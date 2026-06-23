@@ -1,0 +1,12 @@
+{
+  "name": "MediaManager",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently --kill-others \"npm run dev --prefix server\" \"npm run dev --prefix client\"",
+    "format": "prettier --write ."
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2",
+    "prettier": "^3.2.5"
+  }
+}
