@@ -4,12 +4,11 @@ const db = require('../config/database');
 
 router.get('/status', (req, res, next) => {
   try {
-    db.prepare('INSERT INTO logs (message) VALUES (?)').run('API opgevraagd');
     const c = db.prepare('SELECT COUNT(*) as count FROM logs').get();
     res.json({
       status: 'success',
       message: '🚀 API online & beveiligd!',
-      database: `SQLite (Logs: ${c.count})`,
+      database: `SQLite (Logs: ${c ? c.count : 0})`,
       tech: ['Express', 'Helmet', 'Morgan', 'SQLite3'],
     });
   } catch (e) {
