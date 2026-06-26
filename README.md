@@ -38,8 +38,8 @@ You will also need a free [TMDB API Key](https://www.themoviedb.org/documentatio
 
 1. **Clone the repository:**
    ```bash
-   git clone https://github.com/Hoaxr/MediaManager.git
-   cd MediaManager
+   git clone https://github.com/Hoaxr/Atlas.git
+   cd Atlas
    ```
 
 2. **Install dependencies for the server:**
@@ -80,7 +80,7 @@ Upon launching the application for the first time, you will see the **System Sta
 
 ## Contributing 🤝
 
-Contributions, issues, and feature requests are welcome! Feel free to check the [issues page](https://github.com/Hoaxr/MediaManager/issues).
+Contributions, issues, and feature requests are welcome! Feel free to check the [issues page](https://github.com/Hoaxr/Atlas/issues).
 
 ## License 📝
 
