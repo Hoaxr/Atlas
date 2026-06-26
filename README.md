@@ -2,7 +2,7 @@
 
 An elegant, all-in-one media management dashboard designed to seamlessly track, search, and download your favorite Movies and TV Shows.
 
-![Atlas Dashboard](./assets/screenshot.png)
+![Atlas Dashboard](./assets/screenshot.png?v=2)
 
 ## Features ✨
 
