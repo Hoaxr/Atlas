@@ -182,87 +182,63 @@ const filterAndSortResults = (results, profile) => {
   return filtered;
 };
 
+const getSearchFn = (name) => {
+  if (name.includes('eztv')) return searchEZTV;
+  if (name.includes('yts')) return searchYTS;
+  if (name.includes('pirate') || name.includes('tpb')) return searchTPB;
+  if (name.includes('1337')) return search1337x;
+  return searchTPB;
+};
+
 const searchMovie = async (title, year, profile = null) => {
   const indexers = getIndexers();
-  let allResults = [];
   const searchTerm = `${cleanTitle(title)} ${year}`;
 
-  for (const indexer of indexers) {
-    let results = [];
-    const name = indexer.name.toLowerCase();
-    
-    if (name.includes('eztv')) {
-      results = await searchEZTV(searchTerm, indexer.url);
-    } else if (name.includes('yts')) {
-      results = await searchYTS(searchTerm, indexer.url);
-    } else if (name.includes('pirate') || name.includes('tpb')) {
-      results = await searchTPB(searchTerm, indexer.url);
-    } else if (name.includes('1337')) {
-      results = await search1337x(searchTerm, indexer.url);
-    } else {
-      results = await searchTPB(searchTerm, indexer.url);
-    }
-    
-    allResults = [...allResults, ...results];
-  }
+  const results = await Promise.allSettled(
+    indexers.map(indexer =>
+      getSearchFn(indexer.name.toLowerCase())(searchTerm, indexer.url)
+    )
+  );
+
+  const allResults = results.flatMap(r => r.status === 'fulfilled' ? r.value : []);
 
   return filterAndSortResults(allResults, profile);
 };
 
 const searchEpisode = async (showTitle, season, episode, profile = null) => {
   const indexers = getIndexers();
-  let allResults = [];
   
   const s = season.toString().padStart(2, '0');
   const e = episode.toString().padStart(2, '0');
   const searchTerm = `${cleanTitle(showTitle)} S${s}E${e}`;
 
-  for (const indexer of indexers) {
-    let results = [];
-    const name = indexer.name.toLowerCase();
-    
-    if (name.includes('eztv')) {
-      results = await searchEZTV(searchTerm, indexer.url);
-    } else if (name.includes('pirate') || name.includes('tpb')) {
-      results = await searchTPB(searchTerm, indexer.url);
-    } else if (name.includes('1337')) {
-      results = await search1337x(searchTerm, indexer.url);
-    } else {
-      results = await searchTPB(searchTerm, indexer.url);
-    }
-    
-    allResults = [...allResults, ...results];
-  }
+  const results = await Promise.allSettled(
+    indexers.map(indexer =>
+      getSearchFn(indexer.name.toLowerCase())(searchTerm, indexer.url)
+    )
+  );
+
+  const allResults = results.flatMap(r => r.status === 'fulfilled' ? r.value : []);
 
   return filterAndSortResults(allResults, profile);
 };
 
 const searchShowPack = async (showTitle, profile = null) => {
   const indexers = getIndexers();
-  let allResults = [];
   
   // Searching just the clean title usually works best for season packs on 1337x / TPB
   const searchTerm = cleanTitle(showTitle);
 
-  for (const indexer of indexers) {
-    let results = [];
-    const name = indexer.name.toLowerCase();
-    
-    // Some indexers like EZTV don't explicitly have "season packs" easily searchable by just "Season", 
-    // but they might return packs for the base query. 
-    // Usually TPB and 1337x are better for packs.
-    if (name.includes('eztv')) {
-      results = await searchEZTV(searchTerm, indexer.url);
-    } else if (name.includes('pirate') || name.includes('tpb')) {
-      results = await searchTPB(`${searchTerm} season`, indexer.url);
-    } else if (name.includes('1337')) {
-      results = await search1337x(`${searchTerm} season`, indexer.url);
-    } else {
-      results = await searchTPB(`${searchTerm} season`, indexer.url);
-    }
-    
-    allResults = [...allResults, ...results];
-  }
+  const results = await Promise.allSettled(
+    indexers.map(indexer => {
+      const fn = getSearchFn(indexer.name.toLowerCase());
+      // TPB and 1337x are better for packs — append "season" for those
+      const term = indexer.name.toLowerCase().includes('eztv') ? searchTerm : `${searchTerm} season`;
+      return fn(term, indexer.url);
+    })
+  );
+
+  const allResults = results.flatMap(r => r.status === 'fulfilled' ? r.value : []);
 
   return filterAndSortResults(allResults, profile);
 };

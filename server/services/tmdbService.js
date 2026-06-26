@@ -53,33 +53,41 @@ const searchMovies = async (query) => {
       return [...movies, ...shows];
     }
     
+    // Try ID lookup
+    let idResult = null;
     if (isTmdb || /^\d+$/.test(trimmedQuery)) {
       const searchId = isTmdb ? explicitId : trimmedQuery;
       try {
         const responseMovie = await tmdbApi.get(`/movie/${searchId}`).catch(() => null);
-        const responseShow = await tmdbApi.get(`/tv/${searchId}`).catch(() => null);
-        
-        const results = [];
         if (responseMovie && responseMovie.data) {
           responseMovie.data.media_type = 'movie';
-          results.push(responseMovie.data);
+          idResult = responseMovie.data;
         }
-        if (responseShow && responseShow.data) {
-          responseShow.data.media_type = 'tv';
-          results.push(responseShow.data);
-        }
-        
-        if (results.length > 0) return results;
-        if (isTmdb) return []; // If explicit tmdb: was used and not found, return empty
       } catch (e) {
-        if (isTmdb) return [];
+        // Ignore
+      }
+      // If explicit tmdb: prefix was used, return just the ID result (or empty if not found)
+      if (isTmdb) {
+        return idResult ? [idResult] : [];
       }
     }
 
+    // Also run a text search for plain numbers — this ensures searching "300" (the title)
+    // doesn't get short-circuited by the ID lookup returning a different movie
     const response = await tmdbApi.get('/search/movie', {
       params: { query: trimmedQuery, include_adult: false, page: 1 }
     });
-    return response.data.results;
+    const textResults = response.data.results || [];
+
+    // If we found an exact ID match, prepend it (avoid duplicate if it's already in text results)
+    if (idResult) {
+      const isDuplicate = textResults.some(r => r.id === idResult.id);
+      if (!isDuplicate) {
+        textResults.unshift(idResult);
+      }
+    }
+
+    return textResults;
   } catch (error) {
     if (error.response) {
       throw new Error(`TMDB Error: ${error.response.data.status_message}`);
@@ -119,33 +127,40 @@ const searchShows = async (query) => {
       return [...shows, ...movies]; // prioritize shows in the list
     }
     
+    // Try ID lookup
+    let idResult = null;
     if (isTmdb || /^\d+$/.test(trimmedQuery)) {
       const searchId = isTmdb ? explicitId : trimmedQuery;
       try {
         const responseShow = await tmdbApi.get(`/tv/${searchId}`).catch(() => null);
-        const responseMovie = await tmdbApi.get(`/movie/${searchId}`).catch(() => null);
-        
-        const results = [];
         if (responseShow && responseShow.data) {
           responseShow.data.media_type = 'tv';
-          results.push(responseShow.data);
+          idResult = responseShow.data;
         }
-        if (responseMovie && responseMovie.data) {
-          responseMovie.data.media_type = 'movie';
-          results.push(responseMovie.data);
-        }
-        
-        if (results.length > 0) return results;
-        if (isTmdb) return []; // If explicit tmdb: was used and not found, return empty
       } catch (e) {
-        if (isTmdb) return [];
+        // Ignore
+      }
+      // If explicit tmdb: prefix was used, return just the ID result (or empty if not found)
+      if (isTmdb) {
+        return idResult ? [idResult] : [];
       }
     }
 
+    // Also run a text search for plain numbers
     const response = await tmdbApi.get('/search/tv', {
       params: { query: trimmedQuery, page: 1 }
     });
-    return response.data.results;
+    const textResults = response.data.results || [];
+
+    // Prepend exact ID match if found and not already in results
+    if (idResult) {
+      const isDuplicate = textResults.some(r => r.id === idResult.id);
+      if (!isDuplicate) {
+        textResults.unshift(idResult);
+      }
+    }
+
+    return textResults;
   } catch (error) {
     if (error.response) {
       throw new Error(`TMDB Error: ${error.response.data.status_message}`);
@@ -167,6 +182,16 @@ const getMovieById = async (id) => {
 const getShowById = async (id) => {
   try {
     const response = await tmdbApi.get(`/tv/${id}`, { params: { append_to_response: 'videos' } });
+    return response.data;
+  } catch (error) {
+    if (error.response?.status === 404) return null;
+    throw error;
+  }
+};
+
+const getSeasonById = async (showId, seasonNumber) => {
+  try {
+    const response = await tmdbApi.get(`/tv/${showId}/season/${seasonNumber}`);
     return response.data;
   } catch (error) {
     if (error.response?.status === 404) return null;
@@ -198,11 +223,70 @@ const getSeasonEpisodes = async (tmdbId, seasonNumber) => {
   }
 };
 
+const getRecentMovies = async () => {
+  try {
+    const response = await tmdbApi.get('/movie/now_playing');
+    return response.data.results.map(r => ({ ...r, media_type: 'movie' }));
+  } catch (error) {
+    console.error('TMDB Recent Movies Error:', error.message);
+    return [];
+  }
+};
+
+const getRecentShows = async () => {
+  try {
+    const response = await tmdbApi.get('/tv/on_the_air');
+    return response.data.results.map(r => ({ ...r, media_type: 'tv' }));
+  } catch (error) {
+    console.error('TMDB Recent Shows Error:', error.message);
+    return [];
+  }
+};
+
+const getRecommendations = async (type, libraryIds) => {
+  if (!libraryIds || libraryIds.length === 0) return [];
+  // Pick up to 3 random IDs to seed recommendations
+  const shuffled = [...libraryIds].sort(() => 0.5 - Math.random());
+  const seedIds = shuffled.slice(0, 3);
+  
+  const results = [];
+  const seenIds = new Set(libraryIds); // Don't recommend what they already have
+
+  for (const id of seedIds) {
+    try {
+      const endpoint = type === 'movie' ? `/movie/${id}/recommendations` : `/tv/${id}/recommendations`;
+      const response = await tmdbApi.get(endpoint);
+      const items = response.data.results;
+      for (const item of items) {
+        if (!seenIds.has(item.id)) {
+          item.media_type = type;
+          results.push(item);
+          seenIds.add(item.id);
+        }
+      }
+    } catch (e) {
+      console.error(`Failed to get recommendations for ${type} ${id}:`, e.message);
+    }
+  }
+
+  // Sort by popularity and return top 20
+  results.sort((a, b) => (b.popularity || 0) - (a.popularity || 0));
+  return results.slice(0, 20);
+};
+
+const getRecommendationsForMovies = (libraryIds) => getRecommendations('movie', libraryIds);
+const getRecommendationsForShows = (libraryIds) => getRecommendations('tv', libraryIds);
+
 module.exports = {
   searchMovies,
   searchShows,
   getMovieById,
   getShowById,
+  getSeasonById,
   getShowSeasons,
-  getSeasonEpisodes
+  getSeasonEpisodes,
+  getRecentMovies,
+  getRecentShows,
+  getRecommendationsForMovies,
+  getRecommendationsForShows
 };

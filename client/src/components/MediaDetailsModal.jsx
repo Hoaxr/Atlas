@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import axios from 'axios';
+import api from '../lib/api';
 import { X, Star, Calendar, Clock, Plus, ExternalLink, PlayCircle } from 'lucide-react';
 import { customAlert } from '../utils/alerts';
 import TrailerModal from './TrailerModal';
@@ -24,7 +24,7 @@ export default function MediaDetailsModal({ isOpen, onClose, mediaId, mediaType 
 
   const fetchProfiles = async () => {
     try {
-      const res = await axios.get('http://localhost:3000/api/settings');
+      const res = await api.get('/settings');
       if (res.data.status === 'success' && res.data.data.profiles) {
         setProfiles(res.data.data.profiles);
         if (res.data.data.profiles.length > 0) {
@@ -38,7 +38,7 @@ export default function MediaDetailsModal({ isOpen, onClose, mediaId, mediaType 
     setLoading(true);
     setError('');
     try {
-      const res = await axios.get(`http://localhost:3000/api/tmdb/${mediaType}/${mediaId}?_t=${Date.now()}`);
+      const res = await api.get(`/tmdb/${mediaType}/${mediaId}?_t=${Date.now()}`);
       if (res.data.status === 'success') {
         setDetails(res.data.data);
       }
@@ -171,9 +171,9 @@ export default function MediaDetailsModal({ isOpen, onClose, mediaId, mediaType 
                     <button 
                       onClick={async () => {
                         try {
-                          const endpoint = mediaType === 'movie' ? '/api/library/movies' : '/api/library/shows';
+                          const endpoint = mediaType === 'movie' ? '/library/movies' : '/library/shows';
                           const payload = { tmdbId: details.id, qualityProfileId: parseInt(selectedProfile) || null };
-                          await axios.post(`http://localhost:3000${endpoint}`, payload);
+                          await api.post(endpoint, payload);
                           onClose();
                           customAlert(`${mediaType === 'movie' ? 'Movie' : 'TV Show'} added to library successfully!`);
                         } catch (err) {

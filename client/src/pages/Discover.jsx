@@ -1,26 +1,45 @@
-import { useState, useEffect } from 'react';
-import axios from 'axios';
-import { Search as SearchIcon, Plus, Info, Tv, Film, Star, CheckCircle2 } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import api from '../lib/api';
+import { Search as SearchIcon, Plus, Info, Tv, Film, Star, CheckCircle2, ChevronRight, ChevronLeft } from 'lucide-react';
 import MediaDetailsModal from '../components/MediaDetailsModal';
 import { customAlert } from '../utils/alerts';
 
 export default function Discover() {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState([]);
-  const [trending, setTrending] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const [trendingResults, setTrendingResults] = useState([]);
+  const [recentResults, setRecentResults] = useState([]);
+  const [recommendedResults, setRecommendedResults] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [mode, setMode] = useState('movies'); // 'movies' or 'shows'
   const [libraryItems, setLibraryItems] = useState(new Set());
+  const [watchedMap, setWatchedMap] = useState(new Map());
   
   // Modal state
   const [selectedMediaId, setSelectedMediaId] = useState(null);
   const [selectedMediaType, setSelectedMediaType] = useState('movie');
 
+  // Cache data per mode so switching is instant
+  const cacheRef = useRef({ movies: null, shows: null });
+
   useEffect(() => {
+    let interval;
     if (!query) {
       setResults([]);
-      fetchTrending();
+
+      if (cacheRef.current[mode]) {
+        // Cached data available — show immediately, no loading
+        setTrendingResults(cacheRef.current[mode].trending);
+        setRecommendedResults(cacheRef.current[mode].recommended);
+        setRecentResults(cacheRef.current[mode].recent);
+        setLibraryItems(cacheRef.current[mode].libraryIds);
+        setLoading(false);
+      }
+
+      // Always refresh in background
+      fetchAllData();
+      interval = setInterval(() => fetchAllData(true), 60000);
     } else {
       const timer = setTimeout(() => {
         executeSearch(query);
@@ -28,35 +47,80 @@ export default function Discover() {
       return () => clearTimeout(timer);
     }
     fetchLibrary();
+    
+    return () => {
+      if (interval) clearInterval(interval);
+    };
   }, [query, mode]);
 
   const fetchLibrary = async () => {
     try {
-      const endpoint = mode === 'movies' ? '/api/library/movies' : '/api/library/shows';
-      const res = await axios.get(`http://localhost:3000${endpoint}`);
+      const endpoint = mode === 'movies' ? '/library/movies' : '/library/shows';
+      const res = await api.get(endpoint);
       if (res.data.status === 'success') {
-        const itemIds = new Set(res.data.data.map(item => item.tmdb_id));
+        const items = res.data.data;
+        const itemIds = new Set(items.map(item => item.tmdb_id));
+        const watched = new Map(items.map(item => [item.tmdb_id, !!item.watched]));
         setLibraryItems(itemIds);
+        setWatchedMap(watched);
+        
+        // Map library format back to tmdb format for the cards
+        const mappedRecent = items.slice(0, 20).map(i => ({
+          ...i,
+          id: i.tmdb_id,
+          media_type: mode === 'movies' ? 'movie' : 'tv',
+          vote_average: i.rating,
+          release_date: i.year ? `${i.year}-01-01` : '',
+          first_air_date: i.year ? `${i.year}-01-01` : '',
+          title: i.title,
+          name: i.title,
+        }));
+        setRecentResults(mappedRecent);
+        
+        // Update cache
+        if (cacheRef.current[mode]) {
+          cacheRef.current[mode].recent = mappedRecent;
+          cacheRef.current[mode].libraryIds = itemIds;
+        }
       }
     } catch (err) {
       console.error('Failed to fetch library', err);
     }
   };
 
-  const fetchTrending = async () => {
-    setLoading(true);
-    setError('');
-    setTrending([]); // Clear existing items while loading new mode
+  const fetchAllData = async (isBackgroundRefresh = false) => {
+    if (!isBackgroundRefresh) setError('');
+    
     try {
-      const endpoint = mode === 'movies' ? '/api/trakt/trending/movies' : '/api/trakt/trending/shows';
-      const res = await axios.get(`http://localhost:3000${endpoint}`);
-      if (res.data.status === 'success') {
-        setTrending(res.data.data);
+      const trendingEnd = mode === 'movies' ? '/trakt/trending/movies' : '/trakt/trending/shows';
+      const recEnd = mode === 'movies' ? '/tmdb/recommended/movies' : '/tmdb/recommended/shows';
+      
+      const [trendRes, recRes] = await Promise.all([
+        api.get(trendingEnd),
+        api.get(recEnd)
+      ]);
+      
+      if (trendRes.data?.status === 'success') {
+        setTrendingResults(trendRes.data.data);
       }
+      if (recRes.data?.status === 'success') {
+        setRecommendedResults(recRes.data.data);
+      }
+      
+      // Update cache for current mode
+      cacheRef.current[mode] = {
+        trending: trendRes.data?.status === 'success' ? trendRes.data.data : (cacheRef.current[mode]?.trending || []),
+        recommended: recRes.data?.status === 'success' ? recRes.data.data : (cacheRef.current[mode]?.recommended || []),
+        recent: cacheRef.current[mode]?.recent || [],
+        libraryIds: cacheRef.current[mode]?.libraryIds || new Set(),
+      };
+      
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to load trending media. Is Trakt Client ID set in Settings?');
+      if (!isBackgroundRefresh) {
+        setError(err.response?.data?.message || 'Failed to load media. Make sure APIs are configured.');
+      }
     } finally {
-      setLoading(false);
+      if (!isBackgroundRefresh) setLoading(false);
     }
   };
 
@@ -66,8 +130,8 @@ export default function Discover() {
     setLoading(true);
     setError('');
     try {
-      const endpoint = mode === 'movies' ? '/api/tmdb/search/movie' : '/api/tmdb/search/show';
-      const res = await axios.get(`http://localhost:3000${endpoint}?query=${encodeURIComponent(searchQuery)}`);
+      const endpoint = mode === 'movies' ? '/tmdb/search/movie' : '/tmdb/search/show';
+      const res = await api.get(`${endpoint}?query=${encodeURIComponent(searchQuery)}`);
       if (res.data.status === 'success') {
         setResults(res.data.data);
       }
@@ -90,8 +154,8 @@ export default function Discover() {
 
   const handleAddMedia = async (tmdbId, type) => {
     try {
-      const endpoint = type === 'movie' ? '/api/library/movies' : '/api/library/shows';
-      const res = await axios.post(`http://localhost:3000${endpoint}`, { tmdbId });
+      const endpoint = type === 'movie' ? '/library/movies' : '/library/shows';
+      const res = await api.post(endpoint, { tmdbId });
       if (res.data.status === 'success') {
         customAlert(`${type === 'movie' ? 'Movie' : 'Show'} added to library successfully!`);
         setLibraryItems(prev => new Set(prev).add(tmdbId));
@@ -101,21 +165,147 @@ export default function Discover() {
     }
   };
 
-  const displayItems = query ? results : trending;
-  const isTrending = !query;
+  const renderMediaCard = (media, isTrending = false, isGrid = false) => {
+    if (!media) return null;
+
+    const title = media.title || media.name;
+    const releaseYear = (media.release_date || media.first_air_date || '')?.split('-')[0] || 'Unknown';
+    const rating = media.vote_average ? media.vote_average.toFixed(1) : '?';
+    const watchers = media.watchers;
+    const poster = media.poster_path ? (media.poster_path.startsWith('http') ? media.poster_path : `https://image.tmdb.org/t/p/w500${media.poster_path}`) : null;
+    const tmdbId = media.id || (media.ids && media.ids.tmdb);
+    const keyId = tmdbId || Math.random();
+    const isInLibrary = tmdbId ? libraryItems.has(tmdbId) : false;
+    const displayType = media.media_type === 'tv' ? 'show' : media.media_type === 'movie' ? 'movie' : mode === 'movies' ? 'movie' : 'show';
+
+    const cardClass = isGrid 
+      ? "glass-panel rounded-xl overflow-hidden group hover:scale-[1.02] transition-transform duration-300 relative"
+      : "flex-none w-48 sm:w-56 glass-panel rounded-xl overflow-hidden group hover:scale-[1.02] transition-transform duration-300 relative snap-start";
+
+    return (
+      <div key={keyId} className={cardClass}>
+        
+        {isInLibrary && (
+          <div className="absolute top-2 left-2 z-20 bg-slate-900/80 rounded-full shadow-lg" title="In Library">
+            <CheckCircle2 className="w-6 h-6 text-emerald-400 fill-emerald-400/20" />
+          </div>
+        )}
+
+        {isTrending && watchers && (
+          <div className="absolute top-2 right-2 z-20 bg-slate-950/80 backdrop-blur text-xs font-bold px-2 py-1 rounded-md text-orange-400 border border-orange-500/30 shadow-lg">
+            🔥 {watchers} watching
+          </div>
+        )}
+
+        <div className="aspect-[2/3] relative bg-slate-800">
+          {watchedMap.get(tmdbId) ? (
+            <div className="absolute bottom-2 left-2 z-20 flex items-center gap-1 bg-slate-950/80 backdrop-blur px-2 py-1 rounded-md border border-emerald-500/30 shadow-lg">
+              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#34d399" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+              <span className="text-[10px] font-bold text-emerald-400">Watched</span>
+            </div>
+          ) : null}
+          {poster ? (
+            <img 
+              src={poster} 
+              alt={title}
+              className="w-full h-full object-cover"
+            />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center text-slate-500 text-center p-4">No Image</div>
+          )}
+          
+          <div className="absolute inset-0 bg-slate-950/80 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col items-center justify-center gap-3 p-4 z-10">
+            {!isInLibrary ? (
+              <button 
+                onClick={() => handleAddMedia(tmdbId, displayType)}
+                className="bg-cyan-500 hover:bg-cyan-400 text-slate-950 w-full py-2 rounded-lg font-bold flex items-center justify-center gap-2 shadow-lg"
+              >
+                <Plus className="w-4 h-4" /> Add {mode === 'movies' ? 'Movie' : 'Show'}
+              </button>
+            ) : (
+              <div className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 w-full py-2 rounded-lg font-bold flex items-center justify-center gap-2 shadow-lg">
+                <CheckCircle2 className="w-4 h-4" /> In Library
+              </div>
+            )}
+            <button 
+              onClick={() => handleDetailsClick(tmdbId, displayType)}
+              className="bg-white/10 hover:bg-white/20 text-white w-full py-2 rounded-lg font-bold flex items-center justify-center gap-2 transition-colors shadow-lg border border-white/10"
+            >
+              <Info className="w-4 h-4" /> Details
+            </button>
+          </div>
+        </div>
+        <div className="p-4 relative z-20 bg-slate-900/90 border-t border-white/5">
+          <h3 className="font-bold text-slate-200 truncate" title={title}>{title}</h3>
+          <div className="flex justify-between items-center mt-1">
+            <p className="text-sm text-slate-400 font-medium">{releaseYear}</p>
+            {rating !== '?' && (
+              <div className="flex items-center gap-1.5 bg-slate-950/50 px-2.5 py-0.5 rounded-lg border border-white/5 shadow-inner">
+                <Star className="w-3.5 h-3.5 text-yellow-400 fill-yellow-400 drop-shadow-sm" />
+                <span className="text-sm font-bold text-slate-200">{rating}</span>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const MediaRow = ({ title, items, badgeText, isTrending = false }) => {
+    const scrollContainerRef = useRef(null);
+
+    const scroll = (direction) => {
+      if (scrollContainerRef.current) {
+        const scrollAmount = window.innerWidth > 768 ? 800 : 300;
+        scrollContainerRef.current.scrollBy({ left: direction === 'right' ? scrollAmount : -scrollAmount, behavior: 'smooth' });
+      }
+    };
+
+    if (!items || items.length === 0) return null;
+    return (
+      <div className="mb-10 group/row relative">
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-xl font-bold text-slate-200 flex items-center space-x-2">
+            <span className="bg-gradient-to-r from-orange-400 to-pink-500 text-transparent bg-clip-text">
+              {title}
+            </span>
+            {badgeText && (
+              <span className="text-xs font-normal text-slate-500 bg-slate-900 px-2 py-1 rounded-md ml-4 border border-white/5">
+                {badgeText}
+              </span>
+            )}
+          </h2>
+          <div className="flex gap-2">
+             <button onClick={() => scroll('left')} className="p-2 bg-slate-900/50 hover:bg-slate-800 rounded-full text-slate-400 hover:text-white transition-colors border border-white/5 backdrop-blur-sm">
+               <ChevronLeft className="w-5 h-5" />
+             </button>
+             <button onClick={() => scroll('right')} className="p-2 bg-slate-900/50 hover:bg-slate-800 rounded-full text-slate-400 hover:text-white transition-colors border border-white/5 backdrop-blur-sm">
+               <ChevronRight className="w-5 h-5" />
+             </button>
+          </div>
+        </div>
+        
+        <div ref={scrollContainerRef} className="flex overflow-x-auto gap-6 snap-x snap-mandatory pb-4 hide-scrollbar">
+          {items.map(item => renderMediaCard(item, isTrending, false))}
+        </div>
+      </div>
+    );
+  };
+
+  const isDiscovering = !query;
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-black text-slate-100 flex items-center gap-3">
+          <h1 className="text-3xl font-black text-slate-800 dark:text-slate-100 flex items-center gap-3">
             <SearchIcon className="w-8 h-8 text-emerald-400" /> Discover
           </h1>
           <p className="text-slate-400 mt-1">Search and add new media to your library.</p>
         </div>
         
         {/* Mode Toggle */}
-        <div className="flex bg-slate-900/50 p-1 rounded-xl border border-white/5">
+        <div className="flex bg-slate-900/50 p-1 rounded-xl border border-white/5 shadow-inner">
           <button 
             onClick={() => setMode('movies')}
             className={`flex items-center space-x-2 px-4 py-2 rounded-lg font-medium transition-all ${mode === 'movies' ? 'bg-cyan-500/20 text-cyan-400 shadow-sm' : 'text-slate-400 hover:text-slate-200'}`}
@@ -131,14 +321,14 @@ export default function Discover() {
         </div>
       </div>
 
-      <div className="glass-panel rounded-2xl p-6">
+      <div className="glass-panel rounded-2xl p-6 shadow-2xl">
         <form onSubmit={searchMovies} className="flex gap-4">
           <div className="relative flex-1">
             <SearchIcon className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
             <input
               type="text"
               placeholder="Search by title, IMDb ID (e.g. tt1234567), or TMDB ID..."
-              className="glass-input w-full !pl-12 h-12 text-lg"
+              className="glass-input w-full !pl-12 h-12 text-lg shadow-inner"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
             />
@@ -152,94 +342,33 @@ export default function Discover() {
         </div>
       )}
 
-      {isTrending && !loading && !error && displayItems.length > 0 && (
-        <h2 className="text-xl font-bold text-slate-200 flex items-center space-x-2">
-          <span className="bg-gradient-to-r from-orange-400 to-pink-500 text-transparent bg-clip-text">Trending Right Now</span>
-          <span className="text-sm font-normal text-slate-500 bg-slate-900 px-2 py-1 rounded-md ml-4 border border-white/5">
-            Powered by Trakt.tv
-          </span>
-        </h2>
+      {isDiscovering && !error && (
+        <div className="mt-8">
+          {loading ? (
+            <div className="flex flex-col items-center justify-center py-24 text-slate-400 gap-4">
+              <div className="w-8 h-8 border-2 border-cyan-500/50 border-t-cyan-400 rounded-full animate-spin" />
+              <p className="text-sm font-medium">Loading data...</p>
+            </div>
+          ) : (
+            <>
+              <MediaRow title="Trending Right Now" items={trendingResults} badgeText="Powered by Trakt.tv" isTrending={true} />
+              <MediaRow title="Recently Added" items={recentResults} badgeText="From your library" />
+              <MediaRow title="Recommended For You" items={recommendedResults} badgeText="Powered by TMDB" />
+            </>
+          )}
+        </div>
       )}
 
-      {displayItems.length > 0 && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-6">
-          {displayItems.map((item) => {
-            // Both TMDB search and our custom backend Trakt proxy return flattened objects
-            const media = item;
-            
-            // Safely skip if media is undefined
-            if (!media) return null;
-
-            // The poster comes from the TMDB merge in the backend, or directly from TMDB in search
-            const title = media.title || media.name;
-            const releaseYear = (media.release_date || media.first_air_date || '')?.split('-')[0] || 'Unknown';
-            const rating = media.vote_average ? media.vote_average.toFixed(1) : '?';
-            // Trakt responses inject watchers at the top level
-            const watchers = media.watchers;
-            // The backend merged poster_path directly onto the media object
-            const poster = media.poster_path ? `https://image.tmdb.org/t/p/w500${media.poster_path}` : null;
-            const tmdbId = media.id || (media.ids && media.ids.tmdb);
-            const keyId = tmdbId || Math.random();
-            const isInLibrary = tmdbId ? libraryItems.has(tmdbId) : false;
-            // Mode defines whether it's a movie or show for the buttons
-            const displayType = media.media_type === 'tv' ? 'show' : media.media_type === 'movie' ? 'movie' : mode === 'movies' ? 'movie' : 'show';
-
-            return (
-              <div key={keyId} className="glass-panel rounded-xl overflow-hidden group hover:scale-[1.02] transition-transform duration-300 relative">
-                
-                {isInLibrary && (
-                  <div className="absolute top-2 left-2 z-20 bg-slate-900/80 rounded-full shadow-lg" title="In Library">
-                    <CheckCircle2 className="w-6 h-6 text-emerald-400 fill-emerald-400/20" />
-                  </div>
-                )}
-
-                {isTrending && watchers && (
-                  <div className="absolute top-2 right-2 z-20 bg-slate-950/80 backdrop-blur text-xs font-bold px-2 py-1 rounded-md text-orange-400 border border-orange-500/30 shadow-lg">
-                    🔥 {watchers} watching
-                  </div>
-                )}
-
-                <div className="aspect-[2/3] relative bg-slate-800">
-                  {poster ? (
-                    <img 
-                      src={poster} 
-                      alt={title}
-                      className="w-full h-full object-cover"
-                    />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center text-slate-500">No Image</div>
-                  )}
-                  
-                  <div className="absolute inset-0 bg-slate-950/80 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col items-center justify-center gap-3 p-4 z-10">
-                    <button 
-                      onClick={() => handleAddMedia(tmdbId, displayType)}
-                      className="bg-cyan-500 hover:bg-cyan-400 text-slate-950 w-full py-2 rounded-lg font-bold flex items-center justify-center gap-2"
-                    >
-                      <Plus className="w-4 h-4" /> Add {mode === 'movies' ? 'Movie' : 'Show'}
-                    </button>
-                    <button 
-                      onClick={() => handleDetailsClick(tmdbId, displayType)}
-                      className="bg-white/10 hover:bg-white/20 text-white w-full py-2 rounded-lg font-bold flex items-center justify-center gap-2 transition-colors"
-                    >
-                      <Info className="w-4 h-4" /> Details
-                    </button>
-                  </div>
-                </div>
-                <div className="p-4 relative z-20 bg-slate-900/90 border-t border-white/5">
-                  <h3 className="font-bold text-slate-200 truncate" title={title}>{title}</h3>
-                  <div className="flex justify-between items-center mt-1">
-                    <p className="text-sm text-slate-400 font-medium">{releaseYear}</p>
-                    {rating !== '?' && (
-                      <div className="flex items-center gap-1.5 bg-slate-950/50 px-2.5 py-0.5 rounded-lg border border-white/5 shadow-inner">
-                        <Star className="w-3.5 h-3.5 text-yellow-400 fill-yellow-400 drop-shadow-sm" />
-                        <span className="text-sm font-bold text-slate-200">{rating}</span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            );
-          })}
+      {!isDiscovering && results.length > 0 && (
+        <div className="mt-8">
+           <h2 className="text-xl font-bold text-slate-200 flex items-center space-x-2 mb-6">
+             <span className="bg-gradient-to-r from-cyan-400 to-blue-500 text-transparent bg-clip-text">
+               Search Results
+             </span>
+           </h2>
+           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
+             {results.map((item) => renderMediaCard(item, false, true))}
+           </div>
         </div>
       )}
 

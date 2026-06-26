@@ -1,6 +1,16 @@
 const db = require('../config/database');
 const tmdbService = require('./tmdbService');
 
+const isWatchedSyncEnabled = () => {
+  const row = db.prepare("SELECT value FROM settings WHERE key = 'traktWatchedSync'").get();
+  return row && row.value === 'true';
+};
+
+const sanitizeWatched = (items) => {
+  if (isWatchedSyncEnabled()) return items;
+  return items.map(item => ({ ...item, watched: 0 }));
+};
+
 const addMovie = async (tmdbId) => {
   // Check if it already exists
   const existing = db.prepare('SELECT id FROM movies WHERE tmdb_id = ?').get(tmdbId);
@@ -15,10 +25,11 @@ const addMovie = async (tmdbId) => {
   }
 
   const year = movieDetails.release_date ? parseInt(movieDetails.release_date.split('-')[0]) : null;
+  const genres = movieDetails.genres ? movieDetails.genres.map(g => g.name).join(', ') : '';
 
   const insert = db.prepare(`
-    INSERT INTO movies (tmdb_id, title, year, poster_path, overview, status, rating)
-    VALUES (?, ?, ?, ?, ?, 'monitored', ?)
+    INSERT INTO movies (tmdb_id, title, year, poster_path, overview, status, rating, genres)
+    VALUES (?, ?, ?, ?, ?, 'monitored', ?, ?)
   `);
   
   const result = insert.run(
@@ -27,14 +38,20 @@ const addMovie = async (tmdbId) => {
     year,
     movieDetails.poster_path,
     movieDetails.overview,
-    movieDetails.vote_average || 0
+    movieDetails.vote_average || 0,
+    genres
   );
 
   return { id: result.lastInsertRowid, tmdb_id: movieDetails.id, title: movieDetails.title };
 };
 
 const getMovies = () => {
-  return db.prepare('SELECT * FROM movies ORDER BY added_at DESC').all();
+  return sanitizeWatched(db.prepare(`
+    SELECT m.*, qp.name as quality_profile_name
+    FROM movies m
+    LEFT JOIN quality_profiles qp ON m.quality_profile_id = qp.id
+    ORDER BY m.added_at DESC
+  `).all());
 };
 
 const addShow = async (tmdbId) => {
@@ -49,10 +66,11 @@ const addShow = async (tmdbId) => {
   }
 
   const year = showDetails.first_air_date ? parseInt(showDetails.first_air_date.split('-')[0]) : null;
+  const genres = showDetails.genres ? showDetails.genres.map(g => g.name).join(', ') : '';
 
   const insert = db.prepare(`
-    INSERT INTO shows (tmdb_id, title, year, poster_path, overview, status, rating)
-    VALUES (?, ?, ?, ?, ?, 'monitored', ?)
+    INSERT INTO shows (tmdb_id, title, year, poster_path, overview, status, rating, genres)
+    VALUES (?, ?, ?, ?, ?, 'monitored', ?, ?)
   `);
   
   const result = insert.run(
@@ -61,7 +79,8 @@ const addShow = async (tmdbId) => {
     year,
     showDetails.poster_path,
     showDetails.overview,
-    showDetails.vote_average || 0
+    showDetails.vote_average || 0,
+    genres
   );
   
   const internalShowId = result.lastInsertRowid;
@@ -92,7 +111,14 @@ const addShow = async (tmdbId) => {
 };
 
 const getShows = () => {
-  return db.prepare('SELECT * FROM shows ORDER BY added_at DESC').all();
+  return sanitizeWatched(db.prepare(`
+    SELECT s.*, qp.name as quality_profile_name,
+      (SELECT COUNT(*) FROM episodes WHERE show_id = s.id) as episode_count,
+      (SELECT COUNT(*) FROM episodes WHERE show_id = s.id AND status = 'downloaded') as downloaded_episodes
+    FROM shows s
+    LEFT JOIN quality_profiles qp ON s.quality_profile_id = qp.id
+    ORDER BY s.added_at DESC
+  `).all());
 };
 
 const getPaths = () => {

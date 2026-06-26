@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const tmdbService = require('../services/tmdbService');
+const db = require('../config/database');
 
 router.get('/search/movie', async (req, res, next) => {
   try {
@@ -45,6 +46,72 @@ router.get('/show/:id', async (req, res, next) => {
     res.json({ status: 'success', data: show });
   } catch (error) {
     next(error);
+  }
+});
+
+router.get('/recent/:type', async (req, res, next) => {
+  try {
+    const type = req.params.type;
+    const results = type === 'shows' ? await tmdbService.getRecentShows() : await tmdbService.getRecentMovies();
+    res.json({ status: 'success', data: results });
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.get('/recommended/:type', async (req, res, next) => {
+  try {
+    const type = req.params.type;
+    let libraryIds = [];
+    if (type === 'shows') {
+      const shows = db.prepare('SELECT tmdb_id FROM shows').all();
+      libraryIds = shows.map(s => s.tmdb_id);
+    } else {
+      const movies = db.prepare('SELECT tmdb_id FROM movies').all();
+      libraryIds = movies.map(m => m.tmdb_id);
+    }
+    let results = type === 'shows' ? await tmdbService.getRecommendationsForShows(libraryIds) : await tmdbService.getRecommendationsForMovies(libraryIds);
+
+    // Exclude already-watched items by checking Trakt API directly
+    const traktSync = db.prepare("SELECT value FROM settings WHERE key = 'traktWatchedSync'").get();
+    if (traktSync && traktSync.value === 'true') {
+      try {
+        const traktService = require('../services/traktService');
+        const traktType = type === 'shows' ? 'show' : 'movie';
+        const watchedIds = await traktService.getWatchedTmdbIds(traktType);
+        const watchedSet = new Set(watchedIds);
+        results = results.filter(item => !watchedSet.has(item.id));
+      } catch (err) {
+        console.error('[Recommendations] Failed to check Trakt watched status:', err.message);
+      }
+    }
+
+    res.json({ status: 'success', data: results });
+  } catch (e) {
+    next(e);
+  }
+});
+
+// Test TMDB API key
+router.get('/test', async (req, res) => {
+  try {
+    const axios = require('axios');
+    const apiKey = require('../config/database').prepare("SELECT value FROM settings WHERE key = 'tmdbApiKey'").get()?.value;
+    if (!apiKey) {
+      return res.status(400).json({ status: 'error', message: 'TMDB API key not configured' });
+    }
+    const response = await axios.get(`https://api.themoviedb.org/3/movie/550?api_key=${apiKey}`);
+    if (response.data) {
+      return res.json({ status: 'success', message: 'TMDB API key is valid and working' });
+    }
+  } catch (err) {
+    if (err.response?.status === 401) {
+      return res.status(401).json({ status: 'error', message: 'TMDB API key is invalid' });
+    }
+    if (err.response?.status === 404) {
+      return res.status(400).json({ status: 'error', message: 'TMDB API key is invalid or has no access' });
+    }
+    return res.status(500).json({ status: 'error', message: err.message });
   }
 });
 

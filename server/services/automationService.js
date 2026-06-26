@@ -4,6 +4,8 @@ const indexerService = require('./indexerService');
 const downloadClientService = require('./downloadClientService');
 const taskRegistry = require('./taskRegistry');
 const tmdbService = require('./tmdbService');
+const traktService = require('./traktService');
+const eventBus = require('./eventBus');
 
 const getProfile = (id) => {
   if (!id) return null;
@@ -11,7 +13,6 @@ const getProfile = (id) => {
 };
 
 const runSearchCycle = async () => {
-  // Find monitored movies
   const monitoredMovies = db.prepare("SELECT * FROM movies WHERE status = 'monitored'").all();
   
   for (const movie of monitoredMovies) {
@@ -23,13 +24,13 @@ const runSearchCycle = async () => {
         const bestRelease = results[0]; 
         await downloadClientService.addTorrent(bestRelease.link);
         db.prepare("UPDATE movies SET status = 'downloading' WHERE id = ?").run(movie.id);
+        eventBus.info('Download started', { title: movie.title, type: 'movie', release: bestRelease.title });
       }
     } catch (err) {
       console.error(`[Automation] Failed to process ${movie.title}:`, err.message);
     }
   }
 
-  // Find monitored episodes
   const monitoredEpisodes = db.prepare(`
     SELECT e.*, s.title as show_title, s.quality_profile_id 
     FROM episodes e 
@@ -46,6 +47,7 @@ const runSearchCycle = async () => {
         const bestRelease = results[0];
         await downloadClientService.addTorrent(bestRelease.link);
         db.prepare("UPDATE episodes SET status = 'downloading' WHERE id = ?").run(ep.id);
+        eventBus.info('Download started', { title: `${ep.show_title} S${String(ep.season_number).padStart(2,'0')}E${String(ep.episode_number).padStart(2,'0')}`, type: 'episode', release: bestRelease.title });
       }
     } catch (err) {
       console.error(`[Automation] Failed to process ${ep.show_title} S${ep.season_number}E${ep.episode_number}:`, err.message);
@@ -81,6 +83,10 @@ const runUpdateRatings = async () => {
   }
 };
 
+const runTraktWatchedSync = async () => {
+  await traktService.syncWatched();
+};
+
 const init = () => {
   const cronExp = '0 * * * *';
   
@@ -101,9 +107,19 @@ const init = () => {
     runUpdateRatings
   );
 
+  const traktSyncCron = '0 */6 * * *'; // Every 6 hours
+  taskRegistry.registerTask(
+    'trakt_watched_sync',
+    'Trakt Watched Sync',
+    'Syncs watched status from your Trakt account to your local library.',
+    traktSyncCron,
+    runTraktWatchedSync
+  );
+
   cron.schedule(cronExp, () => taskRegistry.executeTask('search_cycle'));
   cron.schedule(ratingsCron, () => taskRegistry.executeTask('update_ratings'));
-  console.log('[Automation] Background search and rating schedulers initialized.');
+  cron.schedule(traktSyncCron, () => taskRegistry.executeTask('trakt_watched_sync'));
+  console.log('[Automation] Background search, rating, and Trakt sync schedulers initialized.');
 };
 
 module.exports = {

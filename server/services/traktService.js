@@ -11,7 +11,12 @@ const traktApi = axios.create({
   baseURL: 'https://api.trakt.tv'
 });
 
-traktApi.interceptors.request.use((config) => {
+const getTraktAccessToken = () => {
+  const row = db.prepare("SELECT value FROM settings WHERE key = ?").get('traktAccessToken');
+  return row ? row.value : null;
+};
+
+const traktRequest = async (config) => {
   const clientId = getTraktClientId();
   if (!clientId) {
     throw new Error('Trakt Client ID is not configured. Please set it in Settings.');
@@ -20,8 +25,16 @@ traktApi.interceptors.request.use((config) => {
   config.headers['Content-Type'] = 'application/json';
   config.headers['trakt-api-version'] = '2';
   config.headers['trakt-api-key'] = clientId;
+  
+  const accessToken = getTraktAccessToken();
+  if (accessToken) {
+    config.headers['Authorization'] = `Bearer ${accessToken}`;
+  }
+  
   return config;
-});
+};
+
+traktApi.interceptors.request.use(traktRequest);
 
 const getTrendingMovies = async (limit = 20) => {
   try {
@@ -98,7 +111,157 @@ const getTrendingShows = async (limit = 20) => {
   }
 };
 
+const refreshTokenIfExpired = async () => {
+  const expiresAt = parseInt(db.prepare("SELECT value FROM settings WHERE key = ?").get('traktTokenExpiresAt')?.value || '0', 10);
+  const now = Math.floor(Date.now() / 1000);
+  if (expiresAt > 0 && now >= expiresAt) {
+    console.log('[TraktSync] Token expired, refreshing...');
+    const clientId = db.prepare("SELECT value FROM settings WHERE key = ?").get('traktClientId')?.value;
+    const clientSecret = db.prepare("SELECT value FROM settings WHERE key = ?").get('traktClientSecret')?.value;
+    const refreshToken = db.prepare("SELECT value FROM settings WHERE key = ?").get('traktRefreshToken')?.value;
+    if (!clientId || !clientSecret || !refreshToken) {
+      console.log('[TraktSync] Cannot refresh — missing credentials');
+      return;
+    }
+    try {
+      const response = await axios.post('https://api.trakt.tv/oauth/token', {
+        refresh_token: refreshToken,
+        client_id: clientId,
+        client_secret: clientSecret,
+        grant_type: 'refresh_token'
+      });
+      const { access_token, refresh_token, created_at, expires_in } = response.data;
+      db.prepare("UPDATE settings SET value = ? WHERE key = 'traktAccessToken'").run(access_token);
+      if (refresh_token) db.prepare("UPDATE settings SET value = ? WHERE key = 'traktRefreshToken'").run(refresh_token);
+      db.prepare("UPDATE settings SET value = ? WHERE key = 'traktTokenExpiresAt'").run(String(created_at + expires_in));
+      console.log('[TraktSync] Token refreshed successfully');
+    } catch (err) {
+      console.error('[TraktSync] Token refresh failed:', err.response?.data || err.message);
+    }
+  }
+};
+
+const syncWatchedMovies = async () => {
+  try {
+    const response = await traktApi.get('/sync/watched/movies');
+    const watchedMovies = response.data;
+    let count = 0;
+    for (const item of watchedMovies) {
+      const tmdbId = item.movie.ids.tmdb;
+      if (!tmdbId) continue;
+      db.prepare('INSERT OR REPLACE INTO watched_tmdb (tmdb_id, type) VALUES (?, ?)').run(tmdbId, 'movie');
+      const movie = db.prepare('SELECT id FROM movies WHERE tmdb_id = ?').get(tmdbId);
+      if (movie) {
+        db.prepare('UPDATE movies SET watched = 1 WHERE id = ?').run(movie.id);
+        count++;
+      }
+    }
+    console.log(`[TraktSync] Synced ${count} watched movies`);
+    return count;
+  } catch (error) {
+    if (error.response?.status === 401) {
+      console.log('[TraktSync] Cannot sync watched movies — OAuth token required. Add a Trakt access token in Settings.');
+      return 0;
+    }
+    console.error('[TraktSync] Failed to sync watched movies:', error.message);
+    return 0;
+  }
+};
+
+const syncWatchedShows = async () => {
+  try {
+    const response = await traktApi.get('/sync/watched/shows');
+    const watchedShows = response.data;
+    let count = 0;
+    for (const item of watchedShows) {
+      const tmdbId = item.show.ids.tmdb;
+      if (!tmdbId) continue;
+      db.prepare('INSERT OR REPLACE INTO watched_tmdb (tmdb_id, type) VALUES (?, ?)').run(tmdbId, 'show');
+      const show = db.prepare('SELECT id FROM shows WHERE tmdb_id = ?').get(tmdbId);
+      if (show) {
+        db.prepare('UPDATE shows SET watched = 1 WHERE id = ?').run(show.id);
+        count++;
+      }
+    }
+    console.log(`[TraktSync] Synced ${count} watched shows`);
+    return count;
+  } catch (error) {
+    if (error.response?.status === 401) {
+      console.log('[TraktSync] Cannot sync watched shows — OAuth token required. Add a Trakt access token in Settings.');
+      return 0;
+    }
+    console.error('[TraktSync] Failed to sync watched shows:', error.message);
+    return 0;
+  }
+};
+
+const getWatchedTmdbIds = async (type) => {
+  try {
+    const endpoint = type === 'movie' ? '/sync/watched/movies' : '/sync/watched/shows';
+    const response = await traktApi.get(endpoint);
+    const items = response.data;
+    const ids = [];
+    for (const item of items) {
+      const tmdbId = type === 'movie' ? item.movie?.ids?.tmdb : item.show?.ids?.tmdb;
+      if (tmdbId) ids.push(tmdbId);
+    }
+    return ids;
+  } catch (error) {
+    if (error.response?.status === 401) {
+      console.log('[TraktSync] Cannot fetch watched list — OAuth token required.');
+      return [];
+    }
+    console.error(`[TraktSync] Failed to fetch watched ${type}s:`, error.message);
+    return [];
+  }
+};
+
+const getUserStats = async () => {
+  try {
+    const response = await traktApi.get('/users/me/stats');
+    const { movies, shows, episodes } = response.data;
+
+    return {
+      movies: {
+        watched: movies?.watched || 0,
+        minutes: movies?.minutes || 0,
+      },
+      shows: {
+        watched: shows?.watched || 0,
+      },
+      episodes: {
+        watched: episodes?.watched || 0,
+        minutes: episodes?.minutes || 0,
+      },
+      totalMinutes: (movies?.minutes || 0) + (episodes?.minutes || 0),
+    };
+  } catch (error) {
+    if (error.response?.status === 401) {
+      return { error: 'Trakt authentication required. Connect Trakt in Settings.' };
+    }
+    console.error('[Trakt] Failed to fetch user stats:', error.message);
+    return { error: 'Failed to fetch Trakt stats.' };
+  }
+};
+
+const syncWatched = async () => {
+  const enabled = db.prepare("SELECT value FROM settings WHERE key = 'traktWatchedSync'").get();
+  if (!enabled || enabled.value !== 'true') {
+    console.log('[TraktSync] Trakt watched sync is disabled in Settings.');
+    return;
+  }
+  // Auto-refresh token if expired before syncing
+  await refreshTokenIfExpired();
+  console.log('[TraktSync] Starting watched status sync...');
+  const movieCount = await syncWatchedMovies();
+  const showCount = await syncWatchedShows();
+  console.log(`[TraktSync] Sync complete — ${movieCount} movies, ${showCount} shows marked as watched.`);
+};
+
 module.exports = {
   getTrendingMovies,
-  getTrendingShows
+  getTrendingShows,
+  syncWatched,
+  getWatchedTmdbIds,
+  getUserStats
 };

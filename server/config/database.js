@@ -104,6 +104,29 @@ try { db.exec("ALTER TABLE quality_profiles ADD COLUMN qualities TEXT;"); } catc
 try { db.exec("ALTER TABLE quality_profiles ADD COLUMN cutoff TEXT;"); } catch (e) {}
 try { db.exec("ALTER TABLE quality_profiles ADD COLUMN upgrade_allowed INTEGER DEFAULT 1;"); } catch (e) {}
 
+// Ensure rating columns exist
+try { db.exec("ALTER TABLE movies ADD COLUMN rating REAL DEFAULT 0;"); } catch (e) {}
+try { db.exec("ALTER TABLE shows ADD COLUMN rating REAL DEFAULT 0;"); } catch (e) {}
+// Ensure size columns exist
+try { db.exec("ALTER TABLE movies ADD COLUMN file_size INTEGER DEFAULT 0;"); } catch (e) {}
+try { db.exec("ALTER TABLE shows ADD COLUMN folder_size INTEGER DEFAULT 0;"); } catch (e) {}
+// Ensure watched columns exist
+try { db.exec("ALTER TABLE movies ADD COLUMN watched INTEGER DEFAULT 0;"); } catch (e) {}
+try { db.exec("ALTER TABLE shows ADD COLUMN watched INTEGER DEFAULT 0;"); } catch (e) {}
+// Ensure genres columns exist
+try { db.exec("ALTER TABLE movies ADD COLUMN genres TEXT DEFAULT '';"); } catch (e) {}
+try { db.exec("ALTER TABLE shows ADD COLUMN genres TEXT DEFAULT '';"); } catch (e) {}
+// Ensure monitored columns exist (separate from status which tracks download state)
+try { db.exec("ALTER TABLE movies ADD COLUMN monitored INTEGER DEFAULT 1;"); } catch (e) {}
+try { db.exec("ALTER TABLE shows ADD COLUMN monitored INTEGER DEFAULT 1;"); } catch (e) {}
+try { db.exec("ALTER TABLE episodes ADD COLUMN monitored INTEGER DEFAULT 1;"); } catch (e) {}
+// Fix existing items: if they have a file on disk, restore 'downloaded' status
+try { db.exec("UPDATE movies SET status = 'downloaded' WHERE file_path IS NOT NULL AND file_path != '' AND status != 'downloading'"); } catch (e) {}
+try { db.exec("UPDATE shows SET status = 'downloaded' WHERE folder_path IS NOT NULL AND folder_path != '' AND status != 'downloading'"); } catch (e) {}
+try { db.exec("UPDATE episodes SET status = 'downloaded' WHERE file_path IS NOT NULL AND file_path != '' AND status != 'downloading'"); } catch (e) {}
+// Track watched TMDB IDs even after library removal
+try { db.exec("CREATE TABLE IF NOT EXISTS watched_tmdb (tmdb_id INTEGER PRIMARY KEY, type TEXT NOT NULL);"); } catch (e) {}
+
 // Seed default quality profile if none exists
 const existingProfile = db.prepare('SELECT id FROM quality_profiles LIMIT 1').get();
 if (!existingProfile) {

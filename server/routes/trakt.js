@@ -22,4 +22,16 @@ router.get('/trending/shows', async (req, res, next) => {
   }
 });
 
+router.get('/stats', async (req, res, next) => {
+  try {
+    const stats = await traktService.getUserStats();
+    if (stats.error) {
+      return res.json({ status: 'error', message: stats.error });
+    }
+    res.json({ status: 'success', data: stats });
+  } catch (e) {
+    next(e);
+  }
+});
+
 module.exports = router;

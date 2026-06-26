@@ -1,17 +1,22 @@
-# MediaManager 🎬
+# Atlas 🎬
 
-An elegant, all-in-one media management dashboard designed to seamlessly track, search, and download your favorite Movies and TV Shows. 
+An elegant, all-in-one media management dashboard designed to seamlessly track, search, and download your favorite Movies and TV Shows.
 
-![MediaManager Dashboard](./assets/screenshot.png)
+![Atlas Dashboard](./assets/screenshot.png)
 
 ## Features ✨
 
 - **Modern Dashboard:** A beautifully designed, highly responsive UI built with React and Tailwind CSS featuring a sleek dark mode.
 - **Media Tracking:** Easily monitor upcoming and existing Movies and TV Shows, complete with dynamic status indicators.
 - **Smart Discovery:** Search for new content from TMDB and instantly add it to your library.
-- **Download Client Integration:** Connect to your favorite download clients to view and manage live torrents directly from the dashboard.
+- **Detailed Media Views:** Dive deep into Movie and TV Show details, including cast, crew, seasons, episodes, and release information.
+- **Download Client Integration:** Connect to your favorite download clients to view and manage live torrents directly from the **Downloads** page.
+- **Calendar View:** Keep track of upcoming movie releases and TV show air dates with an intuitive interactive calendar.
+- **Library Statistics:** View beautiful visual insights and detailed statistics about your entire media collection.
+- **System Tasks Management:** Monitor and manually trigger background automation tasks like library scanning and metadata updates from the **Tasks** page.
 - **Indexer Support:** Built-in integration with indexer managers (like Prowlarr) for automatic searches.
-- **System Health:** Integrated system issue monitoring for missing API keys, indexers, or disconnected download clients.
+- **System Health & Issues:** Integrated monitoring for missing API keys, indexers, or disconnected download clients.
+- **Comprehensive Settings:** Configure your TMDB API keys, download clients, indexers, and application preferences all in one place.
 - **Customizable Views:** Switch seamlessly between grid and list layouts with advanced sorting and filtering options (by status, rating, and release year).
 - **Responsive Layout:** fully functional on desktop and tablet screens.
 

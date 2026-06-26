@@ -52,6 +52,17 @@ export const customAlert = (message, type = 'success') => {
         secondary: '#1e293b',
       },
     });
+  } else if (type === 'info') {
+    toast(message, {
+      style: {
+        background: '#1e293b',
+        color: '#fff',
+        border: '1px solid rgba(6, 182, 212, 0.3)',
+        borderRadius: '16px',
+        padding: '16px',
+      },
+      icon: 'ℹ️',
+    });
   } else {
     toast.error(message, {
       style: {

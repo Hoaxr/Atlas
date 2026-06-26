@@ -4,6 +4,7 @@ const cron = require('node-cron');
 const db = require('../config/database');
 const downloadClientService = require('./downloadClientService');
 const taskRegistry = require('./taskRegistry');
+const eventBus = require('./eventBus');
 
 const isVideoFile = (filename) => {
   const ext = path.extname(filename).toLowerCase();
@@ -179,6 +180,7 @@ const importMovie = async (torrent, movie) => {
 
     db.prepare("UPDATE movies SET status = 'downloaded', file_path = ? WHERE id = ?").run(destFile, movie.id);
     console.log(`[MediaManagement] Movie ${movie.title} marked as downloaded.`);
+    eventBus.success('Download complete', { title: movie.title, type: 'movie' });
 
   } catch (err) {
     console.error(`[MediaManagement] Failed to import movie ${movie.title}:`, err);
@@ -232,6 +234,7 @@ const importEpisode = async (torrent, episode) => {
 
     db.prepare("UPDATE episodes SET status = 'downloaded', file_path = ? WHERE id = ?").run(destFile, episode.id);
     console.log(`[MediaManagement] Episode marked as downloaded.`);
+    eventBus.success('Download complete', { title: `${episode.show_title} S${episode.season_number}E${episode.episode_number}`, type: 'episode' });
 
   } catch (err) {
     console.error(`[MediaManagement] Failed to import episode:`, err);

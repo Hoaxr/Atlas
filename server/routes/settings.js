@@ -16,7 +16,21 @@ router.get('/', (req, res, next) => {
     const tmdbApiKey = getSetting('tmdbApiKey');
     const traktClientId = getSetting('traktClientId');
     const osApiKey = getSetting('osApiKey');
+    const subdlApiKey = getSetting('subdlApiKey');
+    const subsourceApiKey = getSetting('subsourceApiKey');
     const geminiApiKey = getSetting('geminiApiKey');
+    const deepseekApiKey = getSetting('deepseekApiKey');
+    const claudeApiKey = getSetting('claudeApiKey');
+    const translationProvider = getSetting('translationProvider') || 'googleTranslate';
+    const targetLang = getSetting('targetLang') || 'Dutch';
+    let targetLangs = [];
+    try { targetLangs = JSON.parse(getSetting('targetLangs') || '[]'); } catch {}
+    let providerLangs = ['en'];
+    try { providerLangs = JSON.parse(getSetting('providerLangs') || '["en"]'); } catch {}
+    const autoTranslate = getSetting('autoTranslate') === 'true';
+    const traktWatchedSync = getSetting('traktWatchedSync') === 'true';
+    const traktAccessToken = getSetting('traktAccessToken');
+    const traktClientSecret = getSetting('traktClientSecret');
     
     const mask = (val) => val ? '*'.repeat(val.length) : '';
     
@@ -31,7 +45,19 @@ router.get('/', (req, res, next) => {
         tmdbApiKey: mask(tmdbApiKey),
         traktClientId: mask(traktClientId),
         osApiKey: mask(osApiKey),
+        subdlApiKey: mask(subdlApiKey),
+        subsourceApiKey: mask(subsourceApiKey),
         geminiApiKey: mask(geminiApiKey),
+        deepseekApiKey: mask(deepseekApiKey),
+        claudeApiKey: mask(claudeApiKey),
+        translationProvider,
+        targetLang,
+        targetLangs,
+        providerLangs,
+        autoTranslate,
+        traktWatchedSync,
+        traktAccessToken: mask(traktAccessToken),
+        traktClientSecret: mask(traktClientSecret),
         indexers,
         clients,
         profiles
@@ -44,14 +70,26 @@ router.get('/', (req, res, next) => {
 
 router.post('/', (req, res, next) => {
   try {
-    const { tmdbApiKey, traktClientId, osApiKey, geminiApiKey } = req.body;
+    const { tmdbApiKey, traktClientId, osApiKey, subdlApiKey, subsourceApiKey, geminiApiKey, deepseekApiKey, claudeApiKey, translationProvider, targetLang, targetLangs, providerLangs, autoTranslate, traktWatchedSync, traktAccessToken, traktClientSecret } = req.body;
     
     const isMasked = (val) => val && /^\*+$/.test(val);
     
     if (tmdbApiKey !== undefined && !isMasked(tmdbApiKey)) setSetting('tmdbApiKey', tmdbApiKey);
     if (traktClientId !== undefined && !isMasked(traktClientId)) setSetting('traktClientId', traktClientId);
     if (osApiKey !== undefined && !isMasked(osApiKey)) setSetting('osApiKey', osApiKey);
+    if (subdlApiKey !== undefined && !isMasked(subdlApiKey)) setSetting('subdlApiKey', subdlApiKey);
+    if (subsourceApiKey !== undefined && !isMasked(subsourceApiKey)) setSetting('subsourceApiKey', subsourceApiKey);
     if (geminiApiKey !== undefined && !isMasked(geminiApiKey)) setSetting('geminiApiKey', geminiApiKey);
+    if (deepseekApiKey !== undefined && !isMasked(deepseekApiKey)) setSetting('deepseekApiKey', deepseekApiKey);
+    if (claudeApiKey !== undefined && !isMasked(claudeApiKey)) setSetting('claudeApiKey', claudeApiKey);
+    if (translationProvider !== undefined) setSetting('translationProvider', translationProvider);
+    if (targetLang !== undefined) setSetting('targetLang', targetLang);
+    if (targetLangs !== undefined) setSetting('targetLangs', JSON.stringify(targetLangs));
+    if (providerLangs !== undefined) setSetting('providerLangs', JSON.stringify(providerLangs));
+    if (autoTranslate !== undefined) setSetting('autoTranslate', autoTranslate ? 'true' : 'false');
+    if (traktWatchedSync !== undefined) setSetting('traktWatchedSync', traktWatchedSync ? 'true' : 'false');
+    if (traktAccessToken !== undefined && !isMasked(traktAccessToken)) setSetting('traktAccessToken', traktAccessToken);
+    if (traktClientSecret !== undefined && !isMasked(traktClientSecret)) setSetting('traktClientSecret', traktClientSecret);
     
     res.json({ status: 'success', message: 'Settings saved successfully' });
   } catch (e) {
@@ -192,9 +230,341 @@ router.get('/issues', async (req, res) => {
       }
     }
 
+    // Check Library Paths
+    const fs = require('fs/promises');
+    const path = require('path');
+    const libraryPaths = db.prepare('SELECT * FROM library_paths').all();
+    
+    if (libraryPaths.length > 0) {
+      const videoExts = ['.mp4', '.mkv', '.avi', '.mov', '.wmv'];
+      const isVideoFile = (name) => videoExts.includes(path.extname(name).toLowerCase());
+
+      // Recursive check for video files up to 3 levels deep (handles Show/Season 1/ files)
+      const hasVideoFilesRecursive = async (dirPath, depth = 0) => {
+        if (depth > 3) return false;
+        try {
+          const entries = await fs.readdir(dirPath, { withFileTypes: true });
+          for (const entry of entries) {
+            if (entry.isFile() && isVideoFile(entry.name)) return true;
+            if (entry.isDirectory()) {
+              const found = await hasVideoFilesRecursive(path.join(dirPath, entry.name), depth + 1);
+              if (found) return true;
+            }
+          }
+        } catch (e) {
+          // Ignore permission errors on subdirectories
+        }
+        return false;
+      };
+
+      for (const lp of libraryPaths) {
+        try {
+          const stat = await fs.stat(lp.path);
+          if (!stat.isDirectory()) {
+            issues.push({
+              id: `mount_not_dir_${lp.id}`,
+              type: 'error',
+              message: `Library path "${lp.path}" is not a directory. Check your configuration.`,
+              actionText: 'Fix Path',
+              actionLink: '/settings'
+            });
+            continue;
+          }
+
+          const hasVideoFiles = await hasVideoFilesRecursive(lp.path);
+
+          if (!hasVideoFiles) {
+            issues.push({
+              id: `mount_empty_${lp.id}`,
+              type: 'warning',
+              message: `Library path "${lp.path}" appears empty or disconnected — no video files found. Check that your mount is connected and has media files.`,
+              actionText: 'View Paths',
+              actionLink: '/settings'
+            });
+          }
+        } catch (err) {
+          issues.push({
+            id: `mount_unreachable_${lp.id}`,
+            type: 'error',
+            message: `Library path "${lp.path}" is unreachable: ${err.message}. Make sure the mount is connected and accessible.`,
+            actionText: 'Check Mounts',
+            actionLink: '/settings'
+          });
+        }
+      }
+    }
+
     res.json({ status: 'success', data: issues });
   } catch (err) {
     res.status(500).json({ status: 'error', message: err.message });
+  }
+});
+
+// Combined system status — API keys, client connections, and service health
+router.get('/status', async (req, res) => {
+  const axios = require('axios');
+  const services = {};
+  const errors = [];
+
+  // Helper: test a service and record result
+  const test = async (name, label, testFn) => {
+    try {
+      const result = await testFn();
+      services[name] = result;
+    } catch (e) {
+      services[name] = { status: 'error', message: e.message };
+      errors.push({ name: label, message: e.message });
+    }
+  };
+
+  // ---- API Key checks ----
+
+  // TMDB
+  const tmdbKey = getSetting('tmdbApiKey');
+  if (tmdbKey) {
+    await test('tmdb', 'TMDB', async () => {
+      const r = await axios.get('https://api.themoviedb.org/3/configuration', {
+        params: { api_key: tmdbKey }, timeout: 5000
+      });
+      return { status: r.status === 200 ? 'connected' : 'error' };
+    });
+  } else {
+    services.tmdb = { status: 'unconfigured' };
+  }
+
+  // Trakt
+  const traktId = getSetting('traktClientId');
+  if (traktId) {
+    await test('trakt', 'Trakt', async () => {
+      const r = await axios.get('https://api.trakt.tv/movies/trending', {
+        headers: { 'trakt-api-version': '2', 'trakt-api-key': traktId },
+        timeout: 5000
+      });
+      return { status: r.status === 200 ? 'connected' : 'error' };
+    });
+  } else {
+    services.trakt = { status: 'unconfigured' };
+  }
+
+  // OpenSubtitles
+  const osKey = getSetting('osApiKey');
+  if (osKey) {
+    await test('opensubtitles', 'OpenSubtitles', async () => {
+      const r = await axios.get('https://api.opensubtitles.com/api/v1/subtitles', {
+        headers: { 'Api-Key': osKey },
+        params: { tmdb_id: 27205, languages: 'en', limit: 1 },
+        timeout: 5000
+      });
+      return { status: r.status === 200 ? 'connected' : 'error' };
+    });
+  } else {
+    services.opensubtitles = { status: 'unconfigured' };
+  }
+
+  // SubDL
+  const subdlKey = getSetting('subdlApiKey');
+  if (subdlKey) {
+    await test('subdl', 'SubDL', async () => {
+      const r = await axios.get('https://api.subdl.com/api/v1/me', { params: { api_key: subdlKey }, timeout: 5000 });
+      return { status: r.data?.status ? 'connected' : 'error' };
+    });
+  } else {
+    services.subdl = { status: 'unconfigured' };
+  }
+
+  // SubSource
+  const subsourceKey = getSetting('subsourceApiKey');
+  if (subsourceKey) {
+    await test('subsource', 'SubSource', async () => {
+      const r = await axios.get('https://api.subsource.net/api/v1/movies/search', {
+        params: { api_key: subsourceKey, searchType: 'text', q: 'Inception' },
+        validateStatus: () => true,
+        timeout: 5000
+      });
+      return { status: r.status === 200 ? 'connected' : 'error' };
+    });
+  } else {
+    services.subsource = { status: 'unconfigured' };
+  }
+
+  // Gemini
+  const geminiKey = getSetting('geminiApiKey');
+  if (geminiKey) {
+    await test('gemini', 'Gemini', async () => {
+      const { GoogleGenerativeAI } = require('@google/generative-ai');
+      const genAI = new GoogleGenerativeAI(geminiKey);
+      const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+      await model.generateContent('Reply with just the word OK');
+      return { status: 'connected' };
+    });
+  } else {
+    services.gemini = { status: 'unconfigured' };
+  }
+
+  // DeepSeek
+  const deepseekKey = getSetting('deepseekApiKey');
+  if (deepseekKey) {
+    await test('deepseek', 'DeepSeek', async () => {
+      const r = await axios.post('https://api.deepseek.com/v1/chat/completions', {
+        model: 'deepseek-chat',
+        messages: [{ role: 'user', content: 'Reply with just OK' }],
+        max_tokens: 5
+      }, { headers: { Authorization: `Bearer ${deepseekKey}`, 'Content-Type': 'application/json' }, timeout: 10000 });
+      return { status: r.status === 200 ? 'connected' : 'error' };
+    });
+  } else {
+    services.deepseek = { status: 'unconfigured' };
+  }
+
+  // Claude
+  const claudeKey = getSetting('claudeApiKey');
+  if (claudeKey) {
+    await test('claude', 'Claude', async () => {
+      const r = await axios.post('https://api.anthropic.com/v1/messages', {
+        model: 'claude-3-haiku-20240307',
+        max_tokens: 5,
+        messages: [{ role: 'user', content: 'Reply: OK' }]
+      }, { headers: { 'x-api-key': claudeKey, 'anthropic-version': '2023-06-01', 'Content-Type': 'application/json' }, timeout: 10000 });
+      return { status: r.status === 200 ? 'connected' : 'error' };
+    });
+  } else {
+    services.claude = { status: 'unconfigured' };
+  }
+
+  // ---- Download Clients ----
+  const clients = db.prepare('SELECT * FROM download_clients').all();
+  services.downloadClients = [];
+  for (const c of clients) {
+    if (c.type === 'qbittorrent') {
+      try {
+        const r = await axios.get(`${c.host}:${c.port}/api/v2/app/webapiVersion`, { timeout: 3000 });
+        services.downloadClients.push({ name: c.name, status: 'connected' });
+      } catch (e) {
+        if (e.response && (e.response.status === 401 || e.response.status === 403)) {
+          services.downloadClients.push({ name: c.name, status: 'connected' });
+        } else {
+          services.downloadClients.push({ name: c.name, status: 'error', message: 'Unreachable' });
+        }
+      }
+    } else {
+      services.downloadClients.push({ name: c.name, status: 'unknown' });
+    }
+  }
+
+  // ---- Indexers ----
+  const indexerCount = db.prepare('SELECT count(*) as count FROM indexers').get().count;
+  services.indexers = { count: indexerCount, status: indexerCount > 0 ? 'connected' : 'unconfigured' };
+
+  // ---- Library ----
+  const movieCount = db.prepare('SELECT count(*) as count FROM movies').get().count;
+  const showCount = db.prepare('SELECT count(*) as count FROM shows').get().count;
+  services.library = { movies: movieCount, shows: showCount };
+
+  // ---- System Issues ----
+  const fs = require('fs/promises');
+  const path = require('path');
+  const libraryPaths = db.prepare('SELECT * FROM library_paths').all();
+  const mountEntries = [];
+  const mountIssues = [];
+
+  if (libraryPaths.length > 0) {
+    const videoExts = ['.mp4', '.mkv', '.avi', '.mov', '.wmv'];
+    const isVideoFile = (name) => videoExts.includes(path.extname(name).toLowerCase());
+    const hasVideoFilesRecursive = async (dirPath, depth = 0) => {
+      if (depth > 3) return false;
+      try {
+        const entries = await fs.readdir(dirPath, { withFileTypes: true });
+        for (const entry of entries) {
+          if (entry.isFile() && isVideoFile(entry.name)) return true;
+          if (entry.isDirectory()) {
+            const found = await hasVideoFilesRecursive(path.join(dirPath, entry.name), depth + 1);
+            if (found) return found;
+          }
+        }
+      } catch (e) {}
+      return false;
+    };
+
+    for (const lp of libraryPaths) {
+      let status = 'healthy';
+      let issue = null;
+      try {
+        const stat = await fs.stat(lp.path);
+        if (!stat.isDirectory()) {
+          status = 'error';
+          issue = 'Not a directory';
+          mountIssues.push({ path: lp.path, issue });
+        } else {
+          const hasFiles = await hasVideoFilesRecursive(lp.path);
+          if (!hasFiles) {
+            status = 'warning';
+            issue = 'Empty or disconnected';
+            mountIssues.push({ path: lp.path, issue });
+          }
+        }
+      } catch (err) {
+        status = 'error';
+        issue = `Unreachable: ${err.message}`;
+        mountIssues.push({ path: lp.path, issue });
+      }
+      mountEntries.push({ path: lp.path, status, issue });
+    }
+  }
+  services.mounts = { paths: libraryPaths.length, entries: mountEntries, issues: mountIssues };
+
+  res.json({ status: 'success', data: { services, errors } });
+});
+
+// Database Backup - download the SQLite database file
+router.get('/backup', (req, res, next) => {
+  try {
+    const fs = require('fs');
+    const path = require('path');
+    const dbPath = path.join(__dirname, '../data/database.sqlite');
+    
+    if (!fs.existsSync(dbPath)) {
+      return res.status(404).json({ status: 'error', message: 'Database file not found' });
+    }
+    
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    res.setHeader('Content-Type', 'application/octet-stream');
+    res.setHeader('Content-Disposition', `attachment; filename="atlas-backup-${timestamp}.sqlite"`);
+    
+    const stream = fs.createReadStream(dbPath);
+    stream.pipe(res);
+  } catch (e) {
+    next(e);
+  }
+});
+
+// Database Restore - upload a SQLite file
+router.post('/restore', (req, res, next) => {
+  try {
+    const fs = require('fs');
+    const path = require('path');
+    
+    // Express file upload handling - check for raw body or multer
+    // Simple approach: accept base64 encoded file in JSON body
+    const { data, filename } = req.body;
+    if (!data) {
+      return res.status(400).json({ status: 'error', message: 'No database data provided' });
+    }
+    
+    const dbPath = path.join(__dirname, '../data/database.sqlite');
+    const backupPath = path.join(__dirname, `../data/database-backup-${Date.now()}.sqlite`);
+    
+    // Backup current database first
+    if (fs.existsSync(dbPath)) {
+      fs.copyFileSync(dbPath, backupPath);
+    }
+    
+    // Write uploaded data
+    const buffer = Buffer.from(data, 'base64');
+    fs.writeFileSync(dbPath, buffer);
+    
+    res.json({ status: 'success', message: 'Database restored successfully. Previous database backed up.' });
+  } catch (e) {
+    next(e);
   }
 });
 

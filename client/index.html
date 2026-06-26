@@ -1,10 +1,22 @@
 <!doctype html>
-<html>
+<html class="dark">
   <head>
-    <title>React</title>
+    <title>Atlas</title>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3CradialGradient id='g' cx='35%25' cy='30%25' r='65%25'%3E%3Cstop offset='0%25' stop-color='%2322d3ee' stop-opacity='.25'/%3E%3Cstop offset='60%25' stop-color='%2306b6d4' stop-opacity='.15'/%3E%3Cstop offset='100%25' stop-color='%230891b2' stop-opacity='.35'/%3E%3C/radialGradient%3E%3C/defs%3E%3Ccircle cx='32' cy='32' r='26' fill='url(%23g)' stroke='%2322d3ee' stroke-width='2'/%3E%3Cg%3E%3CanimateTransform attributeName='transform' type='rotate' from='0 32 32' to='360 32 32' dur='8s' repeatCount='indefinite'/%3E%3Cellipse cx='32' cy='32' rx='8' ry='26' stroke='%2322d3ee' stroke-width='1.2' stroke-opacity='.5' fill='none'/%3E%3Cellipse cx='32' cy='32' rx='18' ry='26' stroke='%2322d3ee' stroke-width='.8' stroke-opacity='.3' fill='none'/%3E%3Cellipse cx='32' cy='32' rx='26' ry='8' stroke='%2322d3ee' stroke-width='1.2' stroke-opacity='.5' fill='none'/%3E%3Cellipse cx='32' cy='32' rx='26' ry='18' stroke='%2322d3ee' stroke-width='.8' stroke-opacity='.3' fill='none'/%3E%3Cpath d='M22 18 Q26 14 30 18 Q32 22 28 24 Q24 26 22 24 Q20 22 22 18Z' fill='%2322d3ee' fill-opacity='.6'/%3E%3Cpath d='M36 20 Q40 18 42 22 Q41 26 38 26 Q35 24 36 20Z' fill='%2322d3ee' fill-opacity='.55'/%3E%3Cpath d='M26 30 Q30 30 30 34 Q28 40 26 44 Q24 40 24 34 Q24 30 26 30Z' fill='%2322d3ee' fill-opacity='.5'/%3E%3Cpath d='M36 30 Q40 30 40 36 Q38 42 36 44 Q33 40 34 34 Q34 30 36 30Z' fill='%2322d3ee' fill-opacity='.55'/%3E%3Cpath d='M40 44 Q44 44 44 48 Q42 50 39 48 Q38 46 40 44Z' fill='%2322d3ee' fill-opacity='.5'/%3E%3Cpath d='M40 18 Q44 20 43 26 Q42 28 38 28 Q36 26 38 22 Q38 18 40 18Z' fill='%2322d3ee' fill-opacity='.4'/%3E%3Cpolygon points='29,26 29,38 39,32' fill='%2322d3ee'/%3E%3C/g%3E%3Cellipse cx='32' cy='32' rx='32' ry='9' stroke='%2322d3ee' stroke-width='1' fill='none' stroke-opacity='.15' transform='rotate(-15 32 32)' stroke-dasharray='2.5 3'/%3E%3C/svg%3E" />
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="theme-color" content="#06b6d4" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="description" content="Atlas - All-in-one media management dashboard" />
   </head>
   <body class="bg-slate-900 text-slate-100 min-h-screen">
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js').catch(() => {});
+        });
+      }
+    </script>
   </body>
 </html>

@@ -2,11 +2,16 @@ const express = require('express');
 const router = express.Router();
 const libraryService = require('../services/libraryService');
 const scannerService = require('../services/scannerService');
+const db = require('../config/database');
+
+const isWatchedSyncEnabled = () => {
+  const row = db.prepare("SELECT value FROM settings WHERE key = 'traktWatchedSync'").get();
+  return row && row.value === 'true';
+};
 
 // Stats
 router.get('/stats', (req, res, next) => {
   try {
-    const db = require('../config/database');
     const moviesCount = db.prepare('SELECT count(*) as count FROM movies').get().count;
     const showsCount = db.prepare('SELECT count(*) as count FROM shows').get().count;
     res.json({ status: 'success', data: { movies: moviesCount, shows: showsCount } });
@@ -27,20 +32,31 @@ router.get('/movies', (req, res, next) => {
 
 router.get('/movies/:id', async (req, res, next) => {
   try {
-    const db = require('../config/database');
     const fs = require('fs/promises');
     const path = require('path');
     const movie = db.prepare('SELECT m.*, qp.name as quality_profile_name FROM movies m LEFT JOIN quality_profiles qp ON m.quality_profile_id = qp.id WHERE m.id = ?').get(req.params.id);
     if (!movie) return res.status(404).json({ status: 'error', message: 'Movie not found' });
+    if (!isWatchedSyncEnabled()) movie.watched = 0;
     
     let subtitles = [];
     if (movie.file_path) {
       try {
         const dir = path.dirname(movie.file_path);
         const files = await fs.readdir(dir);
-        subtitles = files.filter(f => f.endsWith('.srt') || f.endsWith('.vtt') || f.endsWith('.sub'));
+        const baseName = path.basename(movie.file_path, path.extname(movie.file_path));
+        const subFiles = files.filter(f => {
+          const ext = path.extname(f).toLowerCase();
+          return ['.srt', '.vtt', '.sub'].includes(ext) && f.startsWith(baseName);
+        });
+        subtitles = subFiles.map(f => {
+          const parsed = path.parse(f);
+          const langMatch = parsed.name.match(/\.([a-z]{2})$/);
+          return { file: f, lang: langMatch ? langMatch[1] : 'unknown' };
+        });
         const stats = await fs.stat(movie.file_path);
         movie.size = stats.size;
+        // Persist size to DB so list view can use it
+        db.prepare('UPDATE movies SET file_size = ? WHERE id = ?').run(movie.size, movie.id);
       } catch (err) {
         // Ignore if directory cannot be read
       }
@@ -55,7 +71,6 @@ router.get('/movies/:id', async (req, res, next) => {
 
 router.get('/movies/:id/search', async (req, res, next) => {
   try {
-    const db = require('../config/database');
     const indexerService = require('../services/indexerService');
     const movie = db.prepare('SELECT * FROM movies WHERE id = ?').get(req.params.id);
     if (!movie) return res.status(404).json({ status: 'error', message: 'Movie not found' });
@@ -69,7 +84,6 @@ router.get('/movies/:id/search', async (req, res, next) => {
 
 router.post('/movies/:id/reset', async (req, res, next) => {
   try {
-    const db = require('../config/database');
     db.prepare("UPDATE movies SET status = 'monitored' WHERE id = ?").run(req.params.id);
     res.json({ status: 'success', message: 'Movie reset to monitored' });
   } catch (err) {
@@ -79,14 +93,28 @@ router.post('/movies/:id/reset', async (req, res, next) => {
 
 router.post('/movies/:id/toggle-monitor', async (req, res, next) => {
   try {
-    const db = require('../config/database');
-    const movie = db.prepare('SELECT status FROM movies WHERE id = ?').get(req.params.id);
+    const movie = db.prepare('SELECT monitored, file_path, status FROM movies WHERE id = ?').get(req.params.id);
     if (!movie) return res.status(404).json({ status: 'error', message: 'Movie not found' });
     
-    const newStatus = movie.status === 'unmonitored' ? 'monitored' : 'unmonitored';
-    db.prepare('UPDATE movies SET status = ? WHERE id = ?').run(newStatus, req.params.id);
+    const newMonitored = movie.monitored ? 0 : 1;
+    db.prepare('UPDATE movies SET monitored = ? WHERE id = ?').run(newMonitored, req.params.id);
     
-    res.json({ status: 'success', data: { status: newStatus }});
+    // If the movie has a file on disk and we're re-enabling monitoring, restore 'downloaded' status
+    if (newMonitored && movie.file_path) {
+      db.prepare("UPDATE movies SET status = 'downloaded' WHERE id = ?").run(req.params.id);
+    }
+    
+    res.json({ status: 'success', data: { monitored: newMonitored }});
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.put('/movies/:id/quality', (req, res, next) => {
+  try {
+    const { profileId } = req.body;
+    db.prepare('UPDATE movies SET quality_profile_id = ? WHERE id = ?').run(profileId || null, req.params.id);
+    res.json({ status: 'success', message: 'Quality profile updated' });
   } catch (err) {
     next(err);
   }
@@ -94,7 +122,6 @@ router.post('/movies/:id/toggle-monitor', async (req, res, next) => {
 
 router.post('/movies/:id/download', async (req, res, next) => {
   try {
-    const db = require('../config/database');
     const downloadClientService = require('../services/downloadClientService');
     const { torrentUrl } = req.body;
     
@@ -109,7 +136,6 @@ router.post('/movies/:id/download', async (req, res, next) => {
 
 router.post('/movies/:id/auto-search', async (req, res, next) => {
   try {
-    const db = require('../config/database');
     const indexerService = require('../services/indexerService');
     const downloadClientService = require('../services/downloadClientService');
     
@@ -147,6 +173,158 @@ router.post('/movies', async (req, res, next) => {
   }
 });
 
+const translateSrt = async (enSrtContent, targetLang) => {
+  const provider = db.prepare("SELECT value FROM settings WHERE key = 'translationProvider'").get();
+  const activeProvider = (provider && provider.value) || 'googleTranslate';
+  const { translateWithGemini, translateWithGoogleTranslate, translateWithDeepSeek, translateWithClaude } = require('../services/aiTranslationWorker');
+
+  if (activeProvider === 'gemini') {
+    const geminiApiKeyRow = db.prepare("SELECT value FROM settings WHERE key = 'geminiApiKey'").get();
+    if (!geminiApiKeyRow || !geminiApiKeyRow.value) throw new Error('Gemini API Key missing. Set it in Settings.');
+    return await translateWithGemini(enSrtContent, targetLang, geminiApiKeyRow.value);
+  } else if (activeProvider === 'deepseek') {
+    const deepseekApiKeyRow = db.prepare("SELECT value FROM settings WHERE key = 'deepseekApiKey'").get();
+    if (!deepseekApiKeyRow || !deepseekApiKeyRow.value) throw new Error('DeepSeek API Key missing. Set it in Settings.');
+    return await translateWithDeepSeek(enSrtContent, targetLang, deepseekApiKeyRow.value);
+  } else if (activeProvider === 'claude') {
+    const claudeApiKeyRow = db.prepare("SELECT value FROM settings WHERE key = 'claudeApiKey'").get();
+    if (!claudeApiKeyRow || !claudeApiKeyRow.value) throw new Error('Claude API Key missing. Set it in Settings.');
+    return await translateWithClaude(enSrtContent, targetLang, claudeApiKeyRow.value);
+  } else {
+    return await translateWithGoogleTranslate(enSrtContent, targetLang);
+  }
+};
+
+router.post('/movies/:id/translate-subs', async (req, res, next) => {
+  try {
+    const fs = require('fs');
+    const path = require('path');
+    const targetLangRow = db.prepare("SELECT value FROM settings WHERE key = 'targetLang'").get();
+    const targetLang = req.body.targetLang || (targetLangRow && targetLangRow.value ? targetLangRow.value : 'Dutch');
+    const langCode = { 'Dutch': 'nl', 'French': 'fr', 'German': 'de', 'Spanish': 'es', 'Italian': 'it', 'Portuguese': 'pt' }[targetLang] || 'nl';
+
+    const movie = db.prepare('SELECT * FROM movies WHERE id = ?').get(req.params.id);
+    if (!movie) return res.status(404).json({ status: 'error', message: 'Movie not found' });
+    if (!movie.file_path) return res.status(400).json({ status: 'error', message: 'Movie has no file path' });
+    if (!fs.existsSync(movie.file_path)) return res.status(400).json({ status: 'error', message: 'Movie file not found on disk' });
+
+    const parsedPath = path.parse(movie.file_path);
+    const enSubPath = path.join(parsedPath.dir, `${parsedPath.name}.en.srt`);
+    const targetSubPath = path.join(parsedPath.dir, `${parsedPath.name}.${langCode}.srt`);
+
+    if (!fs.existsSync(enSubPath)) {
+      return res.status(400).json({ status: 'error', message: 'No English subtitle found to translate. Download English subs first.' });
+    }
+
+    if (fs.existsSync(targetSubPath)) {
+      return res.status(400).json({ status: 'error', message: 'Translated subtitle already exists.' });
+    }
+
+    const enSrtContent = fs.readFileSync(enSubPath, 'utf8');
+    const translatedText = await translateSrt(enSrtContent, targetLang);
+    fs.writeFileSync(targetSubPath, translatedText);
+
+    res.json({ status: 'success', message: `Translated to ${targetLang}`, data: { file: `${parsedPath.name}.${langCode}.srt` } });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/movies/:id/download-subs', async (req, res, next) => {
+  try {
+    const fs = require('fs');
+    const path = require('path');
+    const { downloadSubtitlesForMovie } = require('../services/subtitleService');
+    const { langCode, url, fileId } = req.body;
+
+    if (!langCode) return res.status(400).json({ status: 'error', message: 'langCode is required' });
+
+    const movie = db.prepare('SELECT * FROM movies WHERE id = ?').get(req.params.id);
+    if (!movie) return res.status(404).json({ status: 'error', message: 'Movie not found' });
+
+    // If a fileId is provided, download from OpenSubtitles
+    if (fileId) {
+      if (!movie.file_path || !fs.existsSync(movie.file_path)) {
+        return res.status(400).json({ status: 'error', message: 'Movie file not found on disk' });
+      }
+      const parsedPath = path.parse(movie.file_path);
+      const subPath = path.join(parsedPath.dir, `${parsedPath.name}.${langCode}.srt`);
+      const osApiKeyRow = db.prepare("SELECT value FROM settings WHERE key = 'osApiKey'").get();
+      if (!osApiKeyRow?.value) throw new Error('OpenSubtitles API key not set');
+      const downloadRes = await axios.post('https://api.opensubtitles.com/api/v1/download',
+        { file_id: fileId },
+        { headers: { 'Api-Key': osApiKeyRow.value, 'Content-Type': 'application/json', 'Accept': 'application/json' } }
+      );
+      const srtRes = await axios.get(downloadRes.data.link, { responseType: 'text' });
+      fs.writeFileSync(subPath, srtRes.data);
+      return res.json({ status: 'success', message: `Downloaded "${langCode}" subtitle via OpenSubtitles` });
+    }
+
+    // If a direct URL is provided, download from there
+    if (url) {
+      if (!movie.file_path || !fs.existsSync(movie.file_path)) {
+        return res.status(400).json({ status: 'error', message: 'Movie file not found on disk' });
+      }
+      const parsedPath = path.parse(movie.file_path);
+      const subPath = path.join(parsedPath.dir, `${parsedPath.name}.${langCode}.srt`);
+      const axios = require('axios');
+      const srtRes = await axios.get(url, { responseType: 'text' });
+      fs.writeFileSync(subPath, srtRes.data);
+      return res.json({ status: 'success', message: `Downloaded "${langCode}" subtitle from URL` });
+    }
+
+    const result = await downloadSubtitlesForMovie(movie, langCode);
+    if (result.alreadyExists) {
+      return res.json({ status: 'success', message: `Subtitle already exists for "${langCode}"` });
+    }
+    res.json({ status: 'success', message: `Downloaded "${langCode}" subtitle` });
+  } catch (err) {
+    res.status(500).json({ status: 'error', message: err.message });
+  }
+});
+
+router.post('/movies/:id/watched', (req, res, next) => {
+  try {
+    const { watched } = req.body;
+    db.prepare('UPDATE movies SET watched = ? WHERE id = ?').run(watched ? 1 : 0, req.params.id);
+    res.json({ status: 'success', message: watched ? 'Marked as watched' : 'Marked as unwatched' });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/shows/:id/watched', (req, res, next) => {
+  try {
+    const { watched } = req.body;
+    db.prepare('UPDATE shows SET watched = ? WHERE id = ?').run(watched ? 1 : 0, req.params.id);
+    res.json({ status: 'success', message: watched ? 'Marked as watched' : 'Marked as unwatched' });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.put('/movies/:id/remap', async (req, res, next) => {
+  try {
+    const { tmdbId, title, year: movieYear, poster_path, overview, vote_average } = req.body;
+    if (!tmdbId) return res.status(400).json({ status: 'error', message: 'tmdbId is required' });
+
+    // Check if another movie already has this tmdb_id
+    const existing = db.prepare('SELECT id FROM movies WHERE tmdb_id = ? AND id != ?').get(tmdbId, req.params.id);
+    if (existing) return res.status(409).json({ status: 'error', message: 'Another movie in your library already has this TMDB ID' });
+
+    // Use data passed from frontend (from TMDB search results) so we don't need a second API call
+    const releaseYear = movieYear || null;
+
+    db.prepare(`
+      UPDATE movies SET tmdb_id = ?, title = ?, year = ?, poster_path = ?, overview = ?, rating = ? WHERE id = ?
+    `).run(tmdbId, title, releaseYear, poster_path, overview, vote_average || 0, req.params.id);
+
+    res.json({ status: 'success', message: 'Movie remapped successfully' });
+  } catch (error) {
+    next(error);
+  }
+});
+
 // Shows
 router.get('/shows', (req, res, next) => {
   try {
@@ -159,12 +337,12 @@ router.get('/shows', (req, res, next) => {
 
 router.get('/shows/:id', async (req, res, next) => {
   try {
-    const db = require('../config/database');
     const fs = require('fs/promises');
     const path = require('path');
     
     const show = db.prepare('SELECT s.*, qp.name as quality_profile_name FROM shows s LEFT JOIN quality_profiles qp ON s.quality_profile_id = qp.id WHERE s.id = ?').get(req.params.id);
     if (!show) return res.status(404).json({ status: 'error', message: 'Show not found' });
+    if (!isWatchedSyncEnabled()) show.watched = 0;
     
     let folderSize = 0;
     if (show.folder_path) {
@@ -197,6 +375,10 @@ router.get('/shows/:id', async (req, res, next) => {
       }
     }
     show.folder_size = folderSize;
+    // Persist size to DB so list view can use it
+    if (show.folder_path) {
+      db.prepare('UPDATE shows SET folder_size = ? WHERE id = ?').run(folderSize, show.id);
+    }
     
     res.json({ status: 'success', data: show });
   } catch (err) {
@@ -204,19 +386,158 @@ router.get('/shows/:id', async (req, res, next) => {
   }
 });
 
-router.get('/shows/:id/episodes', (req, res, next) => {
+router.get('/shows/:id/episodes', async (req, res, next) => {
   try {
-    const db = require('../config/database');
+    const fs = require('fs');
+    const path = require('path');
     const episodes = db.prepare('SELECT * FROM episodes WHERE show_id = ? ORDER BY season_number ASC, episode_number ASC').all(req.params.id);
-    res.json({ status: 'success', data: episodes });
+
+    // Scan for subtitle files next to each episode
+    const episodesWithSubtitles = episodes.map(ep => {
+      const subs = [];
+      if (ep.file_path && fs.existsSync(ep.file_path)) {
+        const dir = path.dirname(ep.file_path);
+        try {
+          const files = fs.readdirSync(dir);
+          const baseName = path.basename(ep.file_path, path.extname(ep.file_path));
+          const subFiles = files.filter(f => {
+            const ext = path.extname(f).toLowerCase();
+            return ['.srt', '.vtt', '.sub'].includes(ext) && f.startsWith(baseName);
+          });
+          subFiles.forEach(f => {
+            const parsed = path.parse(f);
+            // Extract language code (e.g., "Movie.en.srt" -> "en", "Movie.srt" -> undefined)
+            const langMatch = parsed.name.match(/\.([a-z]{2})$/);
+            subs.push({
+              file: f,
+              lang: langMatch ? langMatch[1] : 'unknown',
+              path: path.join(dir, f)
+            });
+          });
+        } catch (e) {
+          // Directory might not exist
+        }
+      }
+      return { ...ep, subtitles: subs };
+    });
+
+    res.json({ status: 'success', data: episodesWithSubtitles });
   } catch (err) {
     next(err);
   }
 });
 
+router.post('/episodes/:id/translate-subs', async (req, res, next) => {
+  try {
+    const fs = require('fs');
+    const path = require('path');
+    const targetLangRow = db.prepare("SELECT value FROM settings WHERE key = 'targetLang'").get();
+    const targetLang = req.body.targetLang || (targetLangRow && targetLangRow.value ? targetLangRow.value : 'Dutch');
+    const langCode = { 'Dutch': 'nl', 'French': 'fr', 'German': 'de', 'Spanish': 'es', 'Italian': 'it', 'Portuguese': 'pt' }[targetLang] || 'nl';
+
+    const episode = db.prepare('SELECT * FROM episodes WHERE id = ?').get(req.params.id);
+    if (!episode) return res.status(404).json({ status: 'error', message: 'Episode not found' });
+    if (!episode.file_path) return res.status(400).json({ status: 'error', message: 'Episode has no file path' });
+    if (!fs.existsSync(episode.file_path)) return res.status(400).json({ status: 'error', message: 'Episode file not found on disk' });
+
+    const parsedPath = path.parse(episode.file_path);
+    const enSubPath = path.join(parsedPath.dir, `${parsedPath.name}.en.srt`);
+    const targetSubPath = path.join(parsedPath.dir, `${parsedPath.name}.${langCode}.srt`);
+
+    if (!fs.existsSync(enSubPath)) {
+      return res.status(400).json({ status: 'error', message: 'No English subtitle found to translate. Download English subs first.' });
+    }
+
+    if (fs.existsSync(targetSubPath)) {
+      return res.status(400).json({ status: 'error', message: 'Translated subtitle already exists.' });
+    }
+
+    const enSrtContent = fs.readFileSync(enSubPath, 'utf8');
+    const translatedText = await translateSrt(enSrtContent, targetLang);
+    fs.writeFileSync(targetSubPath, translatedText);
+
+    res.json({ status: 'success', message: `Translated to ${targetLang}`, data: { file: `${parsedPath.name}.${langCode}.srt` } });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/episodes/:id/download-subs', async (req, res, next) => {
+  try {
+    const fs = require('fs');
+    const path = require('path');
+    const { downloadSubtitlesForEpisode } = require('../services/subtitleService');
+    const { langCode, url } = req.body;
+
+    if (!langCode) return res.status(400).json({ status: 'error', message: 'langCode is required' });
+
+    const episode = db.prepare('SELECT * FROM episodes WHERE id = ?').get(req.params.id);
+    if (!episode) return res.status(404).json({ status: 'error', message: 'Episode not found' });
+
+    // If a direct URL is provided, download from there
+    if (url) {
+      if (!episode.file_path || !fs.existsSync(episode.file_path)) {
+        return res.status(400).json({ status: 'error', message: 'Episode file not found on disk' });
+      }
+      const parsedPath = path.parse(episode.file_path);
+      const subPath = path.join(parsedPath.dir, `${parsedPath.name}.${langCode}.srt`);
+      const axios = require('axios');
+      const srtRes = await axios.get(url, { responseType: 'text' });
+      fs.writeFileSync(subPath, srtRes.data);
+      return res.json({ status: 'success', message: `Downloaded "${langCode}" subtitle from URL` });
+    }
+
+    const show = db.prepare('SELECT * FROM shows WHERE id = ?').get(episode.show_id);
+    if (!show) return res.status(404).json({ status: 'error', message: 'Show not found' });
+
+    const result = await downloadSubtitlesForEpisode(episode, show, langCode);
+    if (result.alreadyExists) {
+      return res.json({ status: 'success', message: `Subtitle already exists for "${langCode}"` });
+    }
+    res.json({ status: 'success', message: `Downloaded "${langCode}" subtitle` });
+  } catch (err) {
+    res.status(500).json({ status: 'error', message: err.message });
+  }
+});
+
+// Subtitle search
+router.get('/movies/:id/search-subs', async (req, res, next) => {
+  try {
+    const { searchSubtitlesForMovie } = require('../services/subtitleService');
+    const { lang } = req.query;
+    if (!lang) return res.status(400).json({ status: 'error', message: 'lang query param is required' });
+
+    const movie = db.prepare('SELECT * FROM movies WHERE id = ?').get(req.params.id);
+    if (!movie) return res.status(404).json({ status: 'error', message: 'Movie not found' });
+
+    const results = await searchSubtitlesForMovie(movie, lang);
+    res.json({ status: 'success', data: results });
+  } catch (err) {
+    res.status(500).json({ status: 'error', message: err.message });
+  }
+});
+
+router.get('/episodes/:id/search-subs', async (req, res, next) => {
+  try {
+    const { searchSubtitlesForEpisode } = require('../services/subtitleService');
+    const { lang } = req.query;
+    if (!lang) return res.status(400).json({ status: 'error', message: 'lang query param is required' });
+
+    const episode = db.prepare('SELECT * FROM episodes WHERE id = ?').get(req.params.id);
+    if (!episode) return res.status(404).json({ status: 'error', message: 'Episode not found' });
+
+    const show = db.prepare('SELECT * FROM shows WHERE id = ?').get(episode.show_id);
+    if (!show) return res.status(404).json({ status: 'error', message: 'Show not found' });
+
+    const results = await searchSubtitlesForEpisode(episode, show, lang);
+    res.json({ status: 'success', data: results });
+  } catch (err) {
+    res.status(500).json({ status: 'error', message: err.message });
+  }
+});
+
 router.get('/shows/:id/search', async (req, res, next) => {
   try {
-    const db = require('../config/database');
     const indexerService = require('../services/indexerService');
     const show = db.prepare('SELECT * FROM shows WHERE id = ?').get(req.params.id);
     if (!show) return res.status(404).json({ status: 'error', message: 'Show not found' });
@@ -230,7 +551,6 @@ router.get('/shows/:id/search', async (req, res, next) => {
 
 router.post('/shows/:id/auto-search', async (req, res, next) => {
   try {
-    const db = require('../config/database');
     const indexerService = require('../services/indexerService');
     const downloadClientService = require('../services/downloadClientService');
     
@@ -263,7 +583,6 @@ router.post('/shows/:id/auto-search', async (req, res, next) => {
 
 router.post('/shows/:id/download', async (req, res, next) => {
   try {
-    const db = require('../config/database');
     const downloadClientService = require('../services/downloadClientService');
     const { torrentUrl } = req.body;
     
@@ -293,17 +612,53 @@ router.post('/shows', async (req, res, next) => {
   }
 });
 
+router.put('/shows/:id/remap', async (req, res, next) => {
+  try {
+    const { tmdbId, title, year: showYear, poster_path, overview, vote_average } = req.body;
+    if (!tmdbId) return res.status(400).json({ status: 'error', message: 'tmdbId is required' });
+
+    // Check if another show already has this tmdb_id
+    const existing = db.prepare('SELECT id FROM shows WHERE tmdb_id = ? AND id != ?').get(tmdbId, req.params.id);
+    if (existing) return res.status(409).json({ status: 'error', message: 'Another show in your library already has this TMDB ID' });
+
+    // Use data passed from frontend (from TMDB search results) so we don't need a second API call
+    const releaseYear = showYear || null;
+
+    db.prepare(`
+      UPDATE shows SET tmdb_id = ?, title = ?, year = ?, poster_path = ?, overview = ?, rating = ? WHERE id = ?
+    `).run(tmdbId, title, releaseYear, poster_path, overview, vote_average || 0, req.params.id);
+
+    res.json({ status: 'success', message: 'Show remapped successfully' });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.put('/shows/:id/quality', (req, res, next) => {
+  try {
+    const { profileId } = req.body;
+    db.prepare('UPDATE shows SET quality_profile_id = ? WHERE id = ?').run(profileId || null, req.params.id);
+    res.json({ status: 'success', message: 'Quality profile updated' });
+  } catch (err) {
+    next(err);
+  }
+});
+
 router.post('/shows/:id/toggle-monitor', async (req, res, next) => {
   try {
-    const db = require('../config/database');
-    const show = db.prepare('SELECT status FROM shows WHERE id = ?').get(req.params.id);
+    const show = db.prepare('SELECT monitored, folder_path, status FROM shows WHERE id = ?').get(req.params.id);
     if (!show) return res.status(404).json({ status: 'error', message: 'Show not found' });
     
-    const newStatus = show.status === 'unmonitored' ? 'monitored' : 'unmonitored';
-    db.prepare('UPDATE shows SET status = ? WHERE id = ?').run(newStatus, req.params.id);
-    db.prepare('UPDATE episodes SET status = ? WHERE show_id = ?').run(newStatus, req.params.id);
+    const newMonitored = show.monitored ? 0 : 1;
+    db.prepare('UPDATE shows SET monitored = ? WHERE id = ?').run(newMonitored, req.params.id);
+    db.prepare('UPDATE episodes SET monitored = ? WHERE show_id = ?').run(newMonitored, req.params.id);
     
-    res.json({ status: 'success', data: { status: newStatus }});
+    // If the show has a folder on disk and we're re-enabling monitoring, restore 'downloaded' status
+    if (newMonitored && show.folder_path) {
+      db.prepare("UPDATE shows SET status = 'downloaded' WHERE id = ?").run(req.params.id);
+    }
+    
+    res.json({ status: 'success', data: { monitored: newMonitored }});
   } catch (err) {
     next(err);
   }
@@ -311,15 +666,14 @@ router.post('/shows/:id/toggle-monitor', async (req, res, next) => {
 
 router.post('/shows/:id/seasons/:season/toggle-monitor', async (req, res, next) => {
   try {
-    const db = require('../config/database');
     const { id, season } = req.params;
     
-    const monitoredCount = db.prepare('SELECT count(*) as count FROM episodes WHERE show_id = ? AND season_number = ? AND status != ?').get(id, season, 'unmonitored').count;
-    const newStatus = monitoredCount > 0 ? 'unmonitored' : 'monitored';
+    const monitoredCount = db.prepare('SELECT count(*) as count FROM episodes WHERE show_id = ? AND season_number = ? AND monitored = 1').get(id, season).count;
+    const newMonitored = monitoredCount > 0 ? 0 : 1;
     
-    db.prepare('UPDATE episodes SET status = ? WHERE show_id = ? AND season_number = ?').run(newStatus, id, season);
+    db.prepare('UPDATE episodes SET monitored = ? WHERE show_id = ? AND season_number = ?').run(newMonitored, id, season);
     
-    res.json({ status: 'success', data: { status: newStatus }});
+    res.json({ status: 'success', data: { monitored: newMonitored }});
   } catch (err) {
     next(err);
   }
@@ -327,14 +681,13 @@ router.post('/shows/:id/seasons/:season/toggle-monitor', async (req, res, next) 
 
 router.post('/episodes/:id/toggle-monitor', async (req, res, next) => {
   try {
-    const db = require('../config/database');
-    const episode = db.prepare('SELECT status FROM episodes WHERE id = ?').get(req.params.id);
+    const episode = db.prepare('SELECT monitored FROM episodes WHERE id = ?').get(req.params.id);
     if (!episode) return res.status(404).json({ status: 'error', message: 'Episode not found' });
     
-    const newStatus = episode.status === 'unmonitored' ? 'monitored' : 'unmonitored';
-    db.prepare('UPDATE episodes SET status = ? WHERE id = ?').run(newStatus, req.params.id);
+    const newMonitored = episode.monitored ? 0 : 1;
+    db.prepare('UPDATE episodes SET monitored = ? WHERE id = ?').run(newMonitored, req.params.id);
     
-    res.json({ status: 'success', data: { status: newStatus }});
+    res.json({ status: 'success', data: { monitored: newMonitored }});
   } catch (err) {
     next(err);
   }
@@ -388,9 +741,6 @@ router.delete('/paths/:id', (req, res, next) => {
 // Scan
 router.post('/scan', async (req, res, next) => {
   try {
-    // Ideally this runs asynchronously in the background, but for simplicity we await it or start it and return
-    // If scanning takes long, we should return immediately and let it run
-    // Let's run it synchronously for simple local libraries, but a real app would dispatch a job
     const result = await scannerService.scanLibrary();
     res.json(result);
   } catch (error) {
@@ -398,9 +748,36 @@ router.post('/scan', async (req, res, next) => {
   }
 });
 
+// Scan Progress
+router.get('/scan/progress', (req, res) => {
+  res.json(scannerService.getScanProgress());
+});
+
+// Retry unreachable paths
+router.post('/scan/retry-paths', async (req, res, next) => {
+  try {
+    const fs = require('fs/promises');
+    const { paths } = req.body;
+    if (!Array.isArray(paths)) {
+      return res.status(400).json({ status: 'error', message: 'paths must be an array' });
+    }
+    const results = [];
+    for (const p of paths) {
+      try {
+        await fs.stat(p);
+        results.push({ path: p, reachable: true });
+      } catch (err) {
+        results.push({ path: p, reachable: false, error: err.message });
+      }
+    }
+    res.json({ status: 'success', data: results });
+  } catch (error) {
+    next(error);
+  }
+});
+
 router.get('/episodes/:id/search', async (req, res, next) => {
   try {
-    const db = require('../config/database');
     const indexerService = require('../services/indexerService');
     const episode = db.prepare('SELECT e.*, s.title as show_title FROM episodes e JOIN shows s ON e.show_id = s.id WHERE e.id = ?').get(req.params.id);
     if (!episode) return res.status(404).json({ status: 'error', message: 'Episode not found' });
@@ -414,7 +791,6 @@ router.get('/episodes/:id/search', async (req, res, next) => {
 
 router.post('/episodes/:id/auto-search', async (req, res, next) => {
   try {
-    const db = require('../config/database');
     const indexerService = require('../services/indexerService');
     const downloadClientService = require('../services/downloadClientService');
     
@@ -441,7 +817,6 @@ router.post('/episodes/:id/auto-search', async (req, res, next) => {
 
 router.post('/episodes/:id/reset', async (req, res, next) => {
   try {
-    const db = require('../config/database');
     db.prepare("UPDATE episodes SET status = 'monitored' WHERE id = ?").run(req.params.id);
     res.json({ status: 'success', message: 'Episode reset to monitored' });
   } catch (err) {
@@ -451,7 +826,6 @@ router.post('/episodes/:id/reset', async (req, res, next) => {
 
 router.post('/episodes/:id/download', async (req, res, next) => {
   try {
-    const db = require('../config/database');
     const downloadClientService = require('../services/downloadClientService');
     const { torrentUrl } = req.body;
     
@@ -459,6 +833,182 @@ router.post('/episodes/:id/download', async (req, res, next) => {
     db.prepare("UPDATE episodes SET status = 'downloading' WHERE id = ?").run(req.params.id);
     
     res.json({ status: 'success', message: 'Sent to download client' });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Calendar - upcoming episodes from monitored shows
+router.get('/calendar', async (req, res, next) => {
+  try {
+    const tmdbService = require('../services/tmdbService');
+
+    const shows = db.prepare("SELECT * FROM shows WHERE status != 'unmonitored'").all();
+    const upcoming = [];
+
+    for (const show of shows) {
+      try {
+        const tmdbData = await tmdbService.getShowById(show.tmdb_id);
+        if (!tmdbData || !tmdbData.seasons) continue;
+
+        for (const season of tmdbData.seasons) {
+          if (!season.season_number || season.season_number === 0) continue;
+          try {
+            const seasonData = await tmdbService.getSeasonById(show.tmdb_id, season.season_number);
+            if (!seasonData || !seasonData.episodes) continue;
+            
+            for (const ep of seasonData.episodes) {
+              if (!ep.air_date) continue;
+              const airDate = new Date(ep.air_date);
+              const today = new Date();
+              today.setHours(0, 0, 0, 0);
+              
+              // Include today and future episodes
+              if (airDate >= today) {
+                upcoming.push({
+                  show_title: show.title,
+                  show_id: show.id,
+                  tmdb_id: show.tmdb_id,
+                  season_number: season.season_number,
+                  episode_number: ep.episode_number,
+                  title: ep.name,
+                  air_date: ep.air_date,
+                  overview: ep.overview,
+                });
+              }
+            }
+          } catch {}
+        }
+      } catch {}
+    }
+
+    // Sort by air date ascending
+    upcoming.sort((a, b) => new Date(a.air_date) - new Date(b.air_date));
+
+    res.json({ status: 'success', data: upcoming });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Bulk operations
+router.post('/bulk/status', (req, res, next) => {
+  try {
+    const { ids, status, type } = req.body; // type: 'movies' or 'shows'
+    if (!ids || !Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ status: 'error', message: 'ids array is required' });
+    }
+    
+    const table = type === 'shows' ? 'shows' : 'movies';
+    const stmt = db.prepare(`UPDATE ${table} SET status = ? WHERE id = ?`);
+    const updateMany = db.transaction((items) => {
+      for (const id of items) stmt.run(status, id);
+    });
+    updateMany(ids);
+    
+    res.json({ status: 'success', message: `Updated ${ids.length} item(s)` });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/bulk/quality', (req, res, next) => {
+  try {
+    const { ids, profileId, type } = req.body;
+    if (!ids || !Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ status: 'error', message: 'ids array is required' });
+    }
+    
+    const table = type === 'shows' ? 'shows' : 'movies';
+    const stmt = db.prepare(`UPDATE ${table} SET quality_profile_id = ? WHERE id = ?`);
+    const updateMany = db.transaction((items) => {
+      for (const id of items) stmt.run(profileId, id);
+    });
+    updateMany(ids);
+    
+    res.json({ status: 'success', message: `Updated ${ids.length} item(s)` });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/bulk/delete', (req, res, next) => {
+  try {
+    const { ids, type } = req.body;
+    if (!ids || !Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ status: 'error', message: 'ids array is required' });
+    }
+    
+    const table = type === 'shows' ? 'shows' : 'movies';
+    const stmt = db.prepare(`DELETE FROM ${table} WHERE id = ?`);
+    const deleteMany = db.transaction((items) => {
+      for (const id of items) stmt.run(id);
+    });
+    deleteMany(ids);
+    
+    res.json({ status: 'success', message: `Deleted ${ids.length} item(s)` });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Duplicate detection
+router.get('/duplicates', (req, res, next) => {
+  try {
+    const duplicates = { movies: [], shows: [] };
+
+    // Find duplicate movies by TMDB ID
+    const movieDupes = db.prepare(`
+      SELECT tmdb_id, COUNT(*) as count, GROUP_CONCAT(id) as ids, GROUP_CONCAT(title) as titles
+      FROM movies WHERE tmdb_id IS NOT NULL
+      GROUP BY tmdb_id HAVING COUNT(*) > 1
+    `).all();
+
+    for (const dupe of movieDupes) {
+      const idList = dupe.ids.split(',').map(Number);
+      const titleList = dupe.titles.split(',');
+      const items = idList.map((id, i) => {
+        const m = db.prepare('SELECT * FROM movies WHERE id = ?').get(id);
+        return { ...m, displayTitle: titleList[i] };
+      });
+      duplicates.movies.push({ tmdb_id: dupe.tmdb_id, count: dupe.count, items });
+    }
+
+    // Find duplicate shows by TMDB ID
+    const showDupes = db.prepare(`
+      SELECT tmdb_id, COUNT(*) as count, GROUP_CONCAT(id) as ids, GROUP_CONCAT(title) as titles
+      FROM shows WHERE tmdb_id IS NOT NULL
+      GROUP BY tmdb_id HAVING COUNT(*) > 1
+    `).all();
+
+    for (const dupe of showDupes) {
+      const idList = dupe.ids.split(',').map(Number);
+      const titleList = dupe.titles.split(',');
+      const items = idList.map((id, i) => {
+        const s = db.prepare('SELECT * FROM shows WHERE id = ?').get(id);
+        return { ...s, displayTitle: titleList[i] };
+      });
+      duplicates.shows.push({ tmdb_id: dupe.tmdb_id, count: dupe.count, items });
+    }
+
+    res.json({ status: 'success', data: duplicates });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Delete a specific duplicate
+router.post('/duplicates/delete', (req, res, next) => {
+  try {
+    const { id, type } = req.body; // type: 'movie' or 'show'
+    if (!id || !type) {
+      return res.status(400).json({ status: 'error', message: 'id and type are required' });
+    }
+    
+    const table = type === 'show' ? 'shows' : 'movies';
+    db.prepare(`DELETE FROM ${table} WHERE id = ?`).run(id);
+    
+    res.json({ status: 'success', message: 'Duplicate removed' });
   } catch (err) {
     next(err);
   }

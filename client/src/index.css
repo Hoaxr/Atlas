@@ -7,18 +7,63 @@
     @apply bg-white/5 backdrop-blur-md border border-white/10;
   }
   .glass-panel {
-    @apply bg-slate-900/60 backdrop-blur-xl border border-slate-700/50 shadow-xl;
+    @apply bg-white/70 backdrop-blur-xl border border-slate-200/50 shadow-lg shadow-slate-200/20;
+  }
+  .dark .glass-panel {
+    @apply bg-slate-900/60 border-slate-700/50 shadow-xl shadow-black/10;
   }
   .glass-input {
-    @apply bg-slate-950/50 border border-slate-700/50 rounded-lg px-4 py-2 focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500/50 outline-none text-slate-200 transition-all;
+    @apply bg-white border border-slate-300 rounded-lg px-4 py-2 outline-none text-slate-700 transition-all;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 0 0 0 rgba(6,182,212,0);
+  }
+  .glass-input:focus {
+    @apply border-cyan-400/60;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 0 0 3px rgba(6,182,212,0.12);
+  }
+  .dark .glass-input {
+    @apply bg-slate-950/50 border-slate-700/50 text-slate-200;
+  }
+  .dark .glass-input:focus {
+    @apply border-cyan-500/50;
+    box-shadow: 0 0 0 3px rgba(6,182,212,0.08);
+  }
+  .hide-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .hide-scrollbar::-webkit-scrollbar {
+    display: none;
   }
 }
 
 body {
-  @apply bg-slate-950 text-slate-200 antialiased selection:bg-cyan-500/30 selection:text-cyan-100;
-  background-image: radial-gradient(circle at top right, rgba(6, 182, 212, 0.05), transparent 40%),
-                    radial-gradient(circle at bottom left, rgba(16, 185, 129, 0.05), transparent 40%);
+  @apply bg-slate-100 text-slate-600 antialiased;
   background-attachment: fixed;
+}
+
+body::selection {
+  @apply bg-cyan-500/20 text-cyan-700;
+}
+
+.dark body {
+  @apply bg-slate-950 text-slate-200;
+}
+
+.dark body::selection {
+  @apply bg-cyan-500/30 text-cyan-100;
+}
+
+/* Background gradients — subtle cyan-tinted for light, deeper for dark */
+body {
+  background-image:
+    radial-gradient(circle at top right, rgba(6, 182, 212, 0.06), transparent 45%),
+    radial-gradient(circle at bottom left, rgba(6, 182, 212, 0.03), transparent 40%);
+}
+
+.dark body {
+  background-image:
+    radial-gradient(circle at top right, rgba(6, 182, 212, 0.05), transparent 40%),
+    radial-gradient(circle at bottom left, rgba(16, 185, 129, 0.05), transparent 40%);
 }
 
 /* Custom Scrollbar */
@@ -32,15 +77,27 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  @apply bg-slate-700/50 rounded-full;
+  @apply bg-slate-300/60 rounded-full;
 }
 
 ::-webkit-scrollbar-thumb:hover {
+  @apply bg-slate-400/60;
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  @apply bg-slate-700/50;
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
   @apply bg-slate-600/80;
 }
 
 /* For Firefox */
 * {
   scrollbar-width: thin;
+  scrollbar-color: theme('colors.slate.300 / 60%') transparent;
+}
+
+.dark * {
   scrollbar-color: theme('colors.slate.700 / 50%') transparent;
 }

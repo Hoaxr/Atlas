@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import axios from 'axios';
+import api from '../lib/api';
 import { DownloadCloud, ArrowDown, ArrowUp } from 'lucide-react';
 import { customAlert, customConfirm } from '../utils/alerts';
 
@@ -16,8 +16,8 @@ export default function Downloads() {
   const fetchClientData = async () => {
     try {
       const [statsResult, torrentsResult] = await Promise.allSettled([
-        axios.get('http://localhost:3000/api/clients/stats'),
-        axios.get('http://localhost:3000/api/clients/torrents')
+        api.get('/clients/stats'),
+        api.get('/clients/torrents')
       ]);
       
       if (statsResult.status === 'fulfilled' && statsResult.value.data.status === 'success' && statsResult.value.data.data) {
@@ -48,7 +48,7 @@ export default function Downloads() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-black text-slate-100 flex items-center gap-3">
+          <h1 className="text-3xl font-black text-slate-800 dark:text-slate-100 flex items-center gap-3">
             <DownloadCloud className="w-8 h-8 text-emerald-400" /> Downloads
           </h1>
           <p className="text-slate-400 mt-1">Manage your active download client tasks.</p>
@@ -89,7 +89,7 @@ export default function Downloads() {
                       onClick={async () => {
                         if (await customConfirm('Delete this download?')) {
                           try {
-                            await axios.delete(`http://localhost:3000/api/clients/torrents/${t.hash}?deleteFiles=true`);
+                            await api.delete(`/clients/torrents/${t.hash}?deleteFiles=true`);
                             fetchClientData();
                             customAlert('Download cancelled');
                           } catch (e) {

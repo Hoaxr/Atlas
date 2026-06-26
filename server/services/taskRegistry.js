@@ -1,4 +1,5 @@
 const cronParser = require('cron-parser');
+const eventBus = require('./eventBus');
 
 const tasks = {};
 
@@ -11,8 +12,10 @@ const registerTask = (id, name, description, cronExpression, executeFn) => {
     executeFn,
     status: 'idle', // idle, running, error
     lastRun: null,
+    lastRunDuration: null, // in milliseconds
     nextRun: getNextRun(cronExpression),
-    lastMessage: ''
+    lastMessage: '',
+    startedAt: null
   };
 };
 
@@ -29,11 +32,20 @@ const getNextRun = (cronExpression) => {
 
 const updateTaskStatus = (id, status, message = '') => {
   if (tasks[id]) {
+    const now = new Date();
     tasks[id].status = status;
     tasks[id].lastMessage = message;
-    if (status === 'idle') {
-      tasks[id].lastRun = new Date();
+    if (status === 'running') {
+      tasks[id].startedAt = now;
+    }
+    if (status === 'idle' || status === 'error') {
+      if (tasks[id].startedAt) {
+        tasks[id].lastRunDuration = now - tasks[id].startedAt;
+        tasks[id].startedAt = null;
+      }
+      tasks[id].lastRun = now;
       tasks[id].nextRun = getNextRun(tasks[id].cronExpression);
+  
     }
   }
 };
@@ -44,10 +56,13 @@ const executeTask = async (id) => {
 
   try {
     updateTaskStatus(id, 'running', 'Task started');
+    eventBus.info(`Task started: ${task.name}`);
     await task.executeFn();
     updateTaskStatus(id, 'idle', 'Task completed successfully');
+    eventBus.success(`Task completed: ${task.name}`);
   } catch (err) {
     updateTaskStatus(id, 'error', `Failed: ${err.message}`);
+    eventBus.error(`Task failed: ${task.name} — ${err.message}`);
     // Reset to idle after a while so it can run again
     setTimeout(() => updateTaskStatus(id, 'idle', 'Reset after error'), 10000);
   }
