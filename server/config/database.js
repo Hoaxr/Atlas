@@ -24,6 +24,7 @@ db.exec(`
     overview TEXT,
     status TEXT DEFAULT 'monitored',
     file_path TEXT,
+    scene_name TEXT,
     quality_profile_id INTEGER,
     added_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
@@ -64,6 +65,8 @@ db.exec(`
     overview TEXT,
     status TEXT DEFAULT 'monitored',
     file_path TEXT,
+    scene_name TEXT,
+    air_date TEXT,
     added_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(show_id, season_number, episode_number)
   );
@@ -97,6 +100,14 @@ try {
 } catch (e) {}
 
 try {
+  db.exec("ALTER TABLE movies ADD COLUMN scene_name TEXT;");
+} catch (e) {}
+
+try {
+  db.exec("ALTER TABLE episodes ADD COLUMN scene_name TEXT;");
+} catch (e) {}
+
+try {
   db.exec("ALTER TABLE shows ADD COLUMN quality_profile_id INTEGER;");
 } catch (e) {}
 
@@ -120,6 +131,7 @@ try { db.exec("ALTER TABLE shows ADD COLUMN genres TEXT DEFAULT '';"); } catch (
 try { db.exec("ALTER TABLE movies ADD COLUMN monitored INTEGER DEFAULT 1;"); } catch (e) {}
 try { db.exec("ALTER TABLE shows ADD COLUMN monitored INTEGER DEFAULT 1;"); } catch (e) {}
 try { db.exec("ALTER TABLE episodes ADD COLUMN monitored INTEGER DEFAULT 1;"); } catch (e) {}
+try { db.exec("ALTER TABLE episodes ADD COLUMN air_date TEXT;"); } catch (e) {}
 // Fix existing items: if they have a file on disk, restore 'downloaded' status
 try { db.exec("UPDATE movies SET status = 'downloaded' WHERE file_path IS NOT NULL AND file_path != '' AND status != 'downloading'"); } catch (e) {}
 try { db.exec("UPDATE shows SET status = 'downloaded' WHERE folder_path IS NOT NULL AND folder_path != '' AND status != 'downloading'"); } catch (e) {}

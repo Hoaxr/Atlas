@@ -161,8 +161,8 @@ const doScan = async () => {
             try {
               const seasons = await tmdbService.getShowSeasons(tmdbId);
               const insertEp = db.prepare(`
-                INSERT INTO episodes (show_id, season_number, episode_number, title, overview, status)
-                VALUES (?, ?, ?, ?, ?, 'monitored')
+                INSERT INTO episodes (show_id, season_number, episode_number, title, overview, status, air_date)
+                VALUES (?, ?, ?, ?, ?, 'monitored', ?)
                 ON CONFLICT(show_id, season_number, episode_number) DO NOTHING
               `);
               
@@ -170,7 +170,7 @@ const doScan = async () => {
                 if (s.season_number === 0) continue;
                 const eps = await tmdbService.getSeasonEpisodes(tmdbId, s.season_number);
                 for (const ep of eps) {
-                  insertEp.run(showId, ep.season_number, ep.episode_number, ep.name, ep.overview);
+                  insertEp.run(showId, ep.season_number, ep.episode_number, ep.name, ep.overview, ep.air_date);
                 }
               }
             } catch (epErr) {
@@ -240,8 +240,8 @@ const doScan = async () => {
                 try {
                   const seasons = await tmdbService.getShowSeasons(tmdbId);
                   const insertEp = db.prepare(`
-                    INSERT INTO episodes (show_id, season_number, episode_number, title, overview, status)
-                    VALUES (?, ?, ?, ?, ?, 'monitored')
+                    INSERT INTO episodes (show_id, season_number, episode_number, title, overview, status, air_date)
+                    VALUES (?, ?, ?, ?, ?, 'monitored', ?)
                     ON CONFLICT(show_id, season_number, episode_number) DO NOTHING
                   `);
                   
@@ -249,7 +249,7 @@ const doScan = async () => {
                     if (s.season_number === 0) continue;
                     const eps = await tmdbService.getSeasonEpisodes(tmdbId, s.season_number);
                     for (const ep of eps) {
-                      insertEp.run(showId, ep.season_number, ep.episode_number, ep.name, ep.overview);
+                      insertEp.run(showId, ep.season_number, ep.episode_number, ep.name, ep.overview, ep.air_date);
                       episodeCount++;
                     }
                   }
@@ -407,8 +407,21 @@ const doScan = async () => {
         scanProgress.currentFile = m.title;
         try {
           const data = await tmdbService.getMovieById(m.tmdb_id);
-          if (data?.vote_average) {
-            db.prepare('UPDATE movies SET rating = ? WHERE id = ?').run(data.vote_average, m.id);
+          if (data) {
+            let updates = [];
+            let values = [];
+            if (data.vote_average !== undefined) {
+              updates.push('rating = ?');
+              values.push(data.vote_average);
+            }
+            if (data.genres && Array.isArray(data.genres)) {
+              updates.push('genres = ?');
+              values.push(data.genres.map(g => g.name).join(', '));
+            }
+            if (updates.length > 0) {
+              values.push(m.id);
+              db.prepare(`UPDATE movies SET ${updates.join(', ')} WHERE id = ?`).run(...values);
+            }
           }
           // Small delay to respect TMDB rate limits
           await new Promise(r => setTimeout(r, 50));
@@ -420,8 +433,21 @@ const doScan = async () => {
         scanProgress.currentFile = s.title;
         try {
           const data = await tmdbService.getShowById(s.tmdb_id);
-          if (data?.vote_average) {
-            db.prepare('UPDATE shows SET rating = ? WHERE id = ?').run(data.vote_average, s.id);
+          if (data) {
+            let updates = [];
+            let values = [];
+            if (data.vote_average !== undefined) {
+              updates.push('rating = ?');
+              values.push(data.vote_average);
+            }
+            if (data.genres && Array.isArray(data.genres)) {
+              updates.push('genres = ?');
+              values.push(data.genres.map(g => g.name).join(', '));
+            }
+            if (updates.length > 0) {
+              values.push(s.id);
+              db.prepare(`UPDATE shows SET ${updates.join(', ')} WHERE id = ?`).run(...values);
+            }
           }
           await new Promise(r => setTimeout(r, 50));
         } catch (e) { /* skip */ }

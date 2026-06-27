@@ -32,6 +32,14 @@ router.get('/', (req, res, next) => {
     const traktAccessToken = getSetting('traktAccessToken');
     const traktClientSecret = getSetting('traktClientSecret');
     
+    // Naming config
+    const renameMovies = getSetting('renameMovies') !== 'false'; // default true
+    const replaceIllegalCharacters = getSetting('replaceIllegalCharacters') !== 'false'; // default true
+    const colonReplacement = getSetting('colonReplacement') || 'dash';
+    const standardMovieFormat = getSetting('standardMovieFormat') || '{Movie Title} ({Release Year})';
+    const renameEpisodes = getSetting('renameEpisodes') !== 'false';
+    const standardEpisodeFormat = getSetting('standardEpisodeFormat') || '{Show Title} - S{Season}E{Episode} - {Episode Title}';
+    
     const mask = (val) => val ? '*'.repeat(val.length) : '';
     
     // Fetch indexers and clients, excluding sensitive data
@@ -58,6 +66,12 @@ router.get('/', (req, res, next) => {
         traktWatchedSync,
         traktAccessToken: mask(traktAccessToken),
         traktClientSecret: mask(traktClientSecret),
+        renameMovies,
+        replaceIllegalCharacters,
+        colonReplacement,
+        standardMovieFormat,
+        renameEpisodes,
+        standardEpisodeFormat,
         indexers,
         clients,
         profiles
@@ -70,7 +84,7 @@ router.get('/', (req, res, next) => {
 
 router.post('/', (req, res, next) => {
   try {
-    const { tmdbApiKey, traktClientId, osApiKey, subdlApiKey, subsourceApiKey, geminiApiKey, deepseekApiKey, claudeApiKey, translationProvider, targetLang, targetLangs, providerLangs, autoTranslate, traktWatchedSync, traktAccessToken, traktClientSecret } = req.body;
+    const { tmdbApiKey, traktClientId, osApiKey, subdlApiKey, subsourceApiKey, geminiApiKey, deepseekApiKey, claudeApiKey, translationProvider, targetLang, targetLangs, providerLangs, autoTranslate, traktWatchedSync, traktAccessToken, traktClientSecret, renameMovies, replaceIllegalCharacters, colonReplacement, standardMovieFormat, renameEpisodes, standardEpisodeFormat } = req.body;
     
     const isMasked = (val) => val && /^\*+$/.test(val);
     
@@ -90,6 +104,13 @@ router.post('/', (req, res, next) => {
     if (traktWatchedSync !== undefined) setSetting('traktWatchedSync', traktWatchedSync ? 'true' : 'false');
     if (traktAccessToken !== undefined && !isMasked(traktAccessToken)) setSetting('traktAccessToken', traktAccessToken);
     if (traktClientSecret !== undefined && !isMasked(traktClientSecret)) setSetting('traktClientSecret', traktClientSecret);
+    
+    if (renameMovies !== undefined) setSetting('renameMovies', renameMovies ? 'true' : 'false');
+    if (replaceIllegalCharacters !== undefined) setSetting('replaceIllegalCharacters', replaceIllegalCharacters ? 'true' : 'false');
+    if (colonReplacement !== undefined) setSetting('colonReplacement', colonReplacement);
+    if (standardMovieFormat !== undefined) setSetting('standardMovieFormat', standardMovieFormat);
+    if (renameEpisodes !== undefined) setSetting('renameEpisodes', renameEpisodes ? 'true' : 'false');
+    if (standardEpisodeFormat !== undefined) setSetting('standardEpisodeFormat', standardEpisodeFormat);
     
     res.json({ status: 'success', message: 'Settings saved successfully' });
   } catch (e) {

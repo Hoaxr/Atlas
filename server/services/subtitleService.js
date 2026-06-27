@@ -302,9 +302,9 @@ const searchSubtitlesForMovie = async (movie, langCode) => {
   const subdlApiKeyRow = db.prepare("SELECT value FROM settings WHERE key = 'subdlApiKey'").get();
   const subsourceApiKeyRow = db.prepare("SELECT value FROM settings WHERE key = 'subsourceApiKey'").get();
 
-  // Extract scene/release name from file path for matching
+  // Extract scene/release name from database if available, otherwise fallback to file path
   const path = require('path');
-  const sceneName = movie.file_path ? path.basename(movie.file_path, path.extname(movie.file_path)) : '';
+  const sceneName = movie.scene_name || (movie.file_path ? path.basename(movie.file_path, path.extname(movie.file_path)) : '');
 
   const computeMatchScore = (subRelease) => {
     if (!subRelease || !sceneName) return 0;
@@ -441,10 +441,12 @@ const searchSubtitlesForMovie = async (movie, langCode) => {
 
 const searchSubtitlesForEpisode = async (episode, show, langCode) => {
   const osApiKeyRow = db.prepare("SELECT value FROM settings WHERE key = 'osApiKey'").get();
+  const subdlApiKeyRow = db.prepare("SELECT value FROM settings WHERE key = 'subdlApiKey'").get();
+  const subsourceApiKeyRow = db.prepare("SELECT value FROM settings WHERE key = 'subsourceApiKey'").get();
 
-  // Extract scene/release name from file path for matching
+  // Extract scene/release name from database if available, otherwise fallback to file path
   const path = require('path');
-  const sceneName = episode.file_path ? path.basename(episode.file_path, path.extname(episode.file_path)) : '';
+  const sceneName = episode.scene_name || (episode.file_path ? path.basename(episode.file_path, path.extname(episode.file_path)) : '');
 
   const computeMatchScore = (subRelease) => {
     if (!subRelease || !sceneName) return 0;
@@ -494,6 +496,70 @@ const searchSubtitlesForEpisode = async (episode, show, langCode) => {
         })) });
       }
     } catch (e) { console.log(`[SubtitleService] OpenSubtitles episode search failed: ${e.message}`); }
+  }
+
+  if (subdlApiKeyRow?.value) {
+    try {
+      const langMap = { en: 'EN', nl: 'NL', fr: 'FR', de: 'DE', es: 'ES', it: 'IT', pt: 'PT' };
+      const res = await axios.get('https://api.subdl.com/api/v1/subtitles', {
+        params: { api_key: subdlApiKeyRow.value, tmdb_id: show.tmdb_id, type: 'tv', season_number: episode.season_number, episode_number: episode.episode_number, languages: langMap[langCode] || 'EN', unpack: '1' }
+      });
+      if (res.data.status && res.data.subtitles?.length > 0) {
+        const matching = res.data.subtitles.filter(s => (s.language || '').toLowerCase() === langCode);
+        if (matching.length > 0) {
+          results.push({ provider: 'SubDL', items: matching.map(item => ({
+            id: item.sd_id || item.id,
+            name: item.filename || 'Subtitle',
+            language: item.language,
+            release: item.filename || '',
+            downloads: item.downloads || 0,
+            rating: item.rating || 0,
+            fps: item.fps || null,
+            format: item.format || 'srt',
+            uploadDate: item.created_at ? new Date(item.created_at).toLocaleDateString() : null,
+            uploader: item.uploader || null,
+            hearingImpaired: item.hearing_impaired || false,
+            url: item.url || null,
+            subdlId: item.sd_id || item.id
+          })) });
+        }
+      }
+    } catch (e) { console.log(`[SubtitleService] SubDL episode search failed: ${e.message}`); }
+  }
+
+  if (subsourceApiKeyRow?.value) {
+    try {
+      const langMap = { en: 'english', nl: 'dutch', fr: 'french', de: 'german', es: 'spanish', it: 'italian', pt: 'portuguese' };
+      const searchRes = await axios.get('https://api.subsource.net/api/v1/movies/search', {
+        params: { api_key: subsourceApiKeyRow.value, searchType: 'text', q: show.title },
+        validateStatus: () => true
+      });
+      if (searchRes.data?.data?.length > 0) {
+        // Find the TV show matching the title
+        const showEntry = searchRes.data.data.find(s => s.type === 'tv') || searchRes.data.data[0];
+        const subsRes = await axios.get('https://api.subsource.net/api/v1/subtitles', {
+          params: { api_key: subsourceApiKeyRow.value, movieId: showEntry.id, season: episode.season_number, episode: episode.episode_number, language: langMap[langCode] || 'english', limit: 30 },
+          validateStatus: () => true
+        });
+        if (subsRes.data?.data?.length > 0) {
+          results.push({ provider: 'SubSource', items: subsRes.data.data.map(item => ({
+            id: item.subtitleId || item.id,
+            name: item.filename || 'Subtitle',
+            language: item.language || langCode,
+            release: item.filename || '',
+            downloads: item.downloads || 0,
+            rating: item.rating || 0,
+            fps: null,
+            format: item.format || 'srt',
+            uploadDate: item.created_at ? new Date(item.created_at).toLocaleDateString() : null,
+            uploader: item.uploader || null,
+            hearingImpaired: item.hearing_impaired || false,
+            url: item.link ? `https://subsource.net${item.link}` : null,
+            subId: item.subtitleId
+          })) });
+        }
+      }
+    } catch (e) { console.log(`[SubtitleService] SubSource episode search failed: ${e.message}`); }
   }
 
   // Post-process: compute match scores and fill in missing data

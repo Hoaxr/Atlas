@@ -141,9 +141,9 @@ export default function SubtitlesTab({ settings, setSettings, keyStatuses, handl
             <input
               type="checkbox"
               id="autoTranslate"
+              className="w-5 h-5 cursor-pointer accent-cyan-500"
               checked={settings.autoTranslate}
               onChange={(e) => setSettings({ ...settings, autoTranslate: e.target.checked })}
-              className="w-4 h-4 rounded border-slate-600 bg-slate-800 text-pink-500 focus:ring-pink-500 focus:ring-offset-0 cursor-pointer"
             />
             <label htmlFor="autoTranslate" className="text-sm text-slate-300 cursor-pointer select-none">
               <span className="font-medium">Auto-translate after subtitle download</span>

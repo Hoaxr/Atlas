@@ -345,7 +345,7 @@ export default function MovieDetails() {
                             tabIndex={0}
                             onClick={() => setOpenLangMenu(openLangMenu === `${movie.id}-${code}` ? null : `${movie.id}-${code}`)}
                             onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpenLangMenu(openLangMenu === `${movie.id}-${code}` ? null : `${movie.id}-${code}`); } }}
-                            className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded transition-colors cursor-pointer ${
+                            className={`text-xs uppercase font-bold px-2.5 py-1 rounded-md transition-colors cursor-pointer ${
                               exists
                                 ? 'bg-slate-800 text-slate-300 border border-white/5 hover:bg-slate-700 hover:text-white'
                                 : 'bg-amber-500/15 text-amber-400 hover:bg-amber-500/25 hover:text-amber-300 border border-amber-500/30 hover:border-amber-400/50'

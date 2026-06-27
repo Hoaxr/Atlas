@@ -10,6 +10,7 @@ import ProfilesTab from './settings/ProfilesTab';
 import SubtitlesTab from './settings/SubtitlesTab';
 import LibraryTab from './settings/LibraryTab';
 import BackupTab from './settings/BackupTab';
+import NamingTab from './settings/NamingTab';
 
 export default function Settings() {
   const [activeTab, setActiveTab] = useState('apis');
@@ -29,7 +30,13 @@ export default function Settings() {
     claudeApiKey: '',
     traktWatchedSync: false,
     traktAccessToken: '',
-    traktClientSecret: ''
+    traktClientSecret: '',
+    renameMovies: true,
+    replaceIllegalCharacters: true,
+    colonReplacement: 'dash',
+    standardMovieFormat: '{Movie Title} ({Release Year})',
+    renameEpisodes: true,
+    standardEpisodeFormat: '{Show Title} - S{Season}E{Episode} - {Episode Title}'
   });
   const [paths, setPaths] = useState([]);
   const [indexers, setIndexers] = useState([]);
@@ -210,7 +217,13 @@ export default function Settings() {
           claudeApiKey: res.data.data.claudeApiKey || '',
           traktWatchedSync: res.data.data.traktWatchedSync || false,
           traktAccessToken: res.data.data.traktAccessToken || '',
-          traktClientSecret: res.data.data.traktClientSecret || ''
+          traktClientSecret: res.data.data.traktClientSecret || '',
+          renameMovies: res.data.data.renameMovies ?? true,
+          replaceIllegalCharacters: res.data.data.replaceIllegalCharacters ?? true,
+          colonReplacement: res.data.data.colonReplacement || 'dash',
+          standardMovieFormat: res.data.data.standardMovieFormat || '{Movie Title} ({Release Year})',
+          renameEpisodes: res.data.data.renameEpisodes ?? true,
+          standardEpisodeFormat: res.data.data.standardEpisodeFormat || '{Show Title} - S{Season}E{Episode} - {Episode Title}'
         });
         setIndexers(res.data.data.indexers || []);
         setClients(res.data.data.clients || []);
@@ -339,6 +352,7 @@ export default function Settings() {
     { id: 'indexers', label: "Indexers", icon: <Search className="w-4 h-4" /> },
     { id: 'clients', label: "Download Clients", icon: <Download className="w-4 h-4" /> },
     { id: 'profiles', label: "Quality Profiles", icon: <Settings2 className="w-4 h-4" /> },
+    { id: 'naming', label: "Media Naming", icon: <FolderTree className="w-4 h-4" /> },
     { id: 'subtitles', label: "Subtitles & AI Translation", icon: <Languages className="w-4 h-4" /> },
     { id: 'library', label: "Library Management", icon: <FolderTree className="w-4 h-4" /> },
     { id: 'backup', label: "Backup & Restore", icon: <Download className="w-4 h-4" /> },
@@ -434,6 +448,14 @@ export default function Settings() {
             />
           )}
 
+          {activeTab === 'naming' && (
+            <NamingTab
+              settings={settings}
+              setSettings={setSettings}
+              handleSave={handleSave}
+            />
+          )}
+
           {activeTab === 'subtitles' && (
             <SubtitlesTab
               settings={settings}
@@ -466,3 +488,4 @@ export default function Settings() {
     </div>
   );
 }
+

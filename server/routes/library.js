@@ -344,42 +344,9 @@ router.get('/shows/:id', async (req, res, next) => {
     if (!show) return res.status(404).json({ status: 'error', message: 'Show not found' });
     if (!isWatchedSyncEnabled()) show.watched = 0;
     
-    let folderSize = 0;
-    if (show.folder_path) {
-      try {
-        const getFolderSize = async (dir) => {
-          let size = 0;
-          try {
-            const files = await fs.readdir(dir, { withFileTypes: true });
-            for (const file of files) {
-              const filePath = path.join(dir, file.name);
-              try {
-                if (file.isDirectory()) {
-                  size += await getFolderSize(filePath);
-                } else {
-                  const stats = await fs.stat(filePath);
-                  size += stats.size;
-                }
-              } catch (e) {
-                // Ignore individual file errors
-              }
-            }
-          } catch (e) {
-            // Ignore directory read errors
-          }
-          return size;
-        };
-        folderSize = await getFolderSize(show.folder_path);
-      } catch (err) {
-        // Folder might not exist yet or no permissions, ignore
-      }
-    }
-    show.folder_size = folderSize;
-    // Persist size to DB so list view can use it
-    if (show.folder_path) {
-      db.prepare('UPDATE shows SET folder_size = ? WHERE id = ?').run(folderSize, show.id);
-    }
+    // folder_size is already loaded from the database via scannerService.
     
+
     res.json({ status: 'success', data: show });
   } catch (err) {
     next(err);
@@ -392,34 +359,49 @@ router.get('/shows/:id/episodes', async (req, res, next) => {
     const path = require('path');
     const episodes = db.prepare('SELECT * FROM episodes WHERE show_id = ? ORDER BY season_number ASC, episode_number ASC').all(req.params.id);
 
-    // Scan for subtitle files next to each episode
-    const episodesWithSubtitles = episodes.map(ep => {
-      const subs = [];
-      if (ep.file_path && fs.existsSync(ep.file_path)) {
+    const fsp = require('fs/promises');
+    
+    // Group episodes by directory to avoid scanning the same directory multiple times
+    const dirMap = {};
+    for (const ep of episodes) {
+      if (ep.file_path) {
         const dir = path.dirname(ep.file_path);
-        try {
-          const files = fs.readdirSync(dir);
-          const baseName = path.basename(ep.file_path, path.extname(ep.file_path));
-          const subFiles = files.filter(f => {
-            const ext = path.extname(f).toLowerCase();
-            return ['.srt', '.vtt', '.sub'].includes(ext) && f.startsWith(baseName);
-          });
-          subFiles.forEach(f => {
-            const parsed = path.parse(f);
-            // Extract language code (e.g., "Movie.en.srt" -> "en", "Movie.srt" -> undefined)
-            const langMatch = parsed.name.match(/\.([a-z]{2})$/);
-            subs.push({
-              file: f,
-              lang: langMatch ? langMatch[1] : 'unknown',
-              path: path.join(dir, f)
-            });
-          });
-        } catch (e) {
-          // Directory might not exist
-        }
+        if (!dirMap[dir]) dirMap[dir] = [];
+        dirMap[dir].push(ep);
       }
-      return { ...ep, subtitles: subs };
-    });
+    }
+
+    // Read directories asynchronously and concurrently
+    await Promise.all(Object.keys(dirMap).map(async (dir) => {
+      let files = [];
+      try {
+        files = await fsp.readdir(dir);
+      } catch (e) {
+        // Directory might not exist, ignore
+      }
+      
+      for (const ep of dirMap[dir]) {
+        const subs = [];
+        const baseName = path.basename(ep.file_path, path.extname(ep.file_path));
+        const subFiles = files.filter(f => {
+          const ext = path.extname(f).toLowerCase();
+          return ['.srt', '.vtt', '.sub'].includes(ext) && f.startsWith(baseName);
+        });
+        subFiles.forEach(f => {
+          const parsed = path.parse(f);
+          const langMatch = parsed.name.match(/\.([a-z]{2})$/);
+          subs.push({
+            file: f,
+            lang: langMatch ? langMatch[1] : 'unknown',
+            path: path.join(dir, f)
+          });
+        });
+        ep.subtitles = subs;
+      }
+    }));
+    
+    // Episodes that don't have a file_path still need empty subtitles array
+    const episodesWithSubtitles = episodes.map(ep => ({ ...ep, subtitles: ep.subtitles || [] }));
 
     res.json({ status: 'success', data: episodesWithSubtitles });
   } catch (err) {
@@ -560,22 +542,29 @@ router.post('/shows/:id/auto-search', async (req, res, next) => {
     // Find all monitored episodes that are missing
     const episodes = db.prepare("SELECT * FROM episodes WHERE show_id = ? AND status = 'monitored'").all(req.params.id);
     
-    let sentCount = 0;
-    for (const ep of episodes) {
-      const results = await indexerService.searchEpisode(show.title, ep.season_number, ep.episode_number);
-      if (results && results.length > 0) {
-        const bestResult = results.sort((a, b) => b.seeders - a.seeders)[0];
-        await downloadClientService.addTorrent(bestResult.link, 'tv');
-        db.prepare("UPDATE episodes SET status = 'downloading' WHERE id = ?").run(ep.id);
-        sentCount++;
+    // Run the search asynchronously in the background so the UI doesn't freeze
+    (async () => {
+      let sentCount = 0;
+      for (const ep of episodes) {
+        try {
+          const results = await indexerService.searchEpisode(show.title, ep.season_number, ep.episode_number);
+          if (results && results.length > 0) {
+            const bestResult = results.sort((a, b) => b.seeders - a.seeders)[0];
+            await downloadClientService.addTorrent(bestResult.link, 'tv');
+            db.prepare("UPDATE episodes SET status = 'downloading' WHERE id = ?").run(ep.id);
+            sentCount++;
+          }
+        } catch (e) {
+          console.error(`Auto-search failed for ${show.title} S${ep.season_number}E${ep.episode_number}:`, e.message);
+        }
       }
-    }
+      
+      if (sentCount > 0) {
+        db.prepare("UPDATE shows SET status = 'downloading' WHERE id = ?").run(req.params.id);
+      }
+    })();
     
-    if (sentCount > 0) {
-      db.prepare("UPDATE shows SET status = 'downloading' WHERE id = ?").run(req.params.id);
-    }
-    
-    res.json({ status: 'success', message: `Sent ${sentCount} episodes to download client` });
+    res.json({ status: 'success', message: `Search started in the background for ${episodes.length} episodes.` });
   } catch (err) {
     next(err);
   }
@@ -841,49 +830,23 @@ router.post('/episodes/:id/download', async (req, res, next) => {
 // Calendar - upcoming episodes from monitored shows
 router.get('/calendar', async (req, res, next) => {
   try {
-    const tmdbService = require('../services/tmdbService');
-
-    const shows = db.prepare("SELECT * FROM shows WHERE status != 'unmonitored'").all();
-    const upcoming = [];
-
-    for (const show of shows) {
-      try {
-        const tmdbData = await tmdbService.getShowById(show.tmdb_id);
-        if (!tmdbData || !tmdbData.seasons) continue;
-
-        for (const season of tmdbData.seasons) {
-          if (!season.season_number || season.season_number === 0) continue;
-          try {
-            const seasonData = await tmdbService.getSeasonById(show.tmdb_id, season.season_number);
-            if (!seasonData || !seasonData.episodes) continue;
-            
-            for (const ep of seasonData.episodes) {
-              if (!ep.air_date) continue;
-              const airDate = new Date(ep.air_date);
-              const today = new Date();
-              today.setHours(0, 0, 0, 0);
-              
-              // Include today and future episodes
-              if (airDate >= today) {
-                upcoming.push({
-                  show_title: show.title,
-                  show_id: show.id,
-                  tmdb_id: show.tmdb_id,
-                  season_number: season.season_number,
-                  episode_number: ep.episode_number,
-                  title: ep.name,
-                  air_date: ep.air_date,
-                  overview: ep.overview,
-                });
-              }
-            }
-          } catch {}
-        }
-      } catch {}
-    }
-
-    // Sort by air date ascending
-    upcoming.sort((a, b) => new Date(a.air_date) - new Date(b.air_date));
+    const upcoming = db.prepare(`
+      SELECT 
+        e.title, 
+        e.season_number, 
+        e.episode_number, 
+        e.air_date, 
+        e.overview, 
+        s.title as show_title, 
+        s.id as show_id, 
+        s.tmdb_id
+      FROM episodes e
+      JOIN shows s ON e.show_id = s.id
+      WHERE e.air_date IS NOT NULL 
+        AND e.air_date >= date('now', 'localtime')
+        AND s.status != 'unmonitored'
+      ORDER BY e.air_date ASC
+    `).all();
 
     res.json({ status: 'success', data: upcoming });
   } catch (err) {

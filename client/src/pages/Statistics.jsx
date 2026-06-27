@@ -267,15 +267,15 @@ export default function Statistics() {
               { label: 'Shows', data: stats.showStatuses, total: stats.totalShows },
             ].map(({ label, data, total }) => (
               <div key={label}>
-                <p className="text-xs font-medium text-slate-500 mb-2">{label}</p>
-                <div className="flex h-5 rounded-full overflow-hidden bg-slate-800">
+                <p className="text-sm font-medium text-slate-500 mb-2">{label}</p>
+                <div className="flex h-6 rounded-full overflow-hidden bg-slate-800">
                   {['downloaded', 'downloading', 'monitored', 'unmonitored'].map(status => {
                     const count = data[status] || 0;
                     const pct = total > 0 ? (count / total) * 100 : 0;
                     return pct > 0 ? (
                       <div
                         key={status}
-                        className={`${STATUS_COLORS[status]} transition-all flex items-center justify-center text-[10px] font-bold text-white`}
+                        className={`${STATUS_COLORS[status]} transition-all flex items-center justify-center text-xs font-bold text-white`}
                         style={{ width: `${pct}%` }}
                         title={`${STATUS_LABELS[status]}: ${count}`}
                       >
@@ -286,7 +286,7 @@ export default function Statistics() {
                 </div>
                 <div className="flex gap-3 mt-1.5 flex-wrap">
                   {Object.entries(data).map(([status, count]) => (
-                    <span key={status} className="text-[10px] text-slate-500 flex items-center gap-1">
+                    <span key={status} className="text-xs text-slate-500 flex items-center gap-1">
                       <span className={`w-2 h-2 rounded-full ${STATUS_COLORS[status]}`} />
                       {STATUS_LABELS[status]}: {count}
                     </span>

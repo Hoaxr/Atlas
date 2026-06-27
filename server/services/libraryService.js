@@ -90,8 +90,8 @@ const addShow = async (tmdbId) => {
     try {
       const seasons = await tmdbService.getShowSeasons(tmdbId);
       const insertEp = db.prepare(`
-        INSERT INTO episodes (show_id, season_number, episode_number, title, overview, status)
-        VALUES (?, ?, ?, ?, ?, 'monitored')
+        INSERT INTO episodes (show_id, season_number, episode_number, title, overview, status, air_date)
+        VALUES (?, ?, ?, ?, ?, 'monitored', ?)
         ON CONFLICT(show_id, season_number, episode_number) DO NOTHING
       `);
       
@@ -99,7 +99,7 @@ const addShow = async (tmdbId) => {
         if (s.season_number === 0) continue; // Skip specials for now to keep it clean
         const episodes = await tmdbService.getSeasonEpisodes(tmdbId, s.season_number);
         for (const ep of episodes) {
-          insertEp.run(internalShowId, ep.season_number, ep.episode_number, ep.name, ep.overview);
+          insertEp.run(internalShowId, ep.season_number, ep.episode_number, ep.name, ep.overview, ep.air_date);
         }
       }
     } catch (err) {

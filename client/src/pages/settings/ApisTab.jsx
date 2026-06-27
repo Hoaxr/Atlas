@@ -137,9 +137,8 @@ export default function ApisTab({
           ) : null}
 
           <div className="flex items-center gap-3 p-4 bg-slate-900/50 border border-white/5 rounded-xl">
-            <input type="checkbox" id="traktWatchedSync" checked={settings.traktWatchedSync}
-              onChange={(e) => setSettings(prev => ({ ...prev, traktWatchedSync: e.target.checked }))}
-              className="w-5 h-5 rounded bg-slate-800 border-slate-600 text-cyan-500 focus:ring-cyan-500 focus:ring-2 cursor-pointer" />
+            <input type="checkbox" id="traktWatchedSync" className="w-5 h-5 cursor-pointer accent-cyan-500" checked={settings.traktWatchedSync}
+              onChange={(e) => setSettings(prev => ({ ...prev, traktWatchedSync: e.target.checked }))} />
             <label htmlFor="traktWatchedSync" className="text-sm text-slate-300 cursor-pointer select-none">
               <span className="font-medium text-slate-200">Enable Trakt Watched Sync</span>
               <p className="text-xs text-slate-500 mt-0.5">When enabled, movies and shows can be marked as watched. This will sync watched status with your Trakt account.</p>

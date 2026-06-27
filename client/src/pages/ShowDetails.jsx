@@ -4,7 +4,7 @@ import api from '../lib/api';
 import { formatSize } from '../lib/format';
 import { useSettings } from '../lib/useSettings';
 import { useTMDBDetails } from '../lib/useTMDBDetails';
-import { ArrowLeft, HardDrive, Tv, PlayCircle, ChevronDown, ChevronRight, Bookmark, BookmarkMinus, Search, Star, X, RefreshCw, Loader2 } from 'lucide-react';
+import { ArrowLeft, HardDrive, Tv, PlayCircle, ChevronDown, ChevronRight, Bookmark, BookmarkMinus, Search, Star, X, RefreshCw, Loader2, Download } from 'lucide-react';
 import { customAlert, customConfirm } from '../utils/alerts';
 import TrailerModal from '../components/TrailerModal';
 
@@ -508,7 +508,7 @@ export default function ShowDetails() {
                                               tabIndex={0}
                                               onClick={() => setOpenLangMenu(openLangMenu === `${subKey}-${code}` ? null : `${subKey}-${code}`)}
                                               onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpenLangMenu(openLangMenu === `${subKey}-${code}` ? null : `${subKey}-${code}`); } }}
-                                              className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded transition-colors cursor-pointer ${
+                                              className={`text-xs uppercase font-bold px-2.5 py-1 rounded-md transition-colors cursor-pointer ${
                                                 exists
                                                   ? 'bg-slate-800 text-slate-300 border border-white/5 hover:bg-slate-700 hover:text-white'
                                                   : 'bg-amber-500/15 text-amber-400 hover:bg-amber-500/25 hover:text-amber-300 border border-amber-500/30 hover:border-amber-400/50'

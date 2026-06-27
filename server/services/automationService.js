@@ -83,6 +83,35 @@ const runUpdateRatings = async () => {
   }
 };
 
+const runUpdateAirDates = async () => {
+  console.log('[Automation] Updating episode air dates...');
+  // Find shows that are monitored and have missing or upcoming air dates.
+  // Actually, easiest is just to update all monitored shows' episodes periodically.
+  // But to be efficient, we can fetch seasons for shows that are monitored.
+  const shows = db.prepare("SELECT id, tmdb_id FROM shows WHERE status != 'unmonitored'").all();
+  const updateEp = db.prepare(`
+    UPDATE episodes SET air_date = ? 
+    WHERE show_id = ? AND season_number = ? AND episode_number = ?
+  `);
+  
+  for (const show of shows) {
+    try {
+      const seasons = await tmdbService.getShowSeasons(show.tmdb_id);
+      for (const season of seasons) {
+        if (season.season_number === 0) continue;
+        const eps = await tmdbService.getSeasonEpisodes(show.tmdb_id, season.season_number);
+        for (const ep of eps) {
+          if (ep.air_date) {
+            updateEp.run(ep.air_date, show.id, ep.season_number, ep.episode_number);
+          }
+        }
+      }
+    } catch (err) {
+      console.error(`[Automation] Failed to update air dates for show ${show.tmdb_id}: ${err.message}`);
+    }
+  }
+};
+
 const runTraktWatchedSync = async () => {
   await traktService.syncWatched();
 };
@@ -116,10 +145,20 @@ const init = () => {
     runTraktWatchedSync
   );
 
+  const airDatesCron = '0 1 * * *'; // Every day at 1 AM
+  taskRegistry.registerTask(
+    'update_air_dates',
+    'Update Air Dates',
+    'Fetches missing and upcoming episode air dates from TMDB.',
+    airDatesCron,
+    runUpdateAirDates
+  );
+
   cron.schedule(cronExp, () => taskRegistry.executeTask('search_cycle'));
   cron.schedule(ratingsCron, () => taskRegistry.executeTask('update_ratings'));
   cron.schedule(traktSyncCron, () => taskRegistry.executeTask('trakt_watched_sync'));
-  console.log('[Automation] Background search, rating, and Trakt sync schedulers initialized.');
+  cron.schedule(airDatesCron, () => taskRegistry.executeTask('update_air_dates'));
+  console.log('[Automation] Background search, rating, air date, and Trakt sync schedulers initialized.');
 };
 
 module.exports = {
