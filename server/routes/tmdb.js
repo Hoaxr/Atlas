@@ -115,4 +115,33 @@ router.get('/test', async (req, res) => {
   }
 });
 
+// Person details + filmography (cross-referenced with local library)
+router.get('/person/:id', async (req, res, next) => {
+  try {
+    const person = await tmdbService.getPersonById(req.params.id);
+    if (!person) return res.status(404).json({ status: 'error', message: 'Person not found' });
+
+    // Cross-reference credits with local library
+    const localMovieIds = new Set(db.prepare('SELECT tmdb_id FROM movies').all().map(m => m.tmdb_id));
+    const localShowIds  = new Set(db.prepare('SELECT tmdb_id FROM shows').all().map(s => s.tmdb_id));
+
+    const credits = person.combined_credits || {};
+    const enrichCredit = (credit) => ({
+      ...credit,
+      inLibrary: credit.media_type === 'movie'
+        ? localMovieIds.has(credit.id)
+        : localShowIds.has(credit.id),
+    });
+
+    person.combined_credits = {
+      cast: (credits.cast || []).map(enrichCredit),
+      crew: (credits.crew || []).map(enrichCredit),
+    };
+
+    res.json({ status: 'success', data: person });
+  } catch (error) {
+    next(error);
+  }
+});
+
 module.exports = router;

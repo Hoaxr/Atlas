@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react';
 import api from '../lib/api';
-import { X, Star, Calendar, Clock, Plus, ExternalLink, PlayCircle } from 'lucide-react';
+import { X, Star, Calendar, Clock, Plus, ExternalLink, PlayCircle, CheckCircle2 } from 'lucide-react';
 import { customAlert } from '../utils/alerts';
 import TrailerModal from './TrailerModal';
 
-export default function MediaDetailsModal({ isOpen, onClose, mediaId, mediaType }) {
+export default function MediaDetailsModal({ isOpen, onClose, mediaId, mediaType, isInLibrary }) {
   const [details, setDetails] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -12,15 +12,6 @@ export default function MediaDetailsModal({ isOpen, onClose, mediaId, mediaType 
   const [selectedProfile, setSelectedProfile] = useState('');
   const [trailerKey, setTrailerKey] = useState(null);
   const [isTrailerOpen, setIsTrailerOpen] = useState(false);
-
-  useEffect(() => {
-    if (isOpen && mediaId) {
-      fetchDetails();
-      fetchProfiles();
-    } else {
-      setDetails(null);
-    }
-  }, [isOpen, mediaId]);
 
   const fetchProfiles = async () => {
     try {
@@ -31,7 +22,9 @@ export default function MediaDetailsModal({ isOpen, onClose, mediaId, mediaType 
           setSelectedProfile(res.data.data.profiles[0].id);
         }
       }
-    } catch(e) {}
+    } catch {
+      // Settings unavailable — profiles will remain empty
+    }
   };
 
   const fetchDetails = async () => {
@@ -48,6 +41,17 @@ export default function MediaDetailsModal({ isOpen, onClose, mediaId, mediaType 
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (isOpen && mediaId) {
+      fetchDetails();
+      fetchProfiles();
+    } else {
+      setDetails(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, mediaId]);
+
 
   if (!isOpen) return null;
 
@@ -155,61 +159,71 @@ export default function MediaDetailsModal({ isOpen, onClose, mediaId, mediaType 
                 </div>
 
                 <div className="flex flex-col gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-slate-400 mb-1">Quality Profile</label>
-                    <select 
-                      className="glass-input w-full md:w-64" 
-                      value={selectedProfile} 
-                      onChange={e => setSelectedProfile(e.target.value)}
-                    >
-                      {profiles.map(p => (
-                        <option key={p.id} value={p.id}>{p.name}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="flex flex-col sm:flex-row gap-4">
-                    <button 
-                      onClick={async () => {
-                        try {
-                          const endpoint = mediaType === 'movie' ? '/library/movies' : '/library/shows';
-                          const payload = { tmdbId: details.id, qualityProfileId: parseInt(selectedProfile) || null };
-                          await api.post(endpoint, payload);
-                          onClose();
-                          customAlert(`${mediaType === 'movie' ? 'Movie' : 'TV Show'} added to library successfully!`);
-                        } catch (err) {
-                          console.error('Add to library error:', err.response?.data || err);
-                          customAlert(err.response?.data?.message || 'Failed to add to library');
-                        }
-                      }}
-                      className="flex-1 bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold py-3 px-6 rounded-xl transition-all duration-300 shadow-lg shadow-cyan-500/20 flex items-center justify-center gap-2 hover:scale-105"
-                    >
-                      <Plus className="w-5 h-5" />
-                      Add {mediaType === 'movie' ? 'Movie' : 'TV Show'} to Library
-                  </button>
-                  {(() => {
-                    const trailer = details.videos?.results?.find(v => v.site === 'YouTube' && v.type === 'Trailer');
-                    return trailer ? (
-                      <button 
-                        onClick={() => {
-                          setTrailerKey(trailer.key);
-                          setIsTrailerOpen(true);
-                        }}
-                        className="bg-red-500/20 hover:bg-red-500/30 text-red-500 font-bold py-3 px-6 rounded-xl flex items-center justify-center gap-2 transition-transform hover:scale-[1.02] border border-red-500/30"
+                  {!isInLibrary && (
+                    <div>
+                      <label className="block text-sm font-medium text-slate-400 mb-1">Quality Profile</label>
+                      <select 
+                        className="glass-input w-full md:w-64" 
+                        value={selectedProfile} 
+                        onChange={e => setSelectedProfile(e.target.value)}
                       >
-                        <PlayCircle className="w-5 h-5" /> Trailer
-                      </button>
-                    ) : null;
-                  })()}
-                  {details.homepage && (
-                    <a 
-                      href={details.homepage} 
-                      target="_blank" 
-                      rel="noreferrer"
-                      className="bg-slate-800 hover:bg-slate-700 text-white font-bold py-3 px-6 rounded-xl flex items-center justify-center gap-2 transition-transform hover:scale-[1.02] border border-white/5"
-                    >
-                      <ExternalLink className="w-5 h-5" /> Website
-                    </a>
+                        {profiles.map(p => (
+                          <option key={p.id} value={p.id}>{p.name}</option>
+                        ))}
+                      </select>
+                    </div>
                   )}
+
+                  <div className="flex flex-col sm:flex-row gap-4">
+                    {!isInLibrary ? (
+                      <button 
+                        onClick={async () => {
+                          try {
+                            const endpoint = mediaType === 'movie' ? '/library/movies' : '/library/shows';
+                            const payload = { tmdbId: details.id, qualityProfileId: parseInt(selectedProfile) || null };
+                            await api.post(endpoint, payload);
+                            onClose();
+                            customAlert(`${mediaType === 'movie' ? 'Movie' : 'TV Show'} added to library successfully!`);
+                          } catch (err) {
+                            console.error('Add to library error:', err.response?.data || err);
+                            customAlert(err.response?.data?.message || 'Failed to add to library');
+                          }
+                        }}
+                        className="flex-1 bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold py-3 px-6 rounded-xl transition-all duration-300 shadow-lg shadow-cyan-500/20 flex items-center justify-center gap-2 hover:scale-105"
+                      >
+                        <Plus className="w-5 h-5" />
+                        Add {mediaType === 'movie' ? 'Movie' : 'TV Show'} to Library
+                      </button>
+                    ) : (
+                      <div className="flex-1 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-bold py-3 px-6 rounded-xl flex items-center justify-center gap-2 shadow-lg">
+                        <CheckCircle2 className="w-5 h-5" />
+                        In Library
+                      </div>
+                    )}
+                    {(() => {
+                      const trailer = details.videos?.results?.find(v => v.site === 'YouTube' && v.type === 'Trailer');
+                      return trailer ? (
+                        <button 
+                          onClick={() => {
+                            setTrailerKey(trailer.key);
+                            setIsTrailerOpen(true);
+                          }}
+                          className="bg-red-500/20 hover:bg-red-500/30 text-red-500 font-bold py-3 px-6 rounded-xl flex items-center justify-center gap-2 transition-transform hover:scale-[1.02] border border-red-500/30"
+                        >
+                          <PlayCircle className="w-5 h-5" /> Trailer
+                        </button>
+                      ) : null;
+                    })()}
+                    {details.homepage && (
+                      <a 
+                        href={details.homepage} 
+                        target="_blank" 
+                        rel="noreferrer"
+                        className="bg-slate-800 hover:bg-slate-700 text-white font-bold py-3 px-6 rounded-xl flex items-center justify-center gap-2 transition-transform hover:scale-[1.02] border border-white/5"
+                      >
+                        <ExternalLink className="w-5 h-5" /> Website
+                      </a>
+                    )}
                   </div>
                 </div>
               </div>

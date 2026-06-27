@@ -1,12 +1,13 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import api from '../lib/api';
 import { formatSize } from '../lib/format';
 import { useSettings } from '../lib/useSettings';
 import { useTMDBDetails } from '../lib/useTMDBDetails';
-import { ArrowLeft, Search, Download, HardDrive, Film, PlayCircle, Bookmark, BookmarkMinus, Star, X, RefreshCw, Loader2 } from 'lucide-react';
+import { ArrowLeft, Search, Download, HardDrive, Film, PlayCircle, Bookmark, BookmarkMinus, Star, X, RefreshCw, Loader2, Heart } from 'lucide-react';
 import { customAlert, customConfirm } from '../utils/alerts';
 import TrailerModal from '../components/TrailerModal';
+import ManualSearchModal from '../components/ManualSearchModal';
 
 export default function MovieDetails() {
   const { id } = useParams();
@@ -19,9 +20,6 @@ export default function MovieDetails() {
 
   // Search Modal State
   const [searchModalOpen, setSearchModalOpen] = useState(false);
-  const [isSearching, setIsSearching] = useState(false);
-  const [searchResults, setSearchResults] = useState([]);
-  const [hasSearched, setHasSearched] = useState(false);
 
   // Remap Modal State
   const [remapModalOpen, setRemapModalOpen] = useState(false);
@@ -53,10 +51,6 @@ export default function MovieDetails() {
     return () => document.removeEventListener('mousedown', handler);
   }, [openLangMenu]);
 
-  useEffect(() => {
-    fetchMovieData();
-  }, [id]);
-
   const fetchMovieData = useCallback(async () => {
     setLoading(true);
     try {
@@ -71,6 +65,10 @@ export default function MovieDetails() {
       setLoading(false);
     }
   }, [id]);
+
+  useEffect(() => {
+    fetchMovieData();
+  }, [fetchMovieData]);
 
   const refreshAll = useCallback(() => {
     clearTMDB();
@@ -294,7 +292,7 @@ export default function MovieDetails() {
             </div>
             <div>
               <p className="text-slate-500 text-[10px] uppercase tracking-widest font-bold mb-1">Size</p>
-              <p className="font-medium text-slate-300">{formatSize(movie.size)}</p>
+              <p className="font-medium text-slate-300">{formatSize(movie.size || movie.file_size)}</p>
             </div>
             
             <div>
@@ -470,21 +468,7 @@ export default function MovieDetails() {
               <Search className="w-4 h-4" /> Auto Search
             </button>
             <button 
-              onClick={async () => {
-                setSearchModalOpen(true);
-                setSearchResults([]);
-                setHasSearched(false);
-                setIsSearching(true);
-                try {
-                  const res = await api.get(`/library/movies/${movie.id}/search`);
-                  setSearchResults(res.data.data);
-                  setHasSearched(true);
-                } catch (e) {
-                  customAlert('Search failed', 'error');
-                  setHasSearched(true);
-                }
-                setIsSearching(false);
-              }}
+              onClick={() => setSearchModalOpen(true)}
               className="bg-purple-500 hover:bg-purple-400 text-white font-bold px-6 py-2 rounded-xl flex items-center gap-2 transition-transform hover:scale-105"
             >
               <Search className="w-4 h-4" /> Manual Search
@@ -493,60 +477,36 @@ export default function MovieDetails() {
         </div>
       </div>
 
-      {searchModalOpen && (
-        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
-          <div className="bg-slate-900 p-6 rounded-2xl w-full max-w-3xl border border-white/10 max-h-[80vh] flex flex-col">
-            <div className="flex justify-between items-center mb-4 shrink-0">
-              <h2 className="text-2xl font-bold text-white">Interactive Search</h2>
-              <button onClick={() => { setSearchModalOpen(false); setSearchResults([]); }} className="text-slate-400 hover:text-white p-1 rounded-lg transition-colors">
-                <X className="w-6 h-6" />
-              </button>
-            </div>
-            
-            <div className="overflow-y-auto flex-1 min-h-0 pr-2">
-            {isSearching ? (
-              <div className="flex flex-col items-center justify-center py-10 text-purple-400">
-                <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-purple-500 mb-4"></div>
-                <p className="font-bold">Searching Indexers...</p>
-              </div>
-            ) : !searchResults.length && hasSearched ? (
-              <div className="flex flex-col items-center justify-center py-10 text-slate-400">
-                <p>No results found. Please check if your indexer URLs and API keys are correct in Settings.</p>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {searchResults.map((res, i) => (
-                  <div key={i} className="bg-slate-800 p-3 rounded-lg flex justify-between items-center border border-white/5">
-                    <div className="overflow-hidden mr-4">
-                      <p className="text-sm font-bold text-slate-200 truncate" title={res.title}>{res.title}</p>
-                      <div className="flex space-x-3 text-xs text-slate-400 mt-1">
-                        <span className="text-cyan-400">{res.indexer}</span>
-                        <span>{res.seeders} Seeders</span>
-                        <span>{(res.size / 1024 / 1024 / 1024).toFixed(2)} GB</span>
-                      </div>
-                    </div>
-                    <button 
-                      onClick={async () => {
-                        try {
-                          await api.post(`/library/movies/${movie.id}/download`, { torrentUrl: res.link });
-                          customAlert('Sent to download client!');
-                          setSearchModalOpen(false);
-                          fetchMovieData(); // update state (e.g. status)
-                        } catch (e) {
-                          customAlert('Failed to send to client', 'error');
-                        }
-                      }}
-                      className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold px-3 py-1 rounded-lg shrink-0"
-                    >
-                      Download
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-            </div>
+      {/* Cast & Crew Section */}
+      {tmdbDetails?.credits?.cast?.length > 0 && (
+        <div className="mt-8">
+          <h2 className="text-xl font-bold text-white mb-4">Cast</h2>
+          <div className="flex gap-4 overflow-x-auto pb-4 snap-x">
+            {tmdbDetails.credits.cast.slice(0, 15).map(person => (
+              <Link key={person.credit_id} to={`/person/${person.id}`} className="shrink-0 w-32 group snap-start">
+                <div className="aspect-[2/3] rounded-xl overflow-hidden bg-slate-800 mb-2 border border-white/5 group-hover:border-white/20 transition-colors">
+                  {person.profile_path ? (
+                    <img src={`https://image.tmdb.org/t/p/w185${person.profile_path}`} alt={person.name} className="w-full h-full object-cover" loading="lazy" />
+                  ) : (
+                    <div className="w-full h-full flex flex-col items-center justify-center text-slate-600"><Search className="w-6 h-6 mb-1" />No Image</div>
+                  )}
+                </div>
+                <p className="text-xs font-bold text-slate-200 truncate group-hover:text-cyan-400 transition-colors">{person.name}</p>
+                <p className="text-[11px] text-slate-500 truncate">{person.character}</p>
+              </Link>
+            ))}
           </div>
         </div>
+      )}
+
+      {searchModalOpen && (
+        <ManualSearchModal
+          mediaId={movie.id}
+          mediaType="movie"
+          title={movie.title}
+          onClose={() => setSearchModalOpen(false)}
+          onGrabbed={fetchMovieData}
+        />
       )}
       
       {/* Remap Modal */}

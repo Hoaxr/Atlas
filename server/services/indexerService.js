@@ -69,7 +69,7 @@ const search1337x = async (title, url) => {
       const href = titleNode.attr('href');
       const seeders = parseInt($(row).find('.coll-2.seeds').text()) || 0;
       
-      let sizeStr = $(row).find('.coll-4.size').text().split('B')[0] + 'B';
+      const sizeStr = $(row).find('.coll-4.size').text().split('B')[0] + 'B';
       let size = 0;
       if (sizeStr.includes('MB')) size = parseFloat(sizeStr) * 1024 * 1024;
       else if (sizeStr.includes('GB')) size = parseFloat(sizeStr) * 1024 * 1024 * 1024;

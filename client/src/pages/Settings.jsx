@@ -101,9 +101,9 @@ export default function Settings() {
                 }
               }
             })
-            .catch(() => {});
+            .catch(() => { /* background fetch — ignore errors */ });
         }
-      } catch {}
+      } catch { /* sessionStorage unavailable */ }
     }
   }, []);
 
@@ -121,7 +121,7 @@ export default function Settings() {
         setIsScanning(true);
         setScanProgress(res.data);
       }
-    } catch (err) {}
+    } catch { /* scan not in progress */ }
   };
 
   useEffect(() => {
@@ -158,7 +158,7 @@ export default function Settings() {
             }
             setTimeout(() => setStatus({ type: '', message: '' }), 10000);
           }
-        } catch (err) {}
+        } catch { /* poll error — will retry on next interval */ }
       }, 1000);
     } else {
       setScanProgress(null);
@@ -172,7 +172,7 @@ export default function Settings() {
       if (res.data.status === 'success') {
         setClientStatuses(res.data.data);
       }
-    } catch(err) {}
+    } catch { /* client test unavailable */ }
   };
 
   const fetchKeyStatuses = async () => {
@@ -232,7 +232,7 @@ export default function Settings() {
           let parsedQualities = ['1080p'];
           try {
             if (p.qualities) parsedQualities = JSON.parse(p.qualities);
-          } catch(e) {}
+          } catch { /* malformed JSON — use default quality */ }
           return { ...p, qualities: parsedQualities, upgrade_allowed: p.upgrade_allowed !== 0 };
         });
         setProfiles(parsedProfiles);
@@ -246,7 +246,7 @@ export default function Settings() {
     try {
       const res = await api.get('/library/paths');
       if (res.data.status === 'success') setPaths(res.data.data);
-    } catch (err) {}
+    } catch { /* paths unavailable */ }
   };
 
   const handleSave = async () => {
@@ -288,7 +288,7 @@ export default function Settings() {
       await api.post('/library/paths', { path: newPath.trim() });
       setNewPath('');
       fetchPaths();
-    } catch (err) {}
+    } catch { /* path add failed silently — fetchPaths not called */ }
   };
 
   const handleScan = async () => {
@@ -324,7 +324,7 @@ export default function Settings() {
           setTimeout(poll, interval * 1000);
           return;
         }
-      } catch {}
+      } catch { /* Trakt polling error — stop polling */ }
       setTraktPolling(false);
       setTraktDeviceCode(null);
     };

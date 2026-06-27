@@ -1,12 +1,13 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import api from '../lib/api';
 import { formatSize } from '../lib/format';
 import { useSettings } from '../lib/useSettings';
 import { useTMDBDetails } from '../lib/useTMDBDetails';
-import { ArrowLeft, HardDrive, Tv, PlayCircle, ChevronDown, ChevronRight, Bookmark, BookmarkMinus, Search, Star, X, RefreshCw, Loader2, Download } from 'lucide-react';
+import { ArrowLeft, HardDrive, Tv, PlayCircle, ChevronDown, ChevronRight, Bookmark, BookmarkMinus, Search, Star, X, RefreshCw, Loader2, Download, Heart, CheckSquare } from 'lucide-react';
 import { customAlert, customConfirm } from '../utils/alerts';
 import TrailerModal from '../components/TrailerModal';
+import ManualSearchModal from '../components/ManualSearchModal';
 
 export default function ShowDetails() {
   const { id } = useParams();
@@ -55,12 +56,9 @@ export default function ShowDetails() {
       setSubSearched(true);
     }
   };
-  
+
   const [searchModalOpen, setSearchModalOpen] = useState(false);
   const [selectedEpisode, setSelectedEpisode] = useState(null);
-  const [searchResults, setSearchResults] = useState([]);
-  const [isSearching, setIsSearching] = useState(false);
-  const [hasSearched, setHasSearched] = useState(false);
   
   const [collapsedSeasons, setCollapsedSeasons] = useState({});
   const [isTrailerOpen, setIsTrailerOpen] = useState(false);
@@ -74,10 +72,6 @@ export default function ShowDetails() {
   const [remapping, setRemapping] = useState(false);
 
   const { tmdbDetails, trailerKey, clear: clearTMDB } = useTMDBDetails('show', show?.tmdb_id);
-
-  useEffect(() => {
-    fetchShowData();
-  }, [id]);
 
   const fetchShowData = useCallback(async () => {
     setLoading(true);
@@ -100,6 +94,10 @@ export default function ShowDetails() {
       setLoading(false);
     }
   }, [id]);
+
+  useEffect(() => {
+    fetchShowData();
+  }, [fetchShowData]);
 
   const refreshAll = useCallback(() => {
     clearTMDB();
@@ -249,6 +247,20 @@ export default function ShowDetails() {
                 <BookmarkMinus className="w-8 h-8 md:w-10 md:h-10 text-slate-500" />
               )}
             </button>
+            <button
+              onClick={async () => {
+                try {
+                  const res = await api.post(`/library/shows/${show.id}/wanted`);
+                  if (res.data.status === 'success') fetchShowData();
+                } catch {
+                  customAlert('Failed to add to watchlist', 'error');
+                }
+              }}
+              className="hover:scale-110 transition-transform cursor-pointer focus:outline-none"
+              title="Add to Watchlist"
+            >
+              <Heart className={`w-8 h-8 md:w-10 md:h-10 ${show.status === 'wanted' ? 'text-pink-500 fill-pink-500' : 'text-slate-500 hover:text-pink-400'}`} />
+            </button>
             <span>
               {show.title} <span className="text-slate-400 font-light">({show.year})</span>
             </span>
@@ -271,10 +283,11 @@ export default function ShowDetails() {
             <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${
               show.status === 'downloaded' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 
               show.status === 'downloading' ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30' : 
+              show.status === 'wanted' ? 'bg-pink-500/20 text-pink-400 border border-pink-500/30' : 
               show.status === 'monitored' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 
               'bg-rose-500/20 text-rose-400 border border-rose-500/30'
             }`}>
-              {show.status}
+              {show.status === 'wanted' ? 'Watchlist' : show.status}
             </span>
             {show.folder_size > 0 && (
               <span className="bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1">
@@ -419,6 +432,21 @@ export default function ShowDetails() {
                       ) : (
                         <BookmarkMinus className="w-5 h-5 text-slate-500" />
                       )}
+                    </button>
+                    <button 
+                      onClick={async (e) => {
+                        e.stopPropagation();
+                        try {
+                          await api.post(`/library/shows/${show.id}/seasons/${season}/mark-watched`);
+                          fetchShowData();
+                        } catch (err) {
+                          customAlert('Failed to mark season as watched', 'error');
+                        }
+                      }}
+                      className="p-2 hover:bg-emerald-500/20 rounded-lg transition-colors text-slate-400 hover:text-emerald-400"
+                      title="Mark entire season as watched"
+                    >
+                      <CheckSquare className="w-5 h-5" />
                     </button>
                     <h3 className="text-xl font-bold text-purple-400">Season {season}</h3>
                   </div>
@@ -605,21 +633,9 @@ export default function ShowDetails() {
                                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-zap"><path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/></svg>
                                   </button>
                                   <button 
-                                    onClick={async () => {
+                                    onClick={() => {
                                       setSelectedEpisode(ep);
                                       setSearchModalOpen(true);
-                                      setIsSearching(true);
-                                      setHasSearched(false);
-                                      setSearchResults([]);
-                                      try {
-                                        const res = await api.get(`/library/episodes/${ep.id}/search`);
-                                        setSearchResults(res.data.data);
-                                        setHasSearched(true);
-                                      } catch (e) {
-                                        customAlert('Search failed', 'error');
-                                        setHasSearched(true);
-                                      }
-                                      setIsSearching(false);
                                     }}
                                     className="bg-purple-500/20 hover:bg-purple-500/40 text-purple-400 border border-purple-500/30 text-xs font-bold p-2 rounded-lg inline-flex items-center justify-center transition-colors tooltip"
                                     title="Manual Search"
@@ -641,65 +657,37 @@ export default function ShowDetails() {
         </div>
       </div>
 
-      {/* Episode Search Modal (Still needed for the search overlay!) */}
-      {searchModalOpen && selectedEpisode && (
-        <div className="fixed inset-0 bg-black/90 flex items-center justify-center z-50 p-4">
-          <div className="bg-slate-900 p-6 rounded-2xl w-full max-w-3xl border border-white/10 max-h-[80vh] flex flex-col shadow-2xl">
-            <div className="flex justify-between items-center mb-2 shrink-0">
-              <h2 className="text-2xl font-bold text-white">
-                Search S{selectedEpisode.season_number}E{selectedEpisode.episode_number}: {selectedEpisode.title}
-              </h2>
-              <button onClick={() => { setSearchModalOpen(false); setSearchResults([]); }} className="text-slate-400 hover:text-white p-1 rounded-lg transition-colors">
-                <X className="w-6 h-6" />
-              </button>
-            </div>
-            
-            <div className="flex-1 overflow-y-auto py-4">
-              {isSearching ? (
-                <div className="flex flex-col items-center justify-center py-10 text-purple-400">
-                  <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-purple-500 mb-4"></div>
-                  <p className="font-bold">Searching Indexers...</p>
+      {/* Cast & Crew Section */}
+      {tmdbDetails?.credits?.cast?.length > 0 && (
+        <div className="mt-8">
+          <h2 className="text-xl font-bold text-white mb-4">Cast</h2>
+          <div className="flex gap-4 overflow-x-auto pb-4 snap-x">
+            {tmdbDetails.credits.cast.slice(0, 15).map(person => (
+              <Link key={person.credit_id} to={`/person/${person.id}`} className="shrink-0 w-32 group snap-start">
+                <div className="aspect-[2/3] rounded-xl overflow-hidden bg-slate-800 mb-2 border border-white/5 group-hover:border-white/20 transition-colors">
+                  {person.profile_path ? (
+                    <img src={`https://image.tmdb.org/t/p/w185${person.profile_path}`} alt={person.name} className="w-full h-full object-cover" loading="lazy" />
+                  ) : (
+                    <div className="w-full h-full flex flex-col items-center justify-center text-slate-600"><Search className="w-6 h-6 mb-1" />No Image</div>
+                  )}
                 </div>
-              ) : !searchResults.length && hasSearched ? (
-                <div className="flex flex-col items-center justify-center py-10 text-slate-400">
-                  <p>No results found. Please check if your indexer URLs and API keys are correct in Settings.</p>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {searchResults.map((res, i) => (
-                    <div key={i} className="bg-slate-800 p-3 rounded-lg flex justify-between items-center border border-white/5">
-                      <div className="overflow-hidden mr-4">
-                        <p className="text-sm font-bold text-slate-200 truncate" title={res.title}>{res.title}</p>
-                        <div className="flex space-x-3 text-xs text-slate-400 mt-1">
-                          <span className="text-cyan-400">{res.indexer}</span>
-                          <span>{res.seeders} Seeders</span>
-                          <span>{(res.size / 1024 / 1024 / 1024).toFixed(2)} GB</span>
-                        </div>
-                      </div>
-                      <button 
-                        onClick={async () => {
-                          try {
-                            await api.post(`/library/episodes/${selectedEpisode.id}/download`, { torrentUrl: res.link });
-                            customAlert('Sent to download client!');
-                            setSearchModalOpen(false);
-                            setSearchResults([]);
-                            fetchShowData(); // Refresh UI
-                          } catch (e) {
-                            customAlert('Failed to send to client', 'error');
-                          }
-                        }}
-                        className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold px-3 py-1 rounded-lg shrink-0"
-                      >
-                        Download
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
+                <p className="text-xs font-bold text-slate-200 truncate group-hover:text-purple-400 transition-colors">{person.name}</p>
+                <p className="text-[11px] text-slate-500 truncate">{person.character}</p>
+              </Link>
+            ))}
           </div>
         </div>
+      )}
+
+      {/* Episode Search Modal */}
+      {searchModalOpen && selectedEpisode && (
+        <ManualSearchModal
+          mediaId={selectedEpisode.id}
+          mediaType="episode"
+          title={`S${selectedEpisode.season_number}E${selectedEpisode.episode_number}: ${selectedEpisode.title}`}
+          onClose={() => setSearchModalOpen(false)}
+          onGrabbed={fetchShowData}
+        />
       )}
       
       {/* Remap Modal */}

@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import api from '../../lib/api';
 import { Save, Plus, Trash2, Settings2, CheckCircle2 } from 'lucide-react';
 
@@ -90,7 +89,7 @@ export default function ProfilesTab({ profiles, newProfile, setNewProfile, editi
                     fetchSettings();
                     setStatus({ type: 'success', message: 'Profile updated!' });
                     setTimeout(() => setStatus({ type: '', message: '' }), 3000);
-                  } catch(e) {}
+                  } catch { /* profile update failed silently */ }
                 } else {
                   handleAddEntity('profiles', newProfile);
                   setNewProfile({ name: '', qualities: ['720p', '1080p', '2160p'], cutoff: '1080p', upgrade_allowed: true });

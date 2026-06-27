@@ -171,7 +171,7 @@ const searchShows = async (query) => {
 
 const getMovieById = async (id) => {
   try {
-    const response = await tmdbApi.get(`/movie/${id}`, { params: { append_to_response: 'videos' } });
+    const response = await tmdbApi.get(`/movie/${id}`, { params: { append_to_response: 'videos,credits' } });
     return response.data;
   } catch (error) {
     if (error.response?.status === 404) return null;
@@ -181,7 +181,7 @@ const getMovieById = async (id) => {
 
 const getShowById = async (id) => {
   try {
-    const response = await tmdbApi.get(`/tv/${id}`, { params: { append_to_response: 'videos' } });
+    const response = await tmdbApi.get(`/tv/${id}`, { params: { append_to_response: 'videos,credits' } });
     return response.data;
   } catch (error) {
     if (error.response?.status === 404) return null;
@@ -277,6 +277,18 @@ const getRecommendations = async (type, libraryIds) => {
 const getRecommendationsForMovies = (libraryIds) => getRecommendations('movie', libraryIds);
 const getRecommendationsForShows = (libraryIds) => getRecommendations('tv', libraryIds);
 
+const getPersonById = async (personId) => {
+  try {
+    const response = await tmdbApi.get(`/person/${personId}`, {
+      params: { append_to_response: 'combined_credits' }
+    });
+    return response.data;
+  } catch (err) {
+    console.error(`[TMDB] Failed to fetch person ${personId}:`, err.message);
+    return null;
+  }
+};
+
 module.exports = {
   searchMovies,
   searchShows,
@@ -288,5 +300,6 @@ module.exports = {
   getRecentMovies,
   getRecentShows,
   getRecommendationsForMovies,
-  getRecommendationsForShows
+  getRecommendationsForShows,
+  getPersonById,
 };

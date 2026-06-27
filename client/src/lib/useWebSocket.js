@@ -71,9 +71,9 @@ export default function useWebSocket() {
 
             // Forward to all registered handlers
             handlersRef.current.forEach(h => {
-              try { h(data); } catch {}
+              try { h(data); } catch { /* handler error — isolate from other handlers */ }
             });
-          } catch {}
+          } catch { /* malformed WS message — ignore */ }
         };
 
         ws.onclose = () => {

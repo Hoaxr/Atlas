@@ -589,4 +589,48 @@ router.post('/restore', (req, res, next) => {
   }
 });
 
+// ─── Feature 5: Task Schedule Editor ─────────────────────────────────────────
+
+const DEFAULT_SCHEDULES = {
+  search_cycle:      '0 * * * *',     // Every hour
+  update_ratings:    '0 0 * * *',     // Daily midnight
+  update_air_dates:  '0 1 * * *',     // Daily 1 AM
+  trakt_watched_sync:'0 */6 * * *',   // Every 6 hours
+  library_scan:      '0 3 * * *',     // Daily 3 AM
+};
+
+router.get('/schedules', (req, res, next) => {
+  try {
+    const schedules = {};
+    for (const [taskId, defaultCron] of Object.entries(DEFAULT_SCHEDULES)) {
+      const row = db.prepare(`SELECT value FROM settings WHERE key = ?`).get(`schedule_${taskId}`);
+      schedules[taskId] = row ? row.value : defaultCron;
+    }
+    res.json({ status: 'success', data: schedules });
+  } catch (e) { next(e); }
+});
+
+router.post('/schedules', (req, res, next) => {
+  try {
+    const { schedules } = req.body; // { taskId: cronString, ... }
+    if (!schedules || typeof schedules !== 'object') {
+      return res.status(400).json({ status: 'error', message: 'schedules object required' });
+    }
+    const stmt = db.prepare('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value');
+    for (const [taskId, cron] of Object.entries(schedules)) {
+      if (DEFAULT_SCHEDULES[taskId]) {
+        stmt.run(`schedule_${taskId}`, cron);
+      }
+    }
+    // Hot-reload schedules in automation service
+    try {
+      const automationService = require('../services/automationService');
+      if (typeof automationService.rescheduleAll === 'function') {
+        automationService.rescheduleAll(schedules);
+      }
+    } catch { /* service may not be loaded yet */ }
+    res.json({ status: 'success', message: 'Schedules saved' });
+  } catch (e) { next(e); }
+});
+
 module.exports = router;

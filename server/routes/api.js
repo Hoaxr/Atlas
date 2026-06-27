@@ -25,7 +25,10 @@ router.get('/logs', (req, res, next) => {
       'SELECT * FROM logs ORDER BY created_at DESC LIMIT ? OFFSET ?'
     ).all(limit, offset);
     
-    const parsed = logs.map(log => {
+    const levelFilter = req.query.level; // e.g. 'error', 'success', 'warn', 'info'
+    const searchFilter = (req.query.search || '').toLowerCase();
+
+    let parsed = logs.map(log => {
       try {
         const data = JSON.parse(log.message);
         return { id: log.id, ...data, created_at: log.created_at };
@@ -33,6 +36,13 @@ router.get('/logs', (req, res, next) => {
         return { id: log.id, level: 'info', message: log.message, created_at: log.created_at };
       }
     });
+
+    if (levelFilter && levelFilter !== 'all') {
+      parsed = parsed.filter(l => l.level === levelFilter);
+    }
+    if (searchFilter) {
+      parsed = parsed.filter(l => (l.message || '').toLowerCase().includes(searchFilter));
+    }
 
     res.json({ status: 'success', data: parsed });
   } catch (e) {

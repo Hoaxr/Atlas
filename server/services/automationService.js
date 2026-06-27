@@ -7,6 +7,22 @@ const tmdbService = require('./tmdbService');
 const traktService = require('./traktService');
 const eventBus = require('./eventBus');
 
+const DEFAULT_SCHEDULES = {
+  search_cycle:       '0 * * * *',
+  update_ratings:     '0 0 * * *',
+  update_air_dates:   '0 1 * * *',
+  trakt_watched_sync: '0 */6 * * *',
+};
+
+const getSchedule = (taskId) => {
+  try {
+    const row = db.prepare("SELECT value FROM settings WHERE key = ?").get(`schedule_${taskId}`);
+    return row ? row.value : DEFAULT_SCHEDULES[taskId];
+  } catch {
+    return DEFAULT_SCHEDULES[taskId];
+  }
+};
+
 const getProfile = (id) => {
   if (!id) return null;
   return db.prepare('SELECT * FROM quality_profiles WHERE id = ?').get(id);
@@ -85,9 +101,6 @@ const runUpdateRatings = async () => {
 
 const runUpdateAirDates = async () => {
   console.log('[Automation] Updating episode air dates...');
-  // Find shows that are monitored and have missing or upcoming air dates.
-  // Actually, easiest is just to update all monitored shows' episodes periodically.
-  // But to be efficient, we can fetch seasons for shows that are monitored.
   const shows = db.prepare("SELECT id, tmdb_id FROM shows WHERE status != 'unmonitored'").all();
   const updateEp = db.prepare(`
     UPDATE episodes SET air_date = ? 
@@ -116,52 +129,45 @@ const runTraktWatchedSync = async () => {
   await traktService.syncWatched();
 };
 
+// Holds references to active node-cron jobs so we can stop/restart them
+const activeJobs = {};
+
+const scheduleTask = (taskId, cronExp) => {
+  if (activeJobs[taskId]) {
+    activeJobs[taskId].stop();
+  }
+  activeJobs[taskId] = cron.schedule(cronExp, () => taskRegistry.executeTask(taskId));
+};
+
 const init = () => {
-  const cronExp = '0 * * * *';
-  
-  taskRegistry.registerTask(
-    'search_cycle', 
-    'Torrent Search Cycle', 
-    'Searches for missing monitored movies and sends them to the download client.',
-    cronExp,
-    runSearchCycle
-  );
+  const tasks = [
+    { id: 'search_cycle',       name: 'Torrent Search Cycle',      desc: 'Searches for missing monitored movies and sends them to the download client.',             fn: runSearchCycle },
+    { id: 'update_ratings',     name: 'Update Ratings',            desc: 'Fetches missing ratings from TMDB for movies and shows.',                                  fn: runUpdateRatings },
+    { id: 'trakt_watched_sync', name: 'Trakt Watched Sync',        desc: 'Syncs watched status from your Trakt account to your local library.',                     fn: runTraktWatchedSync },
+    { id: 'update_air_dates',   name: 'Update Air Dates',          desc: 'Fetches missing and upcoming episode air dates from TMDB.',                               fn: runUpdateAirDates },
+  ];
 
-  const ratingsCron = '0 0 * * *'; // Every day at midnight
-  taskRegistry.registerTask(
-    'update_ratings',
-    'Update Ratings',
-    'Fetches missing ratings from TMDB for movies and shows.',
-    ratingsCron,
-    runUpdateRatings
-  );
+  for (const task of tasks) {
+    const cronExp = getSchedule(task.id);
+    taskRegistry.registerTask(task.id, task.name, task.desc, cronExp, task.fn);
+    scheduleTask(task.id, cronExp);
+  }
 
-  const traktSyncCron = '0 */6 * * *'; // Every 6 hours
-  taskRegistry.registerTask(
-    'trakt_watched_sync',
-    'Trakt Watched Sync',
-    'Syncs watched status from your Trakt account to your local library.',
-    traktSyncCron,
-    runTraktWatchedSync
-  );
-
-  const airDatesCron = '0 1 * * *'; // Every day at 1 AM
-  taskRegistry.registerTask(
-    'update_air_dates',
-    'Update Air Dates',
-    'Fetches missing and upcoming episode air dates from TMDB.',
-    airDatesCron,
-    runUpdateAirDates
-  );
-
-  cron.schedule(cronExp, () => taskRegistry.executeTask('search_cycle'));
-  cron.schedule(ratingsCron, () => taskRegistry.executeTask('update_ratings'));
-  cron.schedule(traktSyncCron, () => taskRegistry.executeTask('trakt_watched_sync'));
-  cron.schedule(airDatesCron, () => taskRegistry.executeTask('update_air_dates'));
   console.log('[Automation] Background search, rating, air date, and Trakt sync schedulers initialized.');
+};
+
+// Called by settings API to hot-reload schedules without restart
+const rescheduleAll = (newSchedules) => {
+  for (const [taskId, cronExp] of Object.entries(newSchedules)) {
+    if (activeJobs[taskId]) {
+      scheduleTask(taskId, cronExp);
+      console.log(`[Automation] Rescheduled ${taskId} → ${cronExp}`);
+    }
+  }
 };
 
 module.exports = {
   init,
-  runSearchCycle
+  runSearchCycle,
+  rescheduleAll,
 };

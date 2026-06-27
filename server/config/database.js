@@ -89,6 +89,21 @@ db.exec(`
     cutoff TEXT,
     upgrade_allowed INTEGER DEFAULT 1
   );
+
+  CREATE TABLE IF NOT EXISTS collections (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    color TEXT DEFAULT '#06b6d4',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS movie_collections (
+    movie_id INTEGER NOT NULL,
+    collection_id INTEGER NOT NULL,
+    PRIMARY KEY (movie_id, collection_id),
+    FOREIGN KEY (movie_id) REFERENCES movies(id) ON DELETE CASCADE,
+    FOREIGN KEY (collection_id) REFERENCES collections(id) ON DELETE CASCADE
+  );
 `);
 
 try {

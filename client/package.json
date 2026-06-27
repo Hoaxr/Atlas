@@ -4,9 +4,12 @@
   "type": "module",
   "scripts": {
     "dev": "vite --port 3001 --host --clearScreen false",
-    "build": "vite build"
+    "build": "vite build",
+    "lint": "eslint src",
+    "lint:fix": "eslint src --fix"
   },
   "dependencies": {
+    "@tanstack/react-query": "^5.101.2",
     "axios": "^1.18.1",
     "clsx": "^2.1.1",
     "lucide-react": "^1.21.0",
@@ -16,8 +19,12 @@
     "react-router-dom": "^7.18.0"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@vitejs/plugin-react": "^4.3.0",
     "autoprefixer": "^10.4.19",
+    "eslint": "^10.6.0",
+    "eslint-plugin-react": "^7.37.5",
+    "eslint-plugin-react-hooks": "^7.1.1",
     "postcss": "^8.4.38",
     "tailwindcss": "^3.4.3",
     "vite": "^5.2.11"

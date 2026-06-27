@@ -2,8 +2,10 @@
   "name": "MediaManager",
   "private": true,
   "scripts": {
+    "start": "concurrently --kill-others \"npm start --prefix server\" \"npm start --prefix client\"",
     "dev": "concurrently --kill-others \"npm run dev --prefix server\" \"npm run dev --prefix client\"",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "lint": "npm run lint --prefix server && npm run lint --prefix client"
   },
   "devDependencies": {
     "concurrently": "^8.2.2",

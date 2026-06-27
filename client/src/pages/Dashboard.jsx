@@ -1,11 +1,16 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../lib/api';
-import { Activity, Film, Tv, Search, CheckCircle2, AlertCircle, Bookmark, BookmarkMinus, LayoutGrid, List, Star, Info, X, RotateCcw, Filter as FilterIcon, CheckSquare, Square, Trash2, FolderOpen } from 'lucide-react';
+import { Activity, Film, Tv, Search, CheckCircle2, AlertCircle, Bookmark, BookmarkMinus, LayoutGrid, List, Star, Info, X, RotateCcw, Filter as FilterIcon, CheckSquare, Square, Trash2, FolderOpen, ChevronUp, ChevronDown, Heart } from 'lucide-react';
 import { customAlert, customConfirm } from '../utils/alerts';
 import { cachedMovies, cachedShows, setCachedMovies, setCachedShows } from '../lib/libraryCache';
 import { formatSize, formatSpeed } from '../lib/format';
 import { useSettings } from '../lib/useSettings';
+
+const SortIcon = ({ field, sort }) => {
+  if (!sort.startsWith(field)) return null;
+  return sort.endsWith('_asc') ? <ChevronUp className="w-3.5 h-3.5 inline ml-1" /> : <ChevronDown className="w-3.5 h-3.5 inline ml-1" />;
+};
 
 export default function Dashboard() {
   const location = useLocation();
@@ -42,6 +47,16 @@ export default function Dashboard() {
   const [sort, setSort] = useState(() => localStorage.getItem(scopeKey('Sort')) || 'added_desc');
   const [viewStyle, setViewStyle] = useState(() => localStorage.getItem('dashboardViewStyle') || 'grid');
   const [searchQuery, setSearchQuery] = useState('');
+
+  const handleSortClick = (field) => {
+    const defaultDesc = ['rating', 'size', 'year'].includes(field);
+    if (sort.startsWith(field)) {
+      setSort(sort === `${field}_asc` ? `${field}_desc` : `${field}_asc`);
+    } else {
+      setSort(defaultDesc ? `${field}_desc` : `${field}_asc`);
+    }
+  };
+
   const { profiles: qualityProfiles } = useSettings();
 
   // Apply URL params on mount (from Statistics page clicks)
@@ -85,6 +100,9 @@ export default function Dashboard() {
   }, [sort]);
 
   // Reset filters when switching between movies and shows
+  const [page, setPage] = useState(1);
+  const itemsPerPage = 50;
+
   useEffect(() => {
     setStatusFilter(() => localStorage.getItem(scopeKey('StatusFilter')) || 'all');
     setWatchedFilter(() => localStorage.getItem(scopeKey('WatchedFilter')) || 'all');
@@ -92,7 +110,20 @@ export default function Dashboard() {
     setQualityFilter(() => localStorage.getItem(scopeKey('QualityFilter')) || 'all');
     setYearFilter(() => localStorage.getItem(scopeKey('YearFilter')) || 'all');
     setSort(() => localStorage.getItem(scopeKey('Sort')) || 'added_desc');
+    setPage(1);
+    
+    // Check if we need to show loading state when switching tabs
+    if (viewMode === 'movies' && movies.length === 0) setLoading(true);
+    if (viewMode === 'shows' && shows.length === 0) setLoading(true);
+    
+    // Fetch fresh data for the current view
+    fetchViewData(viewMode, false);
   }, [viewMode]);
+
+  // Reset pagination when filters/sort change
+  useEffect(() => {
+    setPage(1);
+  }, [sort, statusFilter, watchedFilter, genreFilter, qualityFilter, yearFilter]);
 
   useEffect(() => {
     // Always show cached data immediately (if available), then refresh
@@ -101,8 +132,6 @@ export default function Dashboard() {
     const startPolling = () => setInterval(fetchClientData, 3000);
     let interval = startPolling();
 
-    // Fetch current view first — faster initial render for what user sees
-    fetchViewData(viewMode, false);
     // Then fetch the other view in background
     const otherMode = viewMode === 'movies' ? 'shows' : 'movies';
     fetchViewData(otherMode, true);
@@ -223,7 +252,7 @@ export default function Dashboard() {
 
     // Year filter
     if (yearFilter !== 'all') {
-      items = items.filter(item => item.year == yearFilter);
+      items = items.filter(item => String(item.year) === yearFilter);
     }
 
     // Genre filter
@@ -258,6 +287,10 @@ export default function Dashboard() {
       if (sort === 'size_asc') return (a.file_size || a.folder_size || 0) - (b.file_size || b.folder_size || 0);
       if (sort === 'title_asc') return (a.title || '').localeCompare(b.title || '');
       if (sort === 'title_desc') return (b.title || '').localeCompare(a.title || '');
+      if (sort === 'year_desc') return (b.year || 0) - (a.year || 0);
+      if (sort === 'year_asc') return (a.year || 0) - (b.year || 0);
+      if (sort === 'status_asc') return (a.status || '').localeCompare(b.status || '');
+      if (sort === 'status_desc') return (b.status || '').localeCompare(a.status || '');
       return 0;
     });
 
@@ -357,6 +390,21 @@ export default function Dashboard() {
     setSelectedIds(new Set());
   }, [viewMode]);
 
+  const paginatedItems = displayItems.slice(0, page * itemsPerPage);
+  
+  const loadMoreRef = useRef(null);
+  useEffect(() => {
+    if (!loadMoreRef.current) return;
+    const observer = new IntersectionObserver((entries) => {
+      if (entries[0].isIntersecting && paginatedItems.length < displayItems.length) {
+        setPage(p => p + 1);
+      }
+    }, { rootMargin: '400px' });
+    
+    observer.observe(loadMoreRef.current);
+    return () => observer.disconnect();
+  }, [paginatedItems.length, displayItems.length]);
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between gap-4">
@@ -407,6 +455,7 @@ export default function Dashboard() {
       </div>
 
       {/* Main Content Area */}
+      
       <div className="glass-panel rounded-2xl min-h-[400px]">
         {/* Filter Bar Header */}
         <div className={`border-b ${viewMode === 'movies' ? 'border-cyan-500/30' : 'border-purple-500/30'} bg-slate-900/50 rounded-t-2xl`}>
@@ -449,6 +498,7 @@ export default function Dashboard() {
               <option value="unmonitored">Unmonitored</option>
               <option value="downloaded">Downloaded</option>
               <option value="downloading">Downloading</option>
+              <option value="wanted">Watchlist</option>
               <option value="missing">Missing</option>
             </FilterSelect>
 
@@ -610,34 +660,18 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* Select All checkbox — list view only */}
-        {viewStyle === 'list' && (
-        <div className="flex items-center gap-2 mb-3">
-          <button
-            onClick={toggleSelectAll}
-            className="p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors"
-            title="Select All"
-          >
-            {selectedIds.size === displayItems.length && displayItems.length > 0 ? (
-              <CheckSquare className="w-5 h-5 text-cyan-400" />
-            ) : selectedIds.size > 0 ? (
-              <div className="w-5 h-5 rounded border-2 border-cyan-400/50 bg-cyan-400/20" />
-            ) : (
-              <Square className="w-5 h-5 text-slate-400 dark:text-slate-600" />
-            )}
-          </button>
-          <span className="text-xs text-slate-500">
-            {selectedIds.size > 0 ? `${selectedIds.size} of ${displayItems.length} selected` : `${displayItems.length} item${displayItems.length !== 1 ? 's' : ''}`}
-          </span>
-        </div>
-        )}
+
         {displayItems.length > 0 ? (
           viewStyle === 'grid' ? (
             <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
-              {displayItems.map(item => (
+              {paginatedItems.map(item => (
                 <div 
                   key={item.id} 
-                  className={`glass-panel rounded-xl overflow-hidden group hover:scale-[1.02] transition-transform duration-300 relative flex flex-col`}
+                  onClick={() => {
+                    if (viewMode === 'shows') navigate(`/shows/${item.id}`);
+                    else navigate(`/movies/${item.id}`);
+                  }}
+                  className={`cursor-pointer glass-panel rounded-xl overflow-hidden group hover:scale-[1.02] transition-transform duration-300 relative flex flex-col`}
                 >
                   <div className="absolute top-2 left-2 z-20">
                     <button 
@@ -679,6 +713,11 @@ export default function Dashboard() {
                     {item.status === 'downloading' && (
                       <div className="bg-slate-900/80 rounded-full shadow-lg p-1.5" title="Downloading">
                         <Activity className="w-5 h-5 text-blue-400 animate-pulse" />
+                      </div>
+                    )}
+                    {item.status === 'wanted' && (
+                      <div className="bg-slate-900/80 rounded-full shadow-lg p-1.5" title="Watchlist">
+                        <Heart className="w-5 h-5 text-pink-500 fill-pink-500/20" />
                       </div>
                     )}
                   </div>
@@ -782,17 +821,31 @@ export default function Dashboard() {
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="border-b border-white/5 text-slate-400 text-sm">
-                  <th className="py-3 px-2 font-medium w-8"></th>
-                  <th className="py-3 px-4 font-medium">Title</th>
-                  <th className="py-3 px-4 font-medium w-24">Year</th>
-                  <th className="py-3 px-4 font-medium w-32">Rating</th>
-                  <th className="py-3 px-4 font-medium w-28">Size</th>
-                  <th className="py-3 px-4 font-medium w-32">Status</th>
+                  <th className="py-3 px-2 font-medium w-8">
+                    <button
+                      onClick={toggleSelectAll}
+                      className="p-0.5 rounded hover:bg-slate-700 transition-colors"
+                      title="Select All"
+                    >
+                      {selectedIds.size === displayItems.length && displayItems.length > 0 ? (
+                        <CheckSquare className="w-4 h-4 text-cyan-400" />
+                      ) : selectedIds.size > 0 ? (
+                        <div className="w-4 h-4 rounded border-2 border-cyan-400/50 bg-cyan-400/20" />
+                      ) : (
+                        <Square className="w-4 h-4 text-slate-600 hover:text-slate-400 transition-colors" />
+                      )}
+                    </button>
+                  </th>
+                  <th className="py-3 px-4 font-medium cursor-pointer hover:text-white transition-colors select-none group" onClick={() => handleSortClick('title')}>Title<SortIcon field="title" sort={sort} /></th>
+                  <th className="py-3 px-4 font-medium w-24 cursor-pointer hover:text-white transition-colors select-none group" onClick={() => handleSortClick('year')}>Year<SortIcon field="year" sort={sort} /></th>
+                  <th className="py-3 px-4 font-medium w-32 cursor-pointer hover:text-white transition-colors select-none group" onClick={() => handleSortClick('rating')}>Rating<SortIcon field="rating" sort={sort} /></th>
+                  <th className="py-3 px-4 font-medium w-28 cursor-pointer hover:text-white transition-colors select-none group" onClick={() => handleSortClick('size')}>Size<SortIcon field="size" sort={sort} /></th>
+                  <th className="py-3 px-4 font-medium w-32 cursor-pointer hover:text-white transition-colors select-none group" onClick={() => handleSortClick('status')}>Status<SortIcon field="status" sort={sort} /></th>
                   <th className="py-3 px-4 font-medium w-24 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/5">
-                {displayItems.map(item => (
+                {paginatedItems.map(item => (
                   <tr 
                     key={item.id}
                     onClick={() => {
@@ -863,16 +916,16 @@ export default function Dashboard() {
                         <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${
                           item.status === 'downloaded' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 
                           item.status === 'downloading' ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30' : 
+                          item.status === 'wanted' ? 'bg-pink-500/20 text-pink-400 border border-pink-500/30' : 
                           item.status === 'monitored' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 
                           'bg-rose-500/20 text-rose-400 border border-rose-500/30'
                         }`}>
-                          {item.status}
+                          {item.status === 'wanted' ? 'Watchlist' : item.status}
                         </span>
                       </div>
                     </td>
                     <td className="py-2.5 px-4 text-right">
-                      <div className="flex justify-end gap-2">
-                        {item.status === 'monitored' && (
+                      <div className="flex justify-end gap-2 items-center">
                           <>
                             <button 
                               onClick={async (e) => { 
@@ -920,10 +973,6 @@ export default function Dashboard() {
                               <Search className="w-4 h-4" />
                             </button>
                           </>
-                        )}
-                        {item.status === 'downloaded' && (
-                          <span className="text-[10px] text-slate-600 italic px-1">Downloaded</span>
-                        )}
                       </div>
                     </td>
                   </tr>
@@ -944,6 +993,10 @@ export default function Dashboard() {
             <p className="text-sm mt-1">Add them from the Discover page or scan your NAS in Settings.</p>
           </div>
         )}
+        
+        {/* Infinite Scroll Observer Target */}
+        <div ref={loadMoreRef} className="h-10 w-full mt-4" />
+        
         </div>
       </div>
 

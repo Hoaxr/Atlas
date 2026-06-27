@@ -32,7 +32,7 @@ const parseMediaTitle = (filename, folderPath) => {
 
     if (!title && folderPath) {
       const parts = folderPath.split(path.sep);
-      let parent = parts[parts.length - 1];
+      const parent = parts[parts.length - 1];
       if (parent.match(/Season\s*\d+/i)) {
         title = parts[parts.length - 2];
       } else {
@@ -48,7 +48,7 @@ const parseMediaTitle = (filename, folderPath) => {
 
   // Otherwise, treat as Movie
   const yearMatch = cleanName.match(/(19\d{2}|20\d{2})/);
-  let year = yearMatch ? parseInt(yearMatch[0]) : null;
+  const year = yearMatch ? parseInt(yearMatch[0]) : null;
   
   let titlePart = cleanName;
   if (yearMatch) {
@@ -95,7 +95,7 @@ const doScan = async () => {
   try {
     // Phase 1: Pre-scan to count total video files
     scanProgress.currentFile = 'Gathering files...';
-    let allFiles = [];
+    const allFiles = [];
     for (const libPath of paths) {
       try {
         const stat = await fs.stat(libPath.path);
@@ -105,7 +105,7 @@ const doScan = async () => {
         }
         
         const files = await fs.readdir(libPath.path, { recursive: true, withFileTypes: true });
-        let videoFiles = [];
+        const videoFiles = [];
         for (const file of files) {
           if (file.isFile() && isVideoFile(file.name)) {
             videoFiles.push(file);
@@ -408,8 +408,8 @@ const doScan = async () => {
         try {
           const data = await tmdbService.getMovieById(m.tmdb_id);
           if (data) {
-            let updates = [];
-            let values = [];
+            const updates = [];
+            const values = [];
             if (data.vote_average !== undefined) {
               updates.push('rating = ?');
               values.push(data.vote_average);
@@ -434,8 +434,8 @@ const doScan = async () => {
         try {
           const data = await tmdbService.getShowById(s.tmdb_id);
           if (data) {
-            let updates = [];
-            let values = [];
+            const updates = [];
+            const values = [];
             if (data.vote_average !== undefined) {
               updates.push('rating = ?');
               values.push(data.vote_average);

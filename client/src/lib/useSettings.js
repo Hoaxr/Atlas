@@ -17,12 +17,12 @@ export function useSettings() {
         setProviderLangs(Array.isArray(langs) && langs.length > 0 ? langs : ['en']);
         const parsedProfiles = (res.data.data.profiles || []).map(p => {
           let parsedQualities = ['1080p'];
-          try { if (p.qualities) parsedQualities = JSON.parse(p.qualities); } catch(e) {}
+          try { if (p.qualities) parsedQualities = JSON.parse(p.qualities); } catch { /* malformed JSON — use default */ }
           return { ...p, qualities: parsedQualities, upgrade_allowed: p.upgrade_allowed !== 0 };
         });
         setProfiles(parsedProfiles);
       }
-    }).catch(() => {}).finally(() => setLoading(false));
+    }).catch(() => { /* settings unavailable */ }).finally(() => setLoading(false));
   }, []);
 
   return { providerLangs, profiles, loading };

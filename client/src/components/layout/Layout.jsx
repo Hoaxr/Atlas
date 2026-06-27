@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react';
-import { Outlet, NavLink } from 'react-router-dom';
-import { Search, Settings as SettingsIcon, Film, Activity, Tv as TvIcon, DownloadCloud, ArrowDown, ArrowUp, Heart, Menu, Calendar as CalendarIcon, BarChart3 } from 'lucide-react';
+import { Outlet, NavLink, useNavigate } from 'react-router-dom';
+import { Search, Settings as SettingsIcon, Film, Activity, Tv as TvIcon, DownloadCloud, ArrowDown, ArrowUp, Heart, Menu, Calendar as CalendarIcon, BarChart3, Keyboard } from 'lucide-react';
 import Logo from './Logo';
 import clsx from 'clsx';
 import api from '../../lib/api';
 import useWebSocket from '../../lib/useWebSocket';
 import { setCachedMovies, setCachedShows } from '../../lib/libraryCache';
+import useKeyboardShortcuts from '../../lib/useKeyboardShortcuts';
+import ShortcutsModal from '../shared/ShortcutsModal';
 
 const navItems = [
   { name: 'Discover', path: '/discover', icon: Search },
@@ -20,12 +22,14 @@ const navItems = [
 
 export default function Layout() {
   useWebSocket(); // Connect to real-time event stream
+  const navigate = useNavigate();
   const [libStats, setLibStats] = useState({ movies: 0, shows: 0 });
   const [clientStats, setClientStats] = useState({ dl_info_speed: 0, up_info_speed: 0 });
   const [downloads, setDownloads] = useState([]);
   const [clientConnected, setClientConnected] = useState(null);
   const [systemIssues, setSystemIssues] = useState([]);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
 
   // Prefetch library data into shared cache so Dashboard loads instantly
   const prefetchLibrary = async () => {
@@ -100,6 +104,19 @@ export default function Layout() {
     };
   }, []);
 
+  // Global keyboard shortcuts
+  useKeyboardShortcuts({
+    'g m': () => navigate('/movies'),
+    'g s': () => navigate('/shows'),
+    'g d': () => navigate('/discover'),
+    'g c': () => navigate('/calendar'),
+    'g t': () => navigate('/tasks'),
+    'g x': () => navigate('/stats'),
+    '/': () => { document.querySelector('[data-search-input]')?.focus(); },
+    '?': () => setShortcutsOpen(true),
+    'escape': () => setShortcutsOpen(false),
+  });
+
   const formatSpeed = (bytes) => {
     if (!bytes || bytes === 0) return '0 B/s';
     const k = 1024;
@@ -110,6 +127,7 @@ export default function Layout() {
 
   return (
     <div className="flex h-screen overflow-hidden bg-slate-50 dark:bg-slate-950">
+      {shortcutsOpen && <ShortcutsModal onClose={() => setShortcutsOpen(false)} />}
       {/* Mobile overlay */}
       {sidebarOpen && (
         <div

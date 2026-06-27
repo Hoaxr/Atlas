@@ -1,5 +1,23 @@
+# Dependencies
 node_modules/
+
+# Environment variables – copy .env.example and fill in values
 .env
-.DS_Store
-dist/
+.env.local
+
+# Database files
 *.sqlite
+*.sqlite-wal
+*.sqlite-shm
+server/data/
+
+# Build output
+dist/
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS artifacts
+.DS_Store
+Thumbs.db

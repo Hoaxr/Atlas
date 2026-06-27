@@ -977,4 +977,250 @@ router.post('/duplicates/delete', (req, res, next) => {
   }
 });
 
+// ─── Feature 1: Watchlist (wanted status) ───────────────────────────────────
+
+router.post('/movies/:id/wanted', (req, res, next) => {
+  try {
+    const movie = db.prepare('SELECT id FROM movies WHERE id = ?').get(req.params.id);
+    if (!movie) return res.status(404).json({ status: 'error', message: 'Movie not found' });
+    db.prepare("UPDATE movies SET status = 'wanted' WHERE id = ?").run(req.params.id);
+    res.json({ status: 'success', message: 'Added to watchlist' });
+  } catch (err) { next(err); }
+});
+
+router.post('/shows/:id/wanted', (req, res, next) => {
+  try {
+    const show = db.prepare('SELECT id FROM shows WHERE id = ?').get(req.params.id);
+    if (!show) return res.status(404).json({ status: 'error', message: 'Show not found' });
+    db.prepare("UPDATE shows SET status = 'wanted' WHERE id = ?").run(req.params.id);
+    res.json({ status: 'success', message: 'Added to watchlist' });
+  } catch (err) { next(err); }
+});
+
+// ─── Feature 3: Season bulk watched ─────────────────────────────────────────
+
+router.post('/shows/:id/seasons/:season/watched', (req, res, next) => {
+  try {
+    const { watched = 1 } = req.body;
+    const result = db.prepare(
+      'UPDATE episodes SET watched = ? WHERE show_id = ? AND season_number = ?'
+    ).run(watched ? 1 : 0, req.params.id, req.params.season);
+    res.json({ status: 'success', message: `${result.changes} episodes updated`, changes: result.changes });
+  } catch (err) { next(err); }
+});
+
+// ─── Feature 4: Manual Search & Grab ────────────────────────────────────────
+
+router.get('/movies/:id/search', async (req, res, next) => {
+  try {
+    const movie = db.prepare('SELECT * FROM movies').all().find(m => m.id === parseInt(req.params.id));
+    if (!movie) return res.status(404).json({ status: 'error', message: 'Movie not found' });
+    const indexerService = require('../services/indexerService');
+    const results = await indexerService.searchMovie(movie.title, movie.year);
+    res.json({ status: 'success', data: results });
+  } catch (err) { next(err); }
+});
+
+router.post('/movies/:id/grab', async (req, res, next) => {
+  try {
+    const { link, title } = req.body;
+    if (!link) return res.status(400).json({ status: 'error', message: 'link is required' });
+    const downloadClientService = require('../services/downloadClientService');
+    const eventBus = require('../services/eventBus');
+    await downloadClientService.addTorrent(link);
+    db.prepare("UPDATE movies SET status = 'downloading' WHERE id = ?").run(req.params.id);
+    eventBus.info('Manual grab started', { title: title || 'Unknown', type: 'movie' });
+    res.json({ status: 'success', message: 'Download started' });
+  } catch (err) { next(err); }
+});
+
+router.get('/episodes/:id/search', async (req, res, next) => {
+  try {
+    const ep = db.prepare(
+      'SELECT e.*, s.title as show_title FROM episodes e JOIN shows s ON e.show_id = s.id WHERE e.id = ?'
+    ).get(req.params.id);
+    if (!ep) return res.status(404).json({ status: 'error', message: 'Episode not found' });
+    const indexerService = require('../services/indexerService');
+    const results = await indexerService.searchEpisode(ep.show_title, ep.season_number, ep.episode_number);
+    res.json({ status: 'success', data: results });
+  } catch (err) { next(err); }
+});
+
+router.post('/episodes/:id/grab', async (req, res, next) => {
+  try {
+    const { link, title } = req.body;
+    if (!link) return res.status(400).json({ status: 'error', message: 'link is required' });
+    const downloadClientService = require('../services/downloadClientService');
+    const eventBus = require('../services/eventBus');
+    await downloadClientService.addTorrent(link);
+    db.prepare("UPDATE episodes SET status = 'downloading' WHERE id = ?").run(req.params.id);
+    eventBus.info('Manual grab started', { title: title || 'Unknown', type: 'episode' });
+    res.json({ status: 'success', message: 'Download started' });
+  } catch (err) { next(err); }
+});
+
+// ─── Feature 11: System Health ───────────────────────────────────────────────
+
+router.get('/health', async (req, res, next) => {
+  try {
+    const fs = require('fs/promises');
+    const path = require('path');
+    const os = require('os');
+
+    // DB file size
+    let dbSize = 0;
+    try {
+      const dbPath = path.join(__dirname, '../data/database.sqlite');
+      const stat = await fs.stat(dbPath);
+      dbSize = stat.size;
+    } catch { /* ignore */ }
+
+    // Library path disk usage
+    const paths = db.prepare('SELECT * FROM library_paths').all();
+    const pathHealth = await Promise.all(paths.map(async (p) => {
+      try {
+        const items = await fs.readdir(p.path);
+        return { path: p.path, accessible: true, itemCount: items.length };
+      } catch {
+        return { path: p.path, accessible: false, itemCount: 0 };
+      }
+    }));
+
+    // Last scan time from settings
+    const lastScanRow = db.prepare("SELECT value FROM settings WHERE key = 'lastScanTime'").get();
+    const lastScan = lastScanRow ? lastScanRow.value : null;
+
+    // Counts
+    const movieCount = db.prepare('SELECT COUNT(*) as c FROM movies').get().c;
+    const showCount  = db.prepare('SELECT COUNT(*) as c FROM shows').get().c;
+    const epCount    = db.prepare('SELECT COUNT(*) as c FROM episodes').get().c;
+    const logCount   = db.prepare('SELECT COUNT(*) as c FROM logs').get().c;
+
+    // System info
+    const uptimeSec = process.uptime();
+    const memUsage = process.memoryUsage();
+
+    res.json({
+      status: 'success',
+      data: {
+        db: { sizeBytes: dbSize },
+        library: { movies: movieCount, shows: showCount, episodes: epCount },
+        paths: pathHealth,
+        lastScan,
+        logs: { count: logCount },
+        process: {
+          uptimeSeconds: Math.floor(uptimeSec),
+          heapUsedMB: Math.round(memUsage.heapUsed / 1024 / 1024),
+          heapTotalMB: Math.round(memUsage.heapTotal / 1024 / 1024),
+          rssMemMB: Math.round(memUsage.rss / 1024 / 1024),
+        },
+        system: {
+          freeMemMB: Math.round(os.freemem() / 1024 / 1024),
+          totalMemMB: Math.round(os.totalmem() / 1024 / 1024),
+          cpuCount: os.cpus().length,
+          platform: os.platform(),
+        }
+      }
+    });
+  } catch (err) { next(err); }
+});
+
+// ─── Feature 12: Library Export ──────────────────────────────────────────────
+
+router.get('/export', (req, res, next) => {
+  try {
+    const format = req.query.format === 'csv' ? 'csv' : 'json';
+    const movies = db.prepare(
+      'SELECT id, tmdb_id, title, year, status, genres, rating, file_path, added_at FROM movies'
+    ).all();
+    const shows = db.prepare(
+      'SELECT id, tmdb_id, title, year, status, genres, rating, folder_path, added_at FROM shows'
+    ).all();
+
+    if (format === 'json') {
+      res.setHeader('Content-Type', 'application/json');
+      res.setHeader('Content-Disposition', 'attachment; filename="atlas-library.json"');
+      return res.json({ exportedAt: new Date().toISOString(), movies, shows });
+    }
+
+    // CSV
+    const escape = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+    const movieHeader = 'type,id,tmdb_id,title,year,status,genres,rating,path,added_at';
+    const movieRows = movies.map(m =>
+      ['movie', m.id, m.tmdb_id, m.title, m.year, m.status, m.genres, m.rating, m.file_path, m.added_at]
+        .map(escape).join(',')
+    );
+    const showRows = shows.map(s =>
+      ['show', s.id, s.tmdb_id, s.title, s.year, s.status, s.genres, s.rating, s.folder_path, s.added_at]
+        .map(escape).join(',')
+    );
+    const csv = [movieHeader, ...movieRows, ...showRows].join('\n');
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', 'attachment; filename="atlas-library.csv"');
+    return res.send(csv);
+  } catch (err) { next(err); }
+});
+
+// ─── Feature 9: Collections ──────────────────────────────────────────────────
+
+router.get('/collections', (req, res, next) => {
+  try {
+    const collections = db.prepare('SELECT * FROM collections ORDER BY name ASC').all();
+    const withCounts = collections.map(c => ({
+      ...c,
+      movieCount: db.prepare('SELECT COUNT(*) as c FROM movie_collections WHERE collection_id = ?').get(c.id).c,
+    }));
+    res.json({ status: 'success', data: withCounts });
+  } catch (err) { next(err); }
+});
+
+router.post('/collections', (req, res, next) => {
+  try {
+    const { name, color = '#06b6d4' } = req.body;
+    if (!name) return res.status(400).json({ status: 'error', message: 'name is required' });
+    const result = db.prepare('INSERT INTO collections (name, color) VALUES (?, ?)').run(name.trim(), color);
+    res.json({ status: 'success', data: { id: result.lastInsertRowid, name, color } });
+  } catch (err) { next(err); }
+});
+
+router.put('/collections/:id', (req, res, next) => {
+  try {
+    const { name, color } = req.body;
+    if (name) db.prepare('UPDATE collections SET name = ? WHERE id = ?').run(name.trim(), req.params.id);
+    if (color) db.prepare('UPDATE collections SET color = ? WHERE id = ?').run(color, req.params.id);
+    res.json({ status: 'success', message: 'Collection updated' });
+  } catch (err) { next(err); }
+});
+
+router.delete('/collections/:id', (req, res, next) => {
+  try {
+    db.prepare('DELETE FROM movie_collections WHERE collection_id = ?').run(req.params.id);
+    db.prepare('DELETE FROM collections WHERE id = ?').run(req.params.id);
+    res.json({ status: 'success', message: 'Collection deleted' });
+  } catch (err) { next(err); }
+});
+
+router.get('/movies/:id/collections', (req, res, next) => {
+  try {
+    const rows = db.prepare(
+      'SELECT c.* FROM collections c JOIN movie_collections mc ON c.id = mc.collection_id WHERE mc.movie_id = ?'
+    ).all(req.params.id);
+    res.json({ status: 'success', data: rows });
+  } catch (err) { next(err); }
+});
+
+router.post('/movies/:id/collections', (req, res, next) => {
+  try {
+    const { collectionIds } = req.body; // array of collection ids
+    if (!Array.isArray(collectionIds)) {
+      return res.status(400).json({ status: 'error', message: 'collectionIds must be an array' });
+    }
+    // Replace all assignments
+    db.prepare('DELETE FROM movie_collections WHERE movie_id = ?').run(req.params.id);
+    const stmt = db.prepare('INSERT OR IGNORE INTO movie_collections (movie_id, collection_id) VALUES (?, ?)');
+    for (const cid of collectionIds) stmt.run(req.params.id, cid);
+    res.json({ status: 'success', message: 'Collections updated' });
+  } catch (err) { next(err); }
+});
+
 module.exports = router;

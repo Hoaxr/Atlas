@@ -364,7 +364,7 @@ const importEpisode = async (torrent, episode) => {
     const s = episode.season_number.toString().padStart(2, '0');
     const e = episode.episode_number.toString().padStart(2, '0');
     
-    let showFolder = sanitizeTitle(episode.show_title, config);
+    const showFolder = sanitizeTitle(episode.show_title, config);
     let fileName = `${showFolder} - S${s}E${e}`;
     
     if (config.renameEpisodes) {

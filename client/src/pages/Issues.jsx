@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import useWebSocket from '../lib/useWebSocket';
 import EmptyState from '../components/shared/EmptyState';
+import HealthWidget from '../components/shared/HealthWidget';
 
 const statusIcons = {
   tmdb: Database,
@@ -199,7 +200,8 @@ export default function Issues() {
       </div>
 
       {activeTab === 'status' ? (
-        <>
+        <div className="space-y-6">
+          <HealthWidget />
           {/* Issues — shown first if there are any */}
           {issues.length > 0 && (
             <section>
@@ -394,7 +396,7 @@ export default function Issues() {
           </div>
         )}
       </section>
-        </>
+        </div>
       ) : (
         /* Activity Feed Tab */
         <div className="space-y-4">

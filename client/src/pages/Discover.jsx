@@ -4,6 +4,47 @@ import { Search as SearchIcon, Plus, Info, Tv, Film, Star, CheckCircle2, Chevron
 import MediaDetailsModal from '../components/MediaDetailsModal';
 import { customAlert } from '../utils/alerts';
 
+const MediaRow = ({ title, items, badgeText, isTrending = false, renderMediaCard }) => {
+  const scrollContainerRef = useRef(null);
+
+  const scroll = (direction) => {
+    if (scrollContainerRef.current) {
+      const scrollAmount = window.innerWidth > 768 ? 800 : 300;
+      scrollContainerRef.current.scrollBy({ left: direction === 'right' ? scrollAmount : -scrollAmount, behavior: 'smooth' });
+    }
+  };
+
+  if (!items || items.length === 0) return null;
+  return (
+    <div className="mb-10 group/row relative">
+      <div className="flex justify-between items-center mb-4">
+        <h2 className="text-xl font-bold text-slate-200 flex items-center space-x-2">
+          <span className="bg-gradient-to-r from-orange-400 to-pink-500 text-transparent bg-clip-text">
+            {title}
+          </span>
+          {badgeText && (
+            <span className="text-xs font-normal text-slate-500 bg-slate-900 px-2 py-1 rounded-md ml-4 border border-white/5">
+              {badgeText}
+            </span>
+          )}
+        </h2>
+        <div className="flex gap-2">
+           <button onClick={() => scroll('left')} className="p-2 bg-slate-900/50 hover:bg-slate-800 rounded-full text-slate-400 hover:text-white transition-colors border border-white/5 backdrop-blur-sm">
+             <ChevronLeft className="w-5 h-5" />
+           </button>
+           <button onClick={() => scroll('right')} className="p-2 bg-slate-900/50 hover:bg-slate-800 rounded-full text-slate-400 hover:text-white transition-colors border border-white/5 backdrop-blur-sm">
+             <ChevronRight className="w-5 h-5" />
+           </button>
+        </div>
+      </div>
+      
+      <div ref={scrollContainerRef} className="flex overflow-x-auto gap-6 snap-x snap-mandatory pb-4 hide-scrollbar">
+        {items.map(item => renderMediaCard(item, isTrending, false))}
+      </div>
+    </div>
+  );
+};
+
 export default function Discover() {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState([]);
@@ -251,47 +292,6 @@ export default function Discover() {
     );
   };
 
-  const MediaRow = ({ title, items, badgeText, isTrending = false }) => {
-    const scrollContainerRef = useRef(null);
-
-    const scroll = (direction) => {
-      if (scrollContainerRef.current) {
-        const scrollAmount = window.innerWidth > 768 ? 800 : 300;
-        scrollContainerRef.current.scrollBy({ left: direction === 'right' ? scrollAmount : -scrollAmount, behavior: 'smooth' });
-      }
-    };
-
-    if (!items || items.length === 0) return null;
-    return (
-      <div className="mb-10 group/row relative">
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-xl font-bold text-slate-200 flex items-center space-x-2">
-            <span className="bg-gradient-to-r from-orange-400 to-pink-500 text-transparent bg-clip-text">
-              {title}
-            </span>
-            {badgeText && (
-              <span className="text-xs font-normal text-slate-500 bg-slate-900 px-2 py-1 rounded-md ml-4 border border-white/5">
-                {badgeText}
-              </span>
-            )}
-          </h2>
-          <div className="flex gap-2">
-             <button onClick={() => scroll('left')} className="p-2 bg-slate-900/50 hover:bg-slate-800 rounded-full text-slate-400 hover:text-white transition-colors border border-white/5 backdrop-blur-sm">
-               <ChevronLeft className="w-5 h-5" />
-             </button>
-             <button onClick={() => scroll('right')} className="p-2 bg-slate-900/50 hover:bg-slate-800 rounded-full text-slate-400 hover:text-white transition-colors border border-white/5 backdrop-blur-sm">
-               <ChevronRight className="w-5 h-5" />
-             </button>
-          </div>
-        </div>
-        
-        <div ref={scrollContainerRef} className="flex overflow-x-auto gap-6 snap-x snap-mandatory pb-4 hide-scrollbar">
-          {items.map(item => renderMediaCard(item, isTrending, false))}
-        </div>
-      </div>
-    );
-  };
-
   const isDiscovering = !query;
 
   return (
@@ -351,9 +351,9 @@ export default function Discover() {
             </div>
           ) : (
             <>
-              <MediaRow title="Trending Right Now" items={trendingResults} badgeText="Powered by Trakt.tv" isTrending={true} />
-              <MediaRow title="Recently Added" items={recentResults} badgeText="From your library" />
-              <MediaRow title="Recommended For You" items={recommendedResults} badgeText="Powered by TMDB" />
+              <MediaRow title="Trending Right Now" items={trendingResults} badgeText="Powered by Trakt.tv" isTrending={true} renderMediaCard={renderMediaCard} />
+              <MediaRow title="Recently Added" items={recentResults} badgeText="From your library" renderMediaCard={renderMediaCard} />
+              <MediaRow title="Recommended For You" items={recommendedResults} badgeText="Powered by TMDB" renderMediaCard={renderMediaCard} />
             </>
           )}
         </div>
@@ -377,6 +377,7 @@ export default function Discover() {
         onClose={() => setSelectedMediaId(null)}
         mediaId={selectedMediaId}
         mediaType={selectedMediaType}
+        isInLibrary={selectedMediaId ? libraryItems.has(selectedMediaId) : false}
       />
     </div>
   );

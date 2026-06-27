@@ -79,9 +79,10 @@ export default function Statistics() {
       movies.forEach(m => {
         movieStatuses[m.status] = (movieStatuses[m.status] || 0) + 1;
         if (m.watched) watchedMovies++;
-        if (m.file_size) { totalFileSize += m.file_size; moviesWithFiles++; }
+        const size = m.file_size || m.folder_size || 0;
+        if (size) { totalFileSize += size; moviesWithFiles++; }
         if (m.year) years[m.year] = (years[m.year] || 0) + 1;
-        if (m.rating && m.rating > 0) ratings.push(m.rating);
+        ratings.push(m.rating || 0);
         if (m.quality_profile_name) {
           qualityProfiles[m.quality_profile_name] = (qualityProfiles[m.quality_profile_name] || 0) + 1;
         }
@@ -96,7 +97,10 @@ export default function Statistics() {
       shows.forEach(s => {
         showStatuses[s.status] = (showStatuses[s.status] || 0) + 1;
         if (s.watched) watchedShows++;
+        const size = s.file_size || s.folder_size || 0;
+        if (size) { totalFileSize += size; }
         if (s.episode_count) totalEpisodes += s.episode_count;
+        ratings.push(s.rating || 0);
         if (s.quality_profile_name) {
           qualityProfiles[s.quality_profile_name] = (qualityProfiles[s.quality_profile_name] || 0) + 1;
         }
@@ -135,6 +139,7 @@ export default function Statistics() {
 
       const totalItems = movies.length + shows.length;
       const downloadedItems = (movieStatuses.downloaded || 0) + (showStatuses.downloaded || 0);
+      const validRatings = ratings.filter(r => r > 0);
 
       setStats({
         totalMovies: movies.length,
@@ -153,8 +158,8 @@ export default function Statistics() {
         downloadedItems,
         totalItems,
         downloadPct: totalItems > 0 ? Math.round((downloadedItems / totalItems) * 100) : 0,
-        averageRating: movies.length > 0
-          ? (movies.reduce((sum, m) => sum + (m.rating || 0), 0) / movies.length).toFixed(1)
+        averageRating: validRatings.length > 0
+          ? (validRatings.reduce((sum, r) => sum + r, 0) / validRatings.length).toFixed(1)
           : 'N/A',
         recentItems: allItems,
       });
@@ -236,17 +241,6 @@ export default function Statistics() {
             <StatCard icon={Tv} label="Episodes Watched" value={traktStats.episodes.watched.toLocaleString()} color="text-pink-400" bg="bg-pink-500/10" />
             <StatCard icon={Clock} label="Watch Time" value={formatDuration(traktStats.totalMinutes)} color="text-pink-400" bg="bg-pink-500/10" />
           </div>
-          {traktStats.totalMinutes > 0 && (() => {
-            const d = formatDurationDetailed(traktStats.totalMinutes);
-            return (
-              <p className="text-xs text-slate-500 mt-2 text-center">
-                {d.years > 0 && `${d.years} year${d.years !== 1 ? 's' : ''} `}
-                {d.days > 0 && `${d.days} day${d.days !== 1 ? 's' : ''} `}
-                {d.hours > 0 && `${d.hours} hour${d.hours !== 1 ? 's' : ''}`}
-                {' '}of total watch time
-              </p>
-            );
-          })()}
         </div>
       )}
 
@@ -261,36 +255,31 @@ export default function Statistics() {
         {/* Status Distribution */}
         <div className="glass-panel rounded-2xl p-6">
           <h3 className="text-lg font-bold text-slate-200 mb-4">Library Status</h3>
-          <div className="space-y-5">
+          <div className="space-y-6">
             {[
               { label: 'Movies', data: stats.movieStatuses, total: stats.totalMovies },
               { label: 'Shows', data: stats.showStatuses, total: stats.totalShows },
             ].map(({ label, data, total }) => (
               <div key={label}>
-                <p className="text-sm font-medium text-slate-500 mb-2">{label}</p>
-                <div className="flex h-6 rounded-full overflow-hidden bg-slate-800">
-                  {['downloaded', 'downloading', 'monitored', 'unmonitored'].map(status => {
-                    const count = data[status] || 0;
-                    const pct = total > 0 ? (count / total) * 100 : 0;
-                    return pct > 0 ? (
-                      <div
-                        key={status}
-                        className={`${STATUS_COLORS[status]} transition-all flex items-center justify-center text-xs font-bold text-white`}
-                        style={{ width: `${pct}%` }}
-                        title={`${STATUS_LABELS[status]}: ${count}`}
-                      >
-                        {pct > 12 ? count : ''}
+                <p className="text-sm font-bold text-slate-400 mb-3">{label}</p>
+                <div className="space-y-2">
+                  {Object.entries(data)
+                    .sort((a, b) => b[1] - a[1])
+                    .map(([status, count]) => (
+                    <div key={status} className="flex items-center gap-3">
+                      <span className="text-sm font-medium text-slate-400 w-24 capitalize">{STATUS_LABELS[status] || status}</span>
+                      <div className="flex-1 h-2 bg-slate-800 rounded-full overflow-hidden">
+                        <div
+                          className={`h-full ${STATUS_COLORS[status] || 'bg-slate-500'} rounded-full`}
+                          style={{ width: `${total > 0 ? (count / total) * 100 : 0}%` }}
+                        />
                       </div>
-                    ) : null;
-                  })}
-                </div>
-                <div className="flex gap-3 mt-1.5 flex-wrap">
-                  {Object.entries(data).map(([status, count]) => (
-                    <span key={status} className="text-xs text-slate-500 flex items-center gap-1">
-                      <span className={`w-2 h-2 rounded-full ${STATUS_COLORS[status]}`} />
-                      {STATUS_LABELS[status]}: {count}
-                    </span>
+                      <span className="text-xs font-bold text-slate-500 w-8 text-right">{count}</span>
+                    </div>
                   ))}
+                  {Object.keys(data).length === 0 && (
+                    <p className="text-slate-500 text-xs italic">No {label.toLowerCase()} added yet.</p>
+                  )}
                 </div>
               </div>
             ))}
@@ -302,15 +291,20 @@ export default function Statistics() {
           <h3 className="text-lg font-bold text-slate-200 mb-4">Top Genres</h3>
           <div className="space-y-2">
             {stats.topGenres.map(([genre, count]) => (
-              <div key={genre} className="flex items-center gap-3">
-                <span className="text-sm font-medium text-slate-400 w-32 truncate">{genre}</span>
+              <div 
+                key={genre} 
+                className="flex items-center gap-3 cursor-pointer hover:bg-slate-800/50 p-1.5 -mx-1.5 rounded-lg transition-colors group"
+                onClick={() => navigate(`/movies?genre=${encodeURIComponent(genre)}`)}
+                title={`View movies in ${genre}`}
+              >
+                <span className="text-sm font-medium text-slate-400 w-32 truncate group-hover:text-slate-300">{genre}</span>
                 <div className="flex-1 h-2 bg-slate-800 rounded-full overflow-hidden">
                   <div
                     className="h-full bg-gradient-to-r from-cyan-500 to-purple-500 rounded-full"
                     style={{ width: `${(count / maxGenreCount) * 100}%` }}
                   />
                 </div>
-                <span className="text-xs font-bold text-slate-500 w-6 text-right">{count}</span>
+                <span className="text-xs font-bold text-slate-500 w-6 text-right group-hover:text-slate-300">{count}</span>
               </div>
             ))}
             {stats.topGenres.length === 0 && (
@@ -320,32 +314,34 @@ export default function Statistics() {
         </div>
 
         {/* Ratings Distribution */}
-        {hasRatings ? (
-          <div className="glass-panel rounded-2xl p-6">
-            <h3 className="text-lg font-bold text-slate-200 mb-4">Ratings</h3>
-            <div className="flex items-end gap-1.5 h-32">
-              {Object.entries(stats.ratingBuckets).map(([range, count]) => (
+        <div className="glass-panel rounded-2xl p-6 flex flex-col">
+          <h3 className="text-lg font-bold text-slate-200 mb-4">Ratings</h3>
+          {hasRatings ? (
+            <div className="space-y-2">
+              {Object.entries(stats.ratingBuckets).reverse().map(([range, count]) => (
                 <div
                   key={range}
-                  className="flex-1 flex flex-col items-center gap-1 h-full justify-end cursor-pointer group"
+                  className="flex items-center gap-3 cursor-pointer hover:bg-slate-800/50 p-1.5 -mx-1.5 rounded-lg transition-colors group"
                   onClick={() => navigate(`/movies?rating=${range}`)}
                   title={`View movies rated ${range}`}
                 >
-                  <span className="text-[10px] font-bold text-yellow-400 group-hover:text-yellow-300">{count || ''}</span>
-                  <div
-                    className="w-full bg-yellow-500 rounded-t-sm group-hover:bg-yellow-400 transition-colors"
-                    style={{ height: count > 0 ? `${Math.max((count / maxRatingCount) * 100, 3)}%` : '0%' }}
-                  />
-                  <span className="text-[10px] text-slate-500 font-medium">{range}</span>
+                  <span className="text-sm font-medium text-slate-400 w-10 group-hover:text-slate-300">{range}</span>
+                  <div className="flex-1 h-2 bg-slate-800 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-yellow-500 rounded-full group-hover:bg-yellow-400 transition-colors"
+                      style={{ width: `${(count / maxRatingCount) * 100}%` }}
+                    />
+                  </div>
+                  <span className="text-xs font-bold text-slate-500 w-8 text-right group-hover:text-slate-300">{count}</span>
                 </div>
               ))}
             </div>
-          </div>
-        ) : (
-          <div className="glass-panel rounded-2xl p-6 flex items-center justify-center">
-            <p className="text-slate-500 text-xs italic text-center">No ratings data yet</p>
-          </div>
-        )}
+          ) : (
+            <div className="flex items-center justify-center h-full">
+              <p className="text-slate-500 text-xs italic text-center">No ratings data yet</p>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Quality Profiles */}
@@ -370,9 +366,9 @@ export default function Statistics() {
       )}
 
       {/* Year Distribution */}
-      <div className="glass-panel rounded-2xl p-6">
+      <div className="glass-panel rounded-2xl p-6 flex flex-col">
         <h3 className="text-lg font-bold text-slate-200 mb-4">Movies by Year</h3>
-        <div className="overflow-x-auto pb-2">
+        <div className="overflow-x-auto pb-2 mt-auto">
           <div className="flex items-end gap-1.5 h-48" style={{ minWidth: `${stats.yearData.length * 2.5}rem` }}>
           {stats.yearData.map(([year, count]) => (
             <div
