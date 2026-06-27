@@ -19,6 +19,12 @@ An elegant, all-in-one media management dashboard designed to seamlessly track, 
 - **Comprehensive Settings:** Configure your TMDB API keys, download clients, indexers, and application preferences all in one place.
 - **Customizable Views:** Switch seamlessly between grid and list layouts with advanced sorting and filtering options (by status, rating, and release year).
 - **Responsive Layout:** fully functional on desktop and tablet screens.
+- **Subtitle Management & Translation:** Search, download, and auto-translate subtitles into preferred languages via multiple providers (Google Translate, DeepSeek, Claude, OpenSubtitles, SubDL, SubSource).
+- **Trakt.tv Integration:** Sync watched status and authenticate with Trakt to keep your media progress aligned.
+- **Quality Profiles:** Define custom quality profiles with cutoff limits to ensure you download the exact resolutions you prefer.
+- **Library Management:** Manage multiple library paths, resolve duplicate files, and run manual or automatic library scans.
+- **Custom Naming Conventions:** Automatically rename movies and TV show episodes based on custom formatting templates.
+- **Backup & Restore:** Easily backup and restore your configuration and database to safeguard your setup.
 
 ## Tech Stack 🛠️
 
