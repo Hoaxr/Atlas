@@ -1,4 +1,5 @@
-import { HelpCircle, CheckSquare, Square } from 'lucide-react';
+import { HelpCircle, CheckSquare, Square, FileText } from 'lucide-react';
+import CustomSelect from '../../components/shared/CustomSelect';
 import { customAlert } from '../../utils/alerts';
 
 export default function NamingTab({ settings, setSettings, handleSave }) {
@@ -37,10 +38,21 @@ export default function NamingTab({ settings, setSettings, handleSave }) {
   };
 
   return (
-    <div className="space-y-8">
+    <div className="max-w-5xl mx-auto space-y-6">
+      <div className="flex items-center justify-between mb-2">
+        <h2 className="text-2xl font-bold text-orange-400 flex items-center gap-2">
+          <FileText className="w-7 h-7" /> Media Naming
+        </h2>
+      </div>
+
+      <div className="bg-orange-500/10 border border-orange-500/20 text-orange-400 p-4 rounded-xl mb-6 flex gap-3 text-sm">
+        <FileText className="w-5 h-5 shrink-0" />
+        <p>Configure how Atlas renames your media files when moving them to your library. Use the tags to build your custom format.</p>
+      </div>
+
       {/* Movie Naming Section */}
-      <div className="bg-slate-800/50 p-6 rounded-xl border border-slate-700/50">
-        <h3 className="text-lg font-bold text-white mb-6 flex items-center gap-2">
+      <div className="glass-panel p-8 rounded-2xl border border-white/10 space-y-6 shadow-xl relative overflow-hidden">
+        <h3 className="text-lg font-bold text-slate-200 flex items-center gap-2">
           Movie Naming
         </h3>
         
@@ -84,15 +96,15 @@ export default function NamingTab({ settings, setSettings, handleSave }) {
               <label className="text-sm font-medium text-slate-300">Colon Replacement</label>
             </div>
             <div className="w-2/3">
-              <select 
-                className="w-full bg-slate-900/50 border border-slate-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-cyan-500 transition-colors"
+              <CustomSelect 
                 value={settings.colonReplacement}
                 onChange={e => setSettings({...settings, colonReplacement: e.target.value})}
-              >
-                <option value="delete">Delete</option>
-                <option value="dash">Replace with Dash</option>
-                <option value="space">Replace with Space</option>
-              </select>
+                options={[
+                  { label: 'Delete', value: 'delete' },
+                  { label: 'Replace with Dash', value: 'dash' },
+                  { label: 'Replace with Space', value: 'space' }
+                ]}
+              />
               <p className="text-xs text-slate-500 mt-2">Change how Atlas handles colon replacement in titles</p>
             </div>
           </div>
@@ -124,9 +136,9 @@ export default function NamingTab({ settings, setSettings, handleSave }) {
         </div>
       </div>
 
-      {/* Episode Naming Section */}
-      <div className="bg-slate-800/50 p-6 rounded-xl border border-slate-700/50">
-        <h3 className="text-lg font-bold text-white mb-6 flex items-center gap-2">
+      {/* TV Naming Section */}
+      <div className="glass-panel p-8 rounded-2xl border border-white/10 space-y-6 shadow-xl relative overflow-hidden mt-8">
+        <h3 className="text-lg font-bold text-slate-200 flex items-center gap-2">
           Episode Naming
         </h3>
         

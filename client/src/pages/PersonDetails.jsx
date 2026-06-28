@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { ArrowLeft, Film, Tv, Star, User, Loader2, CheckCircle2, ExternalLink } from 'lucide-react';
+import { ArrowLeft, Film, Tv, Star, User, Loader2, CheckCircle2, ExternalLink, Plus, Info } from 'lucide-react';
 import api from '../lib/api';
+import MediaDetailsModal from '../components/MediaDetailsModal';
+import { customAlert } from '../utils/alerts';
 
 const IMG_BASE = 'https://image.tmdb.org/t/p/';
 
@@ -12,6 +14,33 @@ export default function PersonDetails() {
   const [loading, setLoading] = useState(true);
   const [tab, setTab]         = useState('acting'); // 'acting' | 'directing'
   const [expanded, setExpanded] = useState(false);
+  const [selectedMediaId, setSelectedMediaId] = useState(null);
+  const [selectedMediaType, setSelectedMediaType] = useState(null);
+
+  const handleAddMedia = async (tmdbId, type) => {
+    try {
+      const endpoint = type === 'movie' ? '/library/movies' : '/library/shows';
+      const res = await api.post(endpoint, { tmdbId });
+      if (res.data.status === 'success') {
+        customAlert(`${type === 'movie' ? 'Movie' : 'Show'} added to library successfully!`);
+        // Update person state to mark this credit as inLibrary
+        setPerson(prev => {
+          if (!prev) return prev;
+          const newCredits = { ...prev.combined_credits };
+          ['cast', 'crew'].forEach(list => {
+            if (newCredits[list]) {
+              newCredits[list] = newCredits[list].map(c => 
+                c.id === tmdbId ? { ...c, inLibrary: true } : c
+              );
+            }
+          });
+          return { ...prev, combined_credits: newCredits };
+        });
+      }
+    } catch (err) {
+      customAlert(err.response?.data?.message || `Failed to add ${type} to library.`, 'error');
+    }
+  };
 
   useEffect(() => {
     setLoading(true);
@@ -152,10 +181,9 @@ export default function PersonDetails() {
           const detailPath = isMovie ? `/movies/${credit.id}` : `/shows/${credit.id}`;
 
           return (
-            <Link
+            <div
               key={`${credit.id}-${credit.credit_id}`}
-              to={detailPath}
-              className="group block rounded-xl overflow-hidden bg-slate-900/60 border border-white/5 hover:border-white/15 transition-all hover:-translate-y-0.5 hover:shadow-xl"
+              className="group block rounded-xl overflow-hidden bg-slate-900/60 border border-white/5 hover:border-white/15 transition-all hover:-translate-y-0.5 hover:shadow-xl relative"
             >
               <div className="relative aspect-[2/3] bg-slate-800">
                 {credit.poster_path ? (
@@ -173,35 +201,57 @@ export default function PersonDetails() {
 
                 {/* In library badge */}
                 {credit.inLibrary && (
-                  <div className="absolute top-1.5 right-1.5 bg-emerald-500 rounded-full p-0.5 shadow-lg">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-white" />
+                  <div className="absolute top-2 left-2 z-20 bg-slate-900/80 rounded-full shadow-lg" title="In Library">
+                    <CheckCircle2 className="w-6 h-6 text-emerald-400 fill-emerald-400/20" />
                   </div>
                 )}
 
+                {/* Hover Overlay */}
+                <div className="absolute inset-0 bg-slate-950/80 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col items-center justify-center gap-3 p-4 z-10">
+                  {!credit.inLibrary ? (
+                    <button 
+                      onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleAddMedia(credit.id, isMovie ? 'movie' : 'tv'); }}
+                      className="bg-cyan-500 hover:bg-cyan-400 text-slate-950 w-full py-2 rounded-lg font-bold flex items-center justify-center gap-2 shadow-lg"
+                    >
+                      <Plus className="w-4 h-4" /> Add {isMovie ? 'Movie' : 'Show'}
+                    </button>
+                  ) : (
+                    <div className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 w-full py-2 rounded-lg font-bold flex items-center justify-center gap-2 shadow-lg">
+                      <CheckCircle2 className="w-4 h-4" /> In Library
+                    </div>
+                  )}
+                  <button 
+                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); setSelectedMediaId(credit.id); setSelectedMediaType(isMovie ? 'movie' : 'tv'); }}
+                    className="bg-white/10 hover:bg-white/20 text-white w-full py-2 rounded-lg font-bold flex items-center justify-center gap-2 transition-colors shadow-lg border border-white/10"
+                  >
+                    <Info className="w-4 h-4" /> Details
+                  </button>
+                </div>
+
                 {/* Type indicator */}
-                <div className="absolute bottom-1.5 left-1.5">
+                <div className="absolute bottom-1.5 left-1.5 z-20">
                   <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${isMovie ? 'bg-blue-500/80 text-white' : 'bg-purple-500/80 text-white'}`}>
                     {isMovie ? 'Movie' : 'Show'}
                   </span>
                 </div>
               </div>
 
-              <div className="p-2.5">
+              <div className="p-2.5 relative z-20 bg-slate-900/90 border-t border-white/5">
                 <p className="text-xs font-semibold text-slate-200 truncate leading-tight">{title}</p>
                 <div className="flex items-center justify-between mt-1">
-                  <span className="text-[11px] text-slate-500">{year || '—'}</span>
+                  <span className="text-[11px] text-slate-500 font-medium">{year || '—'}</span>
                   {credit.vote_average > 0 && (
-                    <span className="flex items-center gap-0.5 text-[11px] text-amber-400">
-                      <Star className="w-2.5 h-2.5 fill-amber-400" />
-                      {credit.vote_average.toFixed(1)}
-                    </span>
+                    <div className="flex items-center gap-1 bg-slate-950/50 px-1.5 py-0.5 rounded-md border border-white/5 shadow-inner">
+                      <Star className="w-2.5 h-2.5 text-yellow-400 fill-yellow-400 drop-shadow-sm" />
+                      <span className="text-[10px] font-bold text-slate-200">{credit.vote_average.toFixed(1)}</span>
+                    </div>
                   )}
                 </div>
                 {credit.character && (
                   <p className="text-[11px] text-slate-600 truncate mt-0.5">as {credit.character}</p>
                 )}
               </div>
-            </Link>
+            </div>
           );
         })}
       </div>
@@ -209,6 +259,14 @@ export default function PersonDetails() {
       {displayed.length === 0 && (
         <div className="text-center py-12 text-slate-500">No credits available.</div>
       )}
+
+      <MediaDetailsModal 
+        isOpen={!!selectedMediaId}
+        onClose={() => setSelectedMediaId(null)}
+        mediaId={selectedMediaId}
+        mediaType={selectedMediaType}
+        isInLibrary={selectedMediaId ? displayed.find(c => c.id === selectedMediaId)?.inLibrary : false}
+      />
     </div>
   );
 }

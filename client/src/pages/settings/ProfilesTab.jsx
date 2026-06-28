@@ -1,10 +1,15 @@
 import api from '../../lib/api';
 import { Save, Plus, Trash2, Settings2, CheckCircle2 } from 'lucide-react';
+import CustomSelect from '../../components/shared/CustomSelect';
 
 export default function ProfilesTab({ profiles, newProfile, setNewProfile, editingProfile, setEditingProfile, handleAddEntity, handleDeleteEntity, fetchSettings, setStatus }) {
   return (
     <div className="max-w-5xl mx-auto space-y-6">
-      <h2 className="text-2xl font-bold text-amber-400 mb-2">Quality Profiles</h2>
+      <div className="flex items-center justify-between mb-2">
+        <h2 className="text-2xl font-bold text-amber-400 flex items-center gap-2">
+          <Settings2 className="w-7 h-7" /> Quality Profiles
+        </h2>
+      </div>
       <div className="bg-amber-500/10 border border-amber-500/20 text-amber-400 p-4 rounded-xl mb-6 flex gap-3 text-sm">
         <Settings2 className="w-5 h-5 shrink-0" />
         <p>Quality profiles allow you to restrict automated searches to specific resolutions. They are assigned per movie or TV show. Qualities at the top of the list are preferred over the ones at the bottom.</p>
@@ -52,11 +57,11 @@ export default function ProfilesTab({ profiles, newProfile, setNewProfile, editi
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
               <label className="block text-sm font-medium text-slate-400 mb-1">Cutoff Quality</label>
-              <select className="glass-input w-full" value={editingProfile ? editingProfile.cutoff : newProfile.cutoff} onChange={e => editingProfile ? setEditingProfile({...editingProfile, cutoff: e.target.value}) : setNewProfile({...newProfile, cutoff: e.target.value})}>
-                {['SD', '720p', '1080p', '2160p', 'Unknown'].map(q => (
-                  <option key={`cutoff-${q}`} value={q}>{q}</option>
-                ))}
-              </select>
+              <CustomSelect 
+                options={['SD', '720p', '1080p', '2160p', 'Unknown'].map(q => ({ label: q, value: q }))}
+                value={editingProfile ? editingProfile.cutoff : newProfile.cutoff} 
+                onChange={e => editingProfile ? setEditingProfile({...editingProfile, cutoff: e.target.value}) : setNewProfile({...newProfile, cutoff: e.target.value})} 
+              />
               <p className="text-xs text-slate-500 mt-1">Once this quality is met, downloading stops.</p>
             </div>
 

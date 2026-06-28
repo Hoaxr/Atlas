@@ -6,9 +6,146 @@ const getIndexers = () => {
   return db.prepare('SELECT * FROM indexers').all();
 };
 
-const searchYTS = async (title, url) => {
+const fetchHtml = async (url) => {
+  let fsUrl = null;
   try {
-    const baseUrl = url || 'https://yts.lu';
+    const settingsRow = db.prepare('SELECT value FROM settings WHERE key = ?').get('flareSolverrUrl');
+    fsUrl = settingsRow ? settingsRow.value : null;
+  } catch (e) {
+    // Ignore settings table error if it doesn't exist yet
+  }
+
+  if (fsUrl) {
+    try {
+      const res = await axios.post(`${fsUrl.replace(/\/$/, '')}/v1`, {
+        cmd: 'request.get',
+        url: url,
+        maxTimeout: 15000
+      }, { headers: { 'Content-Type': 'application/json' }, timeout: 20000 });
+      
+      if (res.data && res.data.solution && res.data.solution.response) {
+        return res.data.solution.response;
+      }
+    } catch (e) {
+      console.error('FlareSolverr request failed:', e.message);
+    }
+  }
+
+  const res = await axios.get(url, {
+    headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' },
+    timeout: 10000
+  });
+  return res.data;
+};
+
+const searchTorznab = async (title, indexer) => {
+  try {
+    const searchUrl = `${indexer.url}?t=search&q=${encodeURIComponent(title)}${indexer.api_key ? '&apikey=' + indexer.api_key : ''}`;
+    const res = await axios.get(searchUrl, { timeout: 15000 });
+    const $ = cheerio.load(res.data, { xmlMode: true });
+    const results = [];
+    
+    $('item').each((i, el) => {
+      const itemTitle = $(el).find('title').text();
+      let link = $(el).find('enclosure').attr('url');
+      if (!link) link = $(el).find('link').text();
+      
+      let size = 0;
+      let seeders = 0;
+      
+      $(el).find('[name="size"]').each((j, attr) => { size = parseInt($(attr).attr('value')) || 0; });
+      $(el).find('[name="seeders"]').each((j, attr) => { seeders = parseInt($(attr).attr('value')) || 0; });
+      
+      if (!size) size = parseInt($(el).find('size').text()) || parseInt($(el).find('enclosure').attr('length')) || 0;
+      
+      if (link && itemTitle) {
+        results.push({
+          title: itemTitle,
+          size: size,
+          seeders: seeders,
+          link: link,
+          indexer: indexer.name
+        });
+      }
+    });
+    return results;
+  } catch (err) {
+    console.error(`Torznab search failed for ${indexer.name}:`, err.message);
+  }
+  return [];
+};
+
+const searchNyaa = async (title, indexer) => {
+  try {
+    const baseUrl = indexer.url || 'https://nyaa.si';
+    const searchUrl = `${baseUrl}/?page=rss&q=${encodeURIComponent(title)}&c=1_0&f=0`;
+    const res = await axios.get(searchUrl, { timeout: 15000 });
+    const $ = cheerio.load(res.data, { xmlMode: true });
+    const results = [];
+    
+    $('item').each((i, el) => {
+      const itemTitle = $(el).find('title').text();
+      const link = $(el).find('link').text(); 
+      let seeders = parseInt($(el).find('nyaa\\:seeders').text()) || 0;
+      let sizeStr = $(el).find('nyaa\\:size').text() || '';
+      let size = 0;
+      if (sizeStr.includes('MiB') || sizeStr.includes('MB')) size = parseFloat(sizeStr) * 1024 * 1024;
+      else if (sizeStr.includes('GiB') || sizeStr.includes('GB')) size = parseFloat(sizeStr) * 1024 * 1024 * 1024;
+      else size = parseInt(sizeStr) || parseInt($(el).find('enclosure').attr('length')) || 0;
+      
+      if (link && itemTitle) {
+        results.push({
+          title: itemTitle,
+          size: size,
+          seeders: seeders,
+          link: link,
+          indexer: indexer.name || 'Nyaa'
+        });
+      }
+    });
+    return results;
+  } catch (err) {
+    console.error(`Nyaa search failed for ${indexer.name}:`, err.message);
+  }
+  return [];
+};
+
+const searchTorrentGalaxy = async (title, indexer) => {
+  try {
+    const baseUrl = indexer.url || 'https://torrentgalaxy.mx';
+    const html = await fetchHtml(`${baseUrl}/torrents.php?search=${encodeURIComponent(title)}`);
+    const $ = cheerio.load(html);
+    const results = [];
+    
+    $('div.tgxtablerow').each((i, el) => {
+      const titleText = $(el).find('div.tgxtablecell a.txlight').text();
+      const magnet = $(el).find('a[href^="magnet:"]').attr('href');
+      const seeders = parseInt($(el).find('font[color="green"]').first().text()) || 0;
+      const sizeStr = $(el).find('span.badge').first().text();
+      let size = 0;
+      if (sizeStr.includes('MB')) size = parseFloat(sizeStr) * 1024 * 1024;
+      else if (sizeStr.includes('GB')) size = parseFloat(sizeStr) * 1024 * 1024 * 1024;
+      
+      if (titleText && magnet) {
+        results.push({
+          title: titleText,
+          size: size,
+          seeders: seeders,
+          link: magnet,
+          indexer: indexer.name || 'TorrentGalaxy'
+        });
+      }
+    });
+    return results;
+  } catch (err) {
+    console.error(`TorrentGalaxy search failed for ${indexer.name}:`, err.message);
+  }
+  return [];
+};
+
+const searchYTS = async (title, indexer) => {
+  try {
+    const baseUrl = indexer.url || 'https://yts.lu';
     const res = await axios.get(`${baseUrl}/api/v2/list_movies.json?query_term=${encodeURIComponent(title)}`, { timeout: 10000 });
     if (res.data && res.data.data && res.data.data.movies) {
       const results = [];
@@ -31,9 +168,9 @@ const searchYTS = async (title, url) => {
   return [];
 };
 
-const searchTPB = async (title, url) => {
+const searchTPB = async (title, indexer) => {
   try {
-    const baseUrl = url || 'https://apibay.org';
+    const baseUrl = indexer.url || 'https://apibay.org';
     const res = await axios.get(`${baseUrl}/q.php?q=${encodeURIComponent(title)}`, { timeout: 10000 });
     if (Array.isArray(res.data) && res.data[0].id !== '0') {
       return res.data.map(item => ({
@@ -50,14 +187,11 @@ const searchTPB = async (title, url) => {
   return [];
 };
 
-const search1337x = async (title, url) => {
+const search1337x = async (title, indexer) => {
   try {
-    const baseUrl = url || 'https://1337x.to';
-    const res = await axios.get(`${baseUrl}/search/${encodeURIComponent(title)}/1/`, {
-      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' },
-      timeout: 10000
-    });
-    const $ = cheerio.load(res.data);
+    const baseUrl = indexer.url || 'https://1337x.to';
+    const html = await fetchHtml(`${baseUrl}/search/${encodeURIComponent(title)}/1/`);
+    const $ = cheerio.load(html);
     const results = [];
     
     // Parse search results
@@ -77,11 +211,8 @@ const search1337x = async (title, url) => {
       if (href) {
         // We must fetch the magnet link from the individual page
         try {
-          const detailRes = await axios.get(`${baseUrl}${href}`, {
-            headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' },
-            timeout: 10000
-          });
-          const detail$ = cheerio.load(detailRes.data);
+          const html = await fetchHtml(`${baseUrl}${href}`);
+          const detail$ = cheerio.load(html);
           const magnet = detail$('a[href^="magnet:"]').attr('href');
           
           if (magnet) {
@@ -105,16 +236,13 @@ const search1337x = async (title, url) => {
   return [];
 };
 
-const searchEZTV = async (title, url) => {
+const searchEZTV = async (title, indexer) => {
   try {
-    const baseUrl = url || 'https://eztvx.to';
+    const baseUrl = indexer.url || 'https://eztvx.to';
     // EZTV search format is usually /search/show-name
     const searchUrl = `${baseUrl}/search/${encodeURIComponent(title.replace(/ /g, '-').toLowerCase())}`;
-    const res = await axios.get(searchUrl, {
-      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' },
-      timeout: 10000
-    });
-    const $ = cheerio.load(res.data);
+    const html = await fetchHtml(searchUrl);
+    const $ = cheerio.load(html);
     const results = [];
     
     $('tr.forum_header_border').each((i, el) => {
@@ -159,7 +287,7 @@ const parseQuality = (title) => {
   return 'Unknown';
 };
 
-const filterAndSortResults = (results, profile) => {
+const filterAndSortResults = (results, profile, currentQuality = null) => {
   if (!profile || !profile.qualities) return results.sort((a, b) => b.seeders - a.seeders);
   
   let qualities = ['1080p'];
@@ -167,7 +295,14 @@ const filterAndSortResults = (results, profile) => {
     qualities = JSON.parse(profile.qualities);
   } catch(e) {}
   
-  const filtered = results.filter(r => qualities.includes(parseQuality(r.title)));
+  let filtered = results.filter(r => qualities.includes(parseQuality(r.title)));
+  
+  if (currentQuality) {
+    const currentIdx = qualities.indexOf(currentQuality);
+    if (currentIdx !== -1) {
+      filtered = filtered.filter(r => qualities.indexOf(parseQuality(r.title)) < currentIdx);
+    }
+  }
   
   filtered.sort((a, b) => {
     const qA = parseQuality(a.title);
@@ -182,30 +317,34 @@ const filterAndSortResults = (results, profile) => {
   return filtered;
 };
 
-const getSearchFn = (name) => {
+const getSearchFn = (indexer) => {
+  if (indexer.type === 'torznab') return searchTorznab;
+  const name = indexer.name.toLowerCase();
   if (name.includes('eztv')) return searchEZTV;
   if (name.includes('yts')) return searchYTS;
   if (name.includes('pirate') || name.includes('tpb')) return searchTPB;
   if (name.includes('1337')) return search1337x;
+  if (name.includes('nyaa')) return searchNyaa;
+  if (name.includes('galaxy') || name.includes('tgx')) return searchTorrentGalaxy;
   return searchTPB;
 };
 
-const searchMovie = async (title, year, profile = null) => {
+const searchMovie = async (title, year, profile = null, currentQuality = null) => {
   const indexers = getIndexers();
   const searchTerm = `${cleanTitle(title)} ${year}`;
 
   const results = await Promise.allSettled(
     indexers.map(indexer =>
-      getSearchFn(indexer.name.toLowerCase())(searchTerm, indexer.url)
+      getSearchFn(indexer)(searchTerm, indexer)
     )
   );
 
   const allResults = results.flatMap(r => r.status === 'fulfilled' ? r.value : []);
 
-  return filterAndSortResults(allResults, profile);
+  return filterAndSortResults(allResults, profile, currentQuality);
 };
 
-const searchEpisode = async (showTitle, season, episode, profile = null) => {
+const searchEpisode = async (showTitle, season, episode, profile = null, currentQuality = null) => {
   const indexers = getIndexers();
   
   const s = season.toString().padStart(2, '0');
@@ -214,16 +353,16 @@ const searchEpisode = async (showTitle, season, episode, profile = null) => {
 
   const results = await Promise.allSettled(
     indexers.map(indexer =>
-      getSearchFn(indexer.name.toLowerCase())(searchTerm, indexer.url)
+      getSearchFn(indexer)(searchTerm, indexer)
     )
   );
 
   const allResults = results.flatMap(r => r.status === 'fulfilled' ? r.value : []);
 
-  return filterAndSortResults(allResults, profile);
+  return filterAndSortResults(allResults, profile, currentQuality);
 };
 
-const searchShowPack = async (showTitle, profile = null) => {
+const searchShowPack = async (showTitle, profile = null, currentQuality = null) => {
   const indexers = getIndexers();
   
   // Searching just the clean title usually works best for season packs on 1337x / TPB
@@ -231,16 +370,16 @@ const searchShowPack = async (showTitle, profile = null) => {
 
   const results = await Promise.allSettled(
     indexers.map(indexer => {
-      const fn = getSearchFn(indexer.name.toLowerCase());
+      const fn = getSearchFn(indexer);
       // TPB and 1337x are better for packs — append "season" for those
       const term = indexer.name.toLowerCase().includes('eztv') ? searchTerm : `${searchTerm} season`;
-      return fn(term, indexer.url);
+      return fn(term, indexer);
     })
   );
 
   const allResults = results.flatMap(r => r.status === 'fulfilled' ? r.value : []);
 
-  return filterAndSortResults(allResults, profile);
+  return filterAndSortResults(allResults, profile, currentQuality);
 };
 
 module.exports = {

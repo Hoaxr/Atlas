@@ -1,4 +1,5 @@
-import { Save, Download, Languages, CheckCircle2 } from 'lucide-react';
+import { Save, Plus, Trash2, Key, Languages, Globe, Download, CheckCircle2, CheckSquare, Square } from 'lucide-react';
+import CustomSelect from '../../components/shared/CustomSelect';
 import LanguageInput from './LanguageInput';
 
 export default function SubtitlesTab({ settings, setSettings, keyStatuses, handleSave }) {
@@ -7,11 +8,15 @@ export default function SubtitlesTab({ settings, setSettings, keyStatuses, handl
 
       {/* === Section 1: Subtitle Providers === */}
       <div>
-        <div className="flex items-center gap-3 mb-4">
-          <Download className="w-6 h-6 text-pink-400" />
-          <h2 className="text-xl font-bold text-pink-400">Subtitle Providers</h2>
+        <div className="flex items-center justify-between mb-2">
+          <h2 className="text-2xl font-bold text-pink-400 flex items-center gap-2">
+            <Languages className="w-7 h-7" /> Subtitle Providers
+          </h2>
         </div>
-        <p className="text-sm text-slate-400 mb-6">Configure subtitle sources. Providers are tried in order — if one fails, the next is used. Select which languages to search for.</p>
+        <div className="bg-pink-500/10 border border-pink-500/20 text-pink-400 p-4 rounded-xl mb-6 flex gap-3 text-sm">
+          <Download className="w-5 h-5 shrink-0" />
+          <p>Configure subtitle sources. Providers are tried in order — if one fails, the next is used. Select which languages to search for.</p>
+        </div>
 
         <div className="glass-panel p-4 rounded-xl border border-white/5 mb-5">
           <p className="text-xs text-slate-400 font-medium mb-2">Search Languages</p>
@@ -62,12 +67,17 @@ export default function SubtitlesTab({ settings, setSettings, keyStatuses, handl
         <div className="space-y-6">
           <div>
             <label className="block text-sm font-medium text-slate-300">Translation Provider</label>
-            <select className="glass-input w-full mt-2" value={settings.translationProvider} onChange={(e) => setSettings({ ...settings, translationProvider: e.target.value })}>
-              <option value="gemini">Gemini AI</option>
-              <option value="deepseek">DeepSeek</option>
-              <option value="claude">Claude (Anthropic)</option>
-              <option value="googleTranslate">Google Translate (free)</option>
-            </select>
+            <CustomSelect 
+              className="mt-2"
+              value={settings.translationProvider} 
+              onChange={(e) => setSettings({ ...settings, translationProvider: e.target.value })}
+              options={[
+                { label: 'Gemini AI', value: 'gemini' },
+                { label: 'DeepSeek', value: 'deepseek' },
+                { label: 'Claude (Anthropic)', value: 'claude' },
+                { label: 'Google Translate (free)', value: 'googleTranslate' }
+              ]}
+            />
             <p className="text-xs text-slate-500 mt-2">
               {settings.translationProvider === 'gemini' && 'Gemini AI — high quality, requires a Gemini API key.'}
               {settings.translationProvider === 'deepseek' && 'DeepSeek — very affordable, requires a DeepSeek API key.'}
@@ -137,18 +147,17 @@ export default function SubtitlesTab({ settings, setSettings, keyStatuses, handl
             </div>
           </div>
 
-          <div className="flex items-center gap-3 p-3 bg-slate-800/30 rounded-xl border border-white/5">
-            <input
-              type="checkbox"
-              id="autoTranslate"
-              className="w-5 h-5 cursor-pointer accent-cyan-500"
-              checked={settings.autoTranslate}
-              onChange={(e) => setSettings({ ...settings, autoTranslate: e.target.checked })}
-            />
-            <label htmlFor="autoTranslate" className="text-sm text-slate-300 cursor-pointer select-none">
-              <span className="font-medium">Auto-translate after subtitle download</span>
+          <div 
+            className="flex items-center gap-3 p-4 bg-slate-900/50 border border-white/5 rounded-xl cursor-pointer select-none transition-colors hover:bg-slate-800/50"
+            onClick={() => setSettings({ ...settings, autoTranslate: !settings.autoTranslate })}
+          >
+            <div className="text-cyan-500">
+              {settings.autoTranslate ? <CheckSquare className="w-6 h-6" /> : <Square className="w-6 h-6 text-slate-500" />}
+            </div>
+            <div>
+              <span className="font-medium text-slate-200 block mb-0.5">Auto-translate after subtitle download</span>
               <p className="text-xs text-slate-500 mt-0.5">When English subtitles are downloaded, automatically translate them into all selected target languages.</p>
-            </label>
+            </div>
           </div>
 
           <div className="pt-2">

@@ -29,12 +29,32 @@ const getProfile = (id) => {
 };
 
 const runSearchCycle = async () => {
-  const monitoredMovies = db.prepare("SELECT * FROM movies WHERE status = 'monitored'").all();
+  const monitoredMovies = db.prepare("SELECT * FROM movies WHERE status = 'monitored' OR status = 'downloaded'").all();
   
   for (const movie of monitoredMovies) {
     try {
       const profile = getProfile(movie.quality_profile_id);
-      const results = await indexerService.searchMovie(movie.title, movie.year, profile);
+      if (!profile) continue;
+
+      let currentQuality = null;
+      if (movie.status === 'downloaded') {
+        if (!profile.upgrade_allowed) continue;
+        currentQuality = indexerService.parseQuality(movie.scene_name || '');
+        
+        if (currentQuality === profile.cutoff) continue;
+        
+        let qualities = [];
+        try { qualities = JSON.parse(profile.qualities); } catch(e) {}
+        
+        const currentIdx = qualities.indexOf(currentQuality);
+        const cutoffIdx = qualities.indexOf(profile.cutoff);
+        
+        if (currentIdx !== -1 && cutoffIdx !== -1 && currentIdx <= cutoffIdx) {
+          continue;
+        }
+      }
+
+      const results = await indexerService.searchMovie(movie.title, movie.year, profile, currentQuality);
       
       if (results.length > 0) {
         const bestRelease = results[0]; 
@@ -51,13 +71,32 @@ const runSearchCycle = async () => {
     SELECT e.*, s.title as show_title, s.quality_profile_id 
     FROM episodes e 
     JOIN shows s ON e.show_id = s.id 
-    WHERE e.status = 'monitored'
+    WHERE e.status = 'monitored' OR e.status = 'downloaded'
   `).all();
 
   for (const ep of monitoredEpisodes) {
     try {
       const profile = getProfile(ep.quality_profile_id);
-      const results = await indexerService.searchEpisode(ep.show_title, ep.season_number, ep.episode_number, profile);
+      if (!profile) continue;
+
+      let currentQuality = null;
+      if (ep.status === 'downloaded') {
+        if (!profile.upgrade_allowed) continue;
+        currentQuality = indexerService.parseQuality(ep.scene_name || '');
+        if (currentQuality === profile.cutoff) continue;
+        
+        let qualities = [];
+        try { qualities = JSON.parse(profile.qualities); } catch(e) {}
+        
+        const currentIdx = qualities.indexOf(currentQuality);
+        const cutoffIdx = qualities.indexOf(profile.cutoff);
+        
+        if (currentIdx !== -1 && cutoffIdx !== -1 && currentIdx <= cutoffIdx) {
+          continue;
+        }
+      }
+
+      const results = await indexerService.searchEpisode(ep.show_title, ep.season_number, ep.episode_number, profile, currentQuality);
       
       if (results.length > 0) {
         const bestRelease = results[0];

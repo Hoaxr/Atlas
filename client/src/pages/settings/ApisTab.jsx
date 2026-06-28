@@ -1,5 +1,5 @@
 import api from '../../lib/api';
-import { Save, AlertCircle } from 'lucide-react';
+import { Save, AlertCircle, CheckSquare, Square, Key } from 'lucide-react';
 import { customAlert, customConfirm } from '../../utils/alerts';
 
 export default function ApisTab({
@@ -9,7 +9,11 @@ export default function ApisTab({
 }) {
   return (
     <div className="max-w-5xl mx-auto space-y-6">
-      <h2 className="text-2xl font-bold text-cyan-400 mb-2">API's & Integrations</h2>
+      <div className="flex items-center justify-between mb-2">
+        <h2 className="text-2xl font-bold text-cyan-400 flex items-center gap-2">
+          <Key className="w-7 h-7" /> API's & Integrations
+        </h2>
+      </div>
       <div className="bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 p-4 rounded-xl mb-6 flex gap-3 text-sm">
         <AlertCircle className="w-5 h-5 shrink-0" />
         <p>TMDB provides all metadata, posters, and search results. Trakt provides trending lists and can sync your watched status.</p>
@@ -136,13 +140,17 @@ export default function ApisTab({
             </div>
           ) : null}
 
-          <div className="flex items-center gap-3 p-4 bg-slate-900/50 border border-white/5 rounded-xl">
-            <input type="checkbox" id="traktWatchedSync" className="w-5 h-5 cursor-pointer accent-cyan-500" checked={settings.traktWatchedSync}
-              onChange={(e) => setSettings(prev => ({ ...prev, traktWatchedSync: e.target.checked }))} />
-            <label htmlFor="traktWatchedSync" className="text-sm text-slate-300 cursor-pointer select-none">
+          <div 
+            className="flex items-center gap-3 p-4 bg-slate-900/50 border border-white/5 rounded-xl cursor-pointer select-none transition-colors hover:bg-slate-800/50"
+            onClick={() => setSettings(prev => ({ ...prev, traktWatchedSync: !prev.traktWatchedSync }))}
+          >
+            <div className="text-cyan-500">
+              {settings.traktWatchedSync ? <CheckSquare className="w-6 h-6" /> : <Square className="w-6 h-6 text-slate-500" />}
+            </div>
+            <div>
               <span className="font-medium text-slate-200">Enable Trakt Watched Sync</span>
               <p className="text-xs text-slate-500 mt-0.5">When enabled, movies and shows can be marked as watched. This will sync watched status with your Trakt account.</p>
-            </label>
+            </div>
           </div>
 
           <div className="pt-4">

@@ -436,15 +436,16 @@ export default function ShowDetails() {
                     <button 
                       onClick={async (e) => {
                         e.stopPropagation();
+                        const allWatched = seasons[season].every(ep => ep.watched);
                         try {
-                          await api.post(`/library/shows/${show.id}/seasons/${season}/mark-watched`);
+                          await api.post(`/library/shows/${show.id}/seasons/${season}/watched`, { watched: allWatched ? 0 : 1 });
                           fetchShowData();
                         } catch (err) {
                           customAlert('Failed to mark season as watched', 'error');
                         }
                       }}
-                      className="p-2 hover:bg-emerald-500/20 rounded-lg transition-colors text-slate-400 hover:text-emerald-400"
-                      title="Mark entire season as watched"
+                      className={`p-2 rounded-lg transition-colors ${seasons[season].every(ep => ep.watched) ? 'bg-emerald-500/20 text-emerald-400 hover:bg-slate-700 hover:text-white' : 'text-slate-400 hover:bg-emerald-500/20 hover:text-emerald-400'}`}
+                      title="Toggle season watched status"
                     >
                       <CheckSquare className="w-5 h-5" />
                     </button>

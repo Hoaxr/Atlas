@@ -56,12 +56,16 @@ export default function ScheduleTab() {
   }
 
   return (
-    <div className="max-w-2xl mx-auto space-y-6">
-      <div>
-        <h2 className="text-2xl font-bold text-cyan-400 mb-1">Task Schedules</h2>
-        <p className="text-slate-400 text-sm">
-          Control when each background task runs. Changes take effect immediately — no restart needed.
-        </p>
+    <div className="max-w-5xl mx-auto space-y-6">
+      <div className="flex items-center justify-between mb-2">
+        <h2 className="text-2xl font-bold text-indigo-400 flex items-center gap-2">
+          <Clock className="w-7 h-7" /> Task Schedules
+        </h2>
+      </div>
+
+      <div className="bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 p-4 rounded-xl mb-6 flex gap-3 text-sm">
+        <Clock className="w-5 h-5 shrink-0" />
+        <p>Control when each background task runs. Changes take effect immediately — no restart needed.</p>
       </div>
 
       {status.message && (

@@ -36,7 +36,10 @@ export default function Settings() {
     colonReplacement: 'dash',
     standardMovieFormat: '{Movie Title} ({Release Year})',
     renameEpisodes: true,
-    standardEpisodeFormat: '{Show Title} - S{Season}E{Episode} - {Episode Title}'
+    standardEpisodeFormat: '{Show Title} - S{Season}E{Episode} - {Episode Title}',
+    removeCompletedDownloads: false,
+    deleteTorrentFiles: false,
+    hideCompletedDownloads: true
   });
   const [paths, setPaths] = useState([]);
   const [indexers, setIndexers] = useState([]);
@@ -420,6 +423,10 @@ export default function Settings() {
               setNewIndexer={setNewIndexer}
               handleAddEntity={handleAddEntity}
               handleDeleteEntity={handleDeleteEntity}
+              fetchSettings={fetchSettings}
+              settings={settings}
+              setSettings={setSettings}
+              handleSave={handleSave}
             />
           )}
 
@@ -431,6 +438,9 @@ export default function Settings() {
               clientStatuses={clientStatuses}
               handleAddEntity={handleAddEntity}
               handleDeleteEntity={handleDeleteEntity}
+              settings={settings}
+              setSettings={setSettings}
+              handleSave={handleSave}
             />
           )}
 

@@ -13,7 +13,15 @@ router.get('/stats', async (req, res) => {
 
 router.get('/torrents', async (req, res) => {
   try {
-    const torrents = await downloadClientService.getTorrents();
+    let torrents = await downloadClientService.getTorrents();
+    
+    const db = require('../config/database');
+    const hideCompleted = db.prepare('SELECT value FROM settings WHERE key = ?').get('hideCompletedDownloads');
+    if (!hideCompleted || hideCompleted.value !== 'false') {
+      // Default is true, so filter out if it's not explicitly false
+      torrents = torrents.filter(t => t.progress < 1 && t.state !== 'stalledUP' && t.state !== 'uploading');
+    }
+    
     res.json({ status: 'success', data: torrents });
   } catch (err) {
     res.status(500).json({ status: 'error', message: err.message });

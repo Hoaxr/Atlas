@@ -40,6 +40,11 @@ router.get('/', (req, res, next) => {
     const renameEpisodes = getSetting('renameEpisodes') !== 'false';
     const standardEpisodeFormat = getSetting('standardEpisodeFormat') || '{Show Title} - S{Season}E{Episode} - {Episode Title}';
     
+    // Download Client Preferences
+    const removeCompletedDownloads = getSetting('removeCompletedDownloads') === 'true'; // default false
+    const deleteTorrentFiles = getSetting('deleteTorrentFiles') === 'true'; // default false
+    const hideCompletedDownloads = getSetting('hideCompletedDownloads') !== 'false'; // default true
+    
     const mask = (val) => val ? '*'.repeat(val.length) : '';
     
     // Fetch indexers and clients, excluding sensitive data
@@ -72,6 +77,9 @@ router.get('/', (req, res, next) => {
         standardMovieFormat,
         renameEpisodes,
         standardEpisodeFormat,
+        removeCompletedDownloads,
+        deleteTorrentFiles,
+        hideCompletedDownloads,
         indexers,
         clients,
         profiles
@@ -84,7 +92,7 @@ router.get('/', (req, res, next) => {
 
 router.post('/', (req, res, next) => {
   try {
-    const { tmdbApiKey, traktClientId, osApiKey, subdlApiKey, subsourceApiKey, geminiApiKey, deepseekApiKey, claudeApiKey, translationProvider, targetLang, targetLangs, providerLangs, autoTranslate, traktWatchedSync, traktAccessToken, traktClientSecret, renameMovies, replaceIllegalCharacters, colonReplacement, standardMovieFormat, renameEpisodes, standardEpisodeFormat } = req.body;
+    const { tmdbApiKey, traktClientId, osApiKey, subdlApiKey, subsourceApiKey, geminiApiKey, deepseekApiKey, claudeApiKey, translationProvider, targetLang, targetLangs, providerLangs, autoTranslate, traktWatchedSync, traktAccessToken, traktClientSecret, renameMovies, replaceIllegalCharacters, colonReplacement, standardMovieFormat, renameEpisodes, standardEpisodeFormat, removeCompletedDownloads, deleteTorrentFiles, hideCompletedDownloads } = req.body;
     
     const isMasked = (val) => val && /^\*+$/.test(val);
     
@@ -112,6 +120,10 @@ router.post('/', (req, res, next) => {
     if (renameEpisodes !== undefined) setSetting('renameEpisodes', renameEpisodes ? 'true' : 'false');
     if (standardEpisodeFormat !== undefined) setSetting('standardEpisodeFormat', standardEpisodeFormat);
     
+    if (removeCompletedDownloads !== undefined) setSetting('removeCompletedDownloads', removeCompletedDownloads ? 'true' : 'false');
+    if (deleteTorrentFiles !== undefined) setSetting('deleteTorrentFiles', deleteTorrentFiles ? 'true' : 'false');
+    if (hideCompletedDownloads !== undefined) setSetting('hideCompletedDownloads', hideCompletedDownloads ? 'true' : 'false');
+    
     res.json({ status: 'success', message: 'Settings saved successfully' });
   } catch (e) {
     next(e);
@@ -125,9 +137,70 @@ router.post('/indexers', (req, res) => {
   res.json({ status: 'success', data: { id: result.lastInsertRowid } });
 });
 
+router.put('/indexers/:id', (req, res) => {
+  const { name, url, api_key, type } = req.body;
+  db.prepare('UPDATE indexers SET name = ?, url = ?, api_key = ?, type = ? WHERE id = ?').run(name, url, api_key, type, req.params.id);
+  res.json({ status: 'success' });
+});
+
 router.delete('/indexers/:id', (req, res) => {
   db.prepare('DELETE FROM indexers WHERE id = ?').run(req.params.id);
   res.json({ status: 'success' });
+});
+
+router.get('/indexers/test', async (req, res) => {
+  try {
+    const indexers = db.prepare('SELECT * FROM indexers').all();
+    const statuses = {};
+    const axios = require('axios');
+    
+    await Promise.all(indexers.map(async (i) => {
+      try {
+        let testUrl = i.url;
+        const config = { timeout: 5000 };
+        if (i.type === 'torznab' && i.api_key) {
+          testUrl = `${i.url}?t=caps&apikey=${i.api_key}`;
+        }
+        await axios.get(testUrl, config);
+        statuses[i.id] = 'live';
+      } catch (e) {
+        if (e.response && e.response.status === 401) {
+          statuses[i.id] = 'error_auth';
+        } else if (i.type === 'generic') {
+          if (e.code === 'ENOTFOUND') {
+            statuses[i.id] = 'offline';
+          } else {
+            statuses[i.id] = 'live';
+          }
+        } else if (e.response && (e.response.status === 403 || e.response.status === 405)) {
+          statuses[i.id] = 'live';
+        } else {
+          statuses[i.id] = 'offline';
+        }
+      }
+    }));
+    
+    res.json({ status: 'success', data: statuses });
+  } catch (err) {
+    res.status(500).json({ status: 'error', message: err.message });
+  }
+});
+
+router.post('/indexers/test-flaresolverr', async (req, res) => {
+  try {
+    const { url } = req.body;
+    if (!url) return res.status(400).json({ status: 'error', message: 'URL is required' });
+    
+    const axios = require('axios');
+    const response = await axios.get(`${url.replace(/\/$/, '')}/`, { timeout: 5000 });
+    
+    if (response.data && response.data.msg === 'FlareSolverr is ready!') {
+      return res.json({ status: 'success', data: { status: 'ok' } });
+    }
+    res.json({ status: 'error', message: 'Invalid response from FlareSolverr' });
+  } catch (err) {
+    res.status(500).json({ status: 'error', message: err.message });
+  }
 });
 
 // Download Clients

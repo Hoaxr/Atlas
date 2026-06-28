@@ -1,12 +1,62 @@
-import { Plus, Trash2, Download } from 'lucide-react';
+import { Plus, Trash2, Download, Save, Info, CheckSquare, Square } from 'lucide-react';
 
-export default function ClientsTab({ clients, newClient, setNewClient, clientStatuses, handleAddEntity, handleDeleteEntity }) {
+export default function ClientsTab({ clients, newClient, setNewClient, clientStatuses, handleAddEntity, handleDeleteEntity, settings, setSettings, handleSave }) {
   return (
     <div className="max-w-5xl mx-auto space-y-6">
-      <h2 className="text-2xl font-bold text-emerald-400 mb-2">Download Clients</h2>
+      <div className="flex items-center justify-between mb-2">
+        <h2 className="text-2xl font-bold text-emerald-400 flex items-center gap-2">
+          <Download className="w-7 h-7" /> Download Clients
+        </h2>
+        {handleSave && (
+          <button onClick={handleSave} className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold py-2 px-4 rounded-xl flex items-center gap-2 transition-all shadow-lg shadow-emerald-500/20">
+            <Save className="w-4 h-4" /> Save Global Settings
+          </button>
+        )}
+      </div>
       <div className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 p-4 rounded-xl mb-6 flex gap-3 text-sm">
         <Download className="w-5 h-5 shrink-0" />
         <p>Configure where your torrents are sent. We currently support qBittorrent via its WebUI API. Make sure your WebUI is enabled in qBittorrent settings!</p>
+      </div>
+
+      <div className="glass-panel p-8 rounded-2xl border border-white/10 space-y-6 mb-8 shadow-xl relative overflow-hidden">
+        <h3 className="font-bold text-lg text-slate-200">Global Preferences</h3>
+        
+        <div className="space-y-4">
+          <label className="flex items-start gap-3 cursor-pointer p-4 rounded-xl bg-slate-900/50 border border-white/5 hover:border-emerald-500/30 transition-colors group">
+            <div className="mt-0.5">
+              <input type="checkbox" className="sr-only" checked={settings?.hideCompletedDownloads || false} onChange={e => setSettings({...settings, hideCompletedDownloads: e.target.checked})} />
+              {settings?.hideCompletedDownloads ? <CheckSquare className="w-5 h-5 text-emerald-400" /> : <Square className="w-5 h-5 text-slate-500" />}
+            </div>
+            <div>
+              <p className="text-sm font-bold text-slate-200 group-hover:text-emerald-400 transition-colors">Hide Completed Downloads from UI</p>
+              <p className="text-xs text-slate-400 mt-1">Hides 100% completed/seeding torrents from the Live Downloads widgets, keeping your dashboard clean.</p>
+            </div>
+          </label>
+          
+          <label className="flex items-start gap-3 cursor-pointer p-4 rounded-xl bg-slate-900/50 border border-white/5 hover:border-emerald-500/30 transition-colors group">
+            <div className="mt-0.5">
+              <input type="checkbox" className="sr-only" checked={settings?.removeCompletedDownloads || false} onChange={e => setSettings({...settings, removeCompletedDownloads: e.target.checked})} />
+              {settings?.removeCompletedDownloads ? <CheckSquare className="w-5 h-5 text-emerald-400" /> : <Square className="w-5 h-5 text-slate-500" />}
+            </div>
+            <div>
+              <p className="text-sm font-bold text-slate-200 group-hover:text-emerald-400 transition-colors">Remove Torrents When Finished</p>
+              <p className="text-xs text-slate-400 mt-1">Automatically tells your download client to remove the torrent once Atlas has imported it.</p>
+            </div>
+          </label>
+
+          {settings?.removeCompletedDownloads && (
+            <label className="flex items-start gap-3 cursor-pointer p-4 rounded-xl bg-red-900/20 border border-red-500/20 hover:border-red-500/40 transition-colors group ml-8">
+              <div className="mt-0.5">
+                <input type="checkbox" className="sr-only" checked={settings?.deleteTorrentFiles || false} onChange={e => setSettings({...settings, deleteTorrentFiles: e.target.checked})} />
+                {settings?.deleteTorrentFiles ? <CheckSquare className="w-5 h-5 text-red-500" /> : <Square className="w-5 h-5 text-red-900/50" />}
+              </div>
+              <div>
+                <p className="text-sm font-bold text-slate-200 group-hover:text-red-400 transition-colors">Also Delete Files (Warning)</p>
+                <p className="text-xs text-red-400/80 mt-1">Permanently deletes the original downloaded file from the torrent folder. This will stop the torrent from seeding, but cleans up your downloads directory regardless of whether you use hardlinks or copies.</p>
+              </div>
+            </label>
+          )}
+        </div>
       </div>
       
       <div className="glass-panel p-8 rounded-2xl border border-white/10 space-y-6 mb-8 shadow-xl relative overflow-hidden">

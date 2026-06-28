@@ -95,19 +95,19 @@ const runMediaManagement = async () => {
     // Filter finished torrents
     const finishedTorrents = torrentList.filter(t => t.progress === 1);
 
-    let downloadingMovies = db.prepare("SELECT * FROM movies WHERE status = 'downloading'").all();
-    let downloadingEpisodes = db.prepare(`
+    let pendingMovies = db.prepare("SELECT * FROM movies WHERE status IN ('downloading', 'monitored')").all();
+    let pendingEpisodes = db.prepare(`
       SELECT e.*, s.title as show_title 
       FROM episodes e 
       JOIN shows s ON e.show_id = s.id 
-      WHERE e.status = 'downloading'
+      WHERE e.status IN ('downloading', 'monitored')
     `).all();
 
     for (const torrent of finishedTorrents) {
       const torrentName = torrent.name.toLowerCase().replace(/[^a-z0-9]/g, ' ');
       
       // Match movies
-      for (const movie of downloadingMovies) {
+      for (const movie of pendingMovies) {
         const movieTitle = movie.title.toLowerCase().replace(/[^a-z0-9]/g, ' ');
         if (torrentName.includes(movieTitle) || torrentName.includes(movie.year.toString())) {
           await importMovie(torrent, movie);
@@ -115,7 +115,7 @@ const runMediaManagement = async () => {
       }
 
       // Match episodes
-      for (const ep of downloadingEpisodes) {
+      for (const ep of pendingEpisodes) {
         const showTitle = ep.show_title.toLowerCase().replace(/[^a-z0-9]/g, ' ');
         const s = ep.season_number.toString().padStart(2, '0');
         const e = ep.episode_number.toString().padStart(2, '0');
@@ -258,7 +258,10 @@ const importMovie = async (torrent, movie) => {
       return;
     }
 
-    const contentPath = torrent.content_path || path.join(torrent.save_path, torrent.name);
+    let contentPath = torrent.content_path || path.join(torrent.save_path, torrent.name);
+    if (contentPath.startsWith('/downloads')) {
+      contentPath = contentPath.replace('/downloads', '/mnt/oblivion/downloads');
+    }
     const videoFile = await findLargestVideoFile(contentPath);
     
     if (!videoFile) {
@@ -267,7 +270,8 @@ const importMovie = async (torrent, movie) => {
     }
 
     const ext = path.extname(videoFile);
-    const libraryRoot = paths[0].path;
+    const libraryRoot = paths.find(p => p.path.toLowerCase().includes('movie'))?.path || paths[0].path;
+    const isDedicatedPath = libraryRoot.toLowerCase().includes('movie');
     const config = getNamingConfig();
     
     let folderName = `${movie.title} (${movie.year})`;
@@ -284,7 +288,9 @@ const importMovie = async (torrent, movie) => {
       fileName = path.basename(videoFile, ext);
     }
     
-    const destFolder = path.join(libraryRoot, 'Movies', folderName);
+    const destFolder = isDedicatedPath 
+      ? path.join(libraryRoot, folderName) 
+      : path.join(libraryRoot, 'Movies', folderName);
     
     await fs.promises.mkdir(destFolder, { recursive: true });
     const destFile = path.join(destFolder, `${fileName}${ext}`);
@@ -332,6 +338,17 @@ const importMovie = async (torrent, movie) => {
     } catch (metaErr) {
       console.error(`[MediaManagement] Failed to generate metadata for movie ${movie.title}:`, metaErr.message);
     }
+    
+    // Check if we should remove the torrent
+    const removeSetting = db.prepare('SELECT value FROM settings WHERE key = ?').get('removeCompletedDownloads');
+    if (removeSetting && removeSetting.value === 'true') {
+      const deleteFilesSetting = db.prepare('SELECT value FROM settings WHERE key = ?').get('deleteTorrentFiles');
+      const deleteFiles = deleteFilesSetting && deleteFilesSetting.value === 'true';
+      console.log(`[MediaManagement] Removing torrent ${torrent.name} from client (deleteFiles: ${deleteFiles})`);
+      const downloadClientService = require('./downloadClientService');
+      await downloadClientService.deleteTorrent(torrent.hash, deleteFiles);
+    }
+
 
 
   } catch (err) {
@@ -349,7 +366,10 @@ const importEpisode = async (torrent, episode) => {
       return;
     }
 
-    const contentPath = torrent.content_path || path.join(torrent.save_path, torrent.name);
+    let contentPath = torrent.content_path || path.join(torrent.save_path, torrent.name);
+    if (contentPath.startsWith('/downloads')) {
+      contentPath = contentPath.replace('/downloads', '/mnt/oblivion/downloads');
+    }
     const videoFile = await findLargestVideoFile(contentPath);
     
     if (!videoFile) {
@@ -358,7 +378,8 @@ const importEpisode = async (torrent, episode) => {
     }
 
     const ext = path.extname(videoFile);
-    const libraryRoot = paths[0].path;
+    const libraryRoot = paths.find(p => p.path.toLowerCase().includes('tv') || p.path.toLowerCase().includes('show'))?.path || paths[0].path;
+    const isDedicatedPath = libraryRoot.toLowerCase().includes('tv') || libraryRoot.toLowerCase().includes('show');
     const config = getNamingConfig();
     
     const s = episode.season_number.toString().padStart(2, '0');
@@ -379,7 +400,9 @@ const importEpisode = async (torrent, episode) => {
     }
 
     const seasonFolder = `Season ${s}`;
-    const destFolder = path.join(libraryRoot, 'TV Shows', showFolder, seasonFolder);
+    const destFolder = isDedicatedPath
+      ? path.join(libraryRoot, showFolder, seasonFolder)
+      : path.join(libraryRoot, 'TV Shows', showFolder, seasonFolder);
     
     await fs.promises.mkdir(destFolder, { recursive: true });
     
@@ -409,9 +432,11 @@ const importEpisode = async (torrent, episode) => {
     try {
       const show = db.prepare('SELECT * FROM shows WHERE id = ?').get(episode.show_id);
       const tmdbData = await tmdbService.getShowById(show.tmdb_id);
-      const showFolder = path.join(libraryRoot, 'TV Shows', episode.show_title);
+      const fullShowFolder = isDedicatedPath
+        ? path.join(libraryRoot, showFolder)
+        : path.join(libraryRoot, 'TV Shows', showFolder);
       
-      const tvshowNfoPath = path.join(showFolder, 'tvshow.nfo');
+      const tvshowNfoPath = path.join(fullShowFolder, 'tvshow.nfo');
       if (!fs.existsSync(tvshowNfoPath)) {
         const showNfoContent = generateTvShowNfo(show, tmdbData);
         await fs.promises.writeFile(tvshowNfoPath, showNfoContent);
@@ -419,11 +444,11 @@ const importEpisode = async (torrent, episode) => {
         
         const posterPath = show.poster_path || tmdbData?.poster_path;
         if (posterPath) {
-          await downloadArtwork(posterPath, path.join(showFolder, 'poster.jpg'));
+          await downloadArtwork(posterPath, path.join(fullShowFolder, 'poster.jpg'));
         }
         const backdropPath = tmdbData?.backdrop_path;
         if (backdropPath) {
-          await downloadArtwork(backdropPath, path.join(showFolder, 'fanart.jpg'));
+          await downloadArtwork(backdropPath, path.join(fullShowFolder, 'fanart.jpg'));
         }
       }
 
@@ -435,6 +460,17 @@ const importEpisode = async (torrent, episode) => {
     } catch (metaErr) {
       console.error(`[MediaManagement] Failed to generate metadata for episode:`, metaErr.message);
     }
+
+    // Check if we should remove the torrent
+    const removeSetting = db.prepare('SELECT value FROM settings WHERE key = ?').get('removeCompletedDownloads');
+    if (removeSetting && removeSetting.value === 'true') {
+      const deleteFilesSetting = db.prepare('SELECT value FROM settings WHERE key = ?').get('deleteTorrentFiles');
+      const deleteFiles = deleteFilesSetting && deleteFilesSetting.value === 'true';
+      console.log(`[MediaManagement] Removing torrent ${torrent.name} from client (deleteFiles: ${deleteFiles})`);
+      const downloadClientService = require('./downloadClientService');
+      await downloadClientService.deleteTorrent(torrent.hash, deleteFiles);
+    }
+
 
 
   } catch (err) {

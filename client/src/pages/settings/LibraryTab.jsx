@@ -1,5 +1,5 @@
 import api from '../../lib/api';
-import { Plus, Trash2, RefreshCw, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Plus, Trash2, RefreshCw, CheckCircle2, AlertCircle, FolderTree } from 'lucide-react';
 import { customAlert } from '../../utils/alerts';
 import DuplicateSection from './DuplicateSection';
 
@@ -12,19 +12,23 @@ export default function LibraryTab({
 
   return (
     <div className="max-w-5xl mx-auto space-y-6">
-      <div className="flex items-center justify-between border-b border-white/10 pb-4">
-        <div>
-          <h2 className="text-2xl font-bold text-blue-400">Library & Root Folders</h2>
-          <p className="text-slate-400 text-sm mt-1">Configure where Atlas moves your completed downloads.</p>
-        </div>
+      <div className="flex items-center justify-between mb-2">
+        <h2 className="text-2xl font-bold text-blue-400 flex items-center gap-2">
+          <FolderTree className="w-7 h-7" /> Library & Root Folders
+        </h2>
         <button 
           onClick={handleScan}
           disabled={isScanning}
           className="bg-blue-500 hover:bg-blue-400 text-white font-bold py-2 px-4 rounded-xl flex items-center gap-2 transition-colors disabled:opacity-50"
         >
           {isScanning ? <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div> : <RefreshCw className="w-4 h-4" />}
-          {isScanning ? 'Scanning...' : 'Scan Library Now'}
+          {isScanning ? 'Scanning...' : 'Scan Now'}
         </button>
+      </div>
+
+      <div className="bg-blue-500/10 border border-blue-500/20 text-blue-400 p-4 rounded-xl mb-6 flex gap-3 text-sm">
+        <Plus className="w-5 h-5 shrink-0" />
+        <p>Configure where Atlas moves your completed downloads. Atlas will automatically scan these folders to build your library.</p>
       </div>
       
       {(scanProgress || scanResults) && (
