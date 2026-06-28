@@ -1,11 +1,21 @@
 import { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import api from '../lib/api';
 import { Search as SearchIcon, Plus, Info, Tv, Film, Star, CheckCircle2, ChevronRight, ChevronLeft } from 'lucide-react';
 import MediaDetailsModal from '../components/MediaDetailsModal';
 import { customAlert } from '../utils/alerts';
 
-const MediaRow = ({ title, items, badgeText, isTrending = false, renderMediaCard }) => {
+function MediaRow({ title, items, badgeText, isTrending = false, renderMediaCard }) {
   const scrollContainerRef = useRef(null);
+  const firstIdRef = useRef(null);
+
+  // Auto-scroll to start when new items are prepended
+  useEffect(() => {
+    if (items && items.length > 0 && items[0].id !== firstIdRef.current && scrollContainerRef.current) {
+      scrollContainerRef.current.scrollTo({ left: 0, behavior: 'smooth' });
+    }
+    firstIdRef.current = items && items.length > 0 ? items[0].id : null;
+  }, [items]);
 
   const scroll = (direction) => {
     if (scrollContainerRef.current) {
@@ -43,9 +53,10 @@ const MediaRow = ({ title, items, badgeText, isTrending = false, renderMediaCard
       </div>
     </div>
   );
-};
+}
 
 export default function Discover() {
+  const navigate = useNavigate();
   const [query, setQuery] = useState('');
   const [results, setResults] = useState([]);
   const [trendingResults, setTrendingResults] = useState([]);
@@ -54,15 +65,23 @@ export default function Discover() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [mode, setMode] = useState('movies'); // 'movies' or 'shows'
-  const [libraryItems, setLibraryItems] = useState(new Set());
+  const [libraryItems, setLibraryItems] = useState(new Map()); // tmdb_id → library DB id
   const [watchedMap, setWatchedMap] = useState(new Map());
   
   // Modal state
   const [selectedMediaId, setSelectedMediaId] = useState(null);
   const [selectedMediaType, setSelectedMediaType] = useState('movie');
+  const [modalAction, setModalAction] = useState('add'); // 'add' or 'details'
 
   // Cache data per mode so switching is instant
   const cacheRef = useRef({ movies: null, shows: null });
+  const searchInputRef = useRef(null);
+
+  useEffect(() => {
+    if (searchInputRef.current) {
+      searchInputRef.current.focus();
+    }
+  }, [mode]);
 
   useEffect(() => {
     let interval;
@@ -100,9 +119,9 @@ export default function Discover() {
       const res = await api.get(endpoint);
       if (res.data.status === 'success') {
         const items = res.data.data;
-        const itemIds = new Set(items.map(item => item.tmdb_id));
+        const itemMap = new Map(items.map(item => [item.tmdb_id, item.id]));
         const watched = new Map(items.map(item => [item.tmdb_id, !!item.watched]));
-        setLibraryItems(itemIds);
+        setLibraryItems(itemMap);
         setWatchedMap(watched);
         
         // Map library format back to tmdb format for the cards
@@ -121,7 +140,7 @@ export default function Discover() {
         // Update cache
         if (cacheRef.current[mode]) {
           cacheRef.current[mode].recent = mappedRecent;
-          cacheRef.current[mode].libraryIds = itemIds;
+          cacheRef.current[mode].libraryIds = itemMap;
         }
       }
     } catch (err) {
@@ -153,7 +172,7 @@ export default function Discover() {
         trending: trendRes.data?.status === 'success' ? trendRes.data.data : (cacheRef.current[mode]?.trending || []),
         recommended: recRes.data?.status === 'success' ? recRes.data.data : (cacheRef.current[mode]?.recommended || []),
         recent: cacheRef.current[mode]?.recent || [],
-        libraryIds: cacheRef.current[mode]?.libraryIds || new Set(),
+        libraryIds: cacheRef.current[mode]?.libraryIds || new Map(),
       };
       
     } catch (err) {
@@ -191,19 +210,13 @@ export default function Discover() {
   const handleDetailsClick = (id, type) => {
     setSelectedMediaId(id);
     setSelectedMediaType(type);
+    setModalAction('details');
   };
 
-  const handleAddMedia = async (tmdbId, type) => {
-    try {
-      const endpoint = type === 'movie' ? '/library/movies' : '/library/shows';
-      const res = await api.post(endpoint, { tmdbId });
-      if (res.data.status === 'success') {
-        customAlert(`${type === 'movie' ? 'Movie' : 'Show'} added to library successfully!`);
-        setLibraryItems(prev => new Set(prev).add(tmdbId));
-      }
-    } catch (err) {
-      customAlert(err.response?.data?.message || `Failed to add ${type} to library.`, 'error');
-    }
+  const handleAddMedia = (id, type) => {
+    setSelectedMediaId(id);
+    setSelectedMediaType(type);
+    setModalAction('add');
   };
 
   const renderMediaCard = (media, isTrending = false, isGrid = false) => {
@@ -215,7 +228,7 @@ export default function Discover() {
     const watchers = media.watchers;
     const poster = media.poster_path ? (media.poster_path.startsWith('http') ? media.poster_path : `https://image.tmdb.org/t/p/w500${media.poster_path}`) : null;
     const tmdbId = media.id || (media.ids && media.ids.tmdb);
-    const keyId = tmdbId || Math.random();
+    const keyId = tmdbId || media.title || media.name || index; // Fallback to title, name, or index
     const isInLibrary = tmdbId ? libraryItems.has(tmdbId) : false;
     const displayType = media.media_type === 'tv' ? 'show' : media.media_type === 'movie' ? 'movie' : mode === 'movies' ? 'movie' : 'show';
 
@@ -264,16 +277,17 @@ export default function Discover() {
                 <Plus className="w-4 h-4" /> Add {mode === 'movies' ? 'Movie' : 'Show'}
               </button>
             ) : (
-              <div className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 w-full py-2 rounded-lg font-bold flex items-center justify-center gap-2 shadow-lg">
+              <button 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const libraryId = libraryItems.get(tmdbId);
+                  navigate(displayType === 'movie' ? `/movies/${libraryId}` : `/shows/${libraryId}`);
+                }}
+                className="bg-emerald-500/20 hover:bg-emerald-500/30 transition-colors text-emerald-400 border border-emerald-500/30 w-full py-2 rounded-lg font-bold flex items-center justify-center gap-2 shadow-lg cursor-pointer"
+              >
                 <CheckCircle2 className="w-4 h-4" /> In Library
-              </div>
+              </button>
             )}
-            <button 
-              onClick={() => handleDetailsClick(tmdbId, displayType)}
-              className="bg-white/10 hover:bg-white/20 text-white w-full py-2 rounded-lg font-bold flex items-center justify-center gap-2 transition-colors shadow-lg border border-white/10"
-            >
-              <Info className="w-4 h-4" /> Details
-            </button>
           </div>
         </div>
         <div className="p-4 relative z-20 bg-slate-900/90 border-t border-white/5">
@@ -326,6 +340,7 @@ export default function Discover() {
           <div className="relative flex-1">
             <SearchIcon className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
             <input
+              ref={searchInputRef}
               type="text"
               placeholder="Search by title, IMDb ID (e.g. tt1234567), or TMDB ID..."
               className="glass-input w-full !pl-12 h-12 text-lg shadow-inner"
@@ -378,6 +393,30 @@ export default function Discover() {
         mediaId={selectedMediaId}
         mediaType={selectedMediaType}
         isInLibrary={selectedMediaId ? libraryItems.has(selectedMediaId) : false}
+        libraryId={selectedMediaId ? libraryItems.get(selectedMediaId) : null}
+        mode={modalAction}
+        onAdded={(tmdbId, details) => {
+          setLibraryItems(prev => new Map(prev).set(tmdbId, null));
+          // Immediately prepend to Recently Added using the TMDB data we already have
+          if (details) {
+            const newItem = {
+              id: details.id,
+              tmdb_id: details.id,
+              media_type: mode === 'movies' ? 'movie' : 'tv',
+              title: details.title || details.name,
+              name: details.title || details.name,
+              poster_path: details.poster_path,
+              vote_average: details.vote_average,
+              rating: details.vote_average,
+              year: details.release_date ? parseInt(details.release_date.split('-')[0]) : (details.first_air_date ? parseInt(details.first_air_date.split('-')[0]) : null),
+              release_date: details.release_date || '',
+              first_air_date: details.first_air_date || '',
+              overview: details.overview,
+            };
+            setRecentResults(prev => [newItem, ...prev].slice(0, 20));
+          }
+          fetchLibrary();
+        }}
       />
     </div>
   );

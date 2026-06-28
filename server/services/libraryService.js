@@ -1,5 +1,8 @@
 const db = require('../config/database');
 const tmdbService = require('./tmdbService');
+const fs = require('fs');
+const path = require('path');
+const { getNamingConfig, sanitizeTitle } = require('./mediaManagementService');
 
 const isWatchedSyncEnabled = () => {
   const row = db.prepare("SELECT value FROM settings WHERE key = 'traktWatchedSync'").get();
@@ -11,7 +14,7 @@ const sanitizeWatched = (items) => {
   return items.map(item => ({ ...item, watched: 0 }));
 };
 
-const addMovie = async (tmdbId) => {
+const addMovie = async (tmdbId, rootFolderPath = null) => {
   // Check if it already exists
   const existing = db.prepare('SELECT id FROM movies WHERE tmdb_id = ?').get(tmdbId);
   if (existing) {
@@ -27,9 +30,13 @@ const addMovie = async (tmdbId) => {
   const year = movieDetails.release_date ? parseInt(movieDetails.release_date.split('-')[0]) : null;
   const genres = movieDetails.genres ? movieDetails.genres.map(g => g.name).join(', ') : '';
 
+  // Default to the first configured quality profile
+  const defaultProfile = db.prepare('SELECT id FROM quality_profiles ORDER BY id ASC LIMIT 1').get();
+  const defaultProfileId = defaultProfile?.id || null;
+
   const insert = db.prepare(`
-    INSERT INTO movies (tmdb_id, title, year, poster_path, overview, status, rating, genres)
-    VALUES (?, ?, ?, ?, ?, 'monitored', ?, ?)
+    INSERT INTO movies (tmdb_id, title, year, poster_path, overview, status, rating, genres, quality_profile_id)
+    VALUES (?, ?, ?, ?, ?, 'monitored', ?, ?, ?)
   `);
   
   const result = insert.run(
@@ -39,8 +46,47 @@ const addMovie = async (tmdbId) => {
     movieDetails.poster_path,
     movieDetails.overview,
     movieDetails.vote_average || 0,
-    genres
+    genres,
+    defaultProfileId
   );
+
+  // Pre-create the movie folder
+  try {
+    let libraryRoot = rootFolderPath;
+    if (!libraryRoot) {
+      const paths = db.prepare('SELECT path FROM library_paths').all();
+      if (paths.length > 0) {
+        libraryRoot = paths.find(p => p.path.toLowerCase().includes('movie'))?.path || paths[0].path;
+      }
+    }
+    
+    if (libraryRoot) {
+      const isDedicatedPath = libraryRoot.toLowerCase().includes('movie');
+      const config = getNamingConfig();
+      
+      let folderName = `${movieDetails.title} (${year})`;
+      if (config.renameMovies) {
+        let format = config.standardMovieFormat;
+        format = format.replace('{Movie Title}', sanitizeTitle(movieDetails.title, config));
+        format = format.replace('{Release Year}', year || '');
+        folderName = format;
+      } else {
+        folderName = sanitizeTitle(folderName, config);
+      }
+
+      const destFolder = isDedicatedPath 
+        ? path.join(libraryRoot, folderName) 
+        : path.join(libraryRoot, 'Movies', folderName);
+      
+      if (!fs.existsSync(destFolder)) {
+        fs.mkdirSync(destFolder, { recursive: true });
+        console.log(`[LibraryService] Pre-created movie folder: ${destFolder}`);
+      }
+      // folder_path is not stored — directory is always derivable from file_path
+    }
+  } catch (err) {
+    console.error(`[LibraryService] Failed to pre-create movie folder:`, err.message);
+  }
 
   return { id: result.lastInsertRowid, tmdb_id: movieDetails.id, title: movieDetails.title };
 };
@@ -50,11 +96,11 @@ const getMovies = () => {
     SELECT m.*, qp.name as quality_profile_name
     FROM movies m
     LEFT JOIN quality_profiles qp ON m.quality_profile_id = qp.id
-    ORDER BY m.added_at DESC
+    ORDER BY m.added_at DESC, m.id DESC
   `).all());
 };
 
-const addShow = async (tmdbId) => {
+const addShow = async (tmdbId, rootFolderPath = null) => {
   const existing = db.prepare('SELECT id FROM shows WHERE tmdb_id = ?').get(tmdbId);
   if (existing) {
     throw new Error('Show already in library');
@@ -107,6 +153,38 @@ const addShow = async (tmdbId) => {
     }
   })();
 
+  // Pre-create the show folder
+  try {
+    let libraryRoot = rootFolderPath;
+    if (!libraryRoot) {
+      const paths = db.prepare('SELECT path FROM library_paths').all();
+      if (paths.length > 0) {
+        libraryRoot = paths.find(p => p.path.toLowerCase().includes('tv') || p.path.toLowerCase().includes('show'))?.path || paths[0].path;
+      }
+    }
+
+    if (libraryRoot) {
+      const isDedicatedPath = libraryRoot.toLowerCase().includes('tv') || libraryRoot.toLowerCase().includes('show');
+      const config = getNamingConfig();
+      
+      const folderName = sanitizeTitle(`${showDetails.name} (${year})`, config);
+
+      const destFolder = isDedicatedPath 
+        ? path.join(libraryRoot, folderName) 
+        : path.join(libraryRoot, 'TV Shows', folderName);
+      
+      if (!fs.existsSync(destFolder)) {
+        fs.mkdirSync(destFolder, { recursive: true });
+        console.log(`[LibraryService] Pre-created show folder: ${destFolder}`);
+      }
+
+      // We should also persist the path in the shows DB since ShowDetails expects it for stats/downloads
+      db.prepare('UPDATE shows SET folder_path = ? WHERE id = ?').run(destFolder, internalShowId);
+    }
+  } catch (err) {
+    console.error(`[LibraryService] Failed to pre-create show folder:`, err.message);
+  }
+
   return { id: internalShowId, tmdb_id: showDetails.id, title: showDetails.name };
 };
 
@@ -114,10 +192,11 @@ const getShows = () => {
   return sanitizeWatched(db.prepare(`
     SELECT s.*, qp.name as quality_profile_name,
       (SELECT COUNT(*) FROM episodes WHERE show_id = s.id) as episode_count,
-      (SELECT COUNT(*) FROM episodes WHERE show_id = s.id AND status = 'downloaded') as downloaded_episodes
+      (SELECT COUNT(*) FROM episodes WHERE show_id = s.id AND status = 'downloaded') as downloaded_episodes,
+      (SELECT COALESCE(scene_name, file_path) FROM episodes WHERE show_id = s.id AND status = 'downloaded' AND (scene_name IS NOT NULL OR file_path IS NOT NULL) LIMIT 1) as sample_episode_path
     FROM shows s
     LEFT JOIN quality_profiles qp ON s.quality_profile_id = qp.id
-    ORDER BY s.added_at DESC
+    ORDER BY s.added_at DESC, s.id DESC
   `).all());
 };
 
@@ -132,7 +211,7 @@ const addPath = (pathString) => {
     return { id: result.lastInsertRowid, path: pathString };
   } catch (e) {
     if (e.message.includes('UNIQUE constraint failed')) {
-      throw new Error('Path already exists in library');
+      throw new Error('Path already exists in library', { cause: e });
     }
     throw e;
   }

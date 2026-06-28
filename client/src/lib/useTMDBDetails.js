@@ -13,10 +13,10 @@ export function useTMDBDetails(mediaType, tmdbId) {
   const [loading, setLoading] = useState(false);
 
   const fetch = useCallback(() => {
-    if (!tmdbId) return;
+    if (!tmdbId) return Promise.resolve();
     setLoading(true);
     const endpoint = mediaType === 'show' ? `/tmdb/show/${tmdbId}` : `/tmdb/movie/${tmdbId}`;
-    api.get(`${endpoint}?_t=${Date.now()}`).then(res => {
+    return api.get(`${endpoint}?_t=${Date.now()}`).then(res => {
       setTmdbDetails(res.data.data);
       if (res.data?.data?.videos?.results) {
         const trailer = res.data.data.videos.results.find(

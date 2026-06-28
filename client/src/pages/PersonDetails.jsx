@@ -16,6 +16,7 @@ export default function PersonDetails() {
   const [expanded, setExpanded] = useState(false);
   const [selectedMediaId, setSelectedMediaId] = useState(null);
   const [selectedMediaType, setSelectedMediaType] = useState(null);
+  const [selectedLibraryId, setSelectedLibraryId] = useState(null);
 
   const handleAddMedia = async (tmdbId, type) => {
     try {
@@ -216,9 +217,18 @@ export default function PersonDetails() {
                       <Plus className="w-4 h-4" /> Add {isMovie ? 'Movie' : 'Show'}
                     </button>
                   ) : (
-                    <div className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 w-full py-2 rounded-lg font-bold flex items-center justify-center gap-2 shadow-lg">
+                    <button
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        if (credit.libraryId) {
+                          navigate(isMovie ? `/movies/${credit.libraryId}` : `/shows/${credit.libraryId}`);
+                        }
+                      }}
+                      className="bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 border border-emerald-500/30 w-full py-2 rounded-lg font-bold flex items-center justify-center gap-2 shadow-lg transition-colors"
+                    >
                       <CheckCircle2 className="w-4 h-4" /> In Library
-                    </div>
+                    </button>
                   )}
                   <button 
                     onClick={(e) => { e.preventDefault(); e.stopPropagation(); setSelectedMediaId(credit.id); setSelectedMediaType(isMovie ? 'movie' : 'tv'); }}
@@ -266,6 +276,21 @@ export default function PersonDetails() {
         mediaId={selectedMediaId}
         mediaType={selectedMediaType}
         isInLibrary={selectedMediaId ? displayed.find(c => c.id === selectedMediaId)?.inLibrary : false}
+        libraryId={selectedLibraryId}
+        onAdded={(tmdbId) => {
+          setPerson(prev => {
+            if (!prev) return prev;
+            const newCredits = { ...prev.combined_credits };
+            ['cast', 'crew'].forEach(list => {
+              if (newCredits[list]) {
+                newCredits[list] = newCredits[list].map(c => 
+                  c.id === tmdbId ? { ...c, inLibrary: true } : c
+                );
+              }
+            });
+            return { ...prev, combined_credits: newCredits };
+          });
+        }}
       />
     </div>
   );

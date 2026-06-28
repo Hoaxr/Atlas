@@ -12,7 +12,7 @@ class AppEventBus extends EventEmitter {
     this.emit('log', { level, message, metadata, timestamp: new Date().toISOString() });
 
     // Also emit as a named event
-    this.emit('event', { type: level, message, metadata, timestamp: new Date().toISOString() });
+    this.emit('event', { level, type: level, message, metadata, timestamp: new Date().toISOString() });
   }
 
   info(message, metadata) { this.log('info', message, metadata); }

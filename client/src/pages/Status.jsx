@@ -68,7 +68,7 @@ function ServiceCard({ name, service }) {
   );
 }
 
-export default function Issues() {
+export default function Status() {
   const [statusData, setStatusData] = useState(null);
   const [issues, setIssues] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -226,7 +226,7 @@ export default function Issues() {
                       <div className="min-w-0">
                         <p className="font-bold text-slate-200 dark:text-slate-200 text-slate-700">
                           {issue.id.includes('tmdb') ? 'TMDB Configuration Required' :
-                           issue.id === 'no_indexers' ? 'No Indexers Found' :
+                           issue.id === 'no_indexers' ? 'Prowlarr Not Configured' :
                            issue.id === 'no_clients' ? 'No Download Client' :
                            issue.id.includes('mount_empty') ? 'Library Mount Empty/Disconnected' :
                            issue.id.includes('mount_unreachable') ? 'Library Mount Unreachable' :
@@ -335,9 +335,9 @@ export default function Issues() {
             </div>
             <div className="flex-1">
               <p className="font-bold text-slate-200">Indexers</p>
-              <p className="text-xs text-slate-400 mt-0.5">{services.indexers?.count || 0} configured</p>
+              <p className="text-xs text-slate-400 mt-0.5">{services.indexers?.status === 'connected' ? 'Prowlarr configured' : 'Not configured'}</p>
             </div>
-            <StatusBadge status={services.indexers?.count > 0 ? 'connected' : 'unconfigured'} label={services.indexers?.count > 0 ? `${services.indexers.count}` : 'None'} />
+            <StatusBadge status={services.indexers?.status} label={services.indexers?.status === 'connected' ? 'Active' : 'None'} />
           </div>
 
           <div className="glass-panel rounded-2xl p-5 border border-white/10 flex items-center gap-4">

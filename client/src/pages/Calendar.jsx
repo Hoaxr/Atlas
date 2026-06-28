@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import api from '../lib/api';
 import { Calendar as CalendarIcon, Tv, ChevronLeft, ChevronRight, RefreshCw } from 'lucide-react';
 import { ListSkeleton } from '../components/shared/Skeleton';
@@ -7,6 +8,7 @@ import EmptyState from '../components/shared/EmptyState';
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 export default function Calendar() {
+  const navigate = useNavigate();
   const [episodes, setEpisodes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -152,7 +154,11 @@ export default function Calendar() {
                 </div>
                 <div className="divide-y divide-slate-700/30 dark:divide-slate-700/30 divide-slate-200">
                   {eps.map((ep, i) => (
-                    <div key={i} className="px-5 py-3 flex items-center gap-3 hover:bg-slate-800/20 dark:hover:bg-slate-800/20 hover:bg-slate-100 transition-colors">
+                    <div
+                      key={i}
+                      onClick={() => navigate(`/shows/${ep.show_id}`)}
+                      className="px-5 py-3 flex items-center gap-3 hover:bg-slate-800/20 dark:hover:bg-slate-800/20 hover:bg-slate-100 transition-colors cursor-pointer"
+                    >
                       <Tv className="w-4 h-4 text-purple-400 shrink-0" />
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-bold text-slate-200 dark:text-slate-200 text-slate-700 truncate">{ep.show_title}</p>

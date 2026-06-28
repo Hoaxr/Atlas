@@ -8,6 +8,7 @@ import api from './api';
 export function useSettings() {
   const [providerLangs, setProviderLangs] = useState(['en']);
   const [profiles, setProfiles] = useState([]);
+  const [defaultQualityProfileId, setDefaultQualityProfileId] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -21,9 +22,10 @@ export function useSettings() {
           return { ...p, qualities: parsedQualities, upgrade_allowed: p.upgrade_allowed !== 0 };
         });
         setProfiles(parsedProfiles);
+        setDefaultQualityProfileId(res.data.data.defaultQualityProfileId || null);
       }
     }).catch(() => { /* settings unavailable */ }).finally(() => setLoading(false));
   }, []);
 
-  return { providerLangs, profiles, loading };
+  return { providerLangs, profiles, defaultQualityProfileId, loading };
 }

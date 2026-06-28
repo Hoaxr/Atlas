@@ -4,22 +4,35 @@ import api from '../lib/api';
 import { formatSize } from '../lib/format';
 import { useSettings } from '../lib/useSettings';
 import { useTMDBDetails } from '../lib/useTMDBDetails';
-import { ArrowLeft, HardDrive, Tv, PlayCircle, ChevronDown, ChevronRight, Bookmark, BookmarkMinus, Search, Star, X, RefreshCw, Loader2, Download, Heart, CheckSquare } from 'lucide-react';
+import { ArrowLeft, HardDrive, Tv, PlayCircle, ChevronDown, ChevronRight, Bookmark, BookmarkMinus, Search, Star, X, RefreshCw, Loader2, Download, Heart, CheckSquare, Trash2 } from 'lucide-react';
 import { customAlert, customConfirm } from '../utils/alerts';
 import TrailerModal from '../components/TrailerModal';
 import ManualSearchModal from '../components/ManualSearchModal';
+import EpisodeDetailsModal from '../components/EpisodeDetailsModal';
 
 export default function ShowDetails() {
   const { id } = useParams();
   const navigate = useNavigate();
   
   const [show, setShow] = useState(null);
+  const [detailsModalEpisode, setDetailsModalEpisode] = useState(null);
+
+  const parseResolution = (title) => {
+    if (!title) return 'Unknown';
+    const t = title.toLowerCase();
+    if (t.includes('2160p') || t.includes('4k')) return '2160p';
+    if (t.includes('1080p')) return '1080p';
+    if (t.includes('720p')) return '720p';
+    if (t.includes('480p') || t.includes('dvdrip') || t.includes('xvid') || t.includes('hdtv') || t.match(/\bsd\b/)) return 'SD';
+    return 'Unknown';
+  };
   const [episodes, setEpisodes] = useState([]);
   const [loading, setLoading] = useState(true);
   const { providerLangs, profiles } = useSettings();
   const [downloadingSubs, setDownloadingSubs] = useState({});
   const [openLangMenu, setOpenLangMenu] = useState(null);
   const [updatingQuality, setUpdatingQuality] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   // Close lang menu on outside click
   useEffect(() => {
@@ -71,38 +84,43 @@ export default function ShowDetails() {
   const [remapHasSearched, setRemapHasSearched] = useState(false);
   const [remapping, setRemapping] = useState(false);
 
-  const { tmdbDetails, trailerKey, clear: clearTMDB } = useTMDBDetails('show', show?.tmdb_id);
+  const { tmdbDetails, trailerKey, refetch: refetchTMDB } = useTMDBDetails('show', show?.tmdb_id);
 
-  const fetchShowData = useCallback(async () => {
-    setLoading(true);
+  const fetchShowData = useCallback(async (silent = true) => {
+    if (!silent) setLoading(true);
     try {
-      const [showRes, epRes] = await Promise.all([
-        api.get(`/library/shows/${id}`),
-        api.get(`/library/shows/${id}/episodes`)
-      ]);
-      
-      if (showRes.data.status === 'success') {
-        setShow(showRes.data.data);
+      const res = await api.get(`/library/shows/${id}`);
+      if (res.data.status === 'success') {
+        setShow(res.data.data);
       }
+      const epRes = await api.get(`/library/shows/${id}/episodes`);
       if (epRes.data.status === 'success') {
         setEpisodes(epRes.data.data);
       }
     } catch (e) {
       console.error(e);
-      customAlert('Failed to load show details', 'error');
+      if (!silent) customAlert('Failed to load show details', 'error');
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, [id]);
 
   useEffect(() => {
-    fetchShowData();
+    fetchShowData(false);
   }, [fetchShowData]);
 
-  const refreshAll = useCallback(() => {
-    clearTMDB();
-    fetchShowData();
-  }, [clearTMDB, fetchShowData]);
+  const refreshAll = useCallback(async () => {
+    setIsRefreshing(true);
+    try {
+      await api.post(`/library/shows/${id}/refresh`);
+    } catch (e) {
+      console.error('Failed to rescan folder', e);
+    }
+    await fetchShowData(true);
+    await refetchTMDB();
+    setIsRefreshing(false);
+    customAlert('Show refreshed!');
+  }, [fetchShowData, refetchTMDB, id]);
 
   const handleQualityChange = async (profileId) => {
     setUpdatingQuality(true);
@@ -247,29 +265,17 @@ export default function ShowDetails() {
                 <BookmarkMinus className="w-8 h-8 md:w-10 md:h-10 text-slate-500" />
               )}
             </button>
-            <button
-              onClick={async () => {
-                try {
-                  const res = await api.post(`/library/shows/${show.id}/wanted`);
-                  if (res.data.status === 'success') fetchShowData();
-                } catch {
-                  customAlert('Failed to add to watchlist', 'error');
-                }
-              }}
-              className="hover:scale-110 transition-transform cursor-pointer focus:outline-none"
-              title="Add to Watchlist"
-            >
-              <Heart className={`w-8 h-8 md:w-10 md:h-10 ${show.status === 'wanted' ? 'text-pink-500 fill-pink-500' : 'text-slate-500 hover:text-pink-400'}`} />
-            </button>
+
             <span>
               {show.title} <span className="text-slate-400 font-light">({show.year})</span>
             </span>
             <button
               onClick={refreshAll}
-              className="mr-2 p-2 bg-slate-800/50 hover:bg-slate-700 rounded-lg transition-colors text-slate-400 hover:text-purple-400"
+              disabled={isRefreshing}
+              className="mr-2 p-2 bg-slate-800/50 hover:bg-slate-700 rounded-lg transition-colors text-slate-400 hover:text-purple-400 disabled:opacity-50"
               title="Refresh show information from TMDB"
             >
-              <RefreshCw className="w-5 h-5" />
+              <RefreshCw className={`w-5 h-5 ${isRefreshing ? 'animate-spin' : ''}`} />
             </button>
           </h1>
           
@@ -301,15 +307,36 @@ export default function ShowDetails() {
           </p>
           
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-x-4 gap-y-6 w-full mt-4 text-sm bg-slate-900/50 p-5 rounded-xl border border-white/5">
-            <div className="col-span-2">
+            <div className="col-span-full">
               <p className="text-slate-500 text-[10px] uppercase tracking-widest font-bold mb-1">Path</p>
-              <p className="font-mono text-xs text-slate-300 truncate" title={show.folder_path}>{show.folder_path || 'Not created yet'}</p>
+              <p className="font-mono text-xs text-slate-300 truncate" title={show.folder_path}>{show.folder_path || 'Not downloaded'}</p>
             </div>
             <div>
-              <p className="text-slate-500 text-[10px] uppercase tracking-widest font-bold mb-1">Status</p>
-              <p className="font-medium text-slate-300 capitalize">{show.status}</p>
+              <p className="text-slate-500 text-[10px] uppercase tracking-widest font-bold mb-1">Resolution</p>
+              {(() => {
+                let res = 'Unknown';
+                if (episodes && episodes.length > 0) {
+                  for (const ep of episodes) {
+                    if (ep.status === 'downloaded') {
+                      const epRes = parseResolution(ep.scene_name || ep.file_path);
+                      if (epRes !== 'Unknown') {
+                        res = epRes;
+                        break;
+                      }
+                    }
+                  }
+                }
+                
+                return res !== 'Unknown' ? (
+                  <span className="px-2 py-0.5 rounded text-xs font-medium bg-slate-800 text-slate-300 border border-slate-700">
+                    {res}
+                  </span>
+                ) : (
+                  <p className="font-medium text-slate-500">-</p>
+                );
+              })()}
             </div>
-            <div>
+            <div className="lg:col-span-2">
               <p className="text-slate-500 text-[10px] uppercase tracking-widest font-bold mb-1">Quality Profile</p>
               {updatingQuality ? (
                 <div className="flex items-center gap-2">
@@ -322,7 +349,7 @@ export default function ShowDetails() {
                   value={show.quality_profile_id || ''}
                   onChange={(e) => handleQualityChange(e.target.value ? parseInt(e.target.value) : null)}
                 >
-                  <option value="">Any</option>
+                  <option value="">Unassigned</option>
                   {profiles.map(p => (
                     <option key={p.id} value={p.id}>{p.name}</option>
                   ))}
@@ -347,13 +374,13 @@ export default function ShowDetails() {
               </div>
             )}
             {tmdbDetails && tmdbDetails.networks?.length > 0 && (
-              <div className="col-span-2 md:col-span-1">
+              <div className="col-span-2 md:col-span-2 lg:col-span-2">
                 <p className="text-slate-500 text-[10px] uppercase tracking-widest font-bold mb-1">Network</p>
                 <p className="font-medium text-slate-300 truncate" title={tmdbDetails.networks[0].name}>{tmdbDetails.networks[0].name}</p>
               </div>
             )}
             {tmdbDetails && tmdbDetails.genres?.length > 0 && (
-              <div className="col-span-2 md:col-span-4 lg:col-span-2">
+              <div className="col-span-2 md:col-span-3 lg:col-span-3">
                 <p className="text-slate-500 text-[10px] uppercase tracking-widest font-bold mb-1">Genres</p>
                 <p className="font-medium text-slate-300 truncate">{tmdbDetails.genres.map(g => g.name).join(', ')}</p>
               </div>
@@ -389,6 +416,28 @@ export default function ShowDetails() {
             </div>
           </div>
 
+          {/* Action Buttons */}
+          <div className="flex gap-4 mt-6 border-t border-white/5 pt-6">
+            <button 
+              onClick={async () => {
+                const deleteFiles = await customConfirm(
+                  `Remove "${show.title}" from your library?\n\nAlso delete files from disk?`,
+                  { confirmText: 'Remove + Delete Files', cancelText: 'Remove Only', thirdOptionText: 'Cancel' }
+                );
+                if (deleteFiles === null) return; // cancelled
+                try {
+                  await api.delete(`/library/shows/${show.id}?deleteFiles=${deleteFiles === true}`);
+                  customAlert('Show removed from library.', 'success');
+                  navigate('/shows');
+                } catch (err) {
+                  customAlert(err.response?.data?.message || 'Failed to remove show.', 'error');
+                }
+              }}
+              className="ml-auto bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 font-bold px-4 py-2 rounded-xl flex items-center gap-2 transition-colors"
+            >
+              <Trash2 className="w-4 h-4" /> Delete Show
+            </button>
+          </div>
 
         </div>
       </div>
@@ -416,7 +465,7 @@ export default function ShowDetails() {
                   <div className="flex items-center gap-3">
                     <button 
                       onClick={async (e) => {
-                        e.stopPropagation();
+                        e.stopPropagation(); e.preventDefault();
                         try {
                           await api.post(`/library/shows/${show.id}/seasons/${season}/toggle-monitor`);
                           fetchShowData();
@@ -435,7 +484,7 @@ export default function ShowDetails() {
                     </button>
                     <button 
                       onClick={async (e) => {
-                        e.stopPropagation();
+                        e.stopPropagation(); e.preventDefault();
                         const allWatched = seasons[season].every(ep => ep.watched);
                         try {
                           await api.post(`/library/shows/${show.id}/seasons/${season}/watched`, { watched: allWatched ? 0 : 1 });
@@ -473,15 +522,21 @@ export default function ShowDetails() {
                       </thead>
                       <tbody className="divide-y divide-white/5">
                         {seasons[season].map(ep => (
-                          <tr key={ep.id} className="hover:bg-slate-800/50 transition-colors group">
+                          <tr 
+                            key={ep.id} 
+                            className="hover:bg-slate-800/50 transition-colors group cursor-pointer"
+                            onClick={() => setDetailsModalEpisode(ep)}
+                          >
                             <td className="px-6 py-4 font-mono text-slate-500">{ep.episode_number}</td>
                             <td className="px-6 py-4">
                               <p className="font-bold text-slate-700 dark:text-slate-200 group-hover:text-purple-400 transition-colors">{ep.title}</p>
                               {ep.overview && <p className="text-xs text-slate-500 line-clamp-1 mt-1 max-w-xl">{ep.overview}</p>}
+                              {ep.scene_name && <p className="text-[10px] font-mono text-cyan-600/80 dark:text-cyan-400/60 mt-1 line-clamp-1 max-w-xl" title={ep.scene_name}>Grabbed: {ep.scene_name}</p>}
                             </td>
                             <td className="px-6 py-4 text-center">
                               <button 
-                                onClick={async () => {
+                                onClick={async (e) => {
+                                  e.stopPropagation(); e.preventDefault();
                                   if (ep.status === 'downloading') {
                                     if (await customConfirm("Reset status to monitored?")) {
                                       try {
@@ -535,8 +590,8 @@ export default function ShowDetails() {
                                               data-lang-badge
                                               role="button"
                                               tabIndex={0}
-                                              onClick={() => setOpenLangMenu(openLangMenu === `${subKey}-${code}` ? null : `${subKey}-${code}`)}
-                                              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpenLangMenu(openLangMenu === `${subKey}-${code}` ? null : `${subKey}-${code}`); } }}
+                                              onClick={(e) => { e.stopPropagation(); e.preventDefault(); setOpenLangMenu(openLangMenu === `${subKey}-${code}` ? null : `${subKey}-${code}`); }}
+                                              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); e.preventDefault(); setOpenLangMenu(openLangMenu === `${subKey}-${code}` ? null : `${subKey}-${code}`); } }}
                                               className={`text-xs uppercase font-bold px-2.5 py-1 rounded-md transition-colors cursor-pointer ${
                                                 exists
                                                   ? 'bg-slate-800 text-slate-300 border border-white/5 hover:bg-slate-700 hover:text-white'
@@ -549,7 +604,8 @@ export default function ShowDetails() {
                                               <div data-lang-menu className="absolute left-0 top-full mt-1 bg-slate-800 border border-white/10 rounded-xl py-1 shadow-2xl z-50 min-w-[150px]">
                                                 {!exists && (
                                                   <button
-                                                    onClick={async () => {
+                                                    onClick={async (e) => {
+                                                      e.stopPropagation(); e.preventDefault();
                                                       setOpenLangMenu(null);
                                                       setDownloadingSubs(prev => ({ ...prev, [`${subKey}-${code}`]: true }));
                                                       try {
@@ -615,7 +671,8 @@ export default function ShowDetails() {
                             <td className="px-6 py-4 text-right">
                                 <div className="flex justify-end gap-2">
                                   <button 
-                                    onClick={async () => {
+                                    onClick={async (e) => {
+                                      e.stopPropagation(); e.preventDefault();
                                       customAlert(`Starting auto-search for S${ep.season_number}E${ep.episode_number}...`);
                                       try {
                                         const res = await api.post(`/library/episodes/${ep.id}/auto-search`);
@@ -634,7 +691,8 @@ export default function ShowDetails() {
                                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-zap"><path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/></svg>
                                   </button>
                                   <button 
-                                    onClick={() => {
+                                    onClick={(e) => {
+                                      e.stopPropagation(); e.preventDefault();
                                       setSelectedEpisode(ep);
                                       setSearchModalOpen(true);
                                     }}
@@ -690,6 +748,47 @@ export default function ShowDetails() {
           onGrabbed={fetchShowData}
         />
       )}
+
+      {/* Episode Details Modal */}
+      <EpisodeDetailsModal 
+        episode={detailsModalEpisode} 
+        show={show} 
+        onClose={() => setDetailsModalEpisode(null)}
+        onAutoSearch={async (ep) => {
+          setDetailsModalEpisode(null);
+          customAlert(`Starting auto-search for S${ep.season_number}E${ep.episode_number}...`);
+          try {
+            const res = await api.post(`/library/episodes/${ep.id}/auto-search`);
+            if (res.data.status === 'success') {
+              customAlert(`Found & downloading: ${res.data.data.title}`);
+              fetchShowData();
+            }
+          } catch (err) {
+            console.error(err);
+            customAlert('Auto-search failed to find any results', 'error');
+          }
+        }}
+        onManualSearch={(ep) => {
+          setDetailsModalEpisode(null);
+          setSelectedEpisode(ep);
+          setSearchModalOpen(true);
+        }}
+        onDeleteFile={async (ep) => {
+          const deleteFiles = await customConfirm(
+            `Delete the downloaded file for S${ep.season_number}E${ep.episode_number}?\n\nThis will remove it from your disk but keep the episode monitored in your library.`,
+            { confirmText: 'Delete File', cancelText: 'Cancel' }
+          );
+          if (deleteFiles !== true) return;
+          try {
+            await api.delete(`/library/episodes/${ep.id}/file?deleteFiles=true`);
+            customAlert('Episode file deleted successfully.', 'success');
+            setDetailsModalEpisode(null);
+            fetchShowData();
+          } catch (err) {
+            customAlert(err.response?.data?.message || 'Failed to delete episode file.', 'error');
+          }
+        }}
+      />
       
       {/* Remap Modal */}
       {remapModalOpen && (

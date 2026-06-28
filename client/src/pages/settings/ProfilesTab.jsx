@@ -1,8 +1,8 @@
 import api from '../../lib/api';
-import { Save, Plus, Trash2, Settings2, CheckCircle2 } from 'lucide-react';
+import { Save, Plus, Trash2, Settings2, CheckCircle2, Star } from 'lucide-react';
 import CustomSelect from '../../components/shared/CustomSelect';
 
-export default function ProfilesTab({ profiles, newProfile, setNewProfile, editingProfile, setEditingProfile, handleAddEntity, handleDeleteEntity, fetchSettings, setStatus }) {
+export default function ProfilesTab({ profiles, newProfile, setNewProfile, editingProfile, setEditingProfile, handleAddEntity, handleDeleteEntity, fetchSettings, setStatus, settings, setSettings, handleSave }) {
   return (
     <div className="max-w-5xl mx-auto space-y-6">
       <div className="flex items-center justify-between mb-2">
@@ -111,10 +111,15 @@ export default function ProfilesTab({ profiles, newProfile, setNewProfile, editi
       </div>
 
       <div className="space-y-4">
-        {profiles.length === 0 ? <p className="text-slate-500 italic p-4 text-center">No profiles configured yet.</p> : profiles.map(p => (
-          <div key={p.id} className="flex justify-between items-center glass-panel p-5 rounded-2xl border border-white/5 hover:border-amber-500/30 transition-colors group shadow-lg">
+        {profiles.length === 0 ? <p className="text-slate-500 italic p-4 text-center">No profiles configured yet.</p> : profiles.map(p => {
+          const isDefault = settings?.defaultQualityProfileId === p.id;
+          return (
+          <div key={p.id} className={`flex justify-between items-center glass-panel p-5 rounded-2xl border hover:border-amber-500/30 transition-colors group shadow-lg ${isDefault ? 'border-amber-500/50 bg-amber-500/5' : 'border-white/5'}`}>
             <div>
-              <p className="text-base font-bold text-slate-200">{p.name}</p>
+              <div className="flex items-center gap-3">
+                <p className="text-base font-bold text-slate-200">{p.name}</p>
+                {isDefault && <span className="text-[10px] uppercase tracking-wider font-bold bg-amber-500/20 text-amber-400 px-2 py-0.5 rounded flex items-center gap-1"><Star className="w-3 h-3 fill-amber-400" /> Default</span>}
+              </div>
               <div className="flex items-center gap-2 mt-2">
                 {p.qualities.map(q => <span key={q} className="text-xs bg-white/10 px-2 py-0.5 rounded text-amber-400">{q}</span>)}
               </div>
@@ -123,11 +128,35 @@ export default function ProfilesTab({ profiles, newProfile, setNewProfile, editi
               </p>
             </div>
             <div className="flex gap-2">
+              <button 
+                onClick={async () => {
+                  if (setSettings) {
+                    const newId = isDefault ? null : p.id;
+                    setSettings(prev => ({ ...prev, defaultQualityProfileId: newId }));
+                    try {
+                      await api.post('/settings', { ...settings, defaultQualityProfileId: newId });
+                      if (setStatus) setStatus({ type: 'success', message: 'Default profile updated!' });
+                      setTimeout(() => { if (setStatus) setStatus({ type: '', message: '' }) }, 3000);
+                    } catch (e) {
+                      if (setStatus) setStatus({ type: 'error', message: 'Failed to update default profile.' });
+                    }
+                  }
+                }} 
+                className={`p-2 bg-slate-900 rounded-lg border border-white/5 transition-colors ${
+                  isDefault 
+                    ? 'text-amber-400 hover:text-slate-400 hover:bg-slate-800' 
+                    : 'text-slate-400 hover:text-amber-400 hover:bg-slate-800'
+                }`}
+                title={isDefault ? "Remove Default" : "Make Default"}
+              >
+                <Star className={`w-4 h-4 ${isDefault ? 'fill-amber-400' : ''}`} />
+              </button>
               <button onClick={() => setEditingProfile(p)} className="text-slate-400 hover:text-amber-400 p-2 bg-slate-900 rounded-lg border border-white/5"><Settings2 className="w-4 h-4" /></button>
               <button onClick={() => handleDeleteEntity('profiles', p.id)} className="text-red-400 hover:text-red-300 p-2 bg-slate-900 rounded-lg border border-white/5"><Trash2 className="w-4 h-4" /></button>
             </div>
           </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

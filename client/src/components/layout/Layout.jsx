@@ -194,7 +194,7 @@ export default function Layout() {
             </div>
           </div>
           
-          <NavLink to="/issues" onClick={() => setSidebarOpen(false)} className="bg-slate-100 border border-slate-200/60 dark:bg-slate-900/50 dark:border-white/5 p-4 rounded-2xl flex items-center space-x-3 hover:bg-slate-200/60 dark:hover:bg-slate-800 transition-colors cursor-pointer group">
+          <NavLink to="/status" onClick={() => setSidebarOpen(false)} className="bg-slate-100 border border-slate-200/60 dark:bg-slate-900/50 dark:border-white/5 p-4 rounded-2xl flex items-center space-x-3 hover:bg-slate-200/60 dark:hover:bg-slate-800 transition-colors cursor-pointer group">
             <div className={`p-2.5 rounded-xl shrink-0 transition-colors ${systemIssues.length > 0 ? 'bg-amber-500/10 text-amber-400 group-hover:bg-amber-500/20' : 'bg-emerald-500/10 text-emerald-400 group-hover:bg-emerald-500/20'}`}>
               <Activity className="w-5 h-5" />
             </div>

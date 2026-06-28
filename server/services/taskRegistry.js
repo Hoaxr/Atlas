@@ -56,10 +56,13 @@ const executeTask = async (id) => {
 
   try {
     updateTaskStatus(id, 'running', 'Task started');
-    eventBus.info(`Task started: ${task.name}`);
-    await task.executeFn();
-    updateTaskStatus(id, 'idle', 'Task completed successfully');
-    eventBus.success(`Task completed: ${task.name}`);
+    const result = await task.executeFn();
+    
+    if (result === 'skipped') {
+      updateTaskStatus(id, 'idle', 'Task skipped (no active downloads)');
+    } else {
+      updateTaskStatus(id, 'idle', 'Task completed successfully');
+    }
   } catch (err) {
     updateTaskStatus(id, 'error', `Failed: ${err.message}`);
     eventBus.error(`Task failed: ${task.name} — ${err.message}`);

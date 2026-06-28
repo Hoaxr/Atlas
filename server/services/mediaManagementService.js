@@ -16,7 +16,8 @@ const getNamingConfig = () => {
     colonReplacement: getSetting('colonReplacement') || 'delete',
     standardMovieFormat: getSetting('standardMovieFormat') || '{Movie Title} ({Release Year})',
     renameEpisodes: getSetting('renameEpisodes') !== 'false',
-    standardEpisodeFormat: getSetting('standardEpisodeFormat') || '{Show Title} - S{Season}E{Episode} - {Episode Title}'
+    standardEpisodeFormat: getSetting('standardEpisodeFormat') || '{Show Title} - S{Season}E{Episode} - {Episode Title}',
+    seasonFolderFormat: getSetting('seasonFolderFormat') || 'Season {Season Number}'
   };
 };
 
@@ -87,6 +88,13 @@ const findLargestVideoFile = async (dirPath) => {
 };
 
 const runMediaManagement = async () => {
+  const pendingMoviesCount = db.prepare("SELECT COUNT(*) as count FROM movies WHERE status = 'downloading'").get().count;
+  const pendingEpisodesCount = db.prepare("SELECT COUNT(*) as count FROM episodes WHERE status = 'downloading'").get().count;
+
+  if (pendingMoviesCount === 0 && pendingEpisodesCount === 0) {
+    return 'skipped';
+  }
+
   console.log('[MediaManagement] Starting post-processing check...');
   
   try {
@@ -95,8 +103,8 @@ const runMediaManagement = async () => {
     // Filter finished torrents
     const finishedTorrents = torrentList.filter(t => t.progress === 1);
 
-    let pendingMovies = db.prepare("SELECT * FROM movies WHERE status IN ('downloading', 'monitored')").all();
-    let pendingEpisodes = db.prepare(`
+    const pendingMovies = db.prepare("SELECT * FROM movies WHERE status IN ('downloading', 'monitored')").all();
+    const pendingEpisodes = db.prepare(`
       SELECT e.*, s.title as show_title 
       FROM episodes e 
       JOIN shows s ON e.show_id = s.id 
@@ -104,19 +112,19 @@ const runMediaManagement = async () => {
     `).all();
 
     for (const torrent of finishedTorrents) {
-      const torrentName = torrent.name.toLowerCase().replace(/[^a-z0-9]/g, ' ');
+      const torrentName = torrent.name.toLowerCase().replace(/[^a-z0-9]/g, ' ').replace(/\s+/g, ' ').trim();
       
       // Match movies
       for (const movie of pendingMovies) {
-        const movieTitle = movie.title.toLowerCase().replace(/[^a-z0-9]/g, ' ');
-        if (torrentName.includes(movieTitle) || torrentName.includes(movie.year.toString())) {
+        const movieTitle = movie.title.toLowerCase().replace(/[^a-z0-9]/g, ' ').replace(/\s+/g, ' ').trim();
+        if (torrentName.includes(movieTitle)) {
           await importMovie(torrent, movie);
         }
       }
 
       // Match episodes
       for (const ep of pendingEpisodes) {
-        const showTitle = ep.show_title.toLowerCase().replace(/[^a-z0-9]/g, ' ');
+        const showTitle = ep.show_title.toLowerCase().replace(/[^a-z0-9]/g, ' ').replace(/\s+/g, ' ').trim();
         const s = ep.season_number.toString().padStart(2, '0');
         const e = ep.episode_number.toString().padStart(2, '0');
         const epString1 = `s${s}e${e}`;
@@ -129,8 +137,8 @@ const runMediaManagement = async () => {
     }
 
     // Re-fetch to see what's STILL downloading after imports
-    downloadingMovies = db.prepare("SELECT * FROM movies WHERE status = 'downloading'").all();
-    downloadingEpisodes = db.prepare(`
+    const downloadingMovies = db.prepare("SELECT * FROM movies WHERE status = 'downloading'").all();
+    const downloadingEpisodes = db.prepare(`
       SELECT e.*, s.title as show_title 
       FROM episodes e 
       JOIN shows s ON e.show_id = s.id 
@@ -139,10 +147,10 @@ const runMediaManagement = async () => {
 
     // Reset items that are missing from the torrent client
     for (const movie of downloadingMovies) {
-      const movieTitle = movie.title.toLowerCase().replace(/[^a-z0-9]/g, ' ');
+      const movieTitle = movie.title.toLowerCase().replace(/[^a-z0-9]/g, ' ').replace(/\s+/g, ' ').trim();
       const isStillInQueue = torrentList.some(t => {
-        const tName = t.name.toLowerCase().replace(/[^a-z0-9]/g, ' ');
-        return tName.includes(movieTitle) || tName.includes(movie.year.toString());
+        const tName = t.name.toLowerCase().replace(/[^a-z0-9]/g, ' ').replace(/\s+/g, ' ').trim();
+        return tName.includes(movieTitle);
       });
       if (!isStillInQueue) {
         console.log(`[MediaManagement] Movie ${movie.title} no longer in download client. Resetting to monitored.`);
@@ -151,20 +159,33 @@ const runMediaManagement = async () => {
     }
 
     for (const ep of downloadingEpisodes) {
-      const showTitle = ep.show_title.toLowerCase().replace(/[^a-z0-9]/g, ' ');
+      const showTitle = ep.show_title.toLowerCase().replace(/[^a-z0-9]/g, ' ').replace(/\s+/g, ' ').trim();
       const s = ep.season_number.toString().padStart(2, '0');
       const e = ep.episode_number.toString().padStart(2, '0');
       const epString1 = `s${s}e${e}`;
       const epString2 = `${s}x${e}`; 
 
       const isStillInQueue = torrentList.some(t => {
-        const tName = t.name.toLowerCase().replace(/[^a-z0-9]/g, ' ');
+        const tName = t.name.toLowerCase().replace(/[^a-z0-9]/g, ' ').replace(/\s+/g, ' ').trim();
         return tName.includes(showTitle) && (tName.includes(epString1) || tName.includes(epString2));
       });
 
       if (!isStillInQueue) {
         console.log(`[MediaManagement] Episode ${ep.show_title} S${s}E${e} no longer in download client. Resetting to monitored.`);
         db.prepare("UPDATE episodes SET status = 'monitored' WHERE id = ?").run(ep.id);
+      }
+    }
+
+    // Recalculate status for downloading shows
+    const downloadingShows = db.prepare("SELECT id FROM shows WHERE status = 'downloading'").all();
+    for (const show of downloadingShows) {
+      const activeEps = db.prepare("SELECT COUNT(*) as count FROM episodes WHERE show_id = ? AND status = 'downloading'").get().count;
+      if (activeEps === 0) {
+        // No active downloads left for this show
+        const missingMonitored = db.prepare("SELECT COUNT(*) as count FROM episodes WHERE show_id = ? AND monitored = 1 AND (file_path IS NULL OR file_path = '')").get().count;
+        const newStatus = missingMonitored > 0 ? 'monitored' : 'downloaded';
+        db.prepare("UPDATE shows SET status = ? WHERE id = ?").run(newStatus, show.id);
+        console.log(`[MediaManagement] Show ID ${show.id} all downloads finished. Status updated to ${newStatus}.`);
       }
     }
 
@@ -201,32 +222,7 @@ ${genreTags}
 </movie>`;
 };
 
-const generateTvShowNfo = (show, tmdbData) => {
-  const genres = show.genres ? show.genres.split(',').map(g => g.trim()) : (tmdbData?.genres ? tmdbData.genres.map(g => g.name) : []);
-  const genreTags = genres.map(g => `  <genre>${escapeXml(g)}</genre>`).join('\n');
-  return `<?xml version="1.0" encoding="UTF-8" standalone="yes" ?>
-<tvshow>
-  <title>${escapeXml(show.title)}</title>
-  <originaltitle>${escapeXml(tmdbData?.original_name || show.title)}</originaltitle>
-  <year>${show.year}</year>
-  <plot>${escapeXml(show.overview)}</plot>
-  <tmdbid>${show.tmdb_id}</tmdbid>
-  <rating>${show.rating || 0}</rating>
-${genreTags}
-</tvshow>`;
-};
-
-const generateEpisodeNfo = (episode, show) => {
-  return `<?xml version="1.0" encoding="UTF-8" standalone="yes" ?>
-<episodedetails>
-  <title>${escapeXml(episode.title)}</title>
-  <showtitle>${escapeXml(show.title)}</showtitle>
-  <season>${episode.season_number}</season>
-  <episode>${episode.episode_number}</episode>
-  <plot>${escapeXml(episode.overview)}</plot>
-  <aired>${episode.air_date || ''}</aired>
-</episodedetails>`;
-};
+// (Removed unused NFO generators)
 
 const downloadArtwork = async (tmdbPath, destPath) => {
   if (!tmdbPath) return;
@@ -315,6 +311,33 @@ const importMovie = async (torrent, movie) => {
     console.log(`[MediaManagement] Movie ${movie.title} marked as downloaded.`);
     eventBus.success('Download complete', { title: movie.title, type: 'movie' });
 
+    // Auto-refresh: detect resolution and update TMDB metadata
+    try {
+      const { getResolution } = require('../utils/videoUtils');
+      let sceneName = torrent.name;
+      const t = sceneName.toLowerCase();
+      const hasRes = t.includes('2160p') || t.includes('4k') || t.includes('1080p') || t.includes('720p') || t.includes('480p') || t.includes('sd');
+      if (!hasRes) {
+        const res = await getResolution(destFile);
+        if (res) sceneName = `${torrent.name} ${res}`;
+      }
+      db.prepare('UPDATE movies SET scene_name = ?, file_size = ? WHERE id = ?')
+        .run(sceneName, fs.statSync(destFile).size, movie.id);
+    } catch (resErr) {
+      console.error(`[MediaManagement] Failed to detect resolution for ${movie.title}:`, resErr.message);
+    }
+
+    // Refresh TMDB metadata in DB
+    try {
+      const tmdbData = await tmdbService.getMovieById(movie.tmdb_id);
+      if (tmdbData) {
+        db.prepare('UPDATE movies SET rating = ?, poster_path = ?, overview = ? WHERE id = ?')
+          .run(tmdbData.vote_average || 0, tmdbData.poster_path, tmdbData.overview, movie.id);
+      }
+    } catch (tmdbErr) {
+      console.error(`[MediaManagement] Failed to refresh TMDB metadata for ${movie.title}:`, tmdbErr.message);
+    }
+
     // Generate NFO and download artwork
     try {
       const tmdbData = await tmdbService.getMovieById(movie.tmdb_id);
@@ -399,7 +422,13 @@ const importEpisode = async (torrent, episode) => {
       fileName = path.basename(videoFile, ext);
     }
 
-    const seasonFolder = `Season ${s}`;
+    let seasonFolder = config.seasonFolderFormat || 'Season {Season Number}';
+    seasonFolder = seasonFolder.replace(/{Show Title}/gi, showFolder);
+    seasonFolder = seasonFolder.replace(/{Season}/gi, s);
+    seasonFolder = seasonFolder.replace(/{Season Number}/gi, episode.season_number.toString());
+    
+    if (!seasonFolder) seasonFolder = `Season ${s}`;
+
     const destFolder = isDedicatedPath
       ? path.join(libraryRoot, showFolder, seasonFolder)
       : path.join(libraryRoot, 'TV Shows', showFolder, seasonFolder);
@@ -428,37 +457,67 @@ const importEpisode = async (torrent, episode) => {
     console.log(`[MediaManagement] Episode marked as downloaded.`);
     eventBus.success('Download complete', { title: `${episode.show_title} S${episode.season_number}E${episode.episode_number}`, type: 'episode' });
 
-    // Generate NFO and download artwork
+    // Auto-refresh: detect resolution and update TMDB metadata
+    try {
+      const { getResolution } = require('../utils/videoUtils');
+      let sceneName = torrent.name;
+      const t = sceneName.toLowerCase();
+      const hasRes = t.includes('2160p') || t.includes('4k') || t.includes('1080p') || t.includes('720p') || t.includes('480p') || t.includes('sd');
+      if (!hasRes) {
+        const res = await getResolution(destFile);
+        if (res) sceneName = `${torrent.name} ${res}`;
+      }
+      db.prepare('UPDATE episodes SET scene_name = ?, file_size = ? WHERE id = ?')
+        .run(sceneName, fs.statSync(destFile).size, episode.id);
+    } catch (resErr) {
+      console.error(`[MediaManagement] Failed to detect resolution for episode:`, resErr.message);
+    }
+
+    // Refresh TMDB metadata in DB
     try {
       const show = db.prepare('SELECT * FROM shows WHERE id = ?').get(episode.show_id);
-      const tmdbData = await tmdbService.getShowById(show.tmdb_id);
+      const tmdbShowData = await tmdbService.getShowById(show.tmdb_id);
+      if (tmdbShowData) {
+        db.prepare('UPDATE shows SET rating = ?, poster_path = ?, overview = ? WHERE id = ?')
+          .run(tmdbShowData.vote_average || 0, tmdbShowData.poster_path, tmdbShowData.overview, show.id);
+      }
+    } catch (tmdbErr) {
+      console.error(`[MediaManagement] Failed to refresh TMDB metadata for show:`, tmdbErr.message);
+    }
+
+    // Calculate folder size
+    try {
+      const show = db.prepare('SELECT * FROM shows WHERE id = ?').get(episode.show_id);
       const fullShowFolder = isDedicatedPath
         ? path.join(libraryRoot, showFolder)
         : path.join(libraryRoot, 'TV Shows', showFolder);
       
-      const tvshowNfoPath = path.join(fullShowFolder, 'tvshow.nfo');
-      if (!fs.existsSync(tvshowNfoPath)) {
-        const showNfoContent = generateTvShowNfo(show, tmdbData);
-        await fs.promises.writeFile(tvshowNfoPath, showNfoContent);
-        console.log(`[MediaManagement] Generated tvshow.nfo for ${show.title}`);
-        
-        const posterPath = show.poster_path || tmdbData?.poster_path;
-        if (posterPath) {
-          await downloadArtwork(posterPath, path.join(fullShowFolder, 'poster.jpg'));
-        }
-        const backdropPath = tmdbData?.backdrop_path;
-        if (backdropPath) {
-          await downloadArtwork(backdropPath, path.join(fullShowFolder, 'fanart.jpg'));
-        }
-      }
 
-      const epNfoContent = generateEpisodeNfo(episode, show);
-      const epNfoPath = path.join(destFolder, `${episode.show_title} - S${s}E${e}.nfo`);
-      await fs.promises.writeFile(epNfoPath, epNfoContent);
-      console.log(`[MediaManagement] Generated episode NFO for S${s}E${e}`);
+      // Update the show's total folder size
+      const calculateFolderSize = async (dirPath) => {
+        let total = 0;
+        try {
+          const files = await fs.promises.readdir(dirPath);
+          for (const f of files) {
+            const fp = path.join(dirPath, f);
+            const st = await fs.promises.stat(fp);
+            if (st.isDirectory()) {
+              total += await calculateFolderSize(fp);
+            } else {
+              total += st.size;
+            }
+          }
+        } catch { /* ignore */ }
+        return total;
+      };
+      const folderSize = await calculateFolderSize(fullShowFolder);
+      db.prepare('UPDATE shows SET folder_size = ? WHERE id = ?').run(folderSize, show.id);
+      console.log(`[MediaManagement] Updated folder size for ${show.title} to ${folderSize} bytes`);
+
+
 
     } catch (metaErr) {
-      console.error(`[MediaManagement] Failed to generate metadata for episode:`, metaErr.message);
+      console.error(`[MediaManagement] Failed to calculate folder size for episode:`, metaErr.message);
     }
 
     // Check if we should remove the torrent
@@ -495,5 +554,7 @@ const init = () => {
 };
 
 module.exports = {
-  init
+  init,
+  getNamingConfig,
+  sanitizeTitle
 };

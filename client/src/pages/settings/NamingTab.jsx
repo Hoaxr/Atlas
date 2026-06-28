@@ -1,14 +1,55 @@
-import { HelpCircle, CheckSquare, Square, FileText } from 'lucide-react';
+import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
+import { HelpCircle, CheckSquare, Square, FileText, X, Tag } from 'lucide-react';
 import CustomSelect from '../../components/shared/CustomSelect';
-import { customAlert } from '../../utils/alerts';
+
+const TagsModal = ({ title, tags, onClose }) => {
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[200] flex items-center justify-center p-4"
+      onClick={onClose}
+    >
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+      
+      <div
+        className="relative z-10 bg-slate-900 border border-white/10 rounded-2xl shadow-2xl p-6 w-full max-w-md"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between mb-5">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-xl bg-cyan-500/10 text-cyan-400">
+              <Tag className="w-5 h-5" />
+            </div>
+            <h2 className="text-lg font-bold text-white">{title}</h2>
+          </div>
+          <button onClick={onClose} className="text-slate-400 hover:text-white transition-colors">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <ul className="space-y-2 max-h-[60vh] overflow-y-auto pr-2 custom-scrollbar">
+          {tags.map((tag, idx) => (
+            <li key={idx} className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2 text-sm bg-slate-800/50 border border-white/5 rounded-lg p-3">
+              <span className="text-cyan-400 font-mono">{tag.name}</span>
+              {tag.desc && <span className="text-slate-400 sm:ml-auto">{tag.desc}</span>}
+            </li>
+          ))}
+        </ul>
+      </div>
+    </div>,
+    document.body
+  );
+};
 
 export default function NamingTab({ settings, setSettings, handleSave }) {
+  const [modalType, setModalType] = useState(null);
+
   const showMovieHelp = () => {
-    customAlert('Available tags: {Movie Title}, {Release Year}, {Quality Title}, {MediaInfo VideoCodec}, {MediaInfo AudioCodec}, {MediaInfo Resolution}', 'info');
+    setModalType('movie');
   };
 
   const showEpisodeHelp = () => {
-    customAlert('Available tags: {Show Title}, {Season}, {Episode}, {Episode Title}, {Quality Title}, {MediaInfo VideoCodec}, {MediaInfo AudioCodec}, {MediaInfo Resolution}', 'info');
+    setModalType('episode');
   };
 
   const generateMovieExample = (format) => {
@@ -34,6 +75,15 @@ export default function NamingTab({ settings, setSettings, handleSave }) {
     result = result.replace(/{MediaInfo VideoCodec}/gi, 'x264');
     result = result.replace(/{MediaInfo AudioCodec}/gi, 'AAC');
     result = result.replace(/{MediaInfo Resolution}/gi, '1080p');
+    return `Example: ${result}`;
+  };
+
+  const generateSeasonFolderExample = (format) => {
+    if (!format) return 'Example: ';
+    let result = format;
+    result = result.replace(/{Show Title}/gi, 'The Show Title');
+    result = result.replace(/{Season}/gi, '02');
+    result = result.replace(/{Season Number}/gi, '2');
     return `Example: ${result}`;
   };
 
@@ -184,6 +234,30 @@ export default function NamingTab({ settings, setSettings, handleSave }) {
               <p className="text-xs text-slate-500 mt-2">{generateEpisodeExample(settings.standardEpisodeFormat)}</p>
             </div>
           </div>
+
+          <div className="flex items-start gap-4">
+            <div className="w-1/3">
+              <label className="text-sm font-medium text-slate-300">Season Folder Format</label>
+            </div>
+            <div className="w-2/3">
+              <div className="flex">
+                <input 
+                  type="text"
+                  className="flex-1 bg-slate-900/50 border border-slate-700 rounded-l-lg px-4 py-2 text-white font-mono text-sm focus:outline-none focus:border-cyan-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  value={settings.seasonFolderFormat || ''}
+                  placeholder="Season {Season Number}"
+                  onChange={e => setSettings({...settings, seasonFolderFormat: e.target.value})}
+                />
+                <button 
+                  onClick={showEpisodeHelp}
+                  className="bg-cyan-500 hover:bg-cyan-600 text-white px-3 py-2 rounded-r-lg border border-cyan-500 transition-colors"
+                >
+                  <HelpCircle className="w-5 h-5" />
+                </button>
+              </div>
+              <p className="text-xs text-slate-500 mt-2">{generateSeasonFolderExample(settings.seasonFolderFormat || 'Season {Season Number}')}</p>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -195,6 +269,39 @@ export default function NamingTab({ settings, setSettings, handleSave }) {
           Save Naming Settings
         </button>
       </div>
+
+      {modalType === 'movie' && (
+        <TagsModal 
+          title="Movie Naming Tags" 
+          tags={[
+            { name: '{Movie Title}', desc: 'Title of the movie' },
+            { name: '{Release Year}', desc: 'Release year' },
+            { name: '{Quality Title}', desc: 'e.g. 1080p WEBRip' },
+            { name: '{MediaInfo VideoCodec}', desc: 'e.g. x264' },
+            { name: '{MediaInfo AudioCodec}', desc: 'e.g. AAC' },
+            { name: '{MediaInfo Resolution}', desc: 'e.g. 1080p' }
+          ]}
+          onClose={() => setModalType(null)}
+        />
+      )}
+
+      {modalType === 'episode' && (
+        <TagsModal 
+          title="Episode Naming Tags" 
+          tags={[
+            { name: '{Show Title}', desc: 'Title of the show' },
+            { name: '{Season}', desc: 'Padded (e.g. 02)' },
+            { name: '{Season Number}', desc: 'Unpadded (e.g. 2)' },
+            { name: '{Episode}', desc: 'Episode number' },
+            { name: '{Episode Title}', desc: 'Title of the episode' },
+            { name: '{Quality Title}', desc: 'e.g. 1080p WEBRip' },
+            { name: '{MediaInfo VideoCodec}', desc: 'e.g. x264' },
+            { name: '{MediaInfo AudioCodec}', desc: 'e.g. AAC' },
+            { name: '{MediaInfo Resolution}', desc: 'e.g. 1080p' }
+          ]}
+          onClose={() => setModalType(null)}
+        />
+      )}
     </div>
   );
 }

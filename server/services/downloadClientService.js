@@ -31,7 +31,29 @@ const addTorrent = async (torrentUrl) => {
   if (!cookie) throw new Error('Failed to authenticate with qBittorrent');
 
   const formData = new FormData();
-  formData.append('urls', torrentUrl);
+  let finalUrl = torrentUrl;
+  
+  if (torrentUrl.startsWith('http')) {
+    console.log(`[DownloadClient] Fetching torrent file from URL: ${torrentUrl}`);
+    const torrentRes = await axios.get(torrentUrl, { 
+      responseType: 'arraybuffer', 
+      timeout: 15000,
+      maxRedirects: 0,
+      validateStatus: (status) => status >= 200 && status < 400
+    });
+    
+    if (torrentRes.status >= 300 && torrentRes.status < 400 && torrentRes.headers.location) {
+      console.log(`[DownloadClient] URL redirected to: ${torrentRes.headers.location}`);
+      finalUrl = torrentRes.headers.location;
+    } else {
+      formData.append('torrents', Buffer.from(torrentRes.data), 'download.torrent');
+      finalUrl = null; // No URL to append, we appended the file
+    }
+  }
+  
+  if (finalUrl) {
+    formData.append('urls', finalUrl);
+  }
   formData.append('savepath', '/downloads'); // Could be configurable
 
   try {

@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../lib/api';
-import { Activity, Film, Tv, Search, CheckCircle2, AlertCircle, Bookmark, BookmarkMinus, LayoutGrid, List, Star, Info, X, RotateCcw, Filter as FilterIcon, CheckSquare, Square, Trash2, FolderOpen, ChevronUp, ChevronDown, Heart } from 'lucide-react';
+import { Activity, Film, Tv, Search, CheckCircle2, AlertCircle, Bookmark, BookmarkMinus, LayoutGrid, List, Star, Info, X, RotateCcw, Filter as FilterIcon, CheckSquare, Square, Trash2, FolderOpen, ChevronUp, ChevronDown, Heart, Columns } from 'lucide-react';
 import { customAlert, customConfirm } from '../utils/alerts';
 import { cachedMovies, cachedShows, setCachedMovies, setCachedShows } from '../lib/libraryCache';
 import { formatSize, formatSpeed } from '../lib/format';
@@ -10,6 +10,16 @@ import { useSettings } from '../lib/useSettings';
 const SortIcon = ({ field, sort }) => {
   if (!sort.startsWith(field)) return null;
   return sort.endsWith('_asc') ? <ChevronUp className="w-3.5 h-3.5 inline ml-1" /> : <ChevronDown className="w-3.5 h-3.5 inline ml-1" />;
+};
+
+const parseResolution = (title) => {
+  if (!title) return 'Unknown';
+  const t = title.toLowerCase();
+  if (t.includes('2160p') || t.includes('4k')) return '2160p';
+  if (t.includes('1080p')) return '1080p';
+  if (t.includes('720p')) return '720p';
+  if (t.includes('480p') || t.includes('dvdrip') || t.includes('xvid') || t.includes('hdtv') || t.match(/\bsd\b/)) return 'SD';
+  return 'Unknown';
 };
 
 export default function Dashboard() {
@@ -32,21 +42,58 @@ export default function Dashboard() {
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [bulkMenuOpen, setBulkMenuOpen] = useState(false);
   const [bulkLoading, setBulkLoading] = useState(false);
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   
   const viewMode = location.pathname.includes('shows') ? 'shows' : 'movies';
-  const [searchParams] = useSearchParams();
+  const scopeKey = (key) => `atlas_${viewMode}_${key}`;
 
-  const scopeKey = (key) => `dashboard${viewMode === 'movies' ? 'Movies' : 'Shows'}${key}`;
+  const [tableColumns, setTableColumns] = useState(() => {
+    try {
+      const stored = localStorage.getItem(scopeKey('TableColumns'));
+      if (stored) return JSON.parse(stored);
+    } catch (e) {}
+    return { year: true, rating: true, resolution: true, size: true, status: true };
+  });
+  const [columnsMenuOpen, setColumnsMenuOpen] = useState(false);
+  const columnsMenuRef = useRef(null);
+
+  useEffect(() => {
+    localStorage.setItem(scopeKey('TableColumns'), JSON.stringify(tableColumns));
+  }, [tableColumns, viewMode]);
+
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (columnsMenuRef.current && !columnsMenuRef.current.contains(event.target)) {
+        setColumnsMenuOpen(false);
+      }
+    }
+    if (columnsMenuOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [columnsMenuOpen]);
+
+  const [searchParams] = useSearchParams();
 
   const [statusFilter, setStatusFilter] = useState(() => localStorage.getItem(scopeKey('StatusFilter')) || 'all');
   const [watchedFilter, setWatchedFilter] = useState(() => localStorage.getItem(scopeKey('WatchedFilter')) || 'all');
   const [genreFilter, setGenreFilter] = useState(() => localStorage.getItem(scopeKey('GenreFilter')) || 'all');
   const [qualityFilter, setQualityFilter] = useState(() => localStorage.getItem(scopeKey('QualityFilter')) || 'all');
+  const [resolutionFilter, setResolutionFilter] = useState(() => localStorage.getItem(scopeKey('ResolutionFilter')) || 'all');
   const [yearFilter, setYearFilter] = useState(() => localStorage.getItem(scopeKey('YearFilter')) || 'all');
   const [ratingFilter, setRatingFilter] = useState('all');
   const [sort, setSort] = useState(() => localStorage.getItem(scopeKey('Sort')) || 'added_desc');
   const [viewStyle, setViewStyle] = useState(() => localStorage.getItem('dashboardViewStyle') || 'grid');
   const [searchQuery, setSearchQuery] = useState('');
+  
+  const searchInputRef = useRef(null);
+
+  // Focus search input when switching between movies and shows
+  useEffect(() => {
+    if (searchInputRef.current) {
+      searchInputRef.current.focus();
+    }
+  }, [viewMode]);
 
   const handleSortClick = (field) => {
     const defaultDesc = ['rating', 'size', 'year'].includes(field);
@@ -92,6 +139,10 @@ export default function Dashboard() {
   }, [qualityFilter]);
 
   useEffect(() => {
+    localStorage.setItem(scopeKey('ResolutionFilter'), resolutionFilter);
+  }, [resolutionFilter]);
+
+  useEffect(() => {
     localStorage.setItem(scopeKey('YearFilter'), yearFilter);
   }, [yearFilter]);
 
@@ -106,10 +157,11 @@ export default function Dashboard() {
   useEffect(() => {
     setStatusFilter(() => localStorage.getItem(scopeKey('StatusFilter')) || 'all');
     setWatchedFilter(() => localStorage.getItem(scopeKey('WatchedFilter')) || 'all');
-    setGenreFilter(() => localStorage.getItem(scopeKey('GenreFilter')) || 'all');
-    setQualityFilter(() => localStorage.getItem(scopeKey('QualityFilter')) || 'all');
-    setYearFilter(() => localStorage.getItem(scopeKey('YearFilter')) || 'all');
-    setSort(() => localStorage.getItem(scopeKey('Sort')) || 'added_desc');
+    setGenreFilter(localStorage.getItem(scopeKey('GenreFilter')) || 'all');
+    setQualityFilter(localStorage.getItem(scopeKey('QualityFilter')) || 'all');
+    setResolutionFilter(localStorage.getItem(scopeKey('ResolutionFilter')) || 'all');
+    setYearFilter(localStorage.getItem(scopeKey('YearFilter')) || 'all');
+    setSort(localStorage.getItem(scopeKey('Sort')) || 'added_desc');
     setPage(1);
     
     // Check if we need to show loading state when switching tabs
@@ -123,7 +175,7 @@ export default function Dashboard() {
   // Reset pagination when filters/sort change
   useEffect(() => {
     setPage(1);
-  }, [sort, statusFilter, watchedFilter, genreFilter, qualityFilter, yearFilter]);
+  }, [sort, statusFilter, watchedFilter, genreFilter, qualityFilter, resolutionFilter, yearFilter]);
 
   useEffect(() => {
     // Always show cached data immediately (if available), then refresh
@@ -217,6 +269,14 @@ export default function Dashboard() {
     allItems.map(item => item.quality_profile_name).filter(Boolean)
   )].sort();
 
+  // Unique resolutions from ALL items
+  const allResolutions = [...new Set(
+    allItems.map(item => parseResolution(item.scene_name || item.sample_episode_path || item.file_path)).filter(r => r !== 'Unknown')
+  )].sort((a, b) => {
+    const order = { '2160p': 4, '1080p': 3, '720p': 2, 'SD': 1, 'Unknown': 0 };
+    return (order[b] || 0) - (order[a] || 0);
+  });
+
   // --- Apply filters (memoized) ---
   const displayItems = useMemo(() => {
     let items = [...allItems];
@@ -269,6 +329,11 @@ export default function Dashboard() {
       items = items.filter(item => item.quality_profile_name === qualityFilter);
     }
 
+    // Resolution filter
+    if (resolutionFilter !== 'all') {
+      items = items.filter(item => parseResolution(item.scene_name || item.sample_episode_path || item.file_path) === resolutionFilter);
+    }
+
     // Rating filter (from statistics page)
     if (ratingFilter !== 'all') {
       const [minR, maxR] = ratingFilter.split('–').map(Number);
@@ -291,11 +356,17 @@ export default function Dashboard() {
       if (sort === 'year_asc') return (a.year || 0) - (b.year || 0);
       if (sort === 'status_asc') return (a.status || '').localeCompare(b.status || '');
       if (sort === 'status_desc') return (b.status || '').localeCompare(a.status || '');
+      if (sort === 'resolution_asc' || sort === 'resolution_desc') {
+        const order = { '2160p': 4, '1080p': 3, '720p': 2, 'SD': 1, 'Unknown': 0 };
+        const resA = order[parseResolution(a.scene_name || a.sample_episode_path || a.file_path)] || 0;
+        const resB = order[parseResolution(b.scene_name || b.sample_episode_path || b.file_path)] || 0;
+        return sort === 'resolution_asc' ? resA - resB : resB - resA;
+      }
       return 0;
     });
 
     return items;
-  }, [allItems, searchQuery, statusFilter, watchedFilter, yearFilter, genreFilter, qualityFilter, ratingFilter, sort]);
+  }, [allItems, searchQuery, statusFilter, watchedFilter, yearFilter, genreFilter, qualityFilter, resolutionFilter, ratingFilter, sort]);
 
   // --- Active filter chips ---
   const activeFilters = [];
@@ -310,6 +381,7 @@ export default function Dashboard() {
   }
   if (genreFilter !== 'all') activeFilters.push({ key: 'genre', label: genreFilter });
   if (qualityFilter !== 'all') activeFilters.push({ key: 'quality', label: qualityFilter });
+  if (resolutionFilter !== 'all') activeFilters.push({ key: 'resolution', label: resolutionFilter });
   if (ratingFilter !== 'all') activeFilters.push({ key: 'rating', label: `Rating: ${ratingFilter}` });
 
   const clearFilter = (key) => {
@@ -319,6 +391,7 @@ export default function Dashboard() {
     if (key === 'watched') setWatchedFilter('all');
     if (key === 'genre') setGenreFilter('all');
     if (key === 'quality') setQualityFilter('all');
+    if (key === 'resolution') setResolutionFilter('all');
     if (key === 'rating') setRatingFilter('all');
   };
 
@@ -329,6 +402,7 @@ export default function Dashboard() {
     setWatchedFilter('all');
     setGenreFilter('all');
     setQualityFilter('all');
+    setResolutionFilter('all');
     setRatingFilter('all');
   };
 
@@ -420,6 +494,8 @@ export default function Dashboard() {
           <div className="relative w-full max-w-[260px] hidden sm:block">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none" />
             <input
+              ref={searchInputRef}
+              autoFocus
               type="text"
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
@@ -450,6 +526,37 @@ export default function Dashboard() {
             >
               <List className="w-4 h-4" />
             </button>
+            
+            {viewStyle === 'list' && (
+              <div ref={columnsMenuRef} className="relative ml-1 flex items-center">
+                <div className="w-px h-5 bg-white/10 mx-1" />
+                <button
+                  onClick={() => setColumnsMenuOpen(!columnsMenuOpen)}
+                  className={`p-1.5 rounded-md transition-colors ${columnsMenuOpen ? 'bg-slate-700 text-white shadow-sm' : 'text-slate-400 hover:text-white'}`}
+                  title="Table Columns"
+                >
+                  <Columns className="w-4 h-4" />
+                </button>
+                {columnsMenuOpen && (
+                  <div className="absolute right-0 top-full mt-3 w-48 bg-slate-800 border border-white/10 rounded-xl shadow-xl z-[60] overflow-hidden text-sm">
+                    <div className="p-2 border-b border-white/5 font-semibold text-slate-300">Visible Columns</div>
+                    <div className="p-2 flex flex-col gap-1">
+                      {['year', 'rating', 'resolution', 'size', 'status'].map(col => (
+                        <label key={col} className="flex items-center gap-2 px-2 py-1.5 hover:bg-white/5 rounded cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={tableColumns[col]}
+                            onChange={(e) => setTableColumns(prev => ({ ...prev, [col]: e.target.checked }))}
+                            className="rounded border-slate-600 bg-slate-900 text-cyan-500 focus:ring-cyan-500/50"
+                          />
+                          <span className="text-slate-300 capitalize">{col}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -464,6 +571,7 @@ export default function Dashboard() {
           <div className="relative w-full p-4 pb-0 sm:hidden">
             <Search className="absolute left-7 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none" />
             <input
+              autoFocus
               type="text"
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
@@ -477,106 +585,137 @@ export default function Dashboard() {
             )}
           </div>
 
-          {/* Filter Dropdowns Row */}
-          <div className="flex flex-wrap items-center gap-2 p-4 pb-3">
-            <FilterSelect
-              value={yearFilter}
-              onChange={e => setYearFilter(e.target.value)}
-              label="All Years"
-            >
-              {allYears.map(year => (
-                <option key={year} value={year}>{year}</option>
-              ))}
-            </FilterSelect>
-
-            <FilterSelect
-              value={statusFilter}
-              onChange={e => setStatusFilter(e.target.value)}
-              label="All Statuses"
-            >
-              <option value="monitored">Monitored</option>
-              <option value="unmonitored">Unmonitored</option>
-              <option value="downloaded">Downloaded</option>
-              <option value="downloading">Downloading</option>
-              <option value="wanted">Watchlist</option>
-              <option value="missing">Missing</option>
-            </FilterSelect>
-
-            <FilterSelect
-              value={watchedFilter}
-              onChange={e => setWatchedFilter(e.target.value)}
-              label="Watched: All"
-            >
-              <option value="watched">Watched</option>
-              <option value="unwatched">Unwatched</option>
-            </FilterSelect>
-
-            {allQualities.length > 0 && (
+          {/* Main Controls Row */}
+          <div className="flex flex-wrap items-center gap-2 p-4 pb-3 justify-between">
+            <div className="flex items-center gap-2">
               <FilterSelect
-                value={qualityFilter}
-                onChange={e => setQualityFilter(e.target.value)}
-                label="All Qualities"
+                value={sort}
+                onChange={e => setSort(e.target.value)}
+                label="Sort: Recently Added"
+                hideAll
               >
-                {allQualities.map(q => (
-                  <option key={q} value={q}>{q}</option>
-                ))}
+                <option value="added_desc">Recently Added</option>
+                <option value="rating_desc">Highest Rating</option>
+                <option value="rating_asc">Lowest Rating</option>
+                <option value="size_desc">Largest Size</option>
+                <option value="size_asc">Smallest Size</option>
+                <option value="title_asc">Title (A-Z)</option>
+                <option value="title_desc">Title (Z-A)</option>
               </FilterSelect>
-            )}
 
-            <FilterSelect
-              value={sort}
-              onChange={e => setSort(e.target.value)}
-              label="Sort: Recently Added"
-              hideAll
-            >
-              <option value="added_desc">Recently Added</option>
-              <option value="rating_desc">Highest Rating</option>
-              <option value="rating_asc">Lowest Rating</option>
-              <option value="size_desc">Largest Size</option>
-              <option value="size_asc">Smallest Size</option>
-              <option value="title_asc">Title (A-Z)</option>
-              <option value="title_desc">Title (Z-A)</option>
-            </FilterSelect>
-
-            {activeFilterCount > 0 && (
               <button
-                onClick={clearAllFilters}
-                className="flex items-center gap-1.5 text-xs font-medium text-slate-400 hover:text-rose-400 bg-slate-900/50 hover:bg-slate-800/50 border border-white/5 hover:border-rose-500/30 px-2.5 py-2 rounded-lg transition-colors shrink-0"
-                title="Clear all filters"
-              >
-                <RotateCcw className="w-3.5 h-3.5" />
-                Clear
-              </button>
-            )}
-          </div>
-
-          {/* Genre Chips Row */}
-          {allGenres.length > 0 && (
-            <div className="flex flex-wrap items-center gap-1.5 px-4 pb-3">
-              <FilterIcon className="w-3.5 h-3.5 text-slate-500 shrink-0" />
-              <button
-                onClick={() => setGenreFilter('all')}
-                className={`text-xs font-medium px-2.5 py-1 rounded-full border transition-colors ${
-                  genreFilter === 'all'
-                    ? 'bg-cyan-500/15 text-cyan-400 border-cyan-500/30'
-                    : 'bg-slate-100 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-white/5 hover:border-slate-400 dark:hover:border-slate-500/30 hover:text-slate-700 dark:hover:text-slate-200'
+                onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
+                className={`flex items-center gap-1.5 text-xs font-medium px-3 py-2 rounded-lg border transition-colors ${
+                  showAdvancedFilters || activeFilterCount > 0
+                    ? 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30'
+                    : 'bg-slate-900/50 text-slate-400 border-white/5 hover:bg-slate-800/50 hover:text-slate-200'
                 }`}
               >
-                All
+                <FilterIcon className="w-3.5 h-3.5" />
+                Filters {activeFilterCount > 0 && <span className="bg-cyan-500 text-slate-900 rounded-full px-1.5 py-0.5 text-[10px] font-bold ml-1">{activeFilterCount}</span>}
               </button>
-              {allGenres.map(genre => (
+
+              {activeFilterCount > 0 && (
                 <button
-                  key={genre}
-                  onClick={() => setGenreFilter(genreFilter === genre ? 'all' : genre)}
-                  className={`text-xs font-medium px-2.5 py-1 rounded-full border transition-colors ${
-                    genreFilter === genre
-                      ? 'bg-cyan-500/15 text-cyan-400 border-cyan-500/30'
-                      : 'bg-slate-800/50 text-slate-400 border-white/5 hover:border-slate-500/30 hover:text-slate-200'
-                  }`}
+                  onClick={clearAllFilters}
+                  className="flex items-center gap-1.5 text-xs font-medium text-slate-400 hover:text-rose-400 bg-slate-900/50 hover:bg-slate-800/50 border border-white/5 hover:border-rose-500/30 px-2.5 py-2 rounded-lg transition-colors shrink-0"
+                  title="Clear all filters"
                 >
-                  {genre}
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  Clear
                 </button>
-              ))}
+              )}
+            </div>
+          </div>
+
+          {showAdvancedFilters && (
+            <div className="px-4 pb-4 border-t border-white/5 pt-3 mt-1 bg-slate-900/30">
+              <div className="flex flex-wrap items-center gap-2 mb-3">
+                <FilterSelect
+                  value={yearFilter}
+                  onChange={e => setYearFilter(e.target.value)}
+                  label="All Years"
+                >
+                  {allYears.map(year => (
+                    <option key={year} value={year}>{year}</option>
+                  ))}
+                </FilterSelect>
+
+                <FilterSelect
+                  value={statusFilter}
+                  onChange={e => setStatusFilter(e.target.value)}
+                  label="All Statuses"
+                >
+                  <option value="monitored">Monitored</option>
+                  <option value="unmonitored">Unmonitored</option>
+                  <option value="downloaded">Downloaded</option>
+                  <option value="downloading">Downloading</option>
+                  <option value="missing">Missing</option>
+                </FilterSelect>
+
+                <FilterSelect
+                  value={watchedFilter}
+                  onChange={e => setWatchedFilter(e.target.value)}
+                  label="Watched: All"
+                >
+                  <option value="watched">Watched</option>
+                  <option value="unwatched">Unwatched</option>
+                </FilterSelect>
+
+                {allQualities.length > 0 && (
+                  <FilterSelect
+                    value={qualityFilter}
+                    onChange={e => setQualityFilter(e.target.value)}
+                    label="All Qualities"
+                  >
+                    {allQualities.map(q => (
+                      <option key={q} value={q}>{q}</option>
+                    ))}
+                  </FilterSelect>
+                )}
+
+                {allResolutions.length > 0 && (
+                  <FilterSelect
+                    value={resolutionFilter}
+                    onChange={e => setResolutionFilter(e.target.value)}
+                    label="All Resolutions"
+                  >
+                    {allResolutions.map(r => (
+                      <option key={r} value={r}>{r}</option>
+                    ))}
+                  </FilterSelect>
+                )}
+              </div>
+
+              {/* Genre Chips Row */}
+              {allGenres.length > 0 && (
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <FilterIcon className="w-3.5 h-3.5 text-slate-500 shrink-0 mr-1" />
+                  <button
+                    onClick={() => setGenreFilter('all')}
+                    className={`text-xs font-medium px-2.5 py-1 rounded-full border transition-colors ${
+                      genreFilter === 'all'
+                        ? 'bg-cyan-500/15 text-cyan-400 border-cyan-500/30'
+                        : 'bg-slate-100 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-white/5 hover:border-slate-400 dark:hover:border-slate-500/30 hover:text-slate-700 dark:hover:text-slate-200'
+                    }`}
+                  >
+                    All
+                  </button>
+                  {allGenres.map(genre => (
+                    <button
+                      key={genre}
+                      onClick={() => setGenreFilter(genreFilter === genre ? 'all' : genre)}
+                      className={`text-xs font-medium px-2.5 py-1 rounded-full border transition-colors ${
+                        genreFilter === genre
+                          ? 'bg-cyan-500/15 text-cyan-400 border-cyan-500/30'
+                          : 'bg-slate-800/50 text-slate-400 border-white/5 hover:border-slate-500/30 hover:text-slate-200'
+                      }`}
+                    >
+                      {genre}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
@@ -676,7 +815,7 @@ export default function Dashboard() {
                   <div className="absolute top-2 left-2 z-20">
                     <button 
                       onClick={async (e) => {
-                        e.stopPropagation();
+                        e.stopPropagation(); e.preventDefault();
                         try {
                           const endpoint = viewMode === 'movies' ? `/library/movies/${item.id}/toggle-monitor` : `/library/shows/${item.id}/toggle-monitor`;
                           const res = await api.post(endpoint);
@@ -715,11 +854,7 @@ export default function Dashboard() {
                         <Activity className="w-5 h-5 text-blue-400 animate-pulse" />
                       </div>
                     )}
-                    {item.status === 'wanted' && (
-                      <div className="bg-slate-900/80 rounded-full shadow-lg p-1.5" title="Watchlist">
-                        <Heart className="w-5 h-5 text-pink-500 fill-pink-500/20" />
-                      </div>
-                    )}
+
                   </div>
 
                   <div className="aspect-[2/3] relative bg-slate-800">
@@ -740,7 +875,7 @@ export default function Dashboard() {
                           <div className="flex gap-2 justify-center">
                             <button 
                               onClick={async (e) => { 
-                                e.stopPropagation(); 
+                                e.stopPropagation(); e.preventDefault(); 
                                 customAlert(`Starting auto-search for ${item.title}...`);
                                 try {
                                   const endpoint = viewMode === 'movies' ? `/library/movies/${item.id}/auto-search` : `/library/shows/${item.id}/auto-search`;
@@ -761,7 +896,7 @@ export default function Dashboard() {
                             </button>
                             <button 
                               onClick={async (e) => { 
-                                e.stopPropagation(); 
+                                e.stopPropagation(); e.preventDefault(); 
                                 setSearchMovieId(item.id); 
                                 setSearchModalOpen(true);
                                 setIsSearching(true);
@@ -787,7 +922,7 @@ export default function Dashboard() {
                         )}
                         <button 
                           onClick={(e) => {
-                            e.stopPropagation();
+                            e.stopPropagation(); e.preventDefault();
                             if (viewMode === 'shows') navigate(`/shows/${item.id}`);
                             else navigate(`/movies/${item.id}`);
                           }}
@@ -837,10 +972,15 @@ export default function Dashboard() {
                     </button>
                   </th>
                   <th className="py-3 px-4 font-medium cursor-pointer hover:text-white transition-colors select-none group" onClick={() => handleSortClick('title')}>Title<SortIcon field="title" sort={sort} /></th>
-                  <th className="py-3 px-4 font-medium w-24 cursor-pointer hover:text-white transition-colors select-none group" onClick={() => handleSortClick('year')}>Year<SortIcon field="year" sort={sort} /></th>
-                  <th className="py-3 px-4 font-medium w-32 cursor-pointer hover:text-white transition-colors select-none group" onClick={() => handleSortClick('rating')}>Rating<SortIcon field="rating" sort={sort} /></th>
-                  <th className="py-3 px-4 font-medium w-28 cursor-pointer hover:text-white transition-colors select-none group" onClick={() => handleSortClick('size')}>Size<SortIcon field="size" sort={sort} /></th>
-                  <th className="py-3 px-4 font-medium w-32 cursor-pointer hover:text-white transition-colors select-none group" onClick={() => handleSortClick('status')}>Status<SortIcon field="status" sort={sort} /></th>
+                  {tableColumns.year && <th className="py-3 px-4 font-medium w-24 cursor-pointer hover:text-white transition-colors select-none group" onClick={() => handleSortClick('year')}>Year<SortIcon field="year" sort={sort} /></th>}
+                  {tableColumns.rating && <th className="py-3 px-4 font-medium w-32 cursor-pointer hover:text-white transition-colors select-none group" onClick={() => handleSortClick('rating')}>Rating<SortIcon field="rating" sort={sort} /></th>}
+                  {tableColumns.resolution && (
+                    <th onClick={() => handleSortClick('resolution')} className="py-3 px-4 font-medium w-28 cursor-pointer hover:text-white transition-colors select-none group whitespace-nowrap">
+                      Resolution<SortIcon field="resolution" sort={sort} />
+                    </th>
+                  )}
+                  {tableColumns.size && <th className="py-3 px-4 font-medium w-28 cursor-pointer hover:text-white transition-colors select-none group" onClick={() => handleSortClick('size')}>Size<SortIcon field="size" sort={sort} /></th>}
+                  {tableColumns.status && <th className="py-3 px-4 font-medium w-32 cursor-pointer hover:text-white transition-colors select-none group" onClick={() => handleSortClick('status')}>Status<SortIcon field="status" sort={sort} /></th>}
                   <th className="py-3 px-4 font-medium w-24 text-right">Actions</th>
                 </tr>
               </thead>
@@ -873,7 +1013,7 @@ export default function Dashboard() {
                       <div className="flex items-center gap-2">
                         <button 
                           onClick={async (e) => {
-                            e.stopPropagation();
+                            e.stopPropagation(); e.preventDefault();
                             try {
                               const endpoint = viewMode === 'movies' ? `/library/movies/${item.id}/toggle-monitor` : `/library/shows/${item.id}/toggle-monitor`;
                               const res = await api.post(endpoint);
@@ -897,39 +1037,57 @@ export default function Dashboard() {
                         <span>{item.title}</span>
                       </div>
                     </td>
-                    <td className="py-2.5 px-4 text-slate-400 text-sm">
-                      {item.year}
-                    </td>
-                    <td className="py-2.5 px-4 text-slate-300 text-sm font-medium">
-                      {item.rating > 0 ? (
-                        <div className="flex items-center gap-1.5 w-fit bg-slate-950/50 px-2.5 py-0.5 rounded-lg border border-white/5 shadow-inner">
-                          <Star className="w-3.5 h-3.5 text-yellow-400 fill-yellow-400 drop-shadow-sm" />
-                          <span className="text-sm font-bold text-slate-600 dark:text-slate-200">{Number(item.rating).toFixed(1)}</span>
+                    {tableColumns.year && (
+                      <td className="py-2.5 px-4 text-slate-300 text-sm">
+                        {item.year || <span className="text-slate-600">—</span>}
+                      </td>
+                    )}
+                    {tableColumns.rating && (
+                      <td className="py-2.5 px-4 text-slate-300 text-sm font-medium">
+                        {item.rating > 0 ? (
+                          <div className="flex items-center gap-1.5 w-fit bg-slate-950/50 px-2.5 py-0.5 rounded-lg border border-white/5 shadow-inner">
+                            <Star className="w-3.5 h-3.5 text-yellow-400 fill-yellow-400 drop-shadow-sm" />
+                            <span className="text-sm font-bold text-slate-600 dark:text-slate-200">{Number(item.rating).toFixed(1)}</span>
+                          </div>
+                        ) : <span className="text-slate-600">—</span>}
+                      </td>
+                    )}
+                    {tableColumns.resolution && (
+                      <td className="py-2.5 px-4 text-slate-300">
+                        {parseResolution(item.scene_name || item.sample_episode_path || item.file_path) !== 'Unknown' ? (
+                          <span className="px-2 py-0.5 rounded text-xs font-medium bg-slate-800 text-slate-300 border border-slate-700">
+                            {parseResolution(item.scene_name || item.sample_episode_path || item.file_path)}
+                          </span>
+                        ) : (
+                          <span className="text-slate-600">—</span>
+                        )}
+                      </td>
+                    )}
+                    {tableColumns.size && (
+                      <td className="py-2.5 px-4 text-slate-400 text-sm">
+                        {formatSize(item.file_size || item.folder_size || 0)}
+                      </td>
+                    )}
+                    {tableColumns.status && (
+                      <td className="py-2.5 px-4">
+                        <div className="flex items-center gap-2">
+                          <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${
+                            item.status === 'downloaded' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 
+                            item.status === 'downloading' ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30' : 
+                            item.status === 'monitored' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 
+                            'bg-rose-500/20 text-rose-400 border border-rose-500/30'
+                          }`}>
+                            {item.status}
+                          </span>
                         </div>
-                      ) : '-'}
-                    </td>
-                    <td className="py-2.5 px-4 text-sm text-slate-400 font-mono">
-                      {formatSize(item.file_size || item.folder_size)}
-                    </td>
-                    <td className="py-2.5 px-4">
-                      <div className="flex items-center gap-2">
-                        <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${
-                          item.status === 'downloaded' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 
-                          item.status === 'downloading' ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30' : 
-                          item.status === 'wanted' ? 'bg-pink-500/20 text-pink-400 border border-pink-500/30' : 
-                          item.status === 'monitored' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 
-                          'bg-rose-500/20 text-rose-400 border border-rose-500/30'
-                        }`}>
-                          {item.status === 'wanted' ? 'Watchlist' : item.status}
-                        </span>
-                      </div>
-                    </td>
+                      </td>
+                    )}
                     <td className="py-2.5 px-4 text-right">
                       <div className="flex justify-end gap-2 items-center">
                           <>
                             <button 
                               onClick={async (e) => { 
-                                e.stopPropagation(); 
+                                e.stopPropagation(); e.preventDefault(); 
                                 customAlert(`Starting auto-search for ${item.title}...`);
                                 try {
                                   const endpoint = viewMode === 'movies' ? `/library/movies/${item.id}/auto-search` : `/library/shows/${item.id}/auto-search`;
@@ -950,7 +1108,7 @@ export default function Dashboard() {
                             </button>
                             <button 
                               onClick={async (e) => { 
-                                e.stopPropagation(); 
+                                e.stopPropagation(); e.preventDefault(); 
                                 setSearchMovieId(item.id); 
                                 setSearchModalOpen(true); 
                                 setIsSearching(true);
@@ -987,7 +1145,7 @@ export default function Dashboard() {
             <p className="text-sm font-medium">Loading data...</p>
           </div>
         ) : (
-          <div className="flex flex-col items-center justify-center h-[300px] text-slate-500 border-2 border-dashed border-slate-700/50 rounded-xl">
+          <div className="flex flex-col items-center justify-center h-[300px] text-slate-500 rounded-xl">
             {viewMode === 'movies' ? <Film className="w-12 h-12 mb-4 opacity-50" /> : <Tv className="w-12 h-12 mb-4 opacity-50" />}
             <p>No {viewMode === 'movies' ? 'movies' : 'TV shows'} in your library yet.</p>
             <p className="text-sm mt-1">Add them from the Discover page or scan your NAS in Settings.</p>

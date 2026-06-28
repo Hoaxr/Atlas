@@ -23,6 +23,7 @@ db.exec(`
     poster_path TEXT,
     overview TEXT,
     status TEXT DEFAULT 'monitored',
+    folder_path TEXT,
     file_path TEXT,
     scene_name TEXT,
     quality_profile_id INTEGER,
@@ -104,6 +105,22 @@ db.exec(`
     FOREIGN KEY (movie_id) REFERENCES movies(id) ON DELETE CASCADE,
     FOREIGN KEY (collection_id) REFERENCES collections(id) ON DELETE CASCADE
   );
+
+  CREATE TABLE IF NOT EXISTS release_profiles (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT,
+    enabled INTEGER DEFAULT 1,
+    must_contain TEXT DEFAULT '[]',
+    must_not_contain TEXT DEFAULT '[]',
+    indexer_id INTEGER
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_movies_tmdb_id ON movies(tmdb_id);
+  CREATE INDEX IF NOT EXISTS idx_movies_status ON movies(status);
+  CREATE INDEX IF NOT EXISTS idx_shows_tmdb_id ON shows(tmdb_id);
+  CREATE INDEX IF NOT EXISTS idx_shows_status ON shows(status);
+  CREATE INDEX IF NOT EXISTS idx_episodes_show_id ON episodes(show_id);
+  CREATE INDEX IF NOT EXISTS idx_episodes_status ON episodes(status);
 `);
 
 try {
@@ -129,6 +146,7 @@ try {
 try { db.exec("ALTER TABLE quality_profiles ADD COLUMN qualities TEXT;"); } catch (e) {}
 try { db.exec("ALTER TABLE quality_profiles ADD COLUMN cutoff TEXT;"); } catch (e) {}
 try { db.exec("ALTER TABLE quality_profiles ADD COLUMN upgrade_allowed INTEGER DEFAULT 1;"); } catch (e) {}
+try { db.exec("ALTER TABLE release_profiles ADD COLUMN apply_to TEXT DEFAULT 'all';"); } catch (e) {}
 
 // Ensure rating columns exist
 try { db.exec("ALTER TABLE movies ADD COLUMN rating REAL DEFAULT 0;"); } catch (e) {}
@@ -136,6 +154,7 @@ try { db.exec("ALTER TABLE shows ADD COLUMN rating REAL DEFAULT 0;"); } catch (e
 // Ensure size columns exist
 try { db.exec("ALTER TABLE movies ADD COLUMN file_size INTEGER DEFAULT 0;"); } catch (e) {}
 try { db.exec("ALTER TABLE shows ADD COLUMN folder_size INTEGER DEFAULT 0;"); } catch (e) {}
+try { db.exec("ALTER TABLE episodes ADD COLUMN file_size INTEGER DEFAULT 0;"); } catch (e) {}
 // Ensure watched columns exist
 try { db.exec("ALTER TABLE movies ADD COLUMN watched INTEGER DEFAULT 0;"); } catch (e) {}
 try { db.exec("ALTER TABLE shows ADD COLUMN watched INTEGER DEFAULT 0;"); } catch (e) {}

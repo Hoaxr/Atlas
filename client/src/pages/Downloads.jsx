@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import api from '../lib/api';
-import { DownloadCloud, ArrowDown, ArrowUp } from 'lucide-react';
+import { DownloadCloud, ArrowDown, ArrowUp, Activity } from 'lucide-react';
 import { customAlert, customConfirm } from '../utils/alerts';
 
 export default function Downloads() {
@@ -36,12 +36,16 @@ export default function Downloads() {
     }
   };
 
-  const formatSpeed = (bytes) => {
-    if (!bytes || bytes === 0) return '0 B/s';
+  const formatBytes = (bytes) => {
+    if (!bytes || bytes === 0) return '0 B';
     const k = 1024;
-    const sizes = ['B/s', 'KB/s', 'MB/s', 'GB/s'];
+    const sizes = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
     return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+  };
+
+  const formatSpeed = (bytes) => {
+    return formatBytes(bytes) + '/s';
   };
 
   return (
@@ -67,6 +71,21 @@ export default function Downloads() {
               <div className="flex flex-col text-xs font-mono text-emerald-400 text-right">
                 <span className="flex items-center justify-end gap-1"><ArrowDown className="w-3 h-3" /> {formatSpeed(stats.dl_info_speed)}</span>
                 <span className="flex items-center justify-end gap-1 text-slate-400"><ArrowUp className="w-3 h-3" /> {formatSpeed(stats.up_info_speed)}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="glass-panel p-6 rounded-2xl flex items-center space-x-4 border-l-4 border-l-indigo-500">
+          <div className="p-3 bg-indigo-500/10 rounded-xl text-indigo-400">
+            <Activity className="w-6 h-6" />
+          </div>
+          <div className="flex-1">
+            <p className="text-sm font-medium text-slate-400">Global Transfer</p>
+            <div className="flex items-center justify-end h-8">
+              <div className="flex flex-col text-xs font-mono text-indigo-400 text-right">
+                <span className="flex items-center justify-end gap-1"><ArrowDown className="w-3 h-3" /> {formatBytes(stats.dl_info_data)}</span>
+                <span className="flex items-center justify-end gap-1 text-slate-400"><ArrowUp className="w-3 h-3" /> {formatBytes(stats.up_info_data)}</span>
               </div>
             </div>
           </div>
@@ -117,9 +136,14 @@ export default function Downloads() {
           </div>
         </div>
       ) : (
-        <div className="flex flex-col items-center justify-center h-[300px] text-slate-500 border-2 border-dashed border-slate-700/50 rounded-xl">
-          <DownloadCloud className="w-12 h-12 mb-4 opacity-50" />
-          <p>No active downloads at the moment.</p>
+        <div className="glass-panel flex flex-col items-center justify-center h-[300px] text-slate-400 rounded-2xl relative overflow-hidden">
+          <div className="absolute inset-0 bg-gradient-to-b from-slate-800/20 to-transparent"></div>
+          <div className="relative z-10 flex flex-col items-center">
+            <div className="p-4 bg-slate-800/50 rounded-full mb-4 ring-1 ring-white/5 shadow-lg shadow-black/20">
+              <DownloadCloud className="w-10 h-10 text-slate-500" />
+            </div>
+            <p className="text-sm font-medium">No active downloads at the moment.</p>
+          </div>
         </div>
       )}
     </div>

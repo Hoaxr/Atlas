@@ -68,7 +68,7 @@ const getTrendingMovies = async (limit = 20) => {
     return moviesWithTmdb.filter(m => m !== null);
   } catch (error) {
     if (error.response) {
-      throw new Error(`Trakt Error: ${error.response.statusText}`);
+      throw new Error(`Trakt Error: ${error.response.statusText}`, { cause: error });
     }
     throw error;
   }
@@ -105,7 +105,7 @@ const getTrendingShows = async (limit = 20) => {
     return showsWithTmdb.filter(s => s !== null);
   } catch (error) {
     if (error.response) {
-      throw new Error(`Trakt Error: ${error.response.statusText}`);
+      throw new Error(`Trakt Error: ${error.response.statusText}`, { cause: error });
     }
     throw error;
   }

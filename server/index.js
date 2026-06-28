@@ -10,10 +10,12 @@ const apiRoutes = require('./routes/api');
 const settingsRoutes = require('./routes/settings');
 const tmdbRoutes = require('./routes/tmdb');
 const traktRoutes = require('./routes/trakt');
-const libraryRoutes = require('./routes/library');
+const libraryRoutes = require('./routes/library/index');
 const tasksRoutes = require('./routes/tasks');
 const clientsRoutes = require('./routes/clients');
 const authRoutes = require('./routes/auth');
+const releaseProfilesRoutes = require('./routes/releaseProfiles');
+
 const errorHandler = require('./middleware/errorHandler');
 const eventBus = require('./services/eventBus');
 
@@ -60,7 +62,19 @@ aiTranslationWorker.init();
 
 app.use(compression());
 app.use(helmet());
-app.use(morgan('dev'));
+app.use(morgan('dev', {
+  skip: (req, res) => {
+    const ignoredPaths = [
+      '/api/settings/clients/test',
+      '/api/library/stats',
+      '/api/clients/torrents',
+      '/api/settings/issues',
+      '/api/clients/stats',
+      '/api/library/scan/progress'
+    ];
+    return ignoredPaths.includes(req.originalUrl);
+  }
+}));
 app.use(cors({
   origin: process.env.CORS_ORIGIN || 'http://localhost:3001',
   credentials: true
@@ -76,6 +90,8 @@ app.use('/api/library', libraryRoutes);
 app.use('/api/tasks', tasksRoutes);
 app.use('/api/clients', clientsRoutes);
 app.use('/api/auth', authRoutes);
+app.use('/api/release-profiles', releaseProfilesRoutes);
+
 app.use(errorHandler);
 
 server.listen(PORT, () => console.log(`[Backend] Server op poort ${PORT}`));

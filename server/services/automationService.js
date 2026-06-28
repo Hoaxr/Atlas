@@ -44,7 +44,7 @@ const runSearchCycle = async () => {
         if (currentQuality === profile.cutoff) continue;
         
         let qualities = [];
-        try { qualities = JSON.parse(profile.qualities); } catch(e) {}
+        try { qualities = JSON.parse(profile.qualities); } catch { /* ignore */ }
         
         const currentIdx = qualities.indexOf(currentQuality);
         const cutoffIdx = qualities.indexOf(profile.cutoff);
@@ -59,7 +59,7 @@ const runSearchCycle = async () => {
       if (results.length > 0) {
         const bestRelease = results[0]; 
         await downloadClientService.addTorrent(bestRelease.link);
-        db.prepare("UPDATE movies SET status = 'downloading' WHERE id = ?").run(movie.id);
+        db.prepare("UPDATE movies SET status = 'downloading', scene_name = ? WHERE id = ?").run(bestRelease.title, movie.id);
         eventBus.info('Download started', { title: movie.title, type: 'movie', release: bestRelease.title });
       }
     } catch (err) {
@@ -86,7 +86,7 @@ const runSearchCycle = async () => {
         if (currentQuality === profile.cutoff) continue;
         
         let qualities = [];
-        try { qualities = JSON.parse(profile.qualities); } catch(e) {}
+        try { qualities = JSON.parse(profile.qualities); } catch { /* ignore */ }
         
         const currentIdx = qualities.indexOf(currentQuality);
         const cutoffIdx = qualities.indexOf(profile.cutoff);
@@ -101,7 +101,7 @@ const runSearchCycle = async () => {
       if (results.length > 0) {
         const bestRelease = results[0];
         await downloadClientService.addTorrent(bestRelease.link);
-        db.prepare("UPDATE episodes SET status = 'downloading' WHERE id = ?").run(ep.id);
+        db.prepare("UPDATE episodes SET status = 'downloading', scene_name = ? WHERE id = ?").run(bestRelease.title, ep.id);
         eventBus.info('Download started', { title: `${ep.show_title} S${String(ep.season_number).padStart(2,'0')}E${String(ep.episode_number).padStart(2,'0')}`, type: 'episode', release: bestRelease.title });
       }
     } catch (err) {

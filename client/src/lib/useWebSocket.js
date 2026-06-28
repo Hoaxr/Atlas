@@ -36,6 +36,7 @@ export default function useWebSocket() {
             // Show toast for background events
             if (data.level === 'success') {
               toast.success(data.message, {
+                duration: 4000,
                 style: {
                   background: '#1e293b',
                   color: '#fff',
@@ -47,6 +48,7 @@ export default function useWebSocket() {
               });
             } else if (data.level === 'error') {
               toast.error(data.message, {
+                duration: 5000,
                 style: {
                   background: '#1e293b',
                   color: '#fff',
@@ -58,11 +60,24 @@ export default function useWebSocket() {
               });
             } else if (data.level === 'warn') {
               toast(data.message, {
+                duration: 4000,
                 icon: '⚠️',
                 style: {
                   background: '#1e293b',
                   color: '#fff',
                   border: '1px solid rgba(251, 191, 36, 0.3)',
+                  borderRadius: '16px',
+                  padding: '12px 16px',
+                },
+              });
+            } else if (data.level === 'info') {
+              toast(data.message, {
+                duration: 3000,
+                icon: 'ℹ️',
+                style: {
+                  background: '#1e293b',
+                  color: '#fff',
+                  border: '1px solid rgba(6, 182, 212, 0.3)',
                   borderRadius: '16px',
                   padding: '12px 16px',
                 },

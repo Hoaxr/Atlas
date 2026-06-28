@@ -122,16 +122,22 @@ router.get('/person/:id', async (req, res, next) => {
     if (!person) return res.status(404).json({ status: 'error', message: 'Person not found' });
 
     // Cross-reference credits with local library
-    const localMovieIds = new Set(db.prepare('SELECT tmdb_id FROM movies').all().map(m => m.tmdb_id));
-    const localShowIds  = new Set(db.prepare('SELECT tmdb_id FROM shows').all().map(s => s.tmdb_id));
+    const localMovies = db.prepare('SELECT id, tmdb_id FROM movies').all();
+    const localShows  = db.prepare('SELECT id, tmdb_id FROM shows').all();
+    const localMovieMap = new Map(localMovies.map(m => [m.tmdb_id, m.id]));
+    const localShowMap  = new Map(localShows.map(s => [s.tmdb_id, s.id]));
 
     const credits = person.combined_credits || {};
-    const enrichCredit = (credit) => ({
-      ...credit,
-      inLibrary: credit.media_type === 'movie'
-        ? localMovieIds.has(credit.id)
-        : localShowIds.has(credit.id),
-    });
+    const enrichCredit = (credit) => {
+      const libraryId = credit.media_type === 'movie'
+        ? localMovieMap.get(credit.id)
+        : localShowMap.get(credit.id);
+      return {
+        ...credit,
+        inLibrary: libraryId !== undefined,
+        libraryId: libraryId ?? null,
+      };
+    };
 
     person.combined_credits = {
       cast: (credits.cast || []).map(enrichCredit),

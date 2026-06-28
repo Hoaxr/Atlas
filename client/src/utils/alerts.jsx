@@ -40,6 +40,7 @@ export const customConfirm = (message) => {
 export const customAlert = (message, type = 'success') => {
   if (type === 'success') {
     toast.success(message, {
+      duration: 4000,
       style: {
         background: '#1e293b',
         color: '#fff',
@@ -54,6 +55,7 @@ export const customAlert = (message, type = 'success') => {
     });
   } else if (type === 'info') {
     toast(message, {
+      duration: 4000,
       style: {
         background: '#1e293b',
         color: '#fff',
@@ -65,6 +67,7 @@ export const customAlert = (message, type = 'success') => {
     });
   } else {
     toast.error(message, {
+      duration: 5000,
       style: {
         background: '#1e293b',
         color: '#fff',

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import api from '../lib/api';
-import { AlertCircle, CheckCircle2, Key, Search, Download, Settings2, FolderTree, Languages } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Key, Search, Download, Settings2, FolderTree, Languages, ShieldAlert } from 'lucide-react';
 import { customAlert } from '../utils/alerts';
 
 import ApisTab from './settings/ApisTab';
@@ -11,6 +11,7 @@ import SubtitlesTab from './settings/SubtitlesTab';
 import LibraryTab from './settings/LibraryTab';
 import BackupTab from './settings/BackupTab';
 import NamingTab from './settings/NamingTab';
+import ReleaseProfilesTab from './settings/ReleaseProfilesTab';
 
 export default function Settings() {
   const [activeTab, setActiveTab] = useState('apis');
@@ -45,12 +46,14 @@ export default function Settings() {
   const [indexers, setIndexers] = useState([]);
   const [clients, setClients] = useState([]);
   const [profiles, setProfiles] = useState([]);
+  const [releaseProfiles, setReleaseProfiles] = useState([]);
 
   const [newPath, setNewPath] = useState('');
-  const [newIndexer, setNewIndexer] = useState({ name: '', url: '', api_key: '', type: 'torznab' });
   const [newClient, setNewClient] = useState({ name: '', host: '', port: 8080, username: '', password: '', type: 'qbittorrent' });
   const [newProfile, setNewProfile] = useState({ name: '', qualities: ['720p', '1080p', '2160p'], cutoff: '1080p', upgrade_allowed: true });
   const [editingProfile, setEditingProfile] = useState(null);
+  const [newReleaseProfile, setNewReleaseProfile] = useState({ name: '', enabled: true, must_contain: [], must_not_contain: [], indexer_id: null, apply_to: 'all' });
+  const [editingReleaseProfile, setEditingReleaseProfile] = useState(null);
 
   const [status, setStatus] = useState({ type: '', message: '' });
   const [isScanning, setIsScanning] = useState(false);
@@ -67,6 +70,7 @@ export default function Settings() {
   useEffect(() => {
     fetchSettings();
     fetchPaths();
+    fetchReleaseProfiles();
     testClients();
     checkScanStatus();
     const interval = setInterval(testClients, 10000);
@@ -215,6 +219,8 @@ export default function Settings() {
           providerLangs: Array.isArray(res.data.data.providerLangs)
             ? res.data.data.providerLangs
             : ['en'],
+          prowlarrUrl: res.data.data.prowlarrUrl || '',
+          prowlarrApiKey: res.data.data.prowlarrApiKey || '',
           autoTranslate: res.data.data.autoTranslate || false,
           deepseekApiKey: res.data.data.deepseekApiKey || '',
           claudeApiKey: res.data.data.claudeApiKey || '',
@@ -226,7 +232,11 @@ export default function Settings() {
           colonReplacement: res.data.data.colonReplacement || 'dash',
           standardMovieFormat: res.data.data.standardMovieFormat || '{Movie Title} ({Release Year})',
           renameEpisodes: res.data.data.renameEpisodes ?? true,
-          standardEpisodeFormat: res.data.data.standardEpisodeFormat || '{Show Title} - S{Season}E{Episode} - {Episode Title}'
+          standardEpisodeFormat: res.data.data.standardEpisodeFormat || '{Show Title} - S{Season}E{Episode} - {Episode Title}',
+          removeCompletedDownloads: res.data.data.removeCompletedDownloads ?? false,
+          deleteTorrentFiles: res.data.data.deleteTorrentFiles ?? false,
+          hideCompletedDownloads: res.data.data.hideCompletedDownloads ?? true,
+          defaultQualityProfileId: res.data.data.defaultQualityProfileId || null
         });
         setIndexers(res.data.data.indexers || []);
         setClients(res.data.data.clients || []);
@@ -242,6 +252,15 @@ export default function Settings() {
       }
     } catch (err) {
       console.error('Failed to fetch settings', err);
+    }
+  };
+
+  const fetchReleaseProfiles = async () => {
+    try {
+      const res = await api.get('/release-profiles');
+      setReleaseProfiles(res.data);
+    } catch (err) {
+      console.error('Failed to fetch release profiles', err);
     }
   };
 
@@ -350,11 +369,50 @@ export default function Settings() {
     }
   };
 
+  const handleAddReleaseProfile = async (profile) => {
+    try {
+      await api.post('/release-profiles', profile);
+      fetchReleaseProfiles();
+      setStatus({ type: 'success', message: 'Release profile added!' });
+      setNewReleaseProfile({ name: '', enabled: true, must_contain: [], must_not_contain: [], indexer_id: null });
+      setTimeout(() => setStatus({ type: '', message: '' }), 3000);
+    } catch (err) {
+      setStatus({ type: 'error', message: 'Failed to add release profile' });
+      setTimeout(() => setStatus({ type: '', message: '' }), 3000);
+    }
+  };
+
+  const handleUpdateReleaseProfile = async (profile) => {
+    try {
+      await api.put(`/release-profiles/${profile.id}`, profile);
+      setEditingReleaseProfile(null);
+      fetchReleaseProfiles();
+      setStatus({ type: 'success', message: 'Release profile updated!' });
+      setTimeout(() => setStatus({ type: '', message: '' }), 3000);
+    } catch (err) {
+      setStatus({ type: 'error', message: 'Failed to update release profile' });
+      setTimeout(() => setStatus({ type: '', message: '' }), 3000);
+    }
+  };
+
+  const handleDeleteReleaseProfile = async (id) => {
+    try {
+      await api.delete(`/release-profiles/${id}`);
+      fetchReleaseProfiles();
+      setStatus({ type: 'success', message: 'Release profile deleted!' });
+      setTimeout(() => setStatus({ type: '', message: '' }), 3000);
+    } catch (err) {
+      setStatus({ type: 'error', message: 'Failed to delete release profile' });
+      setTimeout(() => setStatus({ type: '', message: '' }), 3000);
+    }
+  };
+
   const TABS = [
     { id: 'apis', label: "API's & Integrations", icon: <Key className="w-4 h-4" /> },
     { id: 'indexers', label: "Indexers", icon: <Search className="w-4 h-4" /> },
     { id: 'clients', label: "Download Clients", icon: <Download className="w-4 h-4" /> },
     { id: 'profiles', label: "Quality Profiles", icon: <Settings2 className="w-4 h-4" /> },
+    { id: 'release-profiles', label: "Release Profiles", icon: <ShieldAlert className="w-4 h-4" /> },
     { id: 'naming', label: "Media Naming", icon: <FolderTree className="w-4 h-4" /> },
     { id: 'subtitles', label: "Subtitles & AI Translation", icon: <Languages className="w-4 h-4" /> },
     { id: 'library', label: "Library Management", icon: <FolderTree className="w-4 h-4" /> },
@@ -418,12 +476,6 @@ export default function Settings() {
 
           {activeTab === 'indexers' && (
             <IndexersTab
-              indexers={indexers}
-              newIndexer={newIndexer}
-              setNewIndexer={setNewIndexer}
-              handleAddEntity={handleAddEntity}
-              handleDeleteEntity={handleDeleteEntity}
-              fetchSettings={fetchSettings}
               settings={settings}
               setSettings={setSettings}
               handleSave={handleSave}
@@ -455,6 +507,23 @@ export default function Settings() {
               handleDeleteEntity={handleDeleteEntity}
               fetchSettings={fetchSettings}
               setStatus={setStatus}
+              settings={settings}
+              setSettings={setSettings}
+              handleSave={handleSave}
+            />
+          )}
+
+          {activeTab === 'release-profiles' && (
+            <ReleaseProfilesTab
+              releaseProfiles={releaseProfiles}
+              indexers={indexers}
+              newProfile={newReleaseProfile}
+              setNewProfile={setNewReleaseProfile}
+              editingProfile={editingReleaseProfile}
+              setEditingProfile={setEditingReleaseProfile}
+              handleAddProfile={handleAddReleaseProfile}
+              handleUpdateProfile={handleUpdateReleaseProfile}
+              handleDeleteProfile={handleDeleteReleaseProfile}
             />
           )}
 

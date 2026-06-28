@@ -1,13 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../../config/database');
-const fsp = require('fs/promises');
 const libraryService = require('../../services/libraryService');
 const scannerService = require('../../services/scannerService');
 const downloadClientService = require('../../services/downloadClientService');
-const tmdbService = require('../../services/tmdbService');
 
-// Stats
 router.get('/stats', (req, res, next) => {
   try {
     const moviesCount = db.prepare('SELECT count(*) as count FROM movies').get().count;
@@ -18,21 +15,21 @@ router.get('/stats', (req, res, next) => {
   }
 });
 
-// Downloads
-router.get('/downloads', async (req, res, next) => {
+
+router.get('/paths', (req, res, next) => {
   try {
-    const torrents = await downloadClientService.getTorrents();
-    res.json({ status: 'success', data: torrents });
+    const paths = libraryService.getPaths();
+    res.json({ status: 'success', data: paths });
   } catch (error) {
     next(error);
   }
 });
 
-// Paths
-router.get('/paths', (req, res, next) => {
+router.get('/downloads', async (req, res, next) => {
   try {
-    const paths = libraryService.getPaths();
-    res.json({ status: 'success', data: paths });
+    const downloadClientService = require('../services/downloadClientService');
+    const torrents = await downloadClientService.getTorrents();
+    res.json({ status: 'success', data: torrents });
   } catch (error) {
     next(error);
   }
@@ -63,7 +60,7 @@ router.delete('/paths/:id', (req, res, next) => {
   }
 });
 
-// Scan
+
 router.post('/scan', async (req, res, next) => {
   try {
     const result = await scannerService.scanLibrary();
@@ -73,12 +70,15 @@ router.post('/scan', async (req, res, next) => {
   }
 });
 
+
 router.get('/scan/progress', (req, res) => {
   res.json(scannerService.getScanProgress());
 });
 
+
 router.post('/scan/retry-paths', async (req, res, next) => {
   try {
+    const fs = require('fs/promises');
     const { paths } = req.body;
     if (!Array.isArray(paths)) {
       return res.status(400).json({ status: 'error', message: 'paths must be an array' });
@@ -86,7 +86,7 @@ router.post('/scan/retry-paths', async (req, res, next) => {
     const results = [];
     for (const p of paths) {
       try {
-        await fsp.stat(p);
+        await fs.stat(p);
         results.push({ path: p, reachable: true });
       } catch (err) {
         results.push({ path: p, reachable: false, error: err.message });
@@ -98,111 +98,25 @@ router.post('/scan/retry-paths', async (req, res, next) => {
   }
 });
 
-// Simple in-memory cache for calendar data
-const calendarCache = new Map();
-const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
-const MAX_UPCOMING_DAYS = 90; // Only show episodes within next 90 days
-
-// Calendar
 router.get('/calendar', async (req, res, next) => {
   try {
-    // Check cache
-    const cached = calendarCache.get('calendar');
-    if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
-      return res.json({ status: 'success', data: cached.data, cached: true });
-    }
-
-    const shows = db.prepare("SELECT * FROM shows WHERE status != 'unmonitored'").all();
-    if (shows.length === 0) {
-      return res.json({ status: 'success', data: [] });
-    }
-
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const maxDate = new Date(today);
-    maxDate.setDate(maxDate.getDate() + MAX_UPCOMING_DAYS);
-
-    // Step 1: Fetch all show details in parallel to get season lists
-    const showDetailsResults = await Promise.allSettled(
-      shows.map(show => tmdbService.getShowById(show.tmdb_id).catch(() => null))
-    );
-
-    // Step 2: Collect which seasons to fetch (only seasons that could have future episodes)
-    const seasonFetches = [];
-    const showMap = new Map(); // tmdb_id -> show DB row
-
-    for (let i = 0; i < shows.length; i++) {
-      const show = shows[i];
-      const result = showDetailsResults[i];
-      if (result.status !== 'fulfilled' || !result.value) continue;
-      
-      const tmdbData = result.value;
-      if (!tmdbData.seasons) continue;
-      
-      showMap.set(show.tmdb_id, show);
-
-      for (const season of tmdbData.seasons) {
-        if (!season.season_number || season.season_number === 0) continue;
-        // Skip seasons whose air_date is in the past and has no upcoming episodes
-        // TMDB provides episode_count — we'll fetch to be safe but skip obviously completed seasons
-        // by checking if season aired years ago (very likely no upcoming episodes)
-        const seasonAirYear = season.air_date ? new Date(season.air_date).getFullYear() : 0;
-        const currentYear = today.getFullYear();
-        
-        // Skip seasons that aired more than 2 years ago (very unlikely to have upcoming episodes)
-        if (seasonAirYear > 0 && seasonAirYear < currentYear - 2 && today.getFullYear() > seasonAirYear + 2) {
-          continue;
-        }
-        
-        seasonFetches.push({
-          show,
-          tmdbId: show.tmdb_id,
-          seasonNumber: season.season_number,
-        });
-      }
-    }
-
-    // Step 3: Fetch all season details in parallel
-    const seasonResults = await Promise.allSettled(
-      seasonFetches.map(sf =>
-        tmdbService.getSeasonById(sf.tmdbId, sf.seasonNumber).catch(() => null)
-      )
-    );
-
-    // Step 4: Collect upcoming episodes
-    const upcoming = [];
-
-    for (let i = 0; i < seasonFetches.length; i++) {
-      const sf = seasonFetches[i];
-      const result = seasonResults[i];
-      if (result.status !== 'fulfilled' || !result.value) continue;
-      
-      const seasonData = result.value;
-      if (!seasonData.episodes) continue;
-
-      for (const ep of seasonData.episodes) {
-        if (!ep.air_date) continue;
-        const airDate = new Date(ep.air_date);
-        
-        if (airDate >= today && airDate <= maxDate) {
-          upcoming.push({
-            show_title: sf.show.title,
-            show_id: sf.show.id,
-            tmdb_id: sf.show.tmdb_id,
-            season_number: sf.seasonNumber,
-            episode_number: ep.episode_number,
-            title: ep.name,
-            air_date: ep.air_date,
-            overview: ep.overview,
-          });
-        }
-      }
-    }
-
-    upcoming.sort((a, b) => new Date(a.air_date) - new Date(b.air_date));
-
-    // Cache the result
-    calendarCache.set('calendar', { data: upcoming, timestamp: Date.now() });
+    const upcoming = db.prepare(`
+      SELECT 
+        e.title, 
+        e.season_number, 
+        e.episode_number, 
+        e.air_date, 
+        e.overview, 
+        s.title as show_title, 
+        s.id as show_id, 
+        s.tmdb_id
+      FROM episodes e
+      JOIN shows s ON e.show_id = s.id
+      WHERE e.air_date IS NOT NULL 
+        AND e.air_date >= date('now', 'localtime')
+        AND s.status != 'unmonitored'
+      ORDER BY e.air_date ASC
+    `).all();
 
     res.json({ status: 'success', data: upcoming });
   } catch (err) {
@@ -210,20 +124,17 @@ router.get('/calendar', async (req, res, next) => {
   }
 });
 
-// Bulk operations
+
 router.post('/bulk/status', (req, res, next) => {
   try {
-    const { ids, status, type } = req.body;
+    const { ids, status, type } = req.body; // type: 'movies' or 'shows'
     if (!ids || !Array.isArray(ids) || ids.length === 0) {
       return res.status(400).json({ status: 'error', message: 'ids array is required' });
     }
     
     const table = type === 'shows' ? 'shows' : 'movies';
-    const stmt = db.prepare(`UPDATE ${table} SET status = ? WHERE id = ?`);
-    const updateMany = db.transaction((items) => {
-      for (const id of items) stmt.run(status, id);
-    });
-    updateMany(ids);
+    const placeholders = ids.map(() => '?').join(',');
+    db.prepare(`UPDATE ${table} SET status = ? WHERE id IN (${placeholders})`).run(status, ...ids);
     
     res.json({ status: 'success', message: `Updated ${ids.length} item(s)` });
   } catch (err) {
@@ -239,11 +150,8 @@ router.post('/bulk/quality', (req, res, next) => {
     }
     
     const table = type === 'shows' ? 'shows' : 'movies';
-    const stmt = db.prepare(`UPDATE ${table} SET quality_profile_id = ? WHERE id = ?`);
-    const updateMany = db.transaction((items) => {
-      for (const id of items) stmt.run(profileId, id);
-    });
-    updateMany(ids);
+    const placeholders = ids.map(() => '?').join(',');
+    db.prepare(`UPDATE ${table} SET quality_profile_id = ? WHERE id IN (${placeholders})`).run(profileId, ...ids);
     
     res.json({ status: 'success', message: `Updated ${ids.length} item(s)` });
   } catch (err) {
@@ -259,11 +167,8 @@ router.post('/bulk/delete', (req, res, next) => {
     }
     
     const table = type === 'shows' ? 'shows' : 'movies';
-    const stmt = db.prepare(`DELETE FROM ${table} WHERE id = ?`);
-    const deleteMany = db.transaction((items) => {
-      for (const id of items) stmt.run(id);
-    });
-    deleteMany(ids);
+    const placeholders = ids.map(() => '?').join(',');
+    db.prepare(`DELETE FROM ${table} WHERE id IN (${placeholders})`).run(...ids);
     
     res.json({ status: 'success', message: `Deleted ${ids.length} item(s)` });
   } catch (err) {
@@ -271,11 +176,12 @@ router.post('/bulk/delete', (req, res, next) => {
   }
 });
 
-// Duplicate detection
+
 router.get('/duplicates', (req, res, next) => {
   try {
     const duplicates = { movies: [], shows: [] };
 
+    // Find duplicate movies by TMDB ID
     const movieDupes = db.prepare(`
       SELECT tmdb_id, COUNT(*) as count, GROUP_CONCAT(id) as ids, GROUP_CONCAT(title) as titles
       FROM movies WHERE tmdb_id IS NOT NULL
@@ -292,6 +198,7 @@ router.get('/duplicates', (req, res, next) => {
       duplicates.movies.push({ tmdb_id: dupe.tmdb_id, count: dupe.count, items });
     }
 
+    // Find duplicate shows by TMDB ID
     const showDupes = db.prepare(`
       SELECT tmdb_id, COUNT(*) as count, GROUP_CONCAT(id) as ids, GROUP_CONCAT(title) as titles
       FROM shows WHERE tmdb_id IS NOT NULL
@@ -314,9 +221,10 @@ router.get('/duplicates', (req, res, next) => {
   }
 });
 
+
 router.post('/duplicates/delete', (req, res, next) => {
   try {
-    const { id, type } = req.body;
+    const { id, type } = req.body; // type: 'movie' or 'show'
     if (!id || !type) {
       return res.status(400).json({ status: 'error', message: 'id and type are required' });
     }
@@ -328,6 +236,144 @@ router.post('/duplicates/delete', (req, res, next) => {
   } catch (err) {
     next(err);
   }
+});
+
+
+router.get('/health', async (req, res, next) => {
+  try {
+    const fs = require('fs/promises');
+    const path = require('path');
+    const os = require('os');
+
+    // DB file size
+    let dbSize = 0;
+    try {
+      const dbPath = path.join(__dirname, '../data/database.sqlite');
+      const stat = await fs.stat(dbPath);
+      dbSize = stat.size;
+    } catch { /* ignore */ }
+
+    // Library path disk usage
+    const paths = db.prepare('SELECT * FROM library_paths').all();
+    const pathHealth = await Promise.all(paths.map(async (p) => {
+      try {
+        const items = await fs.readdir(p.path);
+        return { path: p.path, accessible: true, itemCount: items.length };
+      } catch {
+        return { path: p.path, accessible: false, itemCount: 0 };
+      }
+    }));
+
+    // Last scan time from settings
+    const lastScanRow = db.prepare("SELECT value FROM settings WHERE key = 'lastScanTime'").get();
+    const lastScan = lastScanRow ? lastScanRow.value : null;
+
+    // Counts
+    const movieCount = db.prepare('SELECT COUNT(*) as c FROM movies').get().c;
+    const showCount  = db.prepare('SELECT COUNT(*) as c FROM shows').get().c;
+    const epCount    = db.prepare('SELECT COUNT(*) as c FROM episodes').get().c;
+    const logCount   = db.prepare('SELECT COUNT(*) as c FROM logs').get().c;
+
+    // System info
+    const uptimeSec = process.uptime();
+    const memUsage = process.memoryUsage();
+
+    res.json({
+      status: 'success',
+      data: {
+        db: { sizeBytes: dbSize },
+        library: { movies: movieCount, shows: showCount, episodes: epCount },
+        paths: pathHealth,
+        lastScan,
+        logs: { count: logCount },
+        process: {
+          uptimeSeconds: Math.floor(uptimeSec),
+          heapUsedMB: Math.round(memUsage.heapUsed / 1024 / 1024),
+          heapTotalMB: Math.round(memUsage.heapTotal / 1024 / 1024),
+          rssMemMB: Math.round(memUsage.rss / 1024 / 1024),
+        },
+        system: {
+          freeMemMB: Math.round(os.freemem() / 1024 / 1024),
+          totalMemMB: Math.round(os.totalmem() / 1024 / 1024),
+          cpuCount: os.cpus().length,
+          platform: os.platform(),
+        }
+      }
+    });
+  } catch (err) { next(err); }
+});
+
+
+router.get('/export', (req, res, next) => {
+  try {
+    const format = req.query.format === 'csv' ? 'csv' : 'json';
+    const movies = db.prepare(
+      'SELECT id, tmdb_id, title, year, status, genres, rating, file_path, added_at FROM movies'
+    ).all();
+    const shows = db.prepare(
+      'SELECT id, tmdb_id, title, year, status, genres, rating, folder_path, added_at FROM shows'
+    ).all();
+
+    if (format === 'json') {
+      res.setHeader('Content-Type', 'application/json');
+      res.setHeader('Content-Disposition', 'attachment; filename="atlas-library.json"');
+      return res.json({ exportedAt: new Date().toISOString(), movies, shows });
+    }
+
+    // CSV
+    const escape = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+    const movieHeader = 'type,id,tmdb_id,title,year,status,genres,rating,path,added_at';
+    const movieRows = movies.map(m =>
+      ['movie', m.id, m.tmdb_id, m.title, m.year, m.status, m.genres, m.rating, m.file_path, m.added_at]
+        .map(escape).join(',')
+    );
+    const showRows = shows.map(s =>
+      ['show', s.id, s.tmdb_id, s.title, s.year, s.status, s.genres, s.rating, s.folder_path, s.added_at]
+        .map(escape).join(',')
+    );
+    const csv = [movieHeader, ...movieRows, ...showRows].join('\n');
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', 'attachment; filename="atlas-library.csv"');
+    return res.send(csv);
+  } catch (err) { next(err); }
+});
+
+
+router.get('/collections', (req, res, next) => {
+  try {
+    const collections = db.prepare('SELECT * FROM collections ORDER BY name ASC').all();
+    const withCounts = collections.map(c => ({
+      ...c,
+      movieCount: db.prepare('SELECT COUNT(*) as c FROM movie_collections WHERE collection_id = ?').get(c.id).c,
+    }));
+    res.json({ status: 'success', data: withCounts });
+  } catch (err) { next(err); }
+});
+
+router.post('/collections', (req, res, next) => {
+  try {
+    const { name, color = '#06b6d4' } = req.body;
+    if (!name) return res.status(400).json({ status: 'error', message: 'name is required' });
+    const result = db.prepare('INSERT INTO collections (name, color) VALUES (?, ?)').run(name.trim(), color);
+    res.json({ status: 'success', data: { id: result.lastInsertRowid, name, color } });
+  } catch (err) { next(err); }
+});
+
+router.put('/collections/:id', (req, res, next) => {
+  try {
+    const { name, color } = req.body;
+    if (name) db.prepare('UPDATE collections SET name = ? WHERE id = ?').run(name.trim(), req.params.id);
+    if (color) db.prepare('UPDATE collections SET color = ? WHERE id = ?').run(color, req.params.id);
+    res.json({ status: 'success', message: 'Collection updated' });
+  } catch (err) { next(err); }
+});
+
+router.delete('/collections/:id', (req, res, next) => {
+  try {
+    db.prepare('DELETE FROM movie_collections WHERE collection_id = ?').run(req.params.id);
+    db.prepare('DELETE FROM collections WHERE id = ?').run(req.params.id);
+    res.json({ status: 'success', message: 'Collection deleted' });
+  } catch (err) { next(err); }
 });
 
 module.exports = router;

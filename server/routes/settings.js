@@ -21,12 +21,14 @@ router.get('/', (req, res, next) => {
     const geminiApiKey = getSetting('geminiApiKey');
     const deepseekApiKey = getSetting('deepseekApiKey');
     const claudeApiKey = getSetting('claudeApiKey');
+    const prowlarrUrl = getSetting('prowlarrUrl');
+    const prowlarrApiKey = getSetting('prowlarrApiKey');
     const translationProvider = getSetting('translationProvider') || 'googleTranslate';
     const targetLang = getSetting('targetLang') || 'Dutch';
     let targetLangs = [];
-    try { targetLangs = JSON.parse(getSetting('targetLangs') || '[]'); } catch {}
+    try { targetLangs = JSON.parse(getSetting('targetLangs') || '[]'); } catch { /* ignore */ }
     let providerLangs = ['en'];
-    try { providerLangs = JSON.parse(getSetting('providerLangs') || '["en"]'); } catch {}
+    try { providerLangs = JSON.parse(getSetting('providerLangs') || '["en"]'); } catch { /* ignore */ }
     const autoTranslate = getSetting('autoTranslate') === 'true';
     const traktWatchedSync = getSetting('traktWatchedSync') === 'true';
     const traktAccessToken = getSetting('traktAccessToken');
@@ -39,18 +41,20 @@ router.get('/', (req, res, next) => {
     const standardMovieFormat = getSetting('standardMovieFormat') || '{Movie Title} ({Release Year})';
     const renameEpisodes = getSetting('renameEpisodes') !== 'false';
     const standardEpisodeFormat = getSetting('standardEpisodeFormat') || '{Show Title} - S{Season}E{Episode} - {Episode Title}';
+    const seasonFolderFormat = getSetting('seasonFolderFormat') || 'Season {Season Number}';
     
     // Download Client Preferences
     const removeCompletedDownloads = getSetting('removeCompletedDownloads') === 'true'; // default false
     const deleteTorrentFiles = getSetting('deleteTorrentFiles') === 'true'; // default false
     const hideCompletedDownloads = getSetting('hideCompletedDownloads') !== 'false'; // default true
     
+    const defaultQualityProfileId = getSetting('defaultQualityProfileId');
+    
     const mask = (val) => val ? '*'.repeat(val.length) : '';
     
-    // Fetch indexers and clients, excluding sensitive data
-    const indexers = db.prepare('SELECT id, name, url, type FROM indexers').all();
     const clients = db.prepare('SELECT id, name, host, port, type, username FROM download_clients').all();
     const profiles = db.prepare('SELECT * FROM quality_profiles').all();
+    const libraryPaths = db.prepare('SELECT * FROM library_paths').all();
 
     res.json({
       status: 'success',
@@ -63,6 +67,8 @@ router.get('/', (req, res, next) => {
         geminiApiKey: mask(geminiApiKey),
         deepseekApiKey: mask(deepseekApiKey),
         claudeApiKey: mask(claudeApiKey),
+        prowlarrUrl,
+        prowlarrApiKey: mask(prowlarrApiKey),
         translationProvider,
         targetLang,
         targetLangs,
@@ -77,12 +83,14 @@ router.get('/', (req, res, next) => {
         standardMovieFormat,
         renameEpisodes,
         standardEpisodeFormat,
+        seasonFolderFormat,
         removeCompletedDownloads,
         deleteTorrentFiles,
         hideCompletedDownloads,
-        indexers,
+        defaultQualityProfileId: defaultQualityProfileId ? parseInt(defaultQualityProfileId) : null,
         clients,
-        profiles
+        profiles,
+        libraryPaths
       }
     });
   } catch (e) {
@@ -92,18 +100,28 @@ router.get('/', (req, res, next) => {
 
 router.post('/', (req, res, next) => {
   try {
-    const { tmdbApiKey, traktClientId, osApiKey, subdlApiKey, subsourceApiKey, geminiApiKey, deepseekApiKey, claudeApiKey, translationProvider, targetLang, targetLangs, providerLangs, autoTranslate, traktWatchedSync, traktAccessToken, traktClientSecret, renameMovies, replaceIllegalCharacters, colonReplacement, standardMovieFormat, renameEpisodes, standardEpisodeFormat, removeCompletedDownloads, deleteTorrentFiles, hideCompletedDownloads } = req.body;
+    const { tmdbApiKey, traktClientId, osApiKey, subdlApiKey, subsourceApiKey, geminiApiKey, deepseekApiKey, claudeApiKey, prowlarrUrl, prowlarrApiKey, translationProvider, targetLang, targetLangs, providerLangs, autoTranslate, traktWatchedSync, traktAccessToken, traktClientSecret, renameMovies, replaceIllegalCharacters, colonReplacement, standardMovieFormat, renameEpisodes, standardEpisodeFormat, seasonFolderFormat, removeCompletedDownloads, deleteTorrentFiles, hideCompletedDownloads, defaultQualityProfileId } = req.body;
     
     const isMasked = (val) => val && /^\*+$/.test(val);
     
     if (tmdbApiKey !== undefined && !isMasked(tmdbApiKey)) setSetting('tmdbApiKey', tmdbApiKey);
     if (traktClientId !== undefined && !isMasked(traktClientId)) setSetting('traktClientId', traktClientId);
+    
+    if (defaultQualityProfileId !== undefined) {
+      setSetting('defaultQualityProfileId', defaultQualityProfileId);
+      if (defaultQualityProfileId !== null) {
+        db.prepare('UPDATE movies SET quality_profile_id = ? WHERE quality_profile_id IS NULL').run(defaultQualityProfileId);
+        db.prepare('UPDATE shows SET quality_profile_id = ? WHERE quality_profile_id IS NULL').run(defaultQualityProfileId);
+      }
+    }
     if (osApiKey !== undefined && !isMasked(osApiKey)) setSetting('osApiKey', osApiKey);
     if (subdlApiKey !== undefined && !isMasked(subdlApiKey)) setSetting('subdlApiKey', subdlApiKey);
     if (subsourceApiKey !== undefined && !isMasked(subsourceApiKey)) setSetting('subsourceApiKey', subsourceApiKey);
     if (geminiApiKey !== undefined && !isMasked(geminiApiKey)) setSetting('geminiApiKey', geminiApiKey);
     if (deepseekApiKey !== undefined && !isMasked(deepseekApiKey)) setSetting('deepseekApiKey', deepseekApiKey);
     if (claudeApiKey !== undefined && !isMasked(claudeApiKey)) setSetting('claudeApiKey', claudeApiKey);
+    if (prowlarrUrl !== undefined) setSetting('prowlarrUrl', prowlarrUrl);
+    if (prowlarrApiKey !== undefined && !isMasked(prowlarrApiKey)) setSetting('prowlarrApiKey', prowlarrApiKey);
     if (translationProvider !== undefined) setSetting('translationProvider', translationProvider);
     if (targetLang !== undefined) setSetting('targetLang', targetLang);
     if (targetLangs !== undefined) setSetting('targetLangs', JSON.stringify(targetLangs));
@@ -119,6 +137,7 @@ router.post('/', (req, res, next) => {
     if (standardMovieFormat !== undefined) setSetting('standardMovieFormat', standardMovieFormat);
     if (renameEpisodes !== undefined) setSetting('renameEpisodes', renameEpisodes ? 'true' : 'false');
     if (standardEpisodeFormat !== undefined) setSetting('standardEpisodeFormat', standardEpisodeFormat);
+    if (seasonFolderFormat !== undefined) setSetting('seasonFolderFormat', seasonFolderFormat);
     
     if (removeCompletedDownloads !== undefined) setSetting('removeCompletedDownloads', removeCompletedDownloads ? 'true' : 'false');
     if (deleteTorrentFiles !== undefined) setSetting('deleteTorrentFiles', deleteTorrentFiles ? 'true' : 'false');
@@ -130,74 +149,29 @@ router.post('/', (req, res, next) => {
   }
 });
 
-// Indexers
-router.post('/indexers', (req, res) => {
-  const { name, url, api_key, type } = req.body;
-  const result = db.prepare('INSERT INTO indexers (name, url, api_key, type) VALUES (?, ?, ?, ?)').run(name, url, api_key, type);
-  res.json({ status: 'success', data: { id: result.lastInsertRowid } });
-});
-
-router.put('/indexers/:id', (req, res) => {
-  const { name, url, api_key, type } = req.body;
-  db.prepare('UPDATE indexers SET name = ?, url = ?, api_key = ?, type = ? WHERE id = ?').run(name, url, api_key, type, req.params.id);
-  res.json({ status: 'success' });
-});
-
-router.delete('/indexers/:id', (req, res) => {
-  db.prepare('DELETE FROM indexers WHERE id = ?').run(req.params.id);
-  res.json({ status: 'success' });
-});
-
-router.get('/indexers/test', async (req, res) => {
+router.post('/prowlarr/test', async (req, res) => {
   try {
-    const indexers = db.prepare('SELECT * FROM indexers').all();
-    const statuses = {};
-    const axios = require('axios');
-    
-    await Promise.all(indexers.map(async (i) => {
-      try {
-        let testUrl = i.url;
-        const config = { timeout: 5000 };
-        if (i.type === 'torznab' && i.api_key) {
-          testUrl = `${i.url}?t=caps&apikey=${i.api_key}`;
-        }
-        await axios.get(testUrl, config);
-        statuses[i.id] = 'live';
-      } catch (e) {
-        if (e.response && e.response.status === 401) {
-          statuses[i.id] = 'error_auth';
-        } else if (i.type === 'generic') {
-          if (e.code === 'ENOTFOUND') {
-            statuses[i.id] = 'offline';
-          } else {
-            statuses[i.id] = 'live';
-          }
-        } else if (e.response && (e.response.status === 403 || e.response.status === 405)) {
-          statuses[i.id] = 'live';
-        } else {
-          statuses[i.id] = 'offline';
-        }
-      }
-    }));
-    
-    res.json({ status: 'success', data: statuses });
-  } catch (err) {
-    res.status(500).json({ status: 'error', message: err.message });
-  }
-});
+    const { url, apiKey } = req.body;
+    if (!url || !apiKey) return res.status(400).json({ status: 'error', message: 'Missing URL or API Key' });
 
-router.post('/indexers/test-flaresolverr', async (req, res) => {
-  try {
-    const { url } = req.body;
-    if (!url) return res.status(400).json({ status: 'error', message: 'URL is required' });
-    
-    const axios = require('axios');
-    const response = await axios.get(`${url.replace(/\/$/, '')}/`, { timeout: 5000 });
-    
-    if (response.data && response.data.msg === 'FlareSolverr is ready!') {
-      return res.json({ status: 'success', data: { status: 'ok' } });
+    let finalApiKey = apiKey;
+    const isMasked = (val) => val && /^\*+$/.test(val);
+    if (isMasked(apiKey)) {
+      finalApiKey = getSetting('prowlarrApiKey') || apiKey;
     }
-    res.json({ status: 'error', message: 'Invalid response from FlareSolverr' });
+
+    const axios = require('axios');
+    const base = url.replace(/\/$/, '');
+    const result = await axios.get(`${base}/api/v1/system/status`, {
+      headers: { 'X-Api-Key': finalApiKey },
+      signal: AbortSignal.timeout(5000)
+    });
+    
+    if (result.status === 200) {
+      res.json({ status: 'success', message: 'Connected to Prowlarr successfully' });
+    } else {
+      res.status(400).json({ status: 'error', message: 'Failed to connect to Prowlarr' });
+    }
   } catch (err) {
     res.status(500).json({ status: 'error', message: err.message });
   }
@@ -280,14 +254,15 @@ router.get('/issues', async (req, res) => {
       });
     }
 
-    // Check Indexers
-    const indexers = db.prepare('SELECT count(*) as count FROM indexers').get();
-    if (indexers.count === 0) {
+    // Check Indexers (Prowlarr)
+    const prowlarrUrl = getSetting('prowlarrUrl');
+    const prowlarrApiKey = getSetting('prowlarrApiKey');
+    if (!prowlarrUrl || !prowlarrApiKey) {
       issues.push({
         id: 'no_indexers',
         type: 'warning',
-        message: 'No indexers configured. You will not be able to search for torrents.',
-        actionText: 'Add Indexer',
+        message: 'Prowlarr is not configured. You will not be able to search for torrents.',
+        actionText: 'Configure Prowlarr',
         actionLink: '/settings'
       });
     }
@@ -345,8 +320,8 @@ router.get('/issues', async (req, res) => {
               if (found) return true;
             }
           }
-        } catch (e) {
-          // Ignore permission errors on subdirectories
+        } catch {
+          /* ignore */
         }
         return false;
       };
@@ -531,7 +506,7 @@ router.get('/status', async (req, res) => {
   for (const c of clients) {
     if (c.type === 'qbittorrent') {
       try {
-        const r = await axios.get(`${c.host}:${c.port}/api/v2/app/webapiVersion`, { timeout: 3000 });
+        await axios.get(`${c.host}:${c.port}/api/v2/app/webapiVersion`, { timeout: 3000 });
         services.downloadClients.push({ name: c.name, status: 'connected' });
       } catch (e) {
         if (e.response && (e.response.status === 401 || e.response.status === 403)) {
@@ -545,9 +520,15 @@ router.get('/status', async (req, res) => {
     }
   }
 
-  // ---- Indexers ----
-  const indexerCount = db.prepare('SELECT count(*) as count FROM indexers').get().count;
-  services.indexers = { count: indexerCount, status: indexerCount > 0 ? 'connected' : 'unconfigured' };
+  // ---- Indexers (Prowlarr) ----
+  const prowlUrl = getSetting('prowlarrUrl');
+  const prowlKey = getSetting('prowlarrApiKey');
+  const indexerConfigured = prowlUrl && prowlKey;
+  services.indexers = { 
+    count: indexerConfigured ? 1 : 0, 
+    status: indexerConfigured ? 'connected' : 'unconfigured',
+    isProwlarr: true
+  };
 
   // ---- Library ----
   const movieCount = db.prepare('SELECT count(*) as count FROM movies').get().count;
@@ -575,7 +556,9 @@ router.get('/status', async (req, res) => {
             if (found) return found;
           }
         }
-      } catch (e) {}
+      } catch {
+        /* ignore */
+      }
       return false;
     };
 
@@ -639,7 +622,7 @@ router.post('/restore', (req, res, next) => {
     
     // Express file upload handling - check for raw body or multer
     // Simple approach: accept base64 encoded file in JSON body
-    const { data, filename } = req.body;
+    const { data } = req.body;
     if (!data) {
       return res.status(400).json({ status: 'error', message: 'No database data provided' });
     }

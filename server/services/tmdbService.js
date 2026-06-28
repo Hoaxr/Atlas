@@ -90,7 +90,7 @@ const searchMovies = async (query) => {
     return textResults;
   } catch (error) {
     if (error.response) {
-      throw new Error(`TMDB Error: ${error.response.data.status_message}`);
+      throw new Error(`TMDB Error: ${error.response.data.status_message}`, { cause: error });
     }
     throw error;
   }
@@ -163,7 +163,7 @@ const searchShows = async (query) => {
     return textResults;
   } catch (error) {
     if (error.response) {
-      throw new Error(`TMDB Error: ${error.response.data.status_message}`);
+      throw new Error(`TMDB Error: ${error.response.data.status_message}`, { cause: error });
     }
     throw error;
   }

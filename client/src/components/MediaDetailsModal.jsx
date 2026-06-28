@@ -1,25 +1,52 @@
 import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
+import { useNavigate } from 'react-router-dom';
 import api from '../lib/api';
-import { X, Star, Calendar, Clock, Plus, ExternalLink, PlayCircle, CheckCircle2 } from 'lucide-react';
+import { X, Star, Calendar, Clock, Plus, ExternalLink, PlayCircle, CheckCircle2, ArrowRight, CheckSquare, Square } from 'lucide-react';
 import { customAlert } from '../utils/alerts';
 import TrailerModal from './TrailerModal';
 
-export default function MediaDetailsModal({ isOpen, onClose, mediaId, mediaType, isInLibrary }) {
+export default function MediaDetailsModal({ isOpen, onClose, mediaId, mediaType, isInLibrary, libraryId, onAdded, mode = 'add' }) {
+  const navigate = useNavigate();
   const [details, setDetails] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [profiles, setProfiles] = useState([]);
   const [selectedProfile, setSelectedProfile] = useState('');
+  const [libraryPaths, setLibraryPaths] = useState([]);
+  const [selectedPath, setSelectedPath] = useState('');
+  const [autoSearch, setAutoSearch] = useState(true);
   const [trailerKey, setTrailerKey] = useState(null);
   const [isTrailerOpen, setIsTrailerOpen] = useState(false);
 
-  const fetchProfiles = async () => {
+  const fetchSettings = async () => {
     try {
       const res = await api.get('/settings');
-      if (res.data.status === 'success' && res.data.data.profiles) {
-        setProfiles(res.data.data.profiles);
-        if (res.data.data.profiles.length > 0) {
-          setSelectedProfile(res.data.data.profiles[0].id);
+      if (res.data.status === 'success') {
+        const data = res.data.data;
+        if (data.profiles) {
+          setProfiles(data.profiles);
+          const defaultProfileId = data.defaultQualityProfileId;
+          const defaultIdStr = defaultProfileId ? String(defaultProfileId) : null;
+          const profileIdStrs = data.profiles.map(p => String(p.id));
+          if (defaultIdStr && profileIdStrs.includes(defaultIdStr)) {
+            setSelectedProfile(defaultIdStr);
+          } else if (data.profiles.length > 0) {
+            setSelectedProfile(String(data.profiles[0].id));
+          }
+        }
+        if (data.libraryPaths) {
+          setLibraryPaths(data.libraryPaths);
+          
+          // Try to select a smart default based on media type
+          const preferredPath = data.libraryPaths.find(p => 
+            p.path.toLowerCase().includes(mediaType === 'movie' ? 'movie' : (mediaType === 'tv' || mediaType === 'show' ? 'tv' : 'show'))
+          );
+          if (preferredPath) {
+            setSelectedPath(preferredPath.path);
+          } else if (data.libraryPaths.length > 0) {
+            setSelectedPath(data.libraryPaths[0].path);
+          }
         }
       }
     } catch {
@@ -45,7 +72,7 @@ export default function MediaDetailsModal({ isOpen, onClose, mediaId, mediaType,
   useEffect(() => {
     if (isOpen && mediaId) {
       fetchDetails();
-      fetchProfiles();
+      fetchSettings();
     } else {
       setDetails(null);
     }
@@ -55,17 +82,24 @@ export default function MediaDetailsModal({ isOpen, onClose, mediaId, mediaType,
 
   if (!isOpen) return null;
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
-      <div className="bg-slate-900 border border-white/10 rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto relative shadow-2xl">
+  const trailer = details?.videos?.results?.find(v => v.site === 'YouTube' && v.type === 'Trailer');
+
+  return createPortal(
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm" onClick={onClose}>
+      <div className="bg-slate-900 border border-white/10 rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto relative shadow-2xl" onClick={(e) => e.stopPropagation()}>
         
-        {/* Close Button */}
-        <button 
-          onClick={onClose}
-          className="absolute top-4 right-4 z-50 bg-slate-950/50 hover:bg-slate-800 text-slate-300 hover:text-white p-2 rounded-full backdrop-blur transition-colors"
-        >
-          <X className="w-5 h-5" />
-        </button>
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 bg-slate-800/50">
+          <h2 className="text-xl md:text-2xl font-bold text-slate-200">
+            {details ? `${details.title || details.name} ${details.release_date || details.first_air_date ? `(${(details.release_date || details.first_air_date).split('-')[0]})` : ''}` : 'Loading...'}
+          </h2>
+          <button 
+            onClick={onClose}
+            className="text-slate-400 hover:text-white transition-colors"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
 
         {loading && (
           <div className="flex items-center justify-center h-64 text-slate-400">
@@ -81,153 +115,184 @@ export default function MediaDetailsModal({ isOpen, onClose, mediaId, mediaType,
         )}
 
         {details && !loading && (
-          <div className="relative">
-            {/* Backdrop Image */}
-            <div className="w-full h-64 md:h-80 relative bg-slate-800">
-              {details.backdrop_path ? (
-                <>
-                  <img 
-                    src={`https://image.tmdb.org/t/p/original${details.backdrop_path}`} 
-                    alt="Backdrop" 
-                    className="w-full h-full object-cover"
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-slate-900 via-slate-900/60 to-transparent"></div>
-                </>
-              ) : (
-                <div className="absolute inset-0 bg-gradient-to-t from-slate-900 to-transparent"></div>
-              )}
-            </div>
-
-            <div className="px-6 pb-8 -mt-20 relative z-10 flex flex-col md:flex-row gap-6">
+          <div className="flex flex-col h-full">
+            <div className="flex flex-col md:flex-row gap-6 p-6">
               {/* Poster */}
-              <div className="w-40 md:w-56 shrink-0 mx-auto md:mx-0 shadow-2xl rounded-xl overflow-hidden border border-white/10 bg-slate-800 aspect-[2/3]">
+              <div className="w-40 md:w-56 shrink-0 mx-auto md:mx-0 shadow-xl overflow-hidden bg-slate-900 aspect-[2/3] border border-white/5 rounded-sm relative group">
                 {details.poster_path ? (
                   <img 
                     src={`https://image.tmdb.org/t/p/w500${details.poster_path}`} 
                     alt="Poster" 
-                    className="w-full h-full object-cover"
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                   />
                 ) : (
-                  <div className="w-full h-full flex items-center justify-center text-slate-500">No Image</div>
+                  <div className="w-full h-full flex items-center justify-center text-slate-600">No Image</div>
+                )}
+                {trailer && (
+                  <div 
+                    className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center cursor-pointer"
+                    onClick={() => {
+                      setTrailerKey(trailer.key);
+                      setIsTrailerOpen(true);
+                    }}
+                  >
+                    <PlayCircle className="w-16 h-16 text-white drop-shadow-[0_0_12px_rgba(0,0,0,0.8)] transition-transform duration-300 transform scale-90 group-hover:scale-110" strokeWidth={1.5} />
+                  </div>
                 )}
               </div>
 
-              {/* Info */}
-              <div className="flex-1 mt-4 md:mt-16 text-center md:text-left">
-                <h2 className="text-3xl md:text-4xl font-black text-white mb-2">
-                  {details.title || details.name}
-                </h2>
-                
-                <p className="text-slate-400 italic text-lg mb-4">
-                  {details.tagline}
+              {/* Info & Form */}
+              <div className="flex-1 text-sm md:text-base">
+                <div className="mb-6 flex flex-wrap items-center gap-4 text-xs font-bold text-slate-400 uppercase tracking-wider">
+                  {details.vote_average ? (
+                    <div className="flex items-center gap-1 text-yellow-400">
+                      <Star className="w-4 h-4 fill-current" />
+                      {details.vote_average.toFixed(1)}
+                    </div>
+                  ) : null}
+                  {(details.release_date || details.first_air_date) ? (
+                    <div className="flex items-center gap-1">
+                      <Calendar className="w-4 h-4" />
+                      {(details.release_date || details.first_air_date).split('-')[0]}
+                    </div>
+                  ) : null}
+                  {(details.runtime || (details.episode_run_time && details.episode_run_time[0])) ? (
+                    <div className="flex items-center gap-1">
+                      <Clock className="w-4 h-4" />
+                      {details.runtime || details.episode_run_time[0]} min
+                    </div>
+                  ) : null}
+                  {details.genres && details.genres.length > 0 ? (
+                    <div className="text-slate-300 bg-slate-800 px-2 py-0.5 rounded border border-slate-700">
+                      {details.genres.map(g => g.name).join(', ')}
+                    </div>
+                  ) : null}
+                </div>
+
+                <p className="text-slate-300 leading-relaxed mb-8">
+                  {details.overview || 'No overview available.'}
                 </p>
 
-                <div className="flex flex-wrap items-center justify-center md:justify-start gap-4 mb-6 text-sm text-slate-300 font-medium">
-                  {details.vote_average > 0 && (
-                    <div className="flex items-center gap-1 bg-slate-800/80 px-3 py-1 rounded-lg border border-white/5">
-                      <Star className="w-4 h-4 text-yellow-400" />
-                      <span>{details.vote_average.toFixed(1)}</span>
-                    </div>
-                  )}
-                  
-                  <div className="flex items-center gap-1 bg-slate-800/80 px-3 py-1 rounded-lg border border-white/5">
-                    <Calendar className="w-4 h-4 text-cyan-400" />
-                    <span>{(details.release_date || details.first_air_date || '').split('-')[0]}</span>
-                  </div>
-
-                  {(details.runtime || (details.episode_run_time && details.episode_run_time[0])) && (
-                    <div className="flex items-center gap-1 bg-slate-800/80 px-3 py-1 rounded-lg border border-white/5">
-                      <Clock className="w-4 h-4 text-purple-400" />
-                      <span>{details.runtime || details.episode_run_time[0]} min</span>
-                    </div>
-                  )}
-
-                  <div className="flex flex-wrap gap-2">
-                    {details.genres?.slice(0, 3).map(g => (
-                      <span key={g.id} className="bg-white/5 px-3 py-1 rounded-lg border border-white/5">
-                        {g.name}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="mb-8">
-                  <h3 className="text-lg font-bold text-slate-200 mb-2 border-b border-white/10 pb-2">Overview</h3>
-                  <p className="text-slate-400 leading-relaxed text-sm md:text-base">
-                    {details.overview || 'No overview available.'}
-                  </p>
-                </div>
-
-                <div className="flex flex-col gap-4">
-                  {!isInLibrary && (
+                {!isInLibrary && mode === 'add' && (
+                  <div className="grid grid-cols-[140px_1fr] items-center gap-y-5 gap-x-4">
+                    {/* Root Folder */}
+                    <div className="text-right font-bold text-slate-300 text-sm">Root Folder</div>
                     <div>
-                      <label className="block text-sm font-medium text-slate-400 mb-1">Quality Profile</label>
                       <select 
-                        className="glass-input w-full md:w-64" 
-                        value={selectedProfile} 
-                        onChange={e => setSelectedProfile(e.target.value)}
+                        className="w-full bg-slate-800 border border-slate-600 rounded-md text-slate-200 px-3 py-1.5 focus:outline-none focus:border-cyan-500 text-sm"
+                        value={selectedPath}
+                        onChange={e => setSelectedPath(e.target.value)}
                       >
-                        {profiles.map(p => (
-                          <option key={p.id} value={p.id}>{p.name}</option>
-                        ))}
+                        {libraryPaths.length > 0 ? (
+                          libraryPaths.map(lp => (
+                            <option key={lp.id} value={lp.path}>{lp.path}</option>
+                          ))
+                        ) : (
+                          <option value="">No library paths configured</option>
+                        )}
                       </select>
-                    </div>
-                  )}
-
-                  <div className="flex flex-col sm:flex-row gap-4">
-                    {!isInLibrary ? (
-                      <button 
-                        onClick={async () => {
-                          try {
-                            const endpoint = mediaType === 'movie' ? '/library/movies' : '/library/shows';
-                            const payload = { tmdbId: details.id, qualityProfileId: parseInt(selectedProfile) || null };
-                            await api.post(endpoint, payload);
-                            onClose();
-                            customAlert(`${mediaType === 'movie' ? 'Movie' : 'TV Show'} added to library successfully!`);
-                          } catch (err) {
-                            console.error('Add to library error:', err.response?.data || err);
-                            customAlert(err.response?.data?.message || 'Failed to add to library');
-                          }
-                        }}
-                        className="flex-1 bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold py-3 px-6 rounded-xl transition-all duration-300 shadow-lg shadow-cyan-500/20 flex items-center justify-center gap-2 hover:scale-105"
-                      >
-                        <Plus className="w-5 h-5" />
-                        Add {mediaType === 'movie' ? 'Movie' : 'TV Show'} to Library
-                      </button>
-                    ) : (
-                      <div className="flex-1 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-bold py-3 px-6 rounded-xl flex items-center justify-center gap-2 shadow-lg">
-                        <CheckCircle2 className="w-5 h-5" />
-                        In Library
+                      <div className="text-xs text-slate-500 mt-1">
+                        '{details.title || details.name} ({(details.release_date || details.first_air_date || '').split('-')[0]})' subfolder will be created automatically
                       </div>
-                    )}
-                    {(() => {
-                      const trailer = details.videos?.results?.find(v => v.site === 'YouTube' && v.type === 'Trailer');
-                      return trailer ? (
-                        <button 
-                          onClick={() => {
-                            setTrailerKey(trailer.key);
-                            setIsTrailerOpen(true);
-                          }}
-                          className="bg-red-500/20 hover:bg-red-500/30 text-red-500 font-bold py-3 px-6 rounded-xl flex items-center justify-center gap-2 transition-transform hover:scale-[1.02] border border-red-500/30"
-                        >
-                          <PlayCircle className="w-5 h-5" /> Trailer
-                        </button>
-                      ) : null;
-                    })()}
-                    {details.homepage && (
-                      <a 
-                        href={details.homepage} 
-                        target="_blank" 
-                        rel="noreferrer"
-                        className="bg-slate-800 hover:bg-slate-700 text-white font-bold py-3 px-6 rounded-xl flex items-center justify-center gap-2 transition-transform hover:scale-[1.02] border border-white/5"
-                      >
-                        <ExternalLink className="w-5 h-5" /> Website
-                      </a>
-                    )}
+                    </div>
+
+                    {/* Monitor */}
+                    <div className="text-right font-bold text-slate-300 text-sm">Monitor</div>
+                    <select className="w-full bg-slate-800 border border-slate-600 rounded-md text-slate-200 px-3 py-1.5 focus:outline-none focus:border-cyan-500 text-sm">
+                      <option>{mediaType === 'movie' ? 'Movie Only' : 'All Episodes'}</option>
+                    </select>
+
+                    {/* Minimum Availability */}
+                    <div className="text-right font-bold text-slate-300 text-sm">Minimum Availability</div>
+                    <select className="w-full bg-slate-800 border border-slate-600 rounded-md text-slate-200 px-3 py-1.5 focus:outline-none focus:border-cyan-500 text-sm">
+                      <option>Released</option>
+                      <option>PreDB</option>
+                      <option>Physical</option>
+                    </select>
+
+                    {/* Quality Profile */}
+                    <div className="text-right font-bold text-slate-300 text-sm">Quality Profile</div>
+                    <select 
+                      className="w-full bg-slate-800 border border-slate-600 rounded-md text-slate-200 px-3 py-1.5 focus:outline-none focus:border-cyan-500 text-sm" 
+                      value={selectedProfile} 
+                      onChange={e => setSelectedProfile(e.target.value)}
+                    >
+                      {profiles.map(p => (
+                        <option key={p.id} value={String(p.id)}>{p.name}</option>
+                      ))}
+                    </select>
+
+                    {/* Tags */}
+                    <div className="text-right font-bold text-slate-300 text-sm">Tags</div>
+                    <input 
+                      type="text" 
+                      className="w-full bg-slate-800 border border-slate-600 rounded-md text-slate-200 px-3 py-1.5 focus:outline-none focus:border-cyan-500 text-sm" 
+                      placeholder=""
+                    />
                   </div>
+                )}
+                
+                {/* Extra Actions */}
+                <div className="mt-8 flex gap-4">
+                  {isInLibrary && (
+                    <button
+                      onClick={() => {
+                        onClose();
+                        const path = mediaType === 'movie' ? `/movies/${libraryId}` : `/shows/${libraryId}`;
+                        navigate(path);
+                      }}
+                      className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2 px-4 rounded-md flex items-center justify-center gap-2 transition-colors cursor-pointer text-sm"
+                    >
+                      <CheckCircle2 className="w-4 h-4" />
+                      View in Library
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
+
+            {/* Footer */}
+            {!isInLibrary && mode === 'add' && (
+              <div className="p-4 border-t border-white/10 bg-slate-900 flex justify-end items-center gap-6 mt-auto">
+                <label className="flex items-center gap-2 cursor-pointer text-slate-300 hover:text-white transition-colors select-none">
+                  <div className="mt-0.5">
+                    <input type="checkbox" className="sr-only" checked={autoSearch} onChange={(e) => setAutoSearch(e.target.checked)} />
+                    {autoSearch ? <CheckSquare className="w-5 h-5 text-cyan-400" /> : <Square className="w-5 h-5 text-slate-500" />}
+                  </div>
+                  <span className="text-sm">Start search for missing {mediaType === 'movie' ? 'movie' : 'show'}</span>
+                </label>
+                <button 
+                  onClick={async () => {
+                    try {
+                      const endpoint = mediaType === 'movie' ? '/library/movies' : '/library/shows';
+                      const payload = { 
+                        tmdbId: details.id, 
+                        qualityProfileId: parseInt(selectedProfile) || null,
+                        rootFolderPath: selectedPath,
+                        autoSearch 
+                      };
+                      const res = await api.post(endpoint, payload);
+                      if (onAdded) onAdded(details.id, details);
+                      onClose();
+                      customAlert(`${mediaType === 'movie' ? 'Movie' : 'TV Show'} added to library successfully!`);
+                      // Trigger auto-search from client side so it runs in its own request context
+                      if (autoSearch && res.data?.data?.id) {
+                        const searchEndpoint = mediaType === 'movie'
+                          ? `/library/movies/${res.data.data.id}/auto-search`
+                          : `/library/shows/${res.data.data.id}/auto-search`;
+                        api.post(searchEndpoint).catch(() => {});
+                      }
+                    } catch (err) {
+                      console.error('Add to library error:', err.response?.data || err);
+                      customAlert(err.response?.data?.message || 'Failed to add to library');
+                    }
+                  }}
+                  className="bg-green-500 hover:bg-green-400 text-slate-950 font-semibold py-2 px-6 rounded-md transition-all flex items-center justify-center text-sm shadow-sm"
+                >
+                  Add {mediaType === 'movie' ? 'Movie' : 'Show'}
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -235,6 +300,7 @@ export default function MediaDetailsModal({ isOpen, onClose, mediaId, mediaType,
       {isTrailerOpen && trailerKey && (
         <TrailerModal trailerKey={trailerKey} onClose={() => setIsTrailerOpen(false)} />
       )}
-    </div>
+    </div>,
+    document.body
   );
 }

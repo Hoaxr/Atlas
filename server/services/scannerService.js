@@ -2,6 +2,8 @@ const fs = require('fs/promises');
 const path = require('path');
 const db = require('../config/database');
 const tmdbService = require('./tmdbService');
+const { exec } = require('child_process');
+const util = require('util');
 
 const isVideoFile = (filename) => {
   const ext = path.extname(filename).toLowerCase();
@@ -11,10 +13,9 @@ const isVideoFile = (filename) => {
 const parseMediaTitle = (filename, folderPath) => {
   const cleanName = filename.replace(/\.(mp4|mkv|avi|mov|wmv)$/i, '');
   
-  // Check if it's a TV Show (e.g., S01E01, Season 1, S1E1)
   const tvShowMatch = cleanName.match(/(S\d{1,2}E\d{1,2}|Season \d+)/i);
   if (tvShowMatch) {
-    let title = cleanName.substring(0, tvShowMatch.index).replace(/[\.\_\(\)\[\]\-]/g, ' ').trim();
+    let title = cleanName.substring(0, tvShowMatch.index).replace(/[._()[\]-]/g, ' ').trim();
     let seasonNumber = 1;
     let episodeNumber = 1;
     
@@ -55,7 +56,7 @@ const parseMediaTitle = (filename, folderPath) => {
     titlePart = cleanName.substring(0, yearMatch.index);
   }
 
-  let title = titlePart.replace(/[\.\_\(\)\[\]\-]/g, ' ').trim();
+  let title = titlePart.replace(/[._()[\]-]/g, ' ').trim();
   title = title.replace(/\b(1080p|720p|4k|2160p|bluray|webdl|web-dl|x264|x265)\b.*/i, '').trim();
 
   return { title, year, isShow: false };
@@ -85,6 +86,8 @@ const getScanProgress = () => {
   return scanProgress;
 };
 
+const { getResolution } = require('../utils/videoUtils');
+
 const doScan = async () => {
   const paths = db.prepare('SELECT * FROM library_paths').all();
   if (!paths || paths.length === 0) {
@@ -96,6 +99,31 @@ const doScan = async () => {
     // Phase 1: Pre-scan to count total video files
     scanProgress.currentFile = 'Gathering files...';
     const allFiles = [];
+
+    async function getFiles(dir) {
+      try {
+        const dirents = await fs.readdir(dir, { withFileTypes: true });
+        for (const dirent of dirents) {
+          const res = path.join(dir, dirent.name);
+          if (dirent.isDirectory()) {
+            await getFiles(res);
+          } else if (dirent.isFile() && isVideoFile(dirent.name)) {
+            allFiles.push({
+              name: dirent.name,
+              path: res,
+              parentPath: dir,
+              isFile: () => true
+            });
+            if (allFiles.length % 50 === 0) {
+              scanProgress.currentFile = `Gathering files... (Found ${allFiles.length})`;
+            }
+          }
+        }
+      } catch (e) {
+        console.error(`Error reading directory ${dir}:`, e.message);
+      }
+    }
+
     for (const libPath of paths) {
       try {
         const stat = await fs.stat(libPath.path);
@@ -104,19 +132,12 @@ const doScan = async () => {
           continue;
         }
         
-        const files = await fs.readdir(libPath.path, { recursive: true, withFileTypes: true });
-        const videoFiles = [];
-        for (const file of files) {
-          if (file.isFile() && isVideoFile(file.name)) {
-            videoFiles.push(file);
-          }
-        }
+        const initialCount = allFiles.length;
+        await getFiles(libPath.path);
         
-        if (videoFiles.length === 0) {
+        if (allFiles.length === initialCount) {
           scanProgress.emptyPaths.push({ path: libPath.path, error: 'No video files found — mount may be empty or disconnected' });
         }
-        
-        allFiles.push(...videoFiles);
       } catch (err) {
         console.error(`Error gathering files from ${libPath.path}:`, err.message);
         scanProgress.unreachablePaths.push({ path: libPath.path, error: err.message });
@@ -215,7 +236,7 @@ const doScan = async () => {
                     return total;
                   };
                   folderSize = await getSize(showFolderPath);
-                } catch (e) {
+                } catch {
                   // Folder might not exist yet
                 }
 
@@ -269,11 +290,19 @@ const doScan = async () => {
         
         // Link the specific episode to the file
         if (showId && seasonNumber !== undefined && episodeNumber !== undefined) {
+          let fileSize = 0;
+          try {
+            const stat = await fs.stat(fullPath);
+            fileSize = stat.size;
+          } catch {
+            // ignore
+          }
+
           db.prepare(`
             UPDATE episodes 
-            SET file_path = ?, status = 'downloaded' 
+            SET file_path = ?, status = 'downloaded', file_size = ?
             WHERE show_id = ? AND season_number = ? AND episode_number = ?
-          `).run(fullPath, showId, seasonNumber, episodeNumber);
+          `).run(fullPath, fileSize, showId, seasonNumber, episodeNumber);
         }
 
       } else {
@@ -310,18 +339,24 @@ const doScan = async () => {
             try {
               const stat = await fs.stat(fullPath);
               fileSize = stat.size;
-            } catch (e) {
+            } catch {
               // File might not exist yet
             }
+
+            // Look up default quality profile (first in table)
+            const defaultProfile = db.prepare('SELECT id FROM quality_profiles ORDER BY id ASC LIMIT 1').get();
+            const defaultProfileId = defaultProfile?.id || null;
 
             const existingMonitored = db.prepare('SELECT id FROM movies WHERE tmdb_id = ?').get(matchedMovie.id);
             
             if (existingMonitored) {
-              db.prepare('UPDATE movies SET file_path = ?, status = ?, rating = ?, file_size = ? WHERE tmdb_id = ?').run(fullPath, 'downloaded', movieRating, fileSize, matchedMovie.id);
+              // Assign default profile if the movie doesn't already have one
+              db.prepare('UPDATE movies SET file_path = ?, status = ?, rating = ?, file_size = ?, quality_profile_id = COALESCE(quality_profile_id, ?) WHERE tmdb_id = ?')
+                .run(fullPath, 'downloaded', movieRating, fileSize, defaultProfileId, matchedMovie.id);
             } else {
               db.prepare(`
-                INSERT INTO movies (tmdb_id, title, year, poster_path, overview, status, file_path, rating, file_size)
-                VALUES (?, ?, ?, ?, ?, 'downloaded', ?, ?, ?)
+                INSERT INTO movies (tmdb_id, title, year, poster_path, overview, status, file_path, rating, file_size, quality_profile_id)
+                VALUES (?, ?, ?, ?, ?, 'downloaded', ?, ?, ?, ?)
               `).run(
                 matchedMovie.id,
                 matchedMovie.title,
@@ -330,7 +365,8 @@ const doScan = async () => {
                 matchedMovie.overview,
                 fullPath,
                 movieRating,
-                fileSize
+                fileSize,
+                defaultProfileId
               );
               scanProgress.addedMoviesCount++;
               scanProgress.addedMovies.push({ title: matchedMovie.title, year: movieYear });
@@ -345,7 +381,7 @@ const doScan = async () => {
     }
 
     // Phase 3: Post-processing — refresh sizes for ALL existing items
-    const existingMovies = db.prepare("SELECT id, title, file_path FROM movies WHERE status = 'downloaded' AND file_path IS NOT NULL").all();
+    const existingMovies = db.prepare("SELECT id, title, file_path, scene_name FROM movies WHERE status = 'downloaded' AND file_path IS NOT NULL").all();
     const existingShows = db.prepare("SELECT id, title, folder_path FROM shows WHERE status = 'downloaded' AND folder_path IS NOT NULL").all();
     const allMovies = db.prepare("SELECT id, title, tmdb_id FROM movies WHERE tmdb_id IS NOT NULL").all();
     const allShows = db.prepare("SELECT id, title, tmdb_id FROM shows WHERE tmdb_id IS NOT NULL").all();
@@ -362,8 +398,20 @@ const doScan = async () => {
         scanProgress.currentFile = m.title;
         try {
           const stat = await fs.stat(m.file_path);
-          db.prepare('UPDATE movies SET file_size = ? WHERE id = ?').run(stat.size, m.id);
-        } catch (e) { /* skip */ }
+          let resName = null;
+          try {
+            if (!m.scene_name || m.scene_name === '' || m.scene_name.startsWith('Unknown ')) {
+              const res = await getResolution(m.file_path);
+              if (res) resName = `Unknown ${res}`;
+            }
+          } catch { /* ignore */ }
+          
+          if (resName) {
+            db.prepare('UPDATE movies SET file_size = ?, scene_name = ? WHERE id = ?').run(stat.size, resName, m.id);
+          } else {
+            db.prepare('UPDATE movies SET file_size = ? WHERE id = ?').run(stat.size, m.id);
+          }
+        } catch { /* skip */ }
         scanProgress.processedFiles++;
       }
 
@@ -385,12 +433,12 @@ const doScan = async () => {
                   total += st.size;
                 }
               }
-            } catch (e) { /* ignore */ }
+            } catch { /* ignore */ }
             return total;
           };
           folderSize = await getSize(s.folder_path);
           db.prepare('UPDATE shows SET folder_size = ? WHERE id = ?').run(folderSize, s.id);
-        } catch (e) { /* skip */ }
+        } catch { /* skip */ }
         scanProgress.processedFiles++;
       }
     }
@@ -425,7 +473,7 @@ const doScan = async () => {
           }
           // Small delay to respect TMDB rate limits
           await new Promise(r => setTimeout(r, 50));
-        } catch (e) { /* skip */ }
+        } catch { /* skip */ }
         scanProgress.processedFiles++;
       }
 
@@ -450,7 +498,7 @@ const doScan = async () => {
             }
           }
           await new Promise(r => setTimeout(r, 50));
-        } catch (e) { /* skip */ }
+        } catch { /* skip */ }
         scanProgress.processedFiles++;
       }
     }
@@ -463,7 +511,7 @@ const doScan = async () => {
     try {
       const traktService = require('./traktService');
       await traktService.syncWatched();
-    } catch (e) { /* Trakt may not be configured */ }
+    } catch { /* Trakt may not be configured */ }
     scanProgress.processedFiles++;
   } catch (error) {
     console.error('Scan error:', error);

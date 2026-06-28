@@ -4,7 +4,7 @@ import api from '../lib/api';
 import { formatSize } from '../lib/format';
 import { useSettings } from '../lib/useSettings';
 import { useTMDBDetails } from '../lib/useTMDBDetails';
-import { ArrowLeft, Search, Download, HardDrive, Film, PlayCircle, Bookmark, BookmarkMinus, Star, X, RefreshCw, Loader2, Heart } from 'lucide-react';
+import { ArrowLeft, Search, Download, HardDrive, Film, PlayCircle, Bookmark, BookmarkMinus, Star, X, RefreshCw, Loader2, Heart, Trash2, ChevronDown, ChevronRight, Folder } from 'lucide-react';
 import { customAlert, customConfirm } from '../utils/alerts';
 import TrailerModal from '../components/TrailerModal';
 import ManualSearchModal from '../components/ManualSearchModal';
@@ -14,6 +14,16 @@ export default function MovieDetails() {
   const navigate = useNavigate();
   
   const [movie, setMovie] = useState(null);
+
+  const parseResolution = (title) => {
+    if (!title) return 'Unknown';
+    const t = title.toLowerCase();
+    if (t.includes('2160p') || t.includes('4k')) return '2160p';
+    if (t.includes('1080p')) return '1080p';
+    if (t.includes('720p')) return '720p';
+    if (t.includes('480p') || t.includes('dvdrip') || t.includes('xvid') || t.includes('hdtv') || t.match(/\bsd\b/)) return 'SD';
+    return 'Unknown';
+  };
   const [loading, setLoading] = useState(true);
   const [isTrailerOpen, setIsTrailerOpen] = useState(false);
   const { providerLangs, profiles } = useSettings();
@@ -31,8 +41,14 @@ export default function MovieDetails() {
   const [downloadingSubs, setDownloadingSubs] = useState({});
   const [openLangMenu, setOpenLangMenu] = useState(null);
   const [updatingQuality, setUpdatingQuality] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
-  const { tmdbDetails, trailerKey, clear: clearTMDB } = useTMDBDetails('movie', movie?.tmdb_id);
+  // Files State
+  const [filesExpanded, setFilesExpanded] = useState(false);
+  const [movieFiles, setMovieFiles] = useState([]);
+  const [loadingFiles, setLoadingFiles] = useState(false);
+
+  const { tmdbDetails, trailerKey, refetch: refetchTMDB } = useTMDBDetails('movie', movie?.tmdb_id);
 
   // Subtitle Manual Search Modal
   const [subSearchModal, setSubSearchModal] = useState({ open: false, code: '', label: '' });
@@ -51,8 +67,8 @@ export default function MovieDetails() {
     return () => document.removeEventListener('mousedown', handler);
   }, [openLangMenu]);
 
-  const fetchMovieData = useCallback(async () => {
-    setLoading(true);
+  const fetchMovieData = useCallback(async (silent = true) => {
+    if (!silent) setLoading(true);
     try {
       const res = await api.get(`/library/movies/${id}`);
       if (res.data.status === 'success') {
@@ -60,20 +76,45 @@ export default function MovieDetails() {
       }
     } catch (e) {
       console.error(e);
-      customAlert('Failed to load movie details', 'error');
+      if (!silent) customAlert('Failed to load movie details', 'error');
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, [id]);
 
-  useEffect(() => {
-    fetchMovieData();
-  }, [fetchMovieData]);
+  // Fetch file list eagerly so the count badge is correct before expanding
+  const fetchFiles = useCallback(async () => {
+    setLoadingFiles(true);
+    try {
+      const res = await api.get(`/library/movies/${id}/files`);
+      if (res.data.status === 'success') setMovieFiles(res.data.data || []);
+    } catch (err) {
+      // silently ignore
+    } finally {
+      setLoadingFiles(false);
+    }
+  }, [id]);
 
-  const refreshAll = useCallback(() => {
-    clearTMDB();
-    fetchMovieData();
-  }, [clearTMDB, fetchMovieData]);
+  const toggleFiles = () => setFilesExpanded(prev => !prev);
+
+  useEffect(() => {
+    fetchMovieData(false);
+    fetchFiles();
+  }, [fetchMovieData, fetchFiles]);
+
+  const refreshAll = useCallback(async () => {
+    setIsRefreshing(true);
+    try {
+      await api.post(`/library/movies/${id}/refresh`);
+    } catch (e) {
+      console.error('Failed to rescan folder', e);
+    }
+    await fetchMovieData(true);
+    await fetchFiles();
+    await refetchTMDB();
+    setIsRefreshing(false);
+    customAlert('Movie refreshed!');
+  }, [fetchMovieData, fetchFiles, refetchTMDB, id]);
 
   const handleQualityChange = async (profileId) => {
     setUpdatingQuality(true);
@@ -228,10 +269,11 @@ export default function MovieDetails() {
             </span>
             <button
               onClick={refreshAll}
-              className="mr-2 p-2 bg-slate-800/50 hover:bg-slate-700 rounded-lg transition-colors text-slate-400 hover:text-cyan-400"
+              disabled={isRefreshing}
+              className="mr-2 p-2 bg-slate-800/50 hover:bg-slate-700 rounded-lg transition-colors text-slate-400 hover:text-purple-400 disabled:opacity-50"
               title="Refresh movie information from TMDB"
             >
-              <RefreshCw className="w-5 h-5" />
+              <RefreshCw className={`w-5 h-5 ${isRefreshing ? 'animate-spin' : ''}`} />
             </button>
           </h1>
           
@@ -262,15 +304,27 @@ export default function MovieDetails() {
           </p>
           
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-x-4 gap-y-6 w-full mt-4 text-sm bg-slate-900/50 p-5 rounded-xl border border-white/5">
-            <div className="col-span-2">
+            <div className="col-span-full">
               <p className="text-slate-500 text-[10px] uppercase tracking-widest font-bold mb-1">Path</p>
               <p className="font-mono text-xs text-slate-300 truncate" title={movie.file_path}>{movie.file_path || 'Not downloaded'}</p>
             </div>
+            {movie.scene_name && (
+              <div className="col-span-full">
+                <p className="text-slate-500 text-[10px] uppercase tracking-widest font-bold mb-1">Grabbed Release Name (History)</p>
+                <p className="font-mono text-xs text-slate-300 truncate" title={movie.scene_name}>{movie.scene_name}</p>
+              </div>
+            )}
             <div>
-              <p className="text-slate-500 text-[10px] uppercase tracking-widest font-bold mb-1">Status</p>
-              <p className="font-medium text-slate-300 capitalize">{movie.status}</p>
+              <p className="text-slate-500 text-[10px] uppercase tracking-widest font-bold mb-1">Resolution</p>
+              {parseResolution(movie.scene_name || movie.file_path) !== 'Unknown' ? (
+                <span className="px-2 py-0.5 rounded text-xs font-medium bg-slate-800 text-slate-300 border border-slate-700">
+                  {parseResolution(movie.scene_name || movie.file_path)}
+                </span>
+              ) : (
+                <p className="font-medium text-slate-500">-</p>
+              )}
             </div>
-            <div>
+            <div className="lg:col-span-2">
               <p className="text-slate-500 text-[10px] uppercase tracking-widest font-bold mb-1">Quality Profile</p>
               {updatingQuality ? (
                 <div className="flex items-center gap-2">
@@ -283,7 +337,7 @@ export default function MovieDetails() {
                   value={movie.quality_profile_id || ''}
                   onChange={(e) => handleQualityChange(e.target.value ? parseInt(e.target.value) : null)}
                 >
-                  <option value="">Any</option>
+                  <option value="">Unassigned</option>
                   {profiles.map(p => (
                     <option key={p.id} value={p.id}>{p.name}</option>
                   ))}
@@ -308,13 +362,13 @@ export default function MovieDetails() {
               </div>
             )}
             {tmdbDetails && tmdbDetails.production_companies?.length > 0 && (
-              <div className="col-span-2 md:col-span-1">
+              <div className="col-span-2 md:col-span-2 lg:col-span-2">
                 <p className="text-slate-500 text-[10px] uppercase tracking-widest font-bold mb-1">Studio</p>
                 <p className="font-medium text-slate-300 truncate" title={tmdbDetails.production_companies[0].name}>{tmdbDetails.production_companies[0].name}</p>
               </div>
             )}
             {tmdbDetails && tmdbDetails.genres?.length > 0 && (
-              <div className="col-span-2 md:col-span-4 lg:col-span-2">
+              <div className="col-span-2 md:col-span-3 lg:col-span-3">
                 <p className="text-slate-500 text-[10px] uppercase tracking-widest font-bold mb-1">Genres</p>
                 <p className="font-medium text-slate-300 truncate">{tmdbDetails.genres.map(g => g.name).join(', ')}</p>
               </div>
@@ -473,7 +527,97 @@ export default function MovieDetails() {
             >
               <Search className="w-4 h-4" /> Manual Search
             </button>
+            <button 
+              onClick={async () => {
+                const deleteFiles = await customConfirm(
+                  `Remove "${movie.title}" from your library?\n\nAlso delete files from disk?`,
+                  { confirmText: 'Remove + Delete Files', cancelText: 'Remove Only', thirdOptionText: 'Cancel' }
+                );
+                if (deleteFiles === null) return; // cancelled
+                try {
+                  await api.delete(`/library/movies/${movie.id}?deleteFiles=${deleteFiles === true}`);
+                  customAlert('Movie removed from library.', 'success');
+                  navigate('/movies');
+                } catch (err) {
+                  customAlert(err.response?.data?.message || 'Failed to remove movie.', 'error');
+                }
+              }}
+              className="ml-auto bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 font-bold px-4 py-2 rounded-xl flex items-center gap-2 transition-colors"
+            >
+              <Trash2 className="w-4 h-4" /> Delete
+            </button>
           </div>
+        </div>
+      </div>
+
+      {/* Files Section */}
+      <div className="mt-8">
+        <div className="glass-panel rounded-2xl border border-white/5 overflow-hidden">
+          <div 
+            onClick={toggleFiles}
+            className="w-full flex justify-between items-center p-5 bg-slate-800/50 hover:bg-slate-800 transition-colors cursor-pointer border-b border-white/5"
+          >
+            <div className="flex items-center gap-3">
+              <Folder className="w-5 h-5 text-purple-400" />
+              <h3 className="text-base font-bold text-slate-200 group-hover:text-purple-400 transition-colors">Movie Files</h3>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="text-xs font-medium bg-slate-900/50 text-slate-400 px-3 py-1 rounded-full border border-white/5">
+                {movieFiles.length} Files
+              </div>
+              {filesExpanded ? (
+                <ChevronDown className="w-5 h-5 text-slate-400 transition-transform duration-300" />
+              ) : (
+                <ChevronRight className="w-5 h-5 text-slate-400 transition-transform duration-300" />
+              )}
+            </div>
+          </div>
+          {filesExpanded && (
+            <div className="p-0">
+              {loadingFiles ? (
+                <div className="p-6 text-center text-slate-400 flex items-center justify-center gap-2">
+                  <Loader2 className="w-5 h-5 animate-spin" /> Loading files...
+                </div>
+              ) : movieFiles.length === 0 ? (
+                <div className="p-6 text-center text-slate-400">
+                  No files found in directory.
+                </div>
+              ) : (
+                <div className="divide-y divide-white/5">
+                  {movieFiles.map((file, idx) => (
+                    <div key={idx} className="flex items-center justify-between p-4 bg-slate-900/20 hover:bg-slate-800/30 transition-colors">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <HardDrive className="w-4 h-4 text-slate-500 shrink-0" />
+                        <span className="text-sm text-slate-300 truncate">{file.name}</span>
+                        <span className="text-xs text-slate-500 shrink-0">{formatSize(file.size)}</span>
+                      </div>
+                      <button 
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          if (await customConfirm(`Delete file "${file.name}"? This cannot be undone.`)) {
+                            try {
+                              const res = await api.delete(`/library/movies/${movie.id}/files/${encodeURIComponent(file.name)}`);
+                              if (res.data.status === 'success') {
+                                customAlert('File deleted', 'success');
+                                setMovieFiles(movieFiles.filter(f => f.name !== file.name));
+                                fetchMovieData();
+                              }
+                            } catch (err) {
+                              customAlert('Failed to delete file', 'error');
+                            }
+                          }
+                        }}
+                        className="p-1.5 hover:bg-red-500/20 text-slate-400 hover:text-red-400 rounded-lg transition-colors ml-4 shrink-0"
+                        title="Delete File"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
