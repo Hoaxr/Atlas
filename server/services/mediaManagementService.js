@@ -318,7 +318,7 @@ const importMovie = async (torrent, movie) => {
 
     db.prepare("UPDATE movies SET status = 'downloaded', file_path = ?, scene_name = ? WHERE id = ?").run(destFile, torrent.name, movie.id);
     console.log(`[MediaManagement] Movie ${movie.title} marked as downloaded.`);
-    eventBus.success('Download complete', { title: movie.title, type: 'movie' });
+    eventBus.success('Download complete', { title: movie.title, type: 'movie', destinationPath: finalDestPath });
 
     // Auto-refresh: detect resolution and update TMDB metadata
     try {
@@ -473,7 +473,7 @@ const importEpisode = async (torrent, episode) => {
 
     db.prepare("UPDATE episodes SET status = 'downloaded', file_path = ?, scene_name = ? WHERE id = ?").run(destFile, torrent.name, episode.id);
     console.log(`[MediaManagement] Episode marked as downloaded.`);
-    eventBus.success('Download complete', { title: `${episode.show_title} S${episode.season_number}E${episode.episode_number}`, type: 'episode' });
+    eventBus.success('Download complete', { title: `${episode.show_title} S${episode.season_number}E${episode.episode_number}`, type: 'episode', destinationPath: finalDestPath });
 
     // Auto-refresh: detect resolution and update TMDB metadata
     try {

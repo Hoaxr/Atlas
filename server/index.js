@@ -15,6 +15,8 @@ const tasksRoutes = require('./routes/tasks');
 const clientsRoutes = require('./routes/clients');
 const authRoutes = require('./routes/auth');
 const releaseProfilesRoutes = require('./routes/releaseProfiles');
+const usersRoutes = require('./routes/users');
+const requestsRoutes = require('./routes/requests');
 
 const errorHandler = require('./middleware/errorHandler');
 const eventBus = require('./services/eventBus');
@@ -24,6 +26,8 @@ const automationService = require('./services/automationService');
 const mediaManagementService = require('./services/mediaManagementService');
 const subtitleService = require('./services/subtitleService');
 const aiTranslationWorker = require('./services/aiTranslationWorker');
+const notificationService = require('./services/notificationService');
+const mediaServerService = require('./services/mediaServerService');
 
 const app = express();
 const server = http.createServer(app);
@@ -59,6 +63,7 @@ automationService.init();
 mediaManagementService.init();
 subtitleService.init();
 aiTranslationWorker.init();
+// Notification and Media Server services auto-init in constructor
 
 app.use(compression());
 app.use(helmet());
@@ -81,7 +86,17 @@ app.use(cors({
 }));
 app.use(express.json({ limit: '5mb' }));
 
+const authMiddleware = require('./middleware/authMiddleware');
+
 // Routes
+// Apply auth middleware to all /api routes except /api/auth
+app.use('/api', (req, res, next) => {
+  if (req.path.startsWith('/auth')) {
+    return next();
+  }
+  return authMiddleware(req, res, next);
+});
+
 app.use('/api', apiRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/tmdb', tmdbRoutes);
@@ -91,6 +106,8 @@ app.use('/api/tasks', tasksRoutes);
 app.use('/api/clients', clientsRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/release-profiles', releaseProfilesRoutes);
+app.use('/api/users', usersRoutes);
+app.use('/api/requests', requestsRoutes);
 
 app.use(errorHandler);
 

@@ -16,6 +16,7 @@ const navItems = [
   { name: 'Calendar', path: '/calendar', icon: CalendarIcon },
   { name: 'Downloads', path: '/downloads', icon: DownloadCloud },
   { name: 'Stats', path: '/stats', icon: BarChart3 },
+  { name: 'Requests', path: '/requests', icon: Heart },
   { name: 'Tasks', path: '/tasks', icon: Activity },
   { name: 'Settings', path: '/settings', icon: SettingsIcon },
 ];
@@ -34,6 +35,15 @@ export default function Layout() {
   // Prefetch library data into shared cache so Dashboard loads instantly
   const prefetchLibrary = async () => {
     try {
+      const userStr = localStorage.getItem('atlas_user');
+      if (userStr) {
+        const user = JSON.parse(userStr);
+        if (user && user.role === 'user') {
+          navigate('/portal');
+          return;
+        }
+      }
+
       const [moviesRes, showsRes] = await Promise.allSettled([
         api.get('/library/movies'),
         api.get('/library/shows')

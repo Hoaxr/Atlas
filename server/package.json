@@ -20,6 +20,7 @@
     "express": "^4.19.2",
     "fast-xml-parser": "^5.9.3",
     "helmet": "^7.1.0",
+    "jsonwebtoken": "^9.0.3",
     "morgan": "^1.10.0",
     "node-cron": "^4.5.0",
     "ws": "^8.21.0"

@@ -147,10 +147,10 @@ export default function Dashboard() {
   const renderColumnCell = (colKey, item) => {
     switch (colKey) {
       case 'year':
-        return <td className="py-2.5 px-4 text-slate-300 text-sm">{item.year || <span className="text-slate-600">—</span>}</td>;
+        return <td key={colKey} className="py-2.5 px-4 text-slate-300 text-sm">{item.year || <span className="text-slate-600">—</span>}</td>;
       case 'rating':
         return (
-          <td className="py-2.5 px-4 text-slate-300 text-sm font-medium">
+          <td key={colKey} className="py-2.5 px-4 text-slate-300 text-sm font-medium">
             {item.rating > 0 ? (
               <div className="flex items-center gap-1.5 w-fit bg-slate-950/50 px-2.5 py-0.5 rounded-lg border border-white/5 shadow-inner">
                 <Star className="w-3.5 h-3.5 text-yellow-400 fill-yellow-400 drop-shadow-sm" />
@@ -161,7 +161,7 @@ export default function Dashboard() {
         );
       case 'resolution':
         return (
-          <td className="py-2.5 px-4 text-slate-300">
+          <td key={colKey} className="py-2.5 px-4 text-slate-300">
             {parseResolution(item.scene_name || item.sample_episode_path || item.file_path) !== 'Unknown' ? (
               <span className="px-2 py-0.5 rounded text-xs font-medium bg-slate-800 text-slate-300 border border-slate-700">
                 {parseResolution(item.scene_name || item.sample_episode_path || item.file_path)}
@@ -170,12 +170,12 @@ export default function Dashboard() {
           </td>
         );
       case 'size':
-        return <td className="py-2.5 px-4 text-slate-400 text-sm">{formatSize(item.file_size || item.folder_size || 0)}</td>;
+        return <td key={colKey} className="py-2.5 px-4 text-slate-400 text-sm">{formatSize(item.file_size || item.folder_size || 0)}</td>;
       case 'seasons':
-        return <td className="py-2.5 px-4 text-slate-300 text-sm font-medium">{item.season_count || 0}</td>;
+        return <td key={colKey} className="py-2.5 px-4 text-slate-300 text-sm font-medium">{item.season_count || 0}</td>;
       case 'status':
         return (
-          <td className="py-2.5 px-4">
+          <td key={colKey} className="py-2.5 px-4">
             <div className="flex items-center gap-2">
               <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${
                 item.status === 'downloaded' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 

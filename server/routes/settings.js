@@ -90,7 +90,21 @@ router.get('/', (req, res, next) => {
         defaultQualityProfileId: defaultQualityProfileId ? parseInt(defaultQualityProfileId) : null,
         clients,
         profiles,
-        libraryPaths
+        libraryPaths,
+        authEnabled: getSetting('authEnabled') || 'false',
+        authBypassLocalhost: getSetting('authBypassLocalhost') || 'true',
+        authUsername: getSetting('authUsername'),
+        plexUrl: getSetting('plexUrl'),
+        plexToken: mask(getSetting('plexToken')),
+        jellyfinUrl: getSetting('jellyfinUrl'),
+        jellyfinApiKey: mask(getSetting('jellyfinApiKey')),
+        embyUrl: getSetting('embyUrl'),
+        embyApiKey: mask(getSetting('embyApiKey')),
+        discordWebhookUrl: getSetting('discordWebhookUrl'),
+        telegramBotToken: mask(getSetting('telegramBotToken')),
+        telegramChatId: getSetting('telegramChatId'),
+        notifyOnGrab: getSetting('notifyOnGrab') || 'false',
+        notifyOnDownload: getSetting('notifyOnDownload') || 'false'
       }
     });
   } catch (e) {
@@ -100,7 +114,7 @@ router.get('/', (req, res, next) => {
 
 router.post('/', (req, res, next) => {
   try {
-    const { tmdbApiKey, traktClientId, osApiKey, subdlApiKey, subsourceApiKey, geminiApiKey, deepseekApiKey, claudeApiKey, prowlarrUrl, prowlarrApiKey, translationProvider, targetLang, targetLangs, providerLangs, autoTranslate, traktWatchedSync, traktAccessToken, traktClientSecret, renameMovies, replaceIllegalCharacters, colonReplacement, standardMovieFormat, renameEpisodes, standardEpisodeFormat, seasonFolderFormat, removeCompletedDownloads, deleteTorrentFiles, hideCompletedDownloads, defaultQualityProfileId } = req.body;
+    const { tmdbApiKey, traktClientId, osApiKey, subdlApiKey, subsourceApiKey, geminiApiKey, deepseekApiKey, claudeApiKey, prowlarrUrl, prowlarrApiKey, translationProvider, targetLang, targetLangs, providerLangs, autoTranslate, traktWatchedSync, traktAccessToken, traktClientSecret, renameMovies, replaceIllegalCharacters, colonReplacement, standardMovieFormat, renameEpisodes, standardEpisodeFormat, seasonFolderFormat, removeCompletedDownloads, deleteTorrentFiles, hideCompletedDownloads, defaultQualityProfileId, authEnabled, authBypassLocalhost, authUsername, authPassword, plexUrl, plexToken, jellyfinUrl, jellyfinApiKey, embyUrl, embyApiKey, discordWebhookUrl, telegramBotToken, telegramChatId, notifyOnGrab, notifyOnDownload } = req.body;
     
     const isMasked = (val) => val && /^\*+$/.test(val);
     
@@ -142,6 +156,24 @@ router.post('/', (req, res, next) => {
     if (removeCompletedDownloads !== undefined) setSetting('removeCompletedDownloads', removeCompletedDownloads ? 'true' : 'false');
     if (deleteTorrentFiles !== undefined) setSetting('deleteTorrentFiles', deleteTorrentFiles ? 'true' : 'false');
     if (hideCompletedDownloads !== undefined) setSetting('hideCompletedDownloads', hideCompletedDownloads ? 'true' : 'false');
+
+    if (authEnabled !== undefined) setSetting('authEnabled', authEnabled);
+    if (authBypassLocalhost !== undefined) setSetting('authBypassLocalhost', authBypassLocalhost);
+    if (authUsername !== undefined) setSetting('authUsername', authUsername);
+    if (authPassword !== undefined) setSetting('authPassword', authPassword);
+    
+    if (plexUrl !== undefined) setSetting('plexUrl', plexUrl);
+    if (plexToken !== undefined && !isMasked(plexToken)) setSetting('plexToken', plexToken);
+    if (jellyfinUrl !== undefined) setSetting('jellyfinUrl', jellyfinUrl);
+    if (jellyfinApiKey !== undefined && !isMasked(jellyfinApiKey)) setSetting('jellyfinApiKey', jellyfinApiKey);
+    if (embyUrl !== undefined) setSetting('embyUrl', embyUrl);
+    if (embyApiKey !== undefined && !isMasked(embyApiKey)) setSetting('embyApiKey', embyApiKey);
+    
+    if (discordWebhookUrl !== undefined) setSetting('discordWebhookUrl', discordWebhookUrl);
+    if (telegramBotToken !== undefined && !isMasked(telegramBotToken)) setSetting('telegramBotToken', telegramBotToken);
+    if (telegramChatId !== undefined) setSetting('telegramChatId', telegramChatId);
+    if (notifyOnGrab !== undefined) setSetting('notifyOnGrab', notifyOnGrab);
+    if (notifyOnDownload !== undefined) setSetting('notifyOnDownload', notifyOnDownload);
     
     res.json({ status: 'success', message: 'Settings saved successfully' });
   } catch (e) {
@@ -687,6 +719,16 @@ router.post('/schedules', (req, res, next) => {
     } catch { /* service may not be loaded yet */ }
     res.json({ status: 'success', message: 'Schedules saved' });
   } catch (e) { next(e); }
+});
+
+router.post('/test-notification', async (req, res) => {
+  try {
+    const notificationService = require('../services/notificationService');
+    await notificationService.testNotification();
+    res.json({ status: 'success', message: 'Test notification sent' });
+  } catch (err) {
+    res.status(500).json({ status: 'error', message: 'Failed to send test notification' });
+  }
 });
 
 module.exports = router;

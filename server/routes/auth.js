@@ -3,6 +3,8 @@ const router = express.Router();
 const axios = require('axios');
 const db = require('../config/database');
 
+const jwt = require('jsonwebtoken');
+
 const getSetting = (key) => {
   const row = db.prepare('SELECT value FROM settings WHERE key = ?').get(key);
   return row ? row.value : null;
@@ -11,6 +13,28 @@ const getSetting = (key) => {
 const setSetting = (key, value) => {
   db.prepare('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run(key, value);
 };
+
+const JWT_SECRET = process.env.JWT_SECRET || 'atlas_super_secret_key_change_me';
+
+// Login endpoint
+router.post('/login', (req, res) => {
+  const { username, password } = req.body;
+  const authEnabled = getSetting('authEnabled') === 'true';
+
+  if (!authEnabled) {
+    return res.json({ status: 'success', message: 'Authentication is disabled' });
+  }
+
+  const user = db.prepare('SELECT id, username, password, role FROM users WHERE username = ?').get(username);
+  
+  if (user && user.password === password) {
+    const token = jwt.sign({ id: user.id, username: user.username, role: user.role }, JWT_SECRET, { expiresIn: '7d' });
+    res.json({ status: 'success', data: { token, user: { id: user.id, username: user.username, role: user.role } } });
+  } else {
+    res.status(401).json({ status: 'error', message: 'Invalid credentials' });
+  }
+});
+
 
 // Step 1: Request a device code from Trakt
 router.post('/trakt/device-code', async (req, res) => {

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import api from '../lib/api';
-import { AlertCircle, CheckCircle2, Key, Search, Download, Settings2, FolderTree, Languages, ShieldAlert } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Key, Search, Download, Settings2, FolderTree, Languages, ShieldAlert, Network, Users } from 'lucide-react';
 import { customAlert } from '../utils/alerts';
 
 import ApisTab from './settings/ApisTab';
@@ -12,6 +12,9 @@ import LibraryTab from './settings/LibraryTab';
 import BackupTab from './settings/BackupTab';
 import NamingTab from './settings/NamingTab';
 import ReleaseProfilesTab from './settings/ReleaseProfilesTab';
+import ConnectionsTab from './settings/ConnectionsTab';
+import SecurityTab from './settings/SecurityTab';
+import UsersTab from './settings/UsersTab';
 
 export default function Settings() {
   const [activeTab, setActiveTab] = useState('apis');
@@ -409,6 +412,8 @@ export default function Settings() {
 
   const TABS = [
     { id: 'apis', label: "API's & Integrations", icon: <Key className="w-4 h-4" /> },
+    { id: 'connections', label: "Connections", icon: <Network className="w-4 h-4" /> },
+    { id: 'security', label: "Security", icon: <ShieldAlert className="w-4 h-4" /> },
     { id: 'indexers', label: "Indexers", icon: <Search className="w-4 h-4" /> },
     { id: 'clients', label: "Download Clients", icon: <Download className="w-4 h-4" /> },
     { id: 'profiles', label: "Quality Profiles", icon: <Settings2 className="w-4 h-4" /> },
@@ -416,6 +421,7 @@ export default function Settings() {
     { id: 'naming', label: "Media Naming", icon: <FolderTree className="w-4 h-4" /> },
     { id: 'subtitles', label: "Subtitles & AI Translation", icon: <Languages className="w-4 h-4" /> },
     { id: 'library', label: "Library Management", icon: <FolderTree className="w-4 h-4" /> },
+    { id: 'users', label: "Users", icon: <Users className="w-4 h-4" /> },
     { id: 'backup', label: "Backup & Restore", icon: <Download className="w-4 h-4" /> },
   ];
 
@@ -473,6 +479,10 @@ export default function Settings() {
               fetchSettings={fetchSettings}
             />
           )}
+
+          {activeTab === 'connections' && <ConnectionsTab />}
+          {activeTab === 'security' && <SecurityTab />}
+          {activeTab === 'users' && <UsersTab />}
 
           {activeTab === 'indexers' && (
             <IndexersTab

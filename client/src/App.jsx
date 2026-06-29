@@ -17,6 +17,9 @@ const Status = lazy(() => import('./pages/Status'));
 const Calendar = lazy(() => import('./pages/Calendar'));
 const Statistics = lazy(() => import('./pages/Statistics'));
 const PersonDetails = lazy(() => import('./pages/PersonDetails'));
+const Login = lazy(() => import('./pages/Login'));
+const UserPortal = lazy(() => import('./pages/UserPortal'));
+const Requests = lazy(() => import('./pages/Requests'));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -64,6 +67,7 @@ function App() {
           />
           <BrowserRouter>
             <Routes>
+              <Route path="/login" element={<LazyPage><Login /></LazyPage>} />
               <Route path="/" element={<Layout />}>
                 <Route index element={<Navigate to="/movies" replace />} />
                 <Route path="movies" element={<Dashboard />} />
@@ -77,8 +81,10 @@ function App() {
                 <Route path="status" element={<LazyPage><Status /></LazyPage>} />
                 <Route path="calendar" element={<LazyPage><Calendar /></LazyPage>} />
                 <Route path="stats" element={<LazyPage><Statistics /></LazyPage>} />
+                <Route path="requests" element={<LazyPage><Requests /></LazyPage>} />
                 <Route path="person/:id" element={<LazyPage><PersonDetails /></LazyPage>} />
               </Route>
+              <Route path="/portal" element={<LazyPage><UserPortal /></LazyPage>} />
             </Routes>
           </BrowserRouter>
         </ThemeProvider>

@@ -17,6 +17,27 @@ db.exec(`
     value TEXT
   );
 
+  CREATE TABLE IF NOT EXISTS users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT UNIQUE,
+    password TEXT,
+    email TEXT,
+    role TEXT DEFAULT 'user',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS requests (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER,
+    tmdb_id INTEGER,
+    type TEXT,
+    title TEXT,
+    status TEXT DEFAULT 'pending',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  );
+
+
   CREATE TABLE IF NOT EXISTS movies (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     tmdb_id INTEGER UNIQUE,
@@ -184,5 +205,23 @@ if (!existingProfile) {
   // Backfill if empty
   db.prepare(`UPDATE quality_profiles SET qualities = ?, cutoff = ?, upgrade_allowed = ? WHERE qualities IS NULL`).run(JSON.stringify(['1080p']), '1080p', 1);
 }
+
+// Migrate initial admin if users table is empty and we have settings
+const existingAdmin = db.prepare("SELECT id FROM users WHERE role = 'admin' LIMIT 1").get();
+if (!existingAdmin) {
+  const authUsernameRow = db.prepare('SELECT value FROM settings WHERE key = ?').get('authUsername');
+  const authPasswordRow = db.prepare('SELECT value FROM settings WHERE key = ?').get('authPassword');
+  
+  if (authUsernameRow && authUsernameRow.value) {
+    db.prepare("INSERT INTO users (username, password, role) VALUES (?, ?, 'admin')").run(
+      authUsernameRow.value,
+      authPasswordRow ? authPasswordRow.value : ''
+    );
+  } else {
+    // If no auth is set at all, maybe create a default admin 'admin'/'admin' if we want, but better to just leave it until set.
+    // We will ensure new auth setup creates an admin in the users table.
+  }
+}
+
 
 module.exports = db;
