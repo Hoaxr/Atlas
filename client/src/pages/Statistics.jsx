@@ -367,26 +367,30 @@ export default function Statistics() {
 
       {/* Year Distribution */}
       <div className="glass-panel rounded-2xl p-6 flex flex-col">
-        <h3 className="text-lg font-bold text-slate-200 mb-4">Movies by Year</h3>
-        <div className="overflow-x-auto pb-2 mt-auto">
-          <div className="flex items-end gap-1.5 h-48" style={{ minWidth: `${stats.yearData.length * 2.5}rem` }}>
-          {stats.yearData.map(([year, count]) => (
-            <div
-              key={year}
-              className="flex-1 flex flex-col items-center gap-1.5 h-full justify-end min-w-[1.5rem] cursor-pointer group"
-              onClick={() => navigate(`/movies?year=${year}`)}
-              title={`View movies from ${year}`}
-            >
-              <span className="text-[10px] font-bold text-cyan-400 group-hover:text-cyan-300">{count}</span>
+        <h3 className="text-lg font-bold text-slate-200 mb-4">Content by Year</h3>
+        {stats.yearData.length > 0 ? (
+          <div className="overflow-x-auto pb-2">
+            <div className="flex items-end gap-1 h-48" style={{ minWidth: `${Math.max(stats.yearData.length * 3, 20)}rem` }}>
+            {stats.yearData.map(([year, count]) => (
               <div
-                className="w-full bg-cyan-500 rounded-t-sm group-hover:bg-cyan-400 transition-colors"
-                style={{ height: count > 0 ? `${Math.max((count / maxYearCount) * 100, 2)}%` : '0%' }}
-              />
-              <span className="text-[10px] text-slate-500 font-medium mt-1">{year}</span>
-            </div>
-          ))}
-        </div>
-        </div>
+                key={year}
+                className="flex-1 flex flex-col items-center gap-1.5 h-full justify-end min-w-[2rem] cursor-pointer group"
+                onClick={() => navigate(`/movies?year=${year}`)}
+                title={`${count} item(s) from ${year}`}
+              >
+                <span className="text-[10px] font-bold text-cyan-400 group-hover:text-cyan-300">{count}</span>
+                <div
+                  className="w-full bg-gradient-to-t from-cyan-600 to-cyan-400 rounded-t-sm group-hover:from-cyan-500 group-hover:to-cyan-300 transition-all"
+                  style={{ height: count > 0 ? `${Math.max((count / maxYearCount) * 100, 3)}%` : '0%' }}
+                />
+                <span className="text-[10px] text-slate-500 font-medium mt-1 -rotate-45 origin-top-left whitespace-nowrap">{year}</span>
+              </div>
+            ))}
+          </div>
+          </div>
+        ) : (
+          <p className="text-slate-500 text-sm italic py-4 text-center">No year data available</p>
+        )}
       </div>
 
       {/* Recently Added */}
@@ -397,7 +401,11 @@ export default function Statistics() {
           </h3>
           <div className="space-y-1">
             {stats.recentItems.map(item => (
-              <div key={`${item.mediaType}-${item.id}`} className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-slate-800/30 transition-colors">
+              <div
+                key={`${item.mediaType}-${item.id}`}
+                className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-slate-800/30 transition-colors cursor-pointer"
+                onClick={() => navigate(item.mediaType === 'movie' ? `/movies/${item.id}` : `/shows/${item.id}`)}
+              >
                 {item.mediaType === 'movie' ? (
                   <Film className="w-4 h-4 text-cyan-400 shrink-0" />
                 ) : (

@@ -143,19 +143,28 @@ const refreshTokenIfExpired = async () => {
 
 const syncWatchedMovies = async () => {
   try {
-    const response = await traktApi.get('/sync/watched/movies');
-    const watchedMovies = response.data;
+    let page = 1;
+    let totalPages = 1;
     let count = 0;
-    for (const item of watchedMovies) {
-      const tmdbId = item.movie.ids.tmdb;
-      if (!tmdbId) continue;
-      db.prepare('INSERT OR REPLACE INTO watched_tmdb (tmdb_id, type) VALUES (?, ?)').run(tmdbId, 'movie');
-      const movie = db.prepare('SELECT id FROM movies WHERE tmdb_id = ?').get(tmdbId);
-      if (movie) {
-        db.prepare('UPDATE movies SET watched = 1 WHERE id = ?').run(movie.id);
-        count++;
+
+    while (page <= totalPages) {
+      const response = await traktApi.get('/sync/watched/movies', { params: { page } });
+      totalPages = parseInt(response.headers['x-pagination-page-count']) || 1;
+      const watchedMovies = response.data;
+
+      for (const item of watchedMovies) {
+        const tmdbId = item.movie.ids.tmdb;
+        if (!tmdbId) continue;
+        db.prepare('INSERT OR REPLACE INTO watched_tmdb (tmdb_id, type) VALUES (?, ?)').run(tmdbId, 'movie');
+        const movie = db.prepare('SELECT id FROM movies WHERE tmdb_id = ?').get(tmdbId);
+        if (movie) {
+          db.prepare('UPDATE movies SET watched = 1 WHERE id = ?').run(movie.id);
+          count++;
+        }
       }
+      page++;
     }
+
     console.log(`[TraktSync] Synced ${count} watched movies`);
     return count;
   } catch (error) {
@@ -170,19 +179,28 @@ const syncWatchedMovies = async () => {
 
 const syncWatchedShows = async () => {
   try {
-    const response = await traktApi.get('/sync/watched/shows');
-    const watchedShows = response.data;
+    let page = 1;
+    let totalPages = 1;
     let count = 0;
-    for (const item of watchedShows) {
-      const tmdbId = item.show.ids.tmdb;
-      if (!tmdbId) continue;
-      db.prepare('INSERT OR REPLACE INTO watched_tmdb (tmdb_id, type) VALUES (?, ?)').run(tmdbId, 'show');
-      const show = db.prepare('SELECT id FROM shows WHERE tmdb_id = ?').get(tmdbId);
-      if (show) {
-        db.prepare('UPDATE shows SET watched = 1 WHERE id = ?').run(show.id);
-        count++;
+
+    while (page <= totalPages) {
+      const response = await traktApi.get('/sync/watched/shows', { params: { page } });
+      totalPages = parseInt(response.headers['x-pagination-page-count']) || 1;
+      const watchedShows = response.data;
+
+      for (const item of watchedShows) {
+        const tmdbId = item.show.ids.tmdb;
+        if (!tmdbId) continue;
+        db.prepare('INSERT OR REPLACE INTO watched_tmdb (tmdb_id, type) VALUES (?, ?)').run(tmdbId, 'show');
+        const show = db.prepare('SELECT id FROM shows WHERE tmdb_id = ?').get(tmdbId);
+        if (show) {
+          db.prepare('UPDATE shows SET watched = 1 WHERE id = ?').run(show.id);
+          count++;
+        }
       }
+      page++;
     }
+
     console.log(`[TraktSync] Synced ${count} watched shows`);
     return count;
   } catch (error) {

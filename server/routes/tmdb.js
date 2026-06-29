@@ -3,6 +3,20 @@ const router = express.Router();
 const tmdbService = require('../services/tmdbService');
 const db = require('../config/database');
 
+router.get('/movies/now-playing', async (req, res, next) => {
+  try {
+    const movies = await tmdbService.getRecentMovies();
+    res.json({ status: 'success', data: movies });
+  } catch (e) { next(e); }
+});
+
+router.get('/movies/upcoming', async (req, res, next) => {
+  try {
+    const movies = await tmdbService.getUpcomingMovies();
+    res.json({ status: 'success', data: movies });
+  } catch (e) { next(e); }
+});
+
 router.get('/search/movie', async (req, res, next) => {
   try {
     const query = req.query.query;

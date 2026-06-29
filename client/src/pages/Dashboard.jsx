@@ -4,22 +4,12 @@ import api from '../lib/api';
 import { Activity, Film, Tv, Search, CheckCircle2, AlertCircle, Bookmark, BookmarkMinus, LayoutGrid, List, Star, Info, X, RotateCcw, Filter as FilterIcon, CheckSquare, Square, Trash2, FolderOpen, ChevronUp, ChevronDown, Heart, Columns } from 'lucide-react';
 import { customAlert, customConfirm } from '../utils/alerts';
 import { cachedMovies, cachedShows, setCachedMovies, setCachedShows } from '../lib/libraryCache';
-import { formatSize, formatSpeed } from '../lib/format';
+import { formatSize, formatSpeed, parseResolution } from '../lib/format';
 import { useSettings } from '../lib/useSettings';
 
 const SortIcon = ({ field, sort }) => {
   if (!sort.startsWith(field)) return null;
   return sort.endsWith('_asc') ? <ChevronUp className="w-3.5 h-3.5 inline ml-1" /> : <ChevronDown className="w-3.5 h-3.5 inline ml-1" />;
-};
-
-const parseResolution = (title) => {
-  if (!title) return 'Unknown';
-  const t = title.toLowerCase();
-  if (t.includes('2160p') || t.includes('4k')) return '2160p';
-  if (t.includes('1080p')) return '1080p';
-  if (t.includes('720p')) return '720p';
-  if (t.includes('480p') || t.includes('dvdrip') || t.includes('xvid') || t.includes('hdtv') || t.match(/\bsd\b/)) return 'SD';
-  return 'Unknown';
 };
 
 export default function Dashboard() {
@@ -52,14 +42,27 @@ export default function Dashboard() {
       const stored = localStorage.getItem(scopeKey('TableColumns'));
       if (stored) return JSON.parse(stored);
     } catch (e) {}
-    return { year: true, rating: true, resolution: true, size: true, status: true };
+    return { year: true, rating: true, resolution: true, size: true, status: true, seasons: true };
   });
+  const [columnOrder, setColumnOrder] = useState(() => {
+    try {
+      const stored = localStorage.getItem(scopeKey('ColumnOrder'));
+      if (stored) return JSON.parse(stored);
+    } catch (e) {}
+    return ['year', 'rating', 'resolution', 'size', 'seasons', 'status'];
+  });
+  const [dragColumn, setDragColumn] = useState(null);
+  const [dragOverColumn, setDragOverColumn] = useState(null);
   const [columnsMenuOpen, setColumnsMenuOpen] = useState(false);
   const columnsMenuRef = useRef(null);
 
   useEffect(() => {
     localStorage.setItem(scopeKey('TableColumns'), JSON.stringify(tableColumns));
   }, [tableColumns, viewMode]);
+
+  useEffect(() => {
+    localStorage.setItem(scopeKey('ColumnOrder'), JSON.stringify(columnOrder));
+  }, [columnOrder, viewMode]);
 
   useEffect(() => {
     function handleClickOutside(event) {
@@ -96,13 +99,101 @@ export default function Dashboard() {
   }, [viewMode]);
 
   const handleSortClick = (field) => {
-    const defaultDesc = ['rating', 'size', 'year'].includes(field);
+    const defaultDesc = ['rating', 'size', 'year', 'season_count'].includes(field);
     if (sort.startsWith(field)) {
       setSort(sort === `${field}_asc` ? `${field}_desc` : `${field}_asc`);
     } else {
       setSort(defaultDesc ? `${field}_desc` : `${field}_asc`);
     }
   };
+
+  // Drag-and-drop column reordering
+  const handleDragStart = (e, colKey) => {
+    setDragColumn(colKey);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', colKey);
+  };
+  const handleDragOver = (e, colKey) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (dragColumn && dragColumn !== colKey) {
+      setDragOverColumn(colKey);
+    }
+  };
+  const handleDragLeave = () => setDragOverColumn(null);
+  const handleDrop = (e, targetCol) => {
+    e.preventDefault();
+    setDragOverColumn(null);
+    setDragColumn(null);
+    if (!dragColumn || dragColumn === targetCol) return;
+    const newOrder = [...columnOrder];
+    const fromIdx = newOrder.indexOf(dragColumn);
+    const toIdx = newOrder.indexOf(targetCol);
+    newOrder.splice(fromIdx, 1);
+    newOrder.splice(toIdx, 0, dragColumn);
+    setColumnOrder(newOrder);
+  };
+
+  // Column definitions for dynamic table rendering
+  const COLUMN_DEFS = {
+    year:          { label: 'Year',       sortField: 'year',         w: 'w-24' },
+    rating:        { label: 'Rating',     sortField: 'rating',       w: 'w-32' },
+    resolution:    { label: 'Resolution', sortField: 'resolution',   w: 'w-28 whitespace-nowrap' },
+    size:          { label: 'Size',       sortField: 'size',         w: 'w-28' },
+    seasons:       { label: 'Seasons',    sortField: 'season_count', w: 'w-24 whitespace-nowrap', showsOnly: true },
+    status:        { label: 'Status',     sortField: 'status',       w: 'w-32' },
+  };
+
+  const renderColumnCell = (colKey, item) => {
+    switch (colKey) {
+      case 'year':
+        return <td className="py-2.5 px-4 text-slate-300 text-sm">{item.year || <span className="text-slate-600">—</span>}</td>;
+      case 'rating':
+        return (
+          <td className="py-2.5 px-4 text-slate-300 text-sm font-medium">
+            {item.rating > 0 ? (
+              <div className="flex items-center gap-1.5 w-fit bg-slate-950/50 px-2.5 py-0.5 rounded-lg border border-white/5 shadow-inner">
+                <Star className="w-3.5 h-3.5 text-yellow-400 fill-yellow-400 drop-shadow-sm" />
+                <span className="text-sm font-bold text-slate-600 dark:text-slate-200">{Number(item.rating).toFixed(1)}</span>
+              </div>
+            ) : <span className="text-slate-600">—</span>}
+          </td>
+        );
+      case 'resolution':
+        return (
+          <td className="py-2.5 px-4 text-slate-300">
+            {parseResolution(item.scene_name || item.sample_episode_path || item.file_path) !== 'Unknown' ? (
+              <span className="px-2 py-0.5 rounded text-xs font-medium bg-slate-800 text-slate-300 border border-slate-700">
+                {parseResolution(item.scene_name || item.sample_episode_path || item.file_path)}
+              </span>
+            ) : <span className="text-slate-600">—</span>}
+          </td>
+        );
+      case 'size':
+        return <td className="py-2.5 px-4 text-slate-400 text-sm">{formatSize(item.file_size || item.folder_size || 0)}</td>;
+      case 'seasons':
+        return <td className="py-2.5 px-4 text-slate-300 text-sm font-medium">{item.season_count || 0}</td>;
+      case 'status':
+        return (
+          <td className="py-2.5 px-4">
+            <div className="flex items-center gap-2">
+              <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${
+                item.status === 'downloaded' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 
+                item.status === 'downloading' ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30' : 
+                item.status === 'monitored' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 
+                'bg-rose-500/20 text-rose-400 border border-rose-500/30'
+              }`}>
+                {item.status}
+              </span>
+            </div>
+          </td>
+        );
+      default:
+        return null;
+    }
+  };
+
+  const visibleOrderedColumns = columnOrder.filter(col => tableColumns[col] && (!COLUMN_DEFS[col].showsOnly || viewMode === 'shows'));
 
   const { profiles: qualityProfiles } = useSettings();
 
@@ -356,6 +447,8 @@ export default function Dashboard() {
       if (sort === 'year_asc') return (a.year || 0) - (b.year || 0);
       if (sort === 'status_asc') return (a.status || '').localeCompare(b.status || '');
       if (sort === 'status_desc') return (b.status || '').localeCompare(a.status || '');
+      if (sort === 'season_count_desc') return (b.season_count || 0) - (a.season_count || 0);
+      if (sort === 'season_count_asc') return (a.season_count || 0) - (b.season_count || 0);
       if (sort === 'resolution_asc' || sort === 'resolution_desc') {
         const order = { '2160p': 4, '1080p': 3, '720p': 2, 'SD': 1, 'Unknown': 0 };
         const resA = order[parseResolution(a.scene_name || a.sample_episode_path || a.file_path)] || 0;
@@ -541,15 +634,14 @@ export default function Dashboard() {
                   <div className="absolute right-0 top-full mt-3 w-48 bg-slate-800 border border-white/10 rounded-xl shadow-xl z-[60] overflow-hidden text-sm">
                     <div className="p-2 border-b border-white/5 font-semibold text-slate-300">Visible Columns</div>
                     <div className="p-2 flex flex-col gap-1">
-                      {['year', 'rating', 'resolution', 'size', 'status'].map(col => (
-                        <label key={col} className="flex items-center gap-2 px-2 py-1.5 hover:bg-white/5 rounded cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={tableColumns[col]}
-                            onChange={(e) => setTableColumns(prev => ({ ...prev, [col]: e.target.checked }))}
-                            className="rounded border-slate-600 bg-slate-900 text-cyan-500 focus:ring-cyan-500/50"
-                          />
-                          <span className="text-slate-300 capitalize">{col}</span>
+                      {columnOrder.filter(col => col !== 'seasons' || viewMode === 'shows').map(col => (
+                        <label key={col} className="flex items-center gap-2 px-2 py-1.5 hover:bg-white/5 rounded cursor-pointer" onClick={(e) => { e.preventDefault(); setTableColumns(prev => ({ ...prev, [col]: !prev[col] })); }}>
+                          {tableColumns[col] ? (
+                            <CheckSquare className="w-4 h-4 text-cyan-400 flex-shrink-0" />
+                          ) : (
+                            <Square className="w-4 h-4 text-slate-500 flex-shrink-0" />
+                          )}
+                          <span className="text-slate-300 capitalize select-none">{col}</span>
                         </label>
                       ))}
                     </div>
@@ -864,6 +956,12 @@ export default function Dashboard() {
                         <span className="text-[10px] font-bold text-emerald-400">Watched</span>
                       </div>
                     ) : null}
+                    {viewMode === 'shows' && item.season_count > 0 && (
+                      <div className="absolute bottom-2 right-2 z-20 flex items-center gap-1 bg-slate-950/80 backdrop-blur px-2 py-1 rounded-md border border-purple-500/30 shadow-lg">
+                        <Tv className="w-3 h-3 text-purple-400" />
+                        <span className="text-[10px] font-bold text-purple-400">{item.season_count} Season{item.season_count !== 1 ? 's' : ''}</span>
+                      </div>
+                    )}
                     <img 
                       src={`https://image.tmdb.org/t/p/w500${item.poster_path}`} 
                       alt={item.title}
@@ -972,15 +1070,24 @@ export default function Dashboard() {
                     </button>
                   </th>
                   <th className="py-3 px-4 font-medium cursor-pointer hover:text-white transition-colors select-none group" onClick={() => handleSortClick('title')}>Title<SortIcon field="title" sort={sort} /></th>
-                  {tableColumns.year && <th className="py-3 px-4 font-medium w-24 cursor-pointer hover:text-white transition-colors select-none group" onClick={() => handleSortClick('year')}>Year<SortIcon field="year" sort={sort} /></th>}
-                  {tableColumns.rating && <th className="py-3 px-4 font-medium w-32 cursor-pointer hover:text-white transition-colors select-none group" onClick={() => handleSortClick('rating')}>Rating<SortIcon field="rating" sort={sort} /></th>}
-                  {tableColumns.resolution && (
-                    <th onClick={() => handleSortClick('resolution')} className="py-3 px-4 font-medium w-28 cursor-pointer hover:text-white transition-colors select-none group whitespace-nowrap">
-                      Resolution<SortIcon field="resolution" sort={sort} />
-                    </th>
-                  )}
-                  {tableColumns.size && <th className="py-3 px-4 font-medium w-28 cursor-pointer hover:text-white transition-colors select-none group" onClick={() => handleSortClick('size')}>Size<SortIcon field="size" sort={sort} /></th>}
-                  {tableColumns.status && <th className="py-3 px-4 font-medium w-32 cursor-pointer hover:text-white transition-colors select-none group" onClick={() => handleSortClick('status')}>Status<SortIcon field="status" sort={sort} /></th>}
+                  {visibleOrderedColumns.map(colKey => {
+                    const def = COLUMN_DEFS[colKey];
+                    return (
+                      <th
+                        key={colKey}
+                        draggable
+                        onDragStart={(e) => handleDragStart(e, colKey)}
+                        onDragOver={(e) => handleDragOver(e, colKey)}
+                        onDragLeave={handleDragLeave}
+                        onDrop={(e) => handleDrop(e, colKey)}
+                        onDragEnd={() => { setDragColumn(null); setDragOverColumn(null); }}
+                        onClick={() => handleSortClick(def.sortField)}
+                        className={`py-3 px-4 font-medium cursor-pointer hover:text-white transition-colors select-none group ${def.w} ${dragColumn === colKey ? 'opacity-50' : ''} ${dragOverColumn === colKey ? 'border-l-2 border-cyan-400' : ''}`}
+                      >
+                        {def.label}<SortIcon field={def.sortField} sort={sort} />
+                      </th>
+                    );
+                  })}
                   <th className="py-3 px-4 font-medium w-24 text-right">Actions</th>
                 </tr>
               </thead>
@@ -1037,51 +1144,7 @@ export default function Dashboard() {
                         <span>{item.title}</span>
                       </div>
                     </td>
-                    {tableColumns.year && (
-                      <td className="py-2.5 px-4 text-slate-300 text-sm">
-                        {item.year || <span className="text-slate-600">—</span>}
-                      </td>
-                    )}
-                    {tableColumns.rating && (
-                      <td className="py-2.5 px-4 text-slate-300 text-sm font-medium">
-                        {item.rating > 0 ? (
-                          <div className="flex items-center gap-1.5 w-fit bg-slate-950/50 px-2.5 py-0.5 rounded-lg border border-white/5 shadow-inner">
-                            <Star className="w-3.5 h-3.5 text-yellow-400 fill-yellow-400 drop-shadow-sm" />
-                            <span className="text-sm font-bold text-slate-600 dark:text-slate-200">{Number(item.rating).toFixed(1)}</span>
-                          </div>
-                        ) : <span className="text-slate-600">—</span>}
-                      </td>
-                    )}
-                    {tableColumns.resolution && (
-                      <td className="py-2.5 px-4 text-slate-300">
-                        {parseResolution(item.scene_name || item.sample_episode_path || item.file_path) !== 'Unknown' ? (
-                          <span className="px-2 py-0.5 rounded text-xs font-medium bg-slate-800 text-slate-300 border border-slate-700">
-                            {parseResolution(item.scene_name || item.sample_episode_path || item.file_path)}
-                          </span>
-                        ) : (
-                          <span className="text-slate-600">—</span>
-                        )}
-                      </td>
-                    )}
-                    {tableColumns.size && (
-                      <td className="py-2.5 px-4 text-slate-400 text-sm">
-                        {formatSize(item.file_size || item.folder_size || 0)}
-                      </td>
-                    )}
-                    {tableColumns.status && (
-                      <td className="py-2.5 px-4">
-                        <div className="flex items-center gap-2">
-                          <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${
-                            item.status === 'downloaded' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 
-                            item.status === 'downloading' ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30' : 
-                            item.status === 'monitored' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 
-                            'bg-rose-500/20 text-rose-400 border border-rose-500/30'
-                          }`}>
-                            {item.status}
-                          </span>
-                        </div>
-                      </td>
-                    )}
+                    {visibleOrderedColumns.map(colKey => renderColumnCell(colKey, item))}
                     <td className="py-2.5 px-4 text-right">
                       <div className="flex justify-end gap-2 items-center">
                           <>

@@ -94,4 +94,13 @@ app.use('/api/release-profiles', releaseProfilesRoutes);
 
 app.use(errorHandler);
 
+// Graceful shutdown
+const shutdown = (signal) => {
+  console.log(`[Backend] ${signal} received — shutting down...`);
+  server.close(() => { console.log('[Backend] Closed.'); process.exit(0); });
+  setTimeout(() => process.exit(1), 10000);
+};
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
+
 server.listen(PORT, () => console.log(`[Backend] Server op poort ${PORT}`));

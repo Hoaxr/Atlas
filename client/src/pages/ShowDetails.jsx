@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import api from '../lib/api';
-import { formatSize } from '../lib/format';
+import { formatSize, parseResolution } from '../lib/format';
 import { useSettings } from '../lib/useSettings';
 import { useTMDBDetails } from '../lib/useTMDBDetails';
 import { ArrowLeft, HardDrive, Tv, PlayCircle, ChevronDown, ChevronRight, Bookmark, BookmarkMinus, Search, Star, X, RefreshCw, Loader2, Download, Heart, CheckSquare, Trash2 } from 'lucide-react';
@@ -16,16 +16,6 @@ export default function ShowDetails() {
   
   const [show, setShow] = useState(null);
   const [detailsModalEpisode, setDetailsModalEpisode] = useState(null);
-
-  const parseResolution = (title) => {
-    if (!title) return 'Unknown';
-    const t = title.toLowerCase();
-    if (t.includes('2160p') || t.includes('4k')) return '2160p';
-    if (t.includes('1080p')) return '1080p';
-    if (t.includes('720p')) return '720p';
-    if (t.includes('480p') || t.includes('dvdrip') || t.includes('xvid') || t.includes('hdtv') || t.match(/\bsd\b/)) return 'SD';
-    return 'Unknown';
-  };
   const [episodes, setEpisodes] = useState([]);
   const [loading, setLoading] = useState(true);
   const { providerLangs, profiles } = useSettings();
@@ -531,7 +521,6 @@ export default function ShowDetails() {
                             <td className="px-6 py-4">
                               <p className="font-bold text-slate-700 dark:text-slate-200 group-hover:text-purple-400 transition-colors">{ep.title}</p>
                               {ep.overview && <p className="text-xs text-slate-500 line-clamp-1 mt-1 max-w-xl">{ep.overview}</p>}
-                              {ep.scene_name && <p className="text-[10px] font-mono text-cyan-600/80 dark:text-cyan-400/60 mt-1 line-clamp-1 max-w-xl" title={ep.scene_name}>Grabbed: {ep.scene_name}</p>}
                             </td>
                             <td className="px-6 py-4 text-center">
                               <button 
@@ -626,7 +615,8 @@ export default function ShowDetails() {
                                                   </button>
                                                 )}
                                                 <button
-                                                  onClick={() => {
+                                                  onClick={(e) => {
+                                                    e.stopPropagation(); e.preventDefault();
                                                     setOpenLangMenu(null);
                                                     setSubSearchModal({ open: true, code, label: langName[code] || code, episodeId: ep.id });
                                                     setSubSearchResults([]);
@@ -639,7 +629,8 @@ export default function ShowDetails() {
                                                 </button>
                                                 {hasExistingSub && (
                                                   <button
-                                                    onClick={async () => {
+                                                    onClick={async (e) => {
+                                                      e.stopPropagation(); e.preventDefault();
                                                       setOpenLangMenu(null);
                                                       customAlert(`Translating to ${langName[code]}...`, 'info');
                                                       try {

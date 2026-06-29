@@ -19,3 +19,16 @@ export function formatSpeed(bytesPerSec) {
   const i = Math.floor(Math.log(bytesPerSec) / Math.log(k));
   return parseFloat((bytesPerSec / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
 }
+
+/**
+ * Extract resolution from a release title or filename.
+ */
+export function parseResolution(title) {
+  if (!title) return 'Unknown';
+  const t = title.toLowerCase();
+  if (t.includes('2160p') || t.includes('4k')) return '2160p';
+  if (t.includes('1080p')) return '1080p';
+  if (t.includes('720p')) return '720p';
+  if (t.includes('480p') || t.includes('dvdrip') || t.includes('xvid') || t.includes('hdtv') || t.match(/\bsd\b/)) return 'SD';
+  return 'Unknown';
+}

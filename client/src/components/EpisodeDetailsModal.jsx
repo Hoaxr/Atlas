@@ -1,20 +1,9 @@
 import React from 'react';
 import { X, HardDrive, CheckCircle2, Zap, Search, Trash2 } from 'lucide-react';
-import { formatSize } from '../lib/format';
+import { formatSize, parseResolution } from '../lib/format';
 
 const EpisodeDetailsModal = ({ episode, show, onClose, onAutoSearch, onManualSearch, onDeleteFile }) => {
   if (!episode) return null;
-
-  const parseResolution = (title) => {
-    if (!title) return 'Unknown';
-    const t = title.toLowerCase();
-    if (t.includes('2160p') || t.includes('4k')) return '4K';
-    if (t.includes('1080p')) return '1080p';
-    if (t.includes('720p')) return '720p';
-    if (t.includes('480p') || t.includes('dvdrip') || t.includes('xvid') || t.includes('hdtv') || t.match(/\bsd\b/)) return 'SD';
-    if (t.includes('480p')) return '480p';
-    return 'Unknown';
-  };
 
   const resolution = parseResolution(episode.scene_name || episode.file_path);
 

@@ -233,6 +233,16 @@ const getRecentMovies = async () => {
   }
 };
 
+const getUpcomingMovies = async () => {
+  try {
+    const response = await tmdbApi.get('/movie/upcoming');
+    return response.data.results.map(r => ({ ...r, media_type: 'movie' }));
+  } catch (error) {
+    console.error('TMDB Upcoming Movies Error:', error.message);
+    return [];
+  }
+};
+
 const getRecentShows = async () => {
   try {
     const response = await tmdbApi.get('/tv/on_the_air');
@@ -298,6 +308,7 @@ module.exports = {
   getShowSeasons,
   getSeasonEpisodes,
   getRecentMovies,
+  getUpcomingMovies,
   getRecentShows,
   getRecommendationsForMovies,
   getRecommendationsForShows,

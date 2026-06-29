@@ -4,6 +4,7 @@ const db = require('../../config/database');
 const libraryService = require('../../services/libraryService');
 const indexerService = require('../../services/indexerService');
 const downloadClientService = require('../../services/downloadClientService');
+const { isWatchedSyncEnabled, getSubtitlesInDir, extractLang, translateSrt } = require('./helpers');
 
 router.post('/shows/:id/watched', (req, res, next) => {
   try {
@@ -224,6 +225,9 @@ router.post('/episodes/:id/translate-subs', async (req, res, next) => {
     const translatedText = await translateSrt(enSrtContent, targetLang);
     fs.writeFileSync(targetSubPath, translatedText);
 
+    const eventBus = require('../services/eventBus');
+    eventBus.success('Subtitle translated', { title: `${episode.title}`, type: 'episode', language: targetLang });
+
     res.json({ status: 'success', message: `Translated to ${targetLang}`, data: { file: `${parsedPath.name}.${langCode}.srt` } });
   } catch (err) {
     next(err);
@@ -234,7 +238,7 @@ router.post('/episodes/:id/download-subs', async (req, res, next) => {
   try {
     const fs = require('fs');
     const path = require('path');
-    const { downloadSubtitlesForEpisode } = require('../services/subtitleService');
+    const { downloadSubtitlesForEpisode } = require('../../services/subtitleService');
     const { langCode, url } = req.body;
 
     if (!langCode) return res.status(400).json({ status: 'error', message: 'langCode is required' });
@@ -271,7 +275,7 @@ router.post('/episodes/:id/download-subs', async (req, res, next) => {
 
 router.get('/episodes/:id/search-subs', async (req, res, next) => {
   try {
-    const { searchSubtitlesForEpisode } = require('../services/subtitleService');
+    const { searchSubtitlesForEpisode } = require('../../services/subtitleService');
     const { lang } = req.query;
     if (!lang) return res.status(400).json({ status: 'error', message: 'lang query param is required' });
 

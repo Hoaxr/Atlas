@@ -167,7 +167,7 @@ const addShow = async (tmdbId, rootFolderPath = null) => {
       const isDedicatedPath = libraryRoot.toLowerCase().includes('tv') || libraryRoot.toLowerCase().includes('show');
       const config = getNamingConfig();
       
-      const folderName = sanitizeTitle(`${showDetails.name} (${year})`, config);
+      const folderName = sanitizeTitle(showDetails.name, config);
 
       const destFolder = isDedicatedPath 
         ? path.join(libraryRoot, folderName) 
@@ -193,6 +193,7 @@ const getShows = () => {
     SELECT s.*, qp.name as quality_profile_name,
       (SELECT COUNT(*) FROM episodes WHERE show_id = s.id) as episode_count,
       (SELECT COUNT(*) FROM episodes WHERE show_id = s.id AND status = 'downloaded') as downloaded_episodes,
+      (SELECT COUNT(DISTINCT season_number) FROM episodes WHERE show_id = s.id) as season_count,
       (SELECT COALESCE(scene_name, file_path) FROM episodes WHERE show_id = s.id AND status = 'downloaded' AND (scene_name IS NOT NULL OR file_path IS NOT NULL) LIMIT 1) as sample_episode_path
     FROM shows s
     LEFT JOIN quality_profiles qp ON s.quality_profile_id = qp.id

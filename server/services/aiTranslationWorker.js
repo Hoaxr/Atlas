@@ -4,6 +4,7 @@ const cron = require('node-cron');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const db = require('../config/database');
 const taskRegistry = require('./taskRegistry');
+const eventBus = require('./eventBus');
 
 const translateWithGemini = async (text, targetLang, apiKey) => {
   const genAI = new GoogleGenerativeAI(apiKey);
@@ -109,38 +110,91 @@ const translateSubtitles = async () => {
 
   const langCode = { 'Dutch': 'nl', 'French': 'fr', 'German': 'de', 'Spanish': 'es', 'Italian': 'it', 'Portuguese': 'pt' }[targetLang] || 'nl';
 
-  const movies = db.prepare("SELECT * FROM movies WHERE status = 'downloaded' AND file_path IS NOT NULL").all();
+  const translateFile = async (filePath, displayName, seasonNum, episodeNum) => {
+    if (!fs.existsSync(filePath)) return null;
 
+    const parsedPath = path.parse(filePath);
+    const dir = parsedPath.dir;
+    const enSubPath = path.join(dir, `${parsedPath.name}.en.srt`);
+
+    // Find English subtitle — try exact name match first, then SxxExx pattern for episodes
+    let enSub = null;
+    if (fs.existsSync(enSubPath)) {
+      enSub = enSubPath;
+    } else if (seasonNum !== undefined && episodeNum !== undefined) {
+      try {
+        const files = fs.readdirSync(dir);
+        const matchStr1 = `s${String(seasonNum).padStart(2, '0')}e${String(episodeNum).padStart(2, '0')}`;
+        const matchStr2 = `${seasonNum}x${String(episodeNum).padStart(2, '0')}`;
+        const found = files.find(f => {
+          const fLower = f.toLowerCase();
+          return fLower.endsWith('.en.srt') && (fLower.includes(matchStr1) || fLower.includes(matchStr2));
+        });
+        if (found) enSub = path.join(dir, found);
+      } catch {}
+    }
+
+    if (!enSub) return null;
+
+    // Determine target path from the found English subtitle name
+    const enParsed = path.parse(enSub);
+    const targetSub = path.join(dir, `${enParsed.name.replace(/\.en$/, '')}.${langCode}.srt`);
+    if (fs.existsSync(targetSub)) return null;
+
+    console.log(`[AITranslator] Translating subtitles for ${displayName} into ${targetLang} (via ${activeProvider})...`);
+    
+    const enSrtContent = fs.readFileSync(enSub, 'utf8');
+    
+    let translatedText;
+    if (activeProvider === 'gemini') {
+      translatedText = await translateWithGemini(enSrtContent, targetLang, geminiApiKeyRow.value);
+    } else if (activeProvider === 'deepseek') {
+      translatedText = await translateWithDeepSeek(enSrtContent, targetLang, deepseekApiKeyRow.value);
+    } else if (activeProvider === 'claude') {
+      translatedText = await translateWithClaude(enSrtContent, targetLang, claudeApiKeyRow.value);
+    } else {
+      translatedText = await translateWithGoogleTranslate(enSrtContent, targetLang);
+    }
+
+    fs.writeFileSync(targetSub, translatedText);
+    console.log(`[AITranslator] Successfully translated and saved ${targetSub}`);
+    return displayName;
+  };
+
+  // Process movies
+  const movies = db.prepare("SELECT * FROM movies WHERE status = 'downloaded' AND file_path IS NOT NULL").all();
+  let translatedCount = 0;
   for (const movie of movies) {
     try {
-      if (!fs.existsSync(movie.file_path)) continue;
-
-      const parsedPath = path.parse(movie.file_path);
-      const enSubPath = path.join(parsedPath.dir, `${parsedPath.name}.en.srt`);
-      const targetSubPath = path.join(parsedPath.dir, `${parsedPath.name}.${langCode}.srt`);
-
-      if (fs.existsSync(enSubPath) && !fs.existsSync(targetSubPath)) {
-        console.log(`[AITranslator] Translating subtitles for ${movie.title} into ${targetLang} (via ${activeProvider})...`);
-        
-        const enSrtContent = fs.readFileSync(enSubPath, 'utf8');
-        
-        let translatedText;
-        if (activeProvider === 'gemini') {
-          translatedText = await translateWithGemini(enSrtContent, targetLang, geminiApiKeyRow.value);
-        } else if (activeProvider === 'deepseek') {
-          translatedText = await translateWithDeepSeek(enSrtContent, targetLang, deepseekApiKeyRow.value);
-        } else if (activeProvider === 'claude') {
-          translatedText = await translateWithClaude(enSrtContent, targetLang, claudeApiKeyRow.value);
-        } else {
-          translatedText = await translateWithGoogleTranslate(enSrtContent, targetLang);
-        }
-
-        fs.writeFileSync(targetSubPath, translatedText);
-        console.log(`[AITranslator] Successfully translated and saved ${targetSubPath}`);
+      const result = await translateFile(movie.file_path, movie.title);
+      if (result) {
+        eventBus.success('Subtitle translated', { title: movie.title, type: 'movie', language: targetLang });
+        translatedCount++;
       }
     } catch (err) {
       console.error(`[AITranslator] Failed to translate ${movie.title}:`, err.message);
+      eventBus.error(`Subtitle translation failed: ${movie.title}`, { title: movie.title, type: 'movie', error: err.message });
     }
+  }
+
+  // Process TV show episodes
+  const episodes = db.prepare("SELECT e.*, s.title as show_title FROM episodes e JOIN shows s ON e.show_id = s.id WHERE e.status = 'downloaded' AND e.file_path IS NOT NULL").all();
+  for (const ep of episodes) {
+    try {
+      const label = `${ep.show_title} S${String(ep.season_number).padStart(2, '0')}E${String(ep.episode_number).padStart(2, '0')}`;
+      const result = await translateFile(ep.file_path, label, ep.season_number, ep.episode_number);
+      if (result) {
+        eventBus.success('Subtitle translated', { title: label, type: 'episode', language: targetLang });
+        translatedCount++;
+      }
+    } catch (err) {
+      console.error(`[AITranslator] Failed to translate ${ep.show_title} S${ep.season_number}E${ep.episode_number}:`, err.message);
+      eventBus.error(`Subtitle translation failed: ${ep.show_title} S${ep.season_number}E${ep.episode_number}`, { title: `${ep.show_title} S${ep.season_number}E${ep.episode_number}`, type: 'episode', error: err.message });
+    }
+  }
+
+  if (translatedCount > 0) {
+    console.log(`[AITranslator] Translated ${translatedCount} subtitle(s) into ${targetLang}`);
   }
 };
 
@@ -150,7 +204,7 @@ const init = () => {
   taskRegistry.registerTask(
     'ai_translator', 
     'AI Subtitle Translator', 
-    'Translates downloaded English subtitles into the target language using Gemini.',
+    'Translates downloaded English subtitles into the target language.',
     cronExp,
     translateSubtitles
   );

@@ -5,6 +5,41 @@ const isWatchedSyncEnabled = () => {
   return row && row.value === 'true';
 };
 
+const SUBTITLE_EXTS = ['.srt', '.sub', '.vtt', '.ass', '.ssa', '.smi', '.idx'];
+
+const getSubtitlesInDir = async (dir, fsp, pathLib) => {
+  try {
+    const items = await fsp.readdir(dir);
+    return items.filter(item => {
+      const ext = pathLib.extname(item).toLowerCase();
+      return SUBTITLE_EXTS.includes(ext);
+    });
+  } catch {
+    return [];
+  }
+};
+
+const extractLang = (filename, pathLib) => {
+  const name = pathLib.basename(filename, pathLib.extname(filename));
+  // Match pattern: .en, _en at end, or .eng, _eng, .english
+  const match = name.match(/[._]([a-z]{2,3})(?:[._]|$)/i);
+  if (match) {
+    const code = match[1].toLowerCase();
+    // Map 3-letter and full codes to 2-letter
+    const langMap = {
+      eng: 'en', english: 'en',
+      nld: 'nl', dutch: 'nl',
+      fra: 'fr', fre: 'fr', french: 'fr',
+      deu: 'de', ger: 'de', german: 'de',
+      spa: 'es', spanish: 'es',
+      ita: 'it', italian: 'it',
+      por: 'pt', portuguese: 'pt',
+    };
+    return langMap[code] || code;
+  }
+  return 'unknown';
+};
+
 const translateSrt = async (enSrtContent, targetLang) => {
   const provider = db.prepare("SELECT value FROM settings WHERE key = 'translationProvider'").get();
   const activeProvider = (provider && provider.value) || 'googleTranslate';
@@ -27,4 +62,4 @@ const translateSrt = async (enSrtContent, targetLang) => {
   }
 };
 
-module.exports = { isWatchedSyncEnabled, translateSrt };
+module.exports = { isWatchedSyncEnabled, translateSrt, getSubtitlesInDir, extractLang };

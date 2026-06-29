@@ -9,9 +9,10 @@ const eventBus = require('./eventBus');
 
 const DEFAULT_SCHEDULES = {
   search_cycle:       '0 * * * *',
-  update_ratings:     '0 0 * * *',
-  update_air_dates:   '0 1 * * *',
+  refresh_ratings:    '0 3 * * 0',  // Weekly on Sunday at 3 AM
+  update_air_dates:   '0 2 * * 0',  // Weekly on Sunday at 2 AM
   trakt_watched_sync: '0 */6 * * *',
+  stale_cleanup:      '0 */6 * * *', // Every 6 hours
 };
 
 const getSchedule = (taskId) => {
@@ -71,7 +72,8 @@ const runSearchCycle = async () => {
     SELECT e.*, s.title as show_title, s.quality_profile_id 
     FROM episodes e 
     JOIN shows s ON e.show_id = s.id 
-    WHERE e.status = 'monitored' OR e.status = 'downloaded'
+    WHERE (e.status = 'monitored' OR e.status = 'downloaded')
+      AND e.monitored = 1
   `).all();
 
   for (const ep of monitoredEpisodes) {
@@ -110,32 +112,37 @@ const runSearchCycle = async () => {
   }
 };
 
-const runUpdateRatings = async () => {
-  console.log('[Automation] Updating movie ratings...');
-  const movies = db.prepare('SELECT id, tmdb_id FROM movies WHERE rating IS NULL OR rating = 0').all();
+const runRefreshAllRatings = async () => {
+  console.log('[Automation] Refreshing all movie ratings...');
+  const movies = db.prepare('SELECT id, tmdb_id FROM movies').all();
+  let updated = 0;
   for (const movie of movies) {
     try {
       const tmdbData = await tmdbService.getMovieById(movie.tmdb_id);
-      if (tmdbData && tmdbData.vote_average) {
-        db.prepare('UPDATE movies SET rating = ? WHERE id = ?').run(tmdbData.vote_average, movie.id);
+      if (tmdbData && tmdbData.vote_average !== undefined) {
+        db.prepare('UPDATE movies SET rating = ? WHERE id = ? AND rating != ?').run(tmdbData.vote_average, movie.id, tmdbData.vote_average);
+        updated++;
       }
     } catch (err) {
-      console.error(`[Automation] Failed to update movie ${movie.tmdb_id}: ${err.message}`);
+      console.error(`[Automation] Failed to refresh movie ${movie.tmdb_id}: ${err.message}`);
     }
   }
 
-  console.log('[Automation] Updating show ratings...');
-  const shows = db.prepare('SELECT id, tmdb_id FROM shows WHERE rating IS NULL OR rating = 0').all();
+  console.log('[Automation] Refreshing all show ratings...');
+  const shows = db.prepare('SELECT id, tmdb_id FROM shows').all();
   for (const show of shows) {
     try {
       const tmdbData = await tmdbService.getShowById(show.tmdb_id);
-      if (tmdbData && tmdbData.vote_average) {
-        db.prepare('UPDATE shows SET rating = ? WHERE id = ?').run(tmdbData.vote_average, show.id);
+      if (tmdbData && tmdbData.vote_average !== undefined) {
+        db.prepare('UPDATE shows SET rating = ? WHERE id = ? AND rating != ?').run(tmdbData.vote_average, show.id, tmdbData.vote_average);
+        updated++;
       }
     } catch (err) {
-      console.error(`[Automation] Failed to update show ${show.tmdb_id}: ${err.message}`);
+      console.error(`[Automation] Failed to refresh show ${show.tmdb_id}: ${err.message}`);
     }
   }
+
+  if (updated > 0) console.log(`[Automation] Refreshed ${updated} rating(s)`);
 };
 
 const runUpdateAirDates = async () => {
@@ -168,6 +175,45 @@ const runTraktWatchedSync = async () => {
   await traktService.syncWatched();
 };
 
+const runStaleCleanup = async () => {
+  console.log('[Automation] Checking for stale downloads...');
+  const stale = db.prepare(`
+    SELECT id, title, 'movie' as type FROM movies WHERE status = 'downloading'
+    UNION ALL
+    SELECT e.id, s.title, 'episode' as type 
+    FROM episodes e JOIN shows s ON e.show_id = s.id 
+    WHERE e.status = 'downloading'
+  `).all();
+
+  const torrents = await downloadClientService.getTorrents();
+  const torrentNames = new Set(torrents.map(t => t.name?.toLowerCase()));
+
+  let reset = 0;
+  for (const item of stale) {
+    try {
+      const isActive = [...torrentNames].some(name => {
+        const normalized = item.title.toLowerCase().replace(/[^a-z0-9]/g, '');
+        const torrentNorm = name.replace(/[^a-z0-9]/g, '');
+        return torrentNorm.includes(normalized) || normalized.includes(torrentNorm);
+      });
+
+      if (!isActive) {
+        const table = item.type === 'movie' ? 'movies' : 'episodes';
+        db.prepare(`UPDATE ${table} SET status = 'monitored', scene_name = NULL WHERE id = ?`).run(item.id);
+        reset++;
+        console.log(`[Automation] Reset stale download: ${item.title}`);
+      }
+    } catch (err) {
+      console.error(`[Automation] Stale cleanup error for ${item.title}:`, err.message);
+    }
+  }
+
+  if (reset > 0) {
+    console.log(`[Automation] Reset ${reset} stale download(s) back to monitored`);
+    eventBus.info(`Reset ${reset} stale download(s)`, { type: 'cleanup' });
+  }
+};
+
 // Holds references to active node-cron jobs so we can stop/restart them
 const activeJobs = {};
 
@@ -181,9 +227,10 @@ const scheduleTask = (taskId, cronExp) => {
 const init = () => {
   const tasks = [
     { id: 'search_cycle',       name: 'Torrent Search Cycle',      desc: 'Searches for missing monitored movies and sends them to the download client.',             fn: runSearchCycle },
-    { id: 'update_ratings',     name: 'Update Ratings',            desc: 'Fetches missing ratings from TMDB for movies and shows.',                                  fn: runUpdateRatings },
+    { id: 'stale_cleanup',      name: 'Stale Download Cleanup',    desc: 'Resets items stuck in downloading back to monitored if torrent was removed.',               fn: runStaleCleanup },
+    { id: 'refresh_ratings',    name: 'Refresh All Ratings',       desc: 'Refreshes all ratings from TMDB to pick up rating changes (weekly).',                      fn: runRefreshAllRatings },
     { id: 'trakt_watched_sync', name: 'Trakt Watched Sync',        desc: 'Syncs watched status from your Trakt account to your local library.',                     fn: runTraktWatchedSync },
-    { id: 'update_air_dates',   name: 'Update Air Dates',          desc: 'Fetches missing and upcoming episode air dates from TMDB.',                               fn: runUpdateAirDates },
+    { id: 'update_air_dates',   name: 'Update Air Dates',          desc: 'Fetches missing and upcoming episode air dates from TMDB (weekly).',                      fn: runUpdateAirDates },
   ];
 
   for (const task of tasks) {
@@ -192,7 +239,7 @@ const init = () => {
     scheduleTask(task.id, cronExp);
   }
 
-  console.log('[Automation] Background search, rating, air date, and Trakt sync schedulers initialized.');
+  console.log('[Automation] Background search, rating, air date, Trakt sync, and ratings refresh schedulers initialized.');
 };
 
 // Called by settings API to hot-reload schedules without restart
@@ -208,5 +255,6 @@ const rescheduleAll = (newSchedules) => {
 module.exports = {
   init,
   runSearchCycle,
+  runStaleCleanup,
   rescheduleAll,
 };

@@ -113,7 +113,6 @@ router.get('/calendar', async (req, res, next) => {
       FROM episodes e
       JOIN shows s ON e.show_id = s.id
       WHERE e.air_date IS NOT NULL 
-        AND e.air_date >= date('now', 'localtime')
         AND s.status != 'unmonitored'
       ORDER BY e.air_date ASC
     `).all();

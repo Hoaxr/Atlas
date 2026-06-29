@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import api from '../lib/api';
-import { formatSize } from '../lib/format';
+import { formatSize, parseResolution } from '../lib/format';
 import { useSettings } from '../lib/useSettings';
 import { useTMDBDetails } from '../lib/useTMDBDetails';
 import { ArrowLeft, Search, Download, HardDrive, Film, PlayCircle, Bookmark, BookmarkMinus, Star, X, RefreshCw, Loader2, Heart, Trash2, ChevronDown, ChevronRight, Folder } from 'lucide-react';
@@ -14,16 +14,6 @@ export default function MovieDetails() {
   const navigate = useNavigate();
   
   const [movie, setMovie] = useState(null);
-
-  const parseResolution = (title) => {
-    if (!title) return 'Unknown';
-    const t = title.toLowerCase();
-    if (t.includes('2160p') || t.includes('4k')) return '2160p';
-    if (t.includes('1080p')) return '1080p';
-    if (t.includes('720p')) return '720p';
-    if (t.includes('480p') || t.includes('dvdrip') || t.includes('xvid') || t.includes('hdtv') || t.match(/\bsd\b/)) return 'SD';
-    return 'Unknown';
-  };
   const [loading, setLoading] = useState(true);
   const [isTrailerOpen, setIsTrailerOpen] = useState(false);
   const { providerLangs, profiles } = useSettings();

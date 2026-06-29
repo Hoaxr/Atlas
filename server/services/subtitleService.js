@@ -178,17 +178,106 @@ const downloadSubtitlesForMovies = async () => {
 
 const init = () => {
   const cronExp = '0 */6 * * *'; // Every 6 hours
+
+  const runAll = async () => {
+    await downloadSubtitlesForMovies();
+    await downloadSubtitlesForEpisodes();
+  };
   
   taskRegistry.registerTask(
     'subtitle_downloader', 
     'Subtitle Downloader', 
-    'Searches and downloads English subtitles for all downloaded movies.',
+    'Searches and downloads subtitles for all downloaded movies and TV episodes.',
     cronExp,
-    downloadSubtitlesForMovies
+    runAll
   );
 
   cron.schedule(cronExp, () => taskRegistry.executeTask('subtitle_downloader'));
   console.log('[SubtitleService] Scheduler initialized.');
+};
+
+const downloadSubtitlesForEpisodes = async () => {
+  const osApiKeyRow = db.prepare("SELECT value FROM settings WHERE key = 'osApiKey'").get();
+  const subdlApiKeyRow = db.prepare("SELECT value FROM settings WHERE key = 'subdlApiKey'").get();
+  const subsourceApiKeyRow = db.prepare("SELECT value FROM settings WHERE key = 'subsourceApiKey'").get();
+  
+  let providerLangs = ['en'];
+  try {
+    const row = db.prepare("SELECT value FROM settings WHERE key = 'providerLangs'").get();
+    if (row) {
+      const parsed = JSON.parse(row.value);
+      providerLangs = Array.isArray(parsed) ? parsed : ['en'];
+    }
+  } catch {}
+
+  const episodes = db.prepare(`
+    SELECT e.*, s.title as show_title, s.tmdb_id, s.year
+    FROM episodes e
+    JOIN shows s ON e.show_id = s.id
+    WHERE e.status = 'downloaded' AND e.file_path IS NOT NULL
+  `).all();
+
+  for (const ep of episodes) {
+    try {
+      if (!fs.existsSync(ep.file_path)) continue;
+
+      const parsedPath = path.parse(ep.file_path);
+      const label = `${ep.show_title} S${String(ep.season_number).padStart(2, '0')}E${String(ep.episode_number).padStart(2, '0')}`;
+      console.log(`[SubtitleService] Checking subtitles for: ${label}`);
+
+      for (const langCode of providerLangs) {
+        const subPath = path.join(parsedPath.dir, `${parsedPath.name}.${langCode}.srt`);
+        if (fs.existsSync(subPath)) continue;
+
+        console.log(`[SubtitleService] Searching ${langCode} subtitle for: ${label}`);
+        let srtContent = null;
+
+        if (!srtContent && osApiKeyRow?.value) {
+          try {
+            const searchRes = await axios.get('https://api.opensubtitles.com/api/v1/subtitles', {
+              headers: { 'Api-Key': osApiKeyRow.value, 'Content-Type': 'application/json' },
+              params: { tmdb_id: ep.tmdb_id, season_number: ep.season_number, episode_number: ep.episode_number, languages: langCode }
+            });
+            const data = searchRes.data.data;
+            if (data && data.length > 0) {
+              const fileId = data[0].attributes.files[0].file_id;
+              const downloadRes = await axios.post('https://api.opensubtitles.com/api/v1/download',
+                { file_id: fileId },
+                { headers: { 'Api-Key': osApiKeyRow.value, 'Content-Type': 'application/json', 'Accept': 'application/json' } }
+              );
+              const srtRes = await axios.get(downloadRes.data.link, { responseType: 'text' });
+              srtContent = srtRes.data;
+              if (srtContent) console.log(`[SubtitleService] Got ${langCode} from OpenSubtitles for ${label}`);
+            }
+          } catch (e) { console.log(`[SubtitleService] OpenSubtitles episode ${langCode} failed: ${e.message}`); }
+        }
+
+        if (!srtContent && subdlApiKeyRow?.value) {
+          try {
+            const episodeMovie = { ...ep, tmdb_id: ep.tmdb_id, title: label, year: ep.year };
+            srtContent = await trySubdl(subdlApiKeyRow.value, episodeMovie, ep.year, langCode);
+            if (srtContent) console.log(`[SubtitleService] Got ${langCode} from SubDL for ${label}`);
+          } catch (e) { console.log(`[SubtitleService] SubDL episode ${langCode} failed: ${e.message}`); }
+        }
+
+        if (!srtContent && subsourceApiKeyRow?.value) {
+          try {
+            const episodeMovie = { ...ep, title: ep.show_title };
+            srtContent = await trySubsource(subsourceApiKeyRow.value, episodeMovie, langCode);
+            if (srtContent) console.log(`[SubtitleService] Got ${langCode} from SubSource for ${label}`);
+          } catch (e) { console.log(`[SubtitleService] SubSource episode ${langCode} failed: ${e.message}`); }
+        }
+
+        if (srtContent) {
+          fs.writeFileSync(subPath, srtContent);
+          console.log(`[SubtitleService] Saved ${langCode} subtitle to ${subPath}`);
+          eventBus.success('Subtitle downloaded', { title: label, language: langCode });
+        }
+      }
+    } catch (err) {
+      console.error(`[SubtitleService] Failed for episode ${ep.show_title} S${ep.season_number}E${ep.episode_number}:`, err.message);
+    }
+  }
 };
 
 const downloadSubtitlesForMovie = async (movie, langCode) => {

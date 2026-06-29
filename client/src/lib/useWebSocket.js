@@ -33,9 +33,11 @@ export default function useWebSocket() {
           try {
             const data = JSON.parse(event.data);
             
-            // Show toast for background events
+            // Show toast for background events (throttled: only errors, warnings, and significant successes)
             if (data.level === 'success') {
-              toast.success(data.message, {
+              const msg = (data.message || '').toLowerCase();
+              if (msg.includes('download') || msg.includes('translat') || msg.includes('scan') || msg.includes('subtitle')) {
+                toast.success(data.message, {
                 duration: 4000,
                 style: {
                   background: '#1e293b',
@@ -46,6 +48,7 @@ export default function useWebSocket() {
                 },
                 iconTheme: { primary: '#10b981', secondary: '#1e293b' },
               });
+              }
             } else if (data.level === 'error') {
               toast.error(data.message, {
                 duration: 5000,
@@ -71,17 +74,7 @@ export default function useWebSocket() {
                 },
               });
             } else if (data.level === 'info') {
-              toast(data.message, {
-                duration: 3000,
-                icon: 'ℹ️',
-                style: {
-                  background: '#1e293b',
-                  color: '#fff',
-                  border: '1px solid rgba(6, 182, 212, 0.3)',
-                  borderRadius: '16px',
-                  padding: '12px 16px',
-                },
-              });
+              // Skip info toasts to reduce spam — info events still go to handlers
             }
 
             // Forward to all registered handlers

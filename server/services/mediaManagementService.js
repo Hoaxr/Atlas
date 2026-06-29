@@ -255,9 +255,18 @@ const importMovie = async (torrent, movie) => {
     }
 
     let contentPath = torrent.content_path || path.join(torrent.save_path, torrent.name);
-    if (contentPath.startsWith('/downloads')) {
-      contentPath = contentPath.replace('/downloads', '/mnt/oblivion/downloads');
+    
+    // Apply download path mapping from settings (e.g. ["/downloads", "/mnt/oblivion/downloads"])
+    const pathMapping = db.prepare("SELECT value FROM settings WHERE key = 'downloadPathMapping'").get();
+    if (pathMapping?.value) {
+      try {
+        const [from, to] = JSON.parse(pathMapping.value);
+        if (contentPath.startsWith(from)) {
+          contentPath = contentPath.replace(from, to);
+        }
+      } catch {}
     }
+    
     const videoFile = await findLargestVideoFile(contentPath);
     
     if (!videoFile) {
@@ -390,9 +399,18 @@ const importEpisode = async (torrent, episode) => {
     }
 
     let contentPath = torrent.content_path || path.join(torrent.save_path, torrent.name);
-    if (contentPath.startsWith('/downloads')) {
-      contentPath = contentPath.replace('/downloads', '/mnt/oblivion/downloads');
+    
+    // Apply download path mapping from settings
+    const pathMapping = db.prepare("SELECT value FROM settings WHERE key = 'downloadPathMapping'").get();
+    if (pathMapping?.value) {
+      try {
+        const [from, to] = JSON.parse(pathMapping.value);
+        if (contentPath.startsWith(from)) {
+          contentPath = contentPath.replace(from, to);
+        }
+      } catch {}
     }
+    
     const videoFile = await findLargestVideoFile(contentPath);
     
     if (!videoFile) {

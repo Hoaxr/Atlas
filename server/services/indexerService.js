@@ -156,7 +156,7 @@ const filterAndSortResults = (results, profile, type, currentQuality = null, isM
     if (idxA === -1 && idxB === -1) return b.seeders - a.seeders;
     if (idxA === -1) return 1;
     if (idxB === -1) return -1;
-    if (idxA !== idxB) return idxA - idxB;
+    if (idxA !== idxB) return idxB - idxA;
     return b.seeders - a.seeders;
   });
 

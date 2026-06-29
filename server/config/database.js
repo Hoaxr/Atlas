@@ -3,6 +3,8 @@ const path = require('path');
 
 const db = new DatabaseSync(path.join(__dirname, '../data/database.sqlite'));
 
+db.exec('PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;');
+
 db.exec(`
   CREATE TABLE IF NOT EXISTS logs (
     id INTEGER PRIMARY KEY AUTOINCREMENT, 

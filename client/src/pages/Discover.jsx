@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../lib/api';
-import { Search as SearchIcon, Plus, Info, Tv, Film, Star, CheckCircle2, ChevronRight, ChevronLeft } from 'lucide-react';
+import { Search as SearchIcon, Plus, Info, Tv, Film, Star, CheckCircle2, ChevronRight, ChevronLeft, CheckSquare, Square, ListFilter } from 'lucide-react';
 import MediaDetailsModal from '../components/MediaDetailsModal';
 import { customAlert } from '../utils/alerts';
 
@@ -62,7 +62,24 @@ export default function Discover() {
   const [trendingResults, setTrendingResults] = useState([]);
   const [recentResults, setRecentResults] = useState([]);
   const [recommendedResults, setRecommendedResults] = useState([]);
+  const [upcomingResults, setUpcomingResults] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [rowsMenuOpen, setRowsMenuOpen] = useState(false);
+  const rowsMenuRef = useRef(null);
+  
+  const ROW_KEYS = ['trending', 'recent', 'upcoming', 'recommended'];
+  const ROW_LABELS = { trending: 'Trending', recent: 'Recently Added', upcoming: 'In Cinemas', recommended: 'Recommended' };
+  const [visibleRows, setVisibleRows] = useState(() => {
+    try {
+      const stored = localStorage.getItem('discoverVisibleRows');
+      if (stored) return JSON.parse(stored);
+    } catch {}
+    return { trending: true, recent: true, upcoming: true, recommended: true };
+  });
+
+  useEffect(() => {
+    localStorage.setItem('discoverVisibleRows', JSON.stringify(visibleRows));
+  }, [visibleRows]);
   const [error, setError] = useState('');
   const [mode, setMode] = useState('movies'); // 'movies' or 'shows'
   const [libraryItems, setLibraryItems] = useState(new Map()); // tmdb_id → library DB id
@@ -83,6 +100,18 @@ export default function Discover() {
     }
   }, [mode]);
 
+  // Close rows menu on outside click
+  useEffect(() => {
+    if (!rowsMenuOpen) return;
+    const handler = (e) => {
+      if (rowsMenuRef.current && !rowsMenuRef.current.contains(e.target)) {
+        setRowsMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [rowsMenuOpen]);
+
   useEffect(() => {
     let interval;
     if (!query) {
@@ -92,6 +121,7 @@ export default function Discover() {
         // Cached data available — show immediately, no loading
         setTrendingResults(cacheRef.current[mode].trending);
         setRecommendedResults(cacheRef.current[mode].recommended);
+        setUpcomingResults(cacheRef.current[mode].upcoming || []);
         setRecentResults(cacheRef.current[mode].recent);
         setLibraryItems(cacheRef.current[mode].libraryIds);
         setLoading(false);
@@ -155,9 +185,10 @@ export default function Discover() {
       const trendingEnd = mode === 'movies' ? '/trakt/trending/movies' : '/trakt/trending/shows';
       const recEnd = mode === 'movies' ? '/tmdb/recommended/movies' : '/tmdb/recommended/shows';
       
-      const [trendRes, recRes] = await Promise.all([
+      const [trendRes, recRes, upRes] = await Promise.all([
         api.get(trendingEnd),
-        api.get(recEnd)
+        api.get(recEnd),
+        mode === 'movies' ? api.get('/tmdb/movies/upcoming') : Promise.resolve({ data: { status: 'success', data: [] } }),
       ]);
       
       if (trendRes.data?.status === 'success') {
@@ -166,11 +197,15 @@ export default function Discover() {
       if (recRes.data?.status === 'success') {
         setRecommendedResults(recRes.data.data);
       }
+      if (upRes.data?.status === 'success') {
+        setUpcomingResults(upRes.data.data);
+      }
       
       // Update cache for current mode
       cacheRef.current[mode] = {
         trending: trendRes.data?.status === 'success' ? trendRes.data.data : (cacheRef.current[mode]?.trending || []),
         recommended: recRes.data?.status === 'success' ? recRes.data.data : (cacheRef.current[mode]?.recommended || []),
+        upcoming: upRes.data?.status === 'success' ? upRes.data.data : (cacheRef.current[mode]?.upcoming || []),
         recent: cacheRef.current[mode]?.recent || [],
         libraryIds: cacheRef.current[mode]?.libraryIds || new Map(),
       };
@@ -319,19 +354,51 @@ export default function Discover() {
         </div>
         
         {/* Mode Toggle */}
-        <div className="flex bg-slate-900/50 p-1 rounded-xl border border-white/5 shadow-inner">
-          <button 
-            onClick={() => setMode('movies')}
-            className={`flex items-center space-x-2 px-4 py-2 rounded-lg font-medium transition-all ${mode === 'movies' ? 'bg-cyan-500/20 text-cyan-400 shadow-sm' : 'text-slate-400 hover:text-slate-200'}`}
-          >
-            <Film className="w-4 h-4" /> <span>Movies</span>
-          </button>
-          <button 
-            onClick={() => setMode('shows')}
-            className={`flex items-center space-x-2 px-4 py-2 rounded-lg font-medium transition-all ${mode === 'shows' ? 'bg-purple-500/20 text-purple-400 shadow-sm' : 'text-slate-400 hover:text-slate-200'}`}
-          >
-            <Tv className="w-4 h-4" /> <span>TV Shows</span>
-          </button>
+        <div className="flex items-center gap-2">
+          <div className="flex bg-slate-900/50 p-1 rounded-xl border border-white/5 shadow-inner">
+            <button 
+              onClick={() => setMode('movies')}
+              className={`flex items-center space-x-2 px-4 py-2 rounded-lg font-medium transition-all ${mode === 'movies' ? 'bg-cyan-500/20 text-cyan-400 shadow-sm' : 'text-slate-400 hover:text-slate-200'}`}
+            >
+              <Film className="w-4 h-4" /> <span>Movies</span>
+            </button>
+            <button 
+              onClick={() => setMode('shows')}
+              className={`flex items-center space-x-2 px-4 py-2 rounded-lg font-medium transition-all ${mode === 'shows' ? 'bg-purple-500/20 text-purple-400 shadow-sm' : 'text-slate-400 hover:text-slate-200'}`}
+            >
+              <Tv className="w-4 h-4" /> <span>TV Shows</span>
+            </button>
+          </div>
+          
+          {/* Row visibility options */}
+          {isDiscovering && !loading && (
+            <div ref={rowsMenuRef} className="relative">
+              <button
+                onClick={() => setRowsMenuOpen(!rowsMenuOpen)}
+                className={`p-2 rounded-xl transition-colors ${rowsMenuOpen ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
+                title="Toggle rows"
+              >
+                <ListFilter className="w-5 h-5" />
+              </button>
+              {rowsMenuOpen && (
+                <div className="absolute right-0 top-full mt-3 w-52 bg-slate-800 border border-white/10 rounded-xl shadow-xl z-[60] overflow-hidden text-sm">
+                  <div className="p-2 border-b border-white/5 font-semibold text-slate-300">Visible Rows</div>
+                  <div className="p-2 flex flex-col gap-1">
+                    {ROW_KEYS.filter(k => k !== 'upcoming' || mode === 'movies').map(key => (
+                      <label key={key} className="flex items-center gap-2 px-2 py-1.5 hover:bg-white/5 rounded cursor-pointer" onClick={(e) => { e.preventDefault(); setVisibleRows(prev => ({ ...prev, [key]: !prev[key] })); }}>
+                        {visibleRows[key] ? (
+                          <CheckSquare className="w-4 h-4 text-cyan-400 flex-shrink-0" />
+                        ) : (
+                          <Square className="w-4 h-4 text-slate-500 flex-shrink-0" />
+                        )}
+                        <span className="text-slate-300 select-none">{ROW_LABELS[key]}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
@@ -367,8 +434,9 @@ export default function Discover() {
           ) : (
             <>
               <MediaRow title="Trending Right Now" items={trendingResults} badgeText="Powered by Trakt.tv" isTrending={true} renderMediaCard={renderMediaCard} />
-              <MediaRow title="Recently Added" items={recentResults} badgeText="From your library" renderMediaCard={renderMediaCard} />
-              <MediaRow title="Recommended For You" items={recommendedResults} badgeText="Powered by TMDB" renderMediaCard={renderMediaCard} />
+              {visibleRows.recent && <MediaRow title="Recently Added" items={recentResults} badgeText="From your library" renderMediaCard={renderMediaCard} />}
+              {visibleRows.upcoming && <MediaRow title="In Cinemas & Upcoming" items={upcomingResults} badgeText="Powered by TMDB" renderMediaCard={renderMediaCard} />}
+              {visibleRows.recommended && <MediaRow title="Recommended For You" items={recommendedResults} badgeText="Powered by TMDB" renderMediaCard={renderMediaCard} />}
             </>
           )}
         </div>
