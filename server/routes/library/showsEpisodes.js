@@ -71,7 +71,7 @@ router.post('/shows/:id/refresh', async (req, res, next) => {
                 if (match) {
                   const s = parseInt(match[1], 10);
                   const e = parseInt(match[2], 10);
-                  const { getResolution } = require('../utils/videoUtils');
+                  const { getResolution } = require('../../utils/videoUtils');
                   let resName = item.name;
                   const t = resName.toLowerCase();
                   const hasRes = t.includes('2160p') || t.includes('4k') || t.includes('1080p') || t.includes('720p') || t.includes('480p') || t.includes('sd');
@@ -119,7 +119,7 @@ router.post('/shows/:id/refresh', async (req, res, next) => {
     }
 
     try {
-      const tmdbService = require('../services/tmdbService');
+      const tmdbService = require('../../services/tmdbService');
       const data = await tmdbService.getShowById(show.tmdb_id);
       if (data) {
         db.prepare('UPDATE shows SET rating = ?, poster_path = ?, overview = ? WHERE id = ?')
@@ -225,7 +225,7 @@ router.post('/episodes/:id/translate-subs', async (req, res, next) => {
     const translatedText = await translateSrt(enSrtContent, targetLang);
     fs.writeFileSync(targetSubPath, translatedText);
 
-    const eventBus = require('../services/eventBus');
+    const eventBus = require('../../services/eventBus');
     eventBus.success('Subtitle translated', { title: `${episode.title}`, type: 'episode', language: targetLang });
 
     res.json({ status: 'success', message: `Translated to ${targetLang}`, data: { file: `${parsedPath.name}.${langCode}.srt` } });
@@ -294,7 +294,7 @@ router.get('/episodes/:id/search-subs', async (req, res, next) => {
 
 router.get('/shows/:id/search', async (req, res, next) => {
   try {
-    const indexerService = require('../services/indexerService');
+    const indexerService = require('../../services/indexerService');
     const show = db.prepare('SELECT * FROM shows WHERE id = ?').get(req.params.id);
     if (!show) return res.status(404).json({ status: 'error', message: 'Show not found' });
 
@@ -307,8 +307,8 @@ router.get('/shows/:id/search', async (req, res, next) => {
 
 router.post('/shows/:id/auto-search', async (req, res, next) => {
   try {
-    const indexerService = require('../services/indexerService');
-    const downloadClientService = require('../services/downloadClientService');
+    const indexerService = require('../../services/indexerService');
+    const downloadClientService = require('../../services/downloadClientService');
     
     const show = db.prepare('SELECT * FROM shows WHERE id = ?').get(req.params.id);
     if (!show) return res.status(404).json({ status: 'error', message: 'Show not found' });
@@ -346,7 +346,7 @@ router.post('/shows/:id/auto-search', async (req, res, next) => {
 
 router.post('/shows/:id/download', async (req, res, next) => {
   try {
-    const downloadClientService = require('../services/downloadClientService');
+    const downloadClientService = require('../../services/downloadClientService');
     const { torrentUrl } = req.body;
     
     await downloadClientService.addTorrent(torrentUrl, 'tv');
@@ -376,9 +376,9 @@ router.post('/shows', async (req, res, next) => {
       setTimeout(() => {
         (async () => {
           try {
-            const indexerService = require('../services/indexerService');
-            const downloadClientService = require('../services/downloadClientService');
-            const eventBus = require('../services/eventBus');
+            const indexerService = require('../../services/indexerService');
+            const downloadClientService = require('../../services/downloadClientService');
+            const eventBus = require('../../services/eventBus');
             const show = db.prepare('SELECT * FROM shows WHERE id = ?').get(result.id);
             const episodes = db.prepare("SELECT * FROM episodes WHERE show_id = ? AND status = 'monitored'").all(result.id);
             eventBus.info('Auto-search started', { title: show.title, type: 'show', episodes: episodes.length });
@@ -409,7 +409,7 @@ router.post('/shows', async (req, res, next) => {
             }
           } catch (e) {
             console.error(`[AutoSearch] Failed for show ${result.title}:`, e.message);
-            const eventBus = require('../services/eventBus');
+            const eventBus = require('../../services/eventBus');
             eventBus.error('Auto-search failed', { title: result.title, type: 'show', error: e.message });
           }
         })();
@@ -559,7 +559,7 @@ router.delete('/episodes/:id/file', async (req, res, next) => {
 
 router.get('/episodes/:id/search', async (req, res, next) => {
   try {
-    const indexerService = require('../services/indexerService');
+    const indexerService = require('../../services/indexerService');
     const episode = db.prepare('SELECT e.*, s.title as show_title FROM episodes e JOIN shows s ON e.show_id = s.id WHERE e.id = ?').get(req.params.id);
     if (!episode) return res.status(404).json({ status: 'error', message: 'Episode not found' });
 
@@ -572,8 +572,8 @@ router.get('/episodes/:id/search', async (req, res, next) => {
 
 router.post('/episodes/:id/auto-search', async (req, res, next) => {
   try {
-    const indexerService = require('../services/indexerService');
-    const downloadClientService = require('../services/downloadClientService');
+    const indexerService = require('../../services/indexerService');
+    const downloadClientService = require('../../services/downloadClientService');
     
     const episode = db.prepare('SELECT e.*, s.title as show_title FROM episodes e JOIN shows s ON e.show_id = s.id WHERE e.id = ?').get(req.params.id);
     if (!episode) return res.status(404).json({ status: 'error', message: 'Episode not found' });
@@ -607,7 +607,7 @@ router.post('/episodes/:id/reset', async (req, res, next) => {
 
 router.post('/episodes/:id/download', async (req, res, next) => {
   try {
-    const downloadClientService = require('../services/downloadClientService');
+    const downloadClientService = require('../../services/downloadClientService');
     const { torrentUrl } = req.body;
     
     await downloadClientService.addTorrent(torrentUrl, 'tv');
@@ -645,8 +645,8 @@ router.post('/episodes/:id/grab', async (req, res, next) => {
   try {
     const { link, title } = req.body;
     if (!link) return res.status(400).json({ status: 'error', message: 'link is required' });
-    const downloadClientService = require('../services/downloadClientService');
-    const eventBus = require('../services/eventBus');
+    const downloadClientService = require('../../services/downloadClientService');
+    const eventBus = require('../../services/eventBus');
     await downloadClientService.addTorrent(link);
     db.prepare("UPDATE episodes SET status = 'downloading', scene_name = ? WHERE id = ?").run(title || null, req.params.id);
     eventBus.info('Manual grab started', { title: title || 'Unknown', type: 'episode' });

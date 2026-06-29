@@ -29,7 +29,7 @@ export default function ClientsTab({ clients, newClient, setNewClient, clientSta
             </div>
             <div>
               <p className="text-sm font-bold text-slate-200 group-hover:text-emerald-400 transition-colors">Hide Completed Downloads from UI</p>
-              <p className="text-xs text-slate-400 mt-1">Hides 100% completed/seeding torrents from the Live Downloads widgets, keeping your dashboard clean.</p>
+              <p className="text-xs text-slate-400 mt-1">Hides 100% completed/seeding torrents from the Downloads page.</p>
             </div>
           </label>
           
@@ -56,6 +56,41 @@ export default function ClientsTab({ clients, newClient, setNewClient, clientSta
               </div>
             </label>
           )}
+          
+          <div className="p-4 rounded-xl bg-slate-900/50 border border-white/5 mt-6">
+            <h4 className="text-sm font-bold text-slate-200 mb-2">Remote Path Mapping</h4>
+            <p className="text-xs text-slate-400 mb-4">If your download client runs on a different machine or inside Docker, Atlas needs to know how to map the client's path to a local path.</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-medium text-slate-400 mb-1">Remote Path (e.g. /downloads/)</label>
+                <input 
+                  type="text" 
+                  className="glass-input w-full text-sm py-2" 
+                  value={(settings?.downloadPathMapping || ['', ''])[0]} 
+                  onChange={e => {
+                    const newMapping = [...(settings?.downloadPathMapping || ['', ''])];
+                    newMapping[0] = e.target.value;
+                    setSettings({...settings, downloadPathMapping: newMapping});
+                  }} 
+                  placeholder="Path reported by download client" 
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-400 mb-1">Local Path (e.g. /data/downloads/)</label>
+                <input 
+                  type="text" 
+                  className="glass-input w-full text-sm py-2" 
+                  value={(settings?.downloadPathMapping || ['', ''])[1]} 
+                  onChange={e => {
+                    const newMapping = [...(settings?.downloadPathMapping || ['', ''])];
+                    newMapping[1] = e.target.value;
+                    setSettings({...settings, downloadPathMapping: newMapping});
+                  }} 
+                  placeholder="Path Atlas can access" 
+                />
+              </div>
+            </div>
+          </div>
         </div>
       </div>
       

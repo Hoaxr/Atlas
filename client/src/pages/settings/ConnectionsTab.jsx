@@ -19,6 +19,8 @@ export default function ConnectionsTab() {
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [testStatuses, setTestStatuses] = useState({ plex: null, jellyfin: null, emby: null });
+  const [testingMedia, setTestingMedia] = useState({ plex: false, jellyfin: false, emby: false });
 
   useEffect(() => {
     fetchSettings();
@@ -42,6 +44,11 @@ export default function ConnectionsTab() {
           notifyOnGrab: data.notifyOnGrab === 'true',
           notifyOnDownload: data.notifyOnDownload === 'true'
         });
+        
+        // Auto test configured media servers
+        if (data.plexUrl && data.plexToken) testMediaServer('plex', data.plexUrl, data.plexToken, true);
+        if (data.jellyfinUrl && data.jellyfinApiKey) testMediaServer('jellyfin', data.jellyfinUrl, data.jellyfinApiKey, true);
+        if (data.embyUrl && data.embyApiKey) testMediaServer('emby', data.embyUrl, data.embyApiKey, true);
       }
     } catch (err) {
       console.error(err);
@@ -49,6 +56,37 @@ export default function ConnectionsTab() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const testMediaServer = async (type, url, apiKey, silent = false) => {
+    if (!url || !apiKey) {
+      if (!silent) toast.error(`Please enter both URL and API Key/Token for ${type}`);
+      return;
+    }
+
+    setTestingMedia(prev => ({ ...prev, [type]: true }));
+    try {
+      const res = await api.post('/settings/media-server/test', { type, url, apiKey });
+      if (res.data.status === 'success') {
+        if (!silent) toast.success(res.data.message);
+        setTestStatuses(prev => ({ ...prev, [type]: 'connected' }));
+      } else {
+        throw new Error(res.data.message);
+      }
+    } catch (err) {
+      if (!silent) toast.error(err.response?.data?.message || `Failed to connect to ${type}`);
+      setTestStatuses(prev => ({ ...prev, [type]: 'error' }));
+    } finally {
+      setTestingMedia(prev => ({ ...prev, [type]: false }));
+    }
+  };
+
+  const handleTestMediaServerBtn = (type) => {
+    let url, apiKey;
+    if (type === 'plex') { url = settings.plexUrl; apiKey = settings.plexToken; }
+    if (type === 'jellyfin') { url = settings.jellyfinUrl; apiKey = settings.jellyfinApiKey; }
+    if (type === 'emby') { url = settings.embyUrl; apiKey = settings.embyApiKey; }
+    testMediaServer(type, url, apiKey, false);
   };
 
   const handleChange = (e) => {
@@ -77,8 +115,27 @@ export default function ConnectionsTab() {
   };
 
   const handleTestNotification = async () => {
+    const hasDiscord = !!settings.discordWebhookUrl;
+    const hasTelegramToken = !!settings.telegramBotToken;
+    const hasTelegramChat = !!settings.telegramChatId;
+    const hasTelegram = hasTelegramToken && hasTelegramChat;
+
+    if (!hasDiscord && !hasTelegramToken && !hasTelegramChat) {
+      toast.error('Please configure at least one notification service to test');
+      return;
+    }
+
+    if ((hasTelegramToken && !hasTelegramChat) || (!hasTelegramToken && hasTelegramChat)) {
+      toast.error('Telegram requires both a Bot Token and a Chat ID');
+      return;
+    }
+
     try {
-      await api.post('/settings/test-notification');
+      await api.post('/settings/test-notification', {
+        discordWebhookUrl: settings.discordWebhookUrl,
+        telegramBotToken: settings.telegramBotToken,
+        telegramChatId: settings.telegramChatId
+      });
       toast.success('Test notification triggered');
     } catch (err) {
       toast.error('Test failed to send');
@@ -197,7 +254,20 @@ export default function ConnectionsTab() {
         <div className="space-y-6">
           {/* Plex */}
           <div className="p-4 bg-slate-800/30 rounded-xl border border-slate-700/50 space-y-4">
-            <h3 className="text-sm font-bold text-amber-400">Plex</h3>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <h3 className="text-sm font-bold text-amber-400">Plex</h3>
+                {testStatuses.plex === 'connected' && <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-green-500/20 text-green-400 border border-green-500/30">Connected</span>}
+                {testStatuses.plex === 'error' && <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-red-500/20 text-red-400 border border-red-500/30">Disconnected</span>}
+              </div>
+              <button
+                onClick={() => handleTestMediaServerBtn('plex')}
+                disabled={testingMedia.plex}
+                className="px-3 py-1.5 text-xs font-bold text-slate-300 bg-slate-700 hover:bg-slate-600 rounded-lg transition-all disabled:opacity-50"
+              >
+                {testingMedia.plex ? 'Testing...' : 'Test Connection'}
+              </button>
+            </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Plex URL</label>
@@ -225,7 +295,20 @@ export default function ConnectionsTab() {
 
           {/* Jellyfin */}
           <div className="p-4 bg-slate-800/30 rounded-xl border border-slate-700/50 space-y-4">
-            <h3 className="text-sm font-bold text-purple-400">Jellyfin</h3>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <h3 className="text-sm font-bold text-purple-400">Jellyfin</h3>
+                {testStatuses.jellyfin === 'connected' && <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-green-500/20 text-green-400 border border-green-500/30">Connected</span>}
+                {testStatuses.jellyfin === 'error' && <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-red-500/20 text-red-400 border border-red-500/30">Disconnected</span>}
+              </div>
+              <button
+                onClick={() => handleTestMediaServerBtn('jellyfin')}
+                disabled={testingMedia.jellyfin}
+                className="px-3 py-1.5 text-xs font-bold text-slate-300 bg-slate-700 hover:bg-slate-600 rounded-lg transition-all disabled:opacity-50"
+              >
+                {testingMedia.jellyfin ? 'Testing...' : 'Test Connection'}
+              </button>
+            </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Jellyfin URL</label>
@@ -253,7 +336,20 @@ export default function ConnectionsTab() {
 
           {/* Emby */}
           <div className="p-4 bg-slate-800/30 rounded-xl border border-slate-700/50 space-y-4">
-            <h3 className="text-sm font-bold text-emerald-400">Emby</h3>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <h3 className="text-sm font-bold text-emerald-400">Emby</h3>
+                {testStatuses.emby === 'connected' && <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-green-500/20 text-green-400 border border-green-500/30">Connected</span>}
+                {testStatuses.emby === 'error' && <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-red-500/20 text-red-400 border border-red-500/30">Disconnected</span>}
+              </div>
+              <button
+                onClick={() => handleTestMediaServerBtn('emby')}
+                disabled={testingMedia.emby}
+                className="px-3 py-1.5 text-xs font-bold text-slate-300 bg-slate-700 hover:bg-slate-600 rounded-lg transition-all disabled:opacity-50"
+              >
+                {testingMedia.emby ? 'Testing...' : 'Test Connection'}
+              </button>
+            </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Emby URL</label>

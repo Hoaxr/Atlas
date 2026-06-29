@@ -43,7 +43,7 @@ export default function ManualSearchModal({ mediaId, mediaType, title, onClose, 
         if (res.data.status === 'success') setResults(res.data.data);
         else setError('Search returned no results.');
       })
-      .catch(() => setError('Search failed. Make sure your indexers are configured.'))
+      .catch((err) => setError(err.response?.data?.message || 'Search failed. Make sure your indexers are configured.'))
       .finally(() => setLoading(false));
   }, [endpoint]);
 

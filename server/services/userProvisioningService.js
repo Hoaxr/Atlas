@@ -112,18 +112,25 @@ class UserProvisioningService {
       throw new Error('No media servers configured. Please configure Jellyfin, Emby, or Plex in Settings.');
     }
 
-    const importedUsers = new Set();
+    const importedUsers = new Map();
+    let successCount = 0;
+    const errors = [];
 
     // Fetch from Jellyfin
     if (jellyfinUrl && jellyfinApiKey) {
       try {
         const res = await axios.get(`${jellyfinUrl}/Users`, {
-          headers: { 'X-Emby-Token': jellyfinApiKey }
+          headers: { 'X-Emby-Token': jellyfinApiKey },
+          timeout: 5000
         });
         if (Array.isArray(res.data)) {
-          res.data.forEach(u => u.Name && importedUsers.add(u.Name));
+          res.data.forEach(u => {
+            if (u.Name && !importedUsers.has(u.Name)) importedUsers.set(u.Name, 'jellyfin');
+          });
+          successCount++;
         }
       } catch (err) {
+        errors.push(`Jellyfin: ${err.message}`);
         console.error('[UserProvisioning] Failed to fetch users from Jellyfin:', err.message);
       }
     }
@@ -132,12 +139,17 @@ class UserProvisioningService {
     if (embyUrl && embyApiKey) {
       try {
         const res = await axios.get(`${embyUrl}/Users`, {
-          headers: { 'X-Emby-Token': embyApiKey }
+          headers: { 'X-Emby-Token': embyApiKey },
+          timeout: 5000
         });
         if (Array.isArray(res.data)) {
-          res.data.forEach(u => u.Name && importedUsers.add(u.Name));
+          res.data.forEach(u => {
+            if (u.Name && !importedUsers.has(u.Name)) importedUsers.set(u.Name, 'emby');
+          });
+          successCount++;
         }
       } catch (err) {
+        errors.push(`Emby: ${err.message}`);
         console.error('[UserProvisioning] Failed to fetch users from Emby:', err.message);
       }
     }
@@ -149,7 +161,8 @@ class UserProvisioningService {
           headers: {
             'X-Plex-Token': plexToken,
             'Accept': 'application/json'
-          }
+          },
+          timeout: 5000
         });
         
         // The Plex API returns JSON differently depending on the exact endpoint and Accept header.
@@ -160,29 +173,35 @@ class UserProvisioningService {
         if (Array.isArray(users)) {
           users.forEach(u => {
             const name = u.username || u.title;
-            if (name) importedUsers.add(name);
+            if (name && !importedUsers.has(name)) importedUsers.set(name, 'plex');
           });
         } else if (res.data && Array.isArray(res.data)) {
             // fallback
             res.data.forEach(u => {
                 const name = u.username || u.title || u.Name;
-                if (name) importedUsers.add(name);
+                if (name && !importedUsers.has(name)) importedUsers.set(name, 'plex');
             });
         }
+        successCount++;
       } catch (err) {
+        errors.push(`Plex: ${err.message}`);
         console.error('[UserProvisioning] Failed to fetch users from Plex:', err.message);
       }
+    }
+
+    if (successCount === 0 && errors.length > 0) {
+      throw new Error(`Failed to connect to media servers: ${errors.join(', ')}`);
     }
 
     // Save to database
     let importCount = 0;
     const defaultPassword = 'atlas123';
 
-    for (const username of importedUsers) {
+    for (const [username, origin] of importedUsers.entries()) {
       const existing = db.prepare('SELECT id FROM users WHERE username = ?').get(username);
       if (!existing) {
-        db.prepare('INSERT INTO users (username, password, role) VALUES (?, ?, ?)').run(
-          username, defaultPassword, 'user'
+        db.prepare('INSERT INTO users (username, password, role, origin) VALUES (?, ?, ?, ?)').run(
+          username, defaultPassword, 'user', origin
         );
         importCount++;
       }

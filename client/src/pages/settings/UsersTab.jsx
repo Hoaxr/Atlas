@@ -211,6 +211,7 @@ export default function UsersTab() {
               <tr className="border-b border-white/10 text-slate-400">
                 <th className="py-3 px-4 font-medium">Username</th>
                 <th className="py-3 px-4 font-medium">Role</th>
+                <th className="py-3 px-4 font-medium">Origin</th>
                 <th className="py-3 px-4 font-medium">Email</th>
                 <th className="py-3 px-4 font-medium text-right">Actions</th>
               </tr>
@@ -223,6 +224,12 @@ export default function UsersTab() {
                     <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-rose-500/20 text-rose-400">
                       <Shield className="w-3 h-3" /> Admin
                     </span>
+                  </td>
+                  <td className="py-3 px-4">
+                    {user.origin === 'plex' && <span className="text-amber-400 text-[10px] font-bold bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20 uppercase tracking-wider">Plex</span>}
+                    {user.origin === 'jellyfin' && <span className="text-purple-400 text-[10px] font-bold bg-purple-500/10 px-2 py-0.5 rounded border border-purple-500/20 uppercase tracking-wider">Jellyfin</span>}
+                    {user.origin === 'emby' && <span className="text-emerald-400 text-[10px] font-bold bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20 uppercase tracking-wider">Emby</span>}
+                    {(!user.origin || user.origin === 'atlas') && <span className="text-cyan-400 text-[10px] font-bold bg-cyan-500/10 px-2 py-0.5 rounded border border-cyan-500/20 uppercase tracking-wider">Atlas</span>}
                   </td>
                   <td className="py-3 px-4 text-slate-400">{user.email || '-'}</td>
                   <td className="py-3 px-4 text-right">
@@ -247,7 +254,7 @@ export default function UsersTab() {
               ))}
               {users.filter(u => u.role === 'admin').length === 0 && (
                 <tr>
-                  <td colSpan="4" className="py-8 text-center text-slate-500">
+                  <td colSpan="5" className="py-8 text-center text-slate-500">
                     No administrators found.
                   </td>
                 </tr>
@@ -276,6 +283,7 @@ export default function UsersTab() {
               <tr className="border-b border-white/10 text-slate-400">
                 <th className="py-3 px-4 font-medium">Username</th>
                 <th className="py-3 px-4 font-medium">Role</th>
+                <th className="py-3 px-4 font-medium">Origin</th>
                 <th className="py-3 px-4 font-medium">Email</th>
                 <th className="py-3 px-4 font-medium text-right">Actions</th>
               </tr>
@@ -288,6 +296,12 @@ export default function UsersTab() {
                     <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-indigo-500/20 text-indigo-400">
                       <User className="w-3 h-3" /> User
                     </span>
+                  </td>
+                  <td className="py-3 px-4">
+                    {user.origin === 'plex' && <span className="text-amber-400 text-[10px] font-bold bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20 uppercase tracking-wider">Plex</span>}
+                    {user.origin === 'jellyfin' && <span className="text-purple-400 text-[10px] font-bold bg-purple-500/10 px-2 py-0.5 rounded border border-purple-500/20 uppercase tracking-wider">Jellyfin</span>}
+                    {user.origin === 'emby' && <span className="text-emerald-400 text-[10px] font-bold bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20 uppercase tracking-wider">Emby</span>}
+                    {(!user.origin || user.origin === 'atlas') && <span className="text-cyan-400 text-[10px] font-bold bg-cyan-500/10 px-2 py-0.5 rounded border border-cyan-500/20 uppercase tracking-wider">Atlas</span>}
                   </td>
                   <td className="py-3 px-4 text-slate-400">{user.email || '-'}</td>
                   <td className="py-3 px-4 text-right">
@@ -312,7 +326,7 @@ export default function UsersTab() {
               ))}
               {users.filter(u => u.role === 'user').length === 0 && (
                 <tr>
-                  <td colSpan="4" className="py-8 text-center text-slate-500">
+                  <td colSpan="5" className="py-8 text-center text-slate-500">
                     No users found.
                   </td>
                 </tr>

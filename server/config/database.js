@@ -170,6 +170,7 @@ try { db.exec("ALTER TABLE quality_profiles ADD COLUMN qualities TEXT;"); } catc
 try { db.exec("ALTER TABLE quality_profiles ADD COLUMN cutoff TEXT;"); } catch (e) {}
 try { db.exec("ALTER TABLE quality_profiles ADD COLUMN upgrade_allowed INTEGER DEFAULT 1;"); } catch (e) {}
 try { db.exec("ALTER TABLE release_profiles ADD COLUMN apply_to TEXT DEFAULT 'all';"); } catch (e) {}
+try { db.exec("ALTER TABLE users ADD COLUMN origin TEXT DEFAULT 'atlas';"); } catch (e) {}
 
 // Ensure rating columns exist
 try { db.exec("ALTER TABLE movies ADD COLUMN rating REAL DEFAULT 0;"); } catch (e) {}

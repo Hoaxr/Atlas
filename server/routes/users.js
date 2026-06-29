@@ -14,7 +14,7 @@ const requireAdmin = (req, res, next) => {
 // GET /api/users
 router.get('/', requireAdmin, (req, res) => {
   try {
-    const users = db.prepare('SELECT id, username, email, role, created_at FROM users').all();
+    const users = db.prepare('SELECT id, username, email, role, origin, created_at FROM users').all();
     res.json({ status: 'success', data: users });
   } catch (err) {
     res.status(500).json({ status: 'error', message: err.message });

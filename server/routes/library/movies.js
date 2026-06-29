@@ -175,7 +175,7 @@ router.post('/:id/refresh', async (req, res, next) => {
     }
 
     if (bestFile) {
-      const { getResolution } = require('../utils/videoUtils');
+      const { getResolution } = require('../../utils/videoUtils');
       let resName = bestFile.name;
       const t = resName.toLowerCase();
       const hasRes = t.includes('2160p') || t.includes('4k') || t.includes('1080p') || t.includes('720p') || t.includes('480p') || t.includes('sd');
@@ -192,7 +192,7 @@ router.post('/:id/refresh', async (req, res, next) => {
     // If scanPaths is empty (no library configured), leave status untouched
 
     try {
-      const tmdbService = require('../services/tmdbService');
+      const tmdbService = require('../../services/tmdbService');
       const data = await tmdbService.getMovieById(movie.tmdb_id);
       if (data) db.prepare('UPDATE movies SET rating = ?, poster_path = ?, overview = ? WHERE id = ?').run(data.vote_average || 0, data.poster_path, data.overview, movie.id);
     } catch (e) { console.error('TMDB refresh failed for movie:', e.message); }
@@ -205,7 +205,7 @@ router.post('/:id/refresh', async (req, res, next) => {
 
 router.get('/:id/search', async (req, res, next) => {
   try {
-    const indexerService = require('../services/indexerService');
+    const indexerService = require('../../services/indexerService');
     const movie = db.prepare('SELECT * FROM movies WHERE id = ?').get(req.params.id);
     if (!movie) return res.status(404).json({ status: 'error', message: 'Movie not found' });
 
@@ -256,7 +256,7 @@ router.put('/:id/quality', (req, res, next) => {
 
 router.post('/:id/download', async (req, res, next) => {
   try {
-    const downloadClientService = require('../services/downloadClientService');
+    const downloadClientService = require('../../services/downloadClientService');
     const { torrentUrl } = req.body;
     
     await downloadClientService.addTorrent(torrentUrl);
@@ -270,8 +270,8 @@ router.post('/:id/download', async (req, res, next) => {
 
 router.post('/:id/auto-search', async (req, res, next) => {
   try {
-    const indexerService = require('../services/indexerService');
-    const downloadClientService = require('../services/downloadClientService');
+    const indexerService = require('../../services/indexerService');
+    const downloadClientService = require('../../services/downloadClientService');
     
     const movie = db.prepare('SELECT * FROM movies WHERE id = ?').get(req.params.id);
     if (!movie) return res.status(404).json({ status: 'error', message: 'Movie not found' });
@@ -313,7 +313,7 @@ router.post('/', async (req, res, next) => {
 const translateSrt = async (enSrtContent, targetLang) => {
   const provider = db.prepare("SELECT value FROM settings WHERE key = 'translationProvider'").get();
   const activeProvider = (provider && provider.value) || 'googleTranslate';
-  const { translateWithGemini, translateWithGoogleTranslate, translateWithDeepSeek, translateWithClaude } = require('../services/aiTranslationWorker');
+  const { translateWithGemini, translateWithGoogleTranslate, translateWithDeepSeek, translateWithClaude } = require('../../services/aiTranslationWorker');
 
   if (activeProvider === 'gemini') {
     const geminiApiKeyRow = db.prepare("SELECT value FROM settings WHERE key = 'geminiApiKey'").get();
@@ -361,7 +361,7 @@ router.post('/:id/translate-subs', async (req, res, next) => {
     const translatedText = await translateSrt(enSrtContent, targetLang);
     fs.writeFileSync(targetSubPath, translatedText);
 
-    const eventBus = require('../services/eventBus');
+    const eventBus = require('../../services/eventBus');
     eventBus.success('Subtitle translated', { title: movie.title, type: 'movie', language: targetLang });
 
     res.json({ status: 'success', message: `Translated to ${targetLang}`, data: { file: `${parsedPath.name}.${langCode}.srt` } });
@@ -511,8 +511,8 @@ router.post('/:id/grab', async (req, res, next) => {
   try {
     const { link, title } = req.body;
     if (!link) return res.status(400).json({ status: 'error', message: 'link is required' });
-    const downloadClientService = require('../services/downloadClientService');
-    const eventBus = require('../services/eventBus');
+    const downloadClientService = require('../../services/downloadClientService');
+    const eventBus = require('../../services/eventBus');
     await downloadClientService.addTorrent(link);
     db.prepare("UPDATE movies SET status = 'downloading', scene_name = ? WHERE id = ?").run(title || null, req.params.id);
     eventBus.info('Manual grab started', { title: title || 'Unknown', type: 'movie' });

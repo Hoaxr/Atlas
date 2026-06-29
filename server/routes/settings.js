@@ -48,6 +48,9 @@ router.get('/', (req, res, next) => {
     const deleteTorrentFiles = getSetting('deleteTorrentFiles') === 'true'; // default false
     const hideCompletedDownloads = getSetting('hideCompletedDownloads') !== 'false'; // default true
     
+    let downloadPathMapping = ['', ''];
+    try { downloadPathMapping = JSON.parse(getSetting('downloadPathMapping') || '["", ""]'); } catch { /* ignore */ }
+    
     const defaultQualityProfileId = getSetting('defaultQualityProfileId');
     
     const mask = (val) => val ? '*'.repeat(val.length) : '';
@@ -87,6 +90,7 @@ router.get('/', (req, res, next) => {
         removeCompletedDownloads,
         deleteTorrentFiles,
         hideCompletedDownloads,
+        downloadPathMapping,
         defaultQualityProfileId: defaultQualityProfileId ? parseInt(defaultQualityProfileId) : null,
         clients,
         profiles,
@@ -114,7 +118,7 @@ router.get('/', (req, res, next) => {
 
 router.post('/', (req, res, next) => {
   try {
-    const { tmdbApiKey, traktClientId, osApiKey, subdlApiKey, subsourceApiKey, geminiApiKey, deepseekApiKey, claudeApiKey, prowlarrUrl, prowlarrApiKey, translationProvider, targetLang, targetLangs, providerLangs, autoTranslate, traktWatchedSync, traktAccessToken, traktClientSecret, renameMovies, replaceIllegalCharacters, colonReplacement, standardMovieFormat, renameEpisodes, standardEpisodeFormat, seasonFolderFormat, removeCompletedDownloads, deleteTorrentFiles, hideCompletedDownloads, defaultQualityProfileId, authEnabled, authBypassLocalhost, authUsername, authPassword, plexUrl, plexToken, jellyfinUrl, jellyfinApiKey, embyUrl, embyApiKey, discordWebhookUrl, telegramBotToken, telegramChatId, notifyOnGrab, notifyOnDownload } = req.body;
+    const { tmdbApiKey, traktClientId, osApiKey, subdlApiKey, subsourceApiKey, geminiApiKey, deepseekApiKey, claudeApiKey, prowlarrUrl, prowlarrApiKey, translationProvider, targetLang, targetLangs, providerLangs, autoTranslate, traktWatchedSync, traktAccessToken, traktClientSecret, renameMovies, replaceIllegalCharacters, colonReplacement, standardMovieFormat, renameEpisodes, standardEpisodeFormat, seasonFolderFormat, removeCompletedDownloads, deleteTorrentFiles, hideCompletedDownloads, downloadPathMapping, defaultQualityProfileId, authEnabled, authBypassLocalhost, authUsername, authPassword, plexUrl, plexToken, jellyfinUrl, jellyfinApiKey, embyUrl, embyApiKey, discordWebhookUrl, telegramBotToken, telegramChatId, notifyOnGrab, notifyOnDownload } = req.body;
     
     const isMasked = (val) => val && /^\*+$/.test(val);
     
@@ -156,6 +160,7 @@ router.post('/', (req, res, next) => {
     if (removeCompletedDownloads !== undefined) setSetting('removeCompletedDownloads', removeCompletedDownloads ? 'true' : 'false');
     if (deleteTorrentFiles !== undefined) setSetting('deleteTorrentFiles', deleteTorrentFiles ? 'true' : 'false');
     if (hideCompletedDownloads !== undefined) setSetting('hideCompletedDownloads', hideCompletedDownloads ? 'true' : 'false');
+    if (downloadPathMapping !== undefined) setSetting('downloadPathMapping', JSON.stringify(downloadPathMapping));
 
     if (authEnabled !== undefined) setSetting('authEnabled', authEnabled);
     if (authBypassLocalhost !== undefined) setSetting('authBypassLocalhost', authBypassLocalhost);
@@ -204,6 +209,46 @@ router.post('/prowlarr/test', async (req, res) => {
     } else {
       res.status(400).json({ status: 'error', message: 'Failed to connect to Prowlarr' });
     }
+  } catch (err) {
+    res.status(500).json({ status: 'error', message: err.message });
+  }
+});
+
+router.post('/media-server/test', async (req, res) => {
+  try {
+    const { type, url, apiKey } = req.body;
+    if (!type || !url || !apiKey) return res.status(400).json({ status: 'error', message: 'Missing type, URL, or API Key' });
+
+    let finalApiKey = apiKey;
+    const isMasked = (val) => val && /^\*+$/.test(val);
+    if (isMasked(apiKey)) {
+      if (type === 'plex') finalApiKey = getSetting('plexToken') || apiKey;
+      else if (type === 'jellyfin') finalApiKey = getSetting('jellyfinApiKey') || apiKey;
+      else if (type === 'emby') finalApiKey = getSetting('embyApiKey') || apiKey;
+    }
+
+    const axios = require('axios');
+    const base = url.replace(/\/$/, '');
+    
+    if (type === 'plex') {
+      const result = await axios.get(`${base}/identity`, {
+        headers: { 'X-Plex-Token': finalApiKey, 'Accept': 'application/json' },
+        timeout: 5000
+      });
+      if (result.status === 200) {
+        return res.json({ status: 'success', message: 'Connected to Plex successfully' });
+      }
+    } else if (type === 'jellyfin' || type === 'emby') {
+      const result = await axios.get(`${base}/System/Info`, {
+        headers: { 'X-Emby-Token': finalApiKey },
+        timeout: 5000
+      });
+      if (result.status === 200) {
+        return res.json({ status: 'success', message: `Connected to ${type === 'jellyfin' ? 'Jellyfin' : 'Emby'} successfully` });
+      }
+    }
+    
+    res.status(400).json({ status: 'error', message: `Failed to connect to ${type}` });
   } catch (err) {
     res.status(500).json({ status: 'error', message: err.message });
   }
@@ -724,7 +769,7 @@ router.post('/schedules', (req, res, next) => {
 router.post('/test-notification', async (req, res) => {
   try {
     const notificationService = require('../services/notificationService');
-    await notificationService.testNotification();
+    await notificationService.testNotification(req.body || {});
     res.json({ status: 'success', message: 'Test notification sent' });
   } catch (err) {
     res.status(500).json({ status: 'error', message: 'Failed to send test notification' });

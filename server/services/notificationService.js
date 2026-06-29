@@ -27,10 +27,20 @@ class NotificationService {
     }
   }
 
-  async sendNotification(title, message, metadata = {}) {
-    const discordUrl = this.getSetting('discordWebhookUrl');
-    const telegramToken = this.getSetting('telegramBotToken');
-    const telegramChatId = this.getSetting('telegramChatId');
+  async sendNotification(title, message, metadata = {}, overrides = {}) {
+    const isMasked = (val) => typeof val === 'string' && /^\*+$/.test(val);
+    
+    const discordUrl = (overrides.discordWebhookUrl !== undefined && !isMasked(overrides.discordWebhookUrl)) 
+      ? overrides.discordWebhookUrl 
+      : this.getSetting('discordWebhookUrl');
+      
+    const telegramToken = (overrides.telegramBotToken !== undefined && !isMasked(overrides.telegramBotToken)) 
+      ? overrides.telegramBotToken 
+      : this.getSetting('telegramBotToken');
+      
+    const telegramChatId = (overrides.telegramChatId !== undefined && !isMasked(overrides.telegramChatId)) 
+      ? overrides.telegramChatId 
+      : this.getSetting('telegramChatId');
 
     const itemTitle = metadata.title || 'Unknown Title';
     const description = message;
@@ -60,12 +70,17 @@ class NotificationService {
         });
       } catch (err) {
         console.error('[NotificationService] Telegram error:', err.message);
+        if (err.response) {
+          require('fs').writeFileSync('telegram-debug.log', JSON.stringify(err.response.data));
+        } else {
+          require('fs').writeFileSync('telegram-debug.log', err.message);
+        }
       }
     }
   }
 
-  async testNotification() {
-    await this.sendNotification('Test Notification', 'This is a test notification from Atlas Media Manager.', { title: 'Test Media' });
+  async testNotification(overrides = {}) {
+    await this.sendNotification('Atlas', 'This is a test notification from Atlas Media Manager.', { title: 'Test Notification' }, overrides);
   }
 }
 

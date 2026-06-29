@@ -120,4 +120,7 @@ const shutdown = (signal) => {
 process.on('SIGTERM', () => shutdown('SIGTERM'));
 process.on('SIGINT', () => shutdown('SIGINT'));
 
-server.listen(PORT, () => console.log(`[Backend] Server op poort ${PORT}`));
+server.listen(PORT, () => {
+  console.log(`[Backend] Server op poort ${PORT}`);
+  notificationService.sendNotification('System', 'Atlas Media Manager has started successfully.', { title: 'Atlas Started' });
+});

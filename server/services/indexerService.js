@@ -30,7 +30,7 @@ const searchProwlarr = async (query, type = 'search') => {
 
   if (!prowlarrUrl || !prowlarrApiKey) {
     console.warn('[IndexerService] Prowlarr URL or API Key is missing.');
-    return [];
+    throw new Error('No indexers are configured. Please configure Prowlarr in Settings.');
   }
 
   try {
@@ -74,7 +74,7 @@ const searchProwlarr = async (query, type = 'search') => {
     });
   } catch (err) {
     console.error(`[IndexerService] Prowlarr search failed:`, err.message);
-    return [];
+    throw new Error(`Prowlarr search failed: ${err.message}`);
   }
 };
 

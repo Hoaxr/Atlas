@@ -43,7 +43,8 @@ export default function Settings() {
     standardEpisodeFormat: '{Show Title} - S{Season}E{Episode} - {Episode Title}',
     removeCompletedDownloads: false,
     deleteTorrentFiles: false,
-    hideCompletedDownloads: true
+    hideCompletedDownloads: true,
+    downloadPathMapping: ['', '']
   });
   const [paths, setPaths] = useState([]);
   const [indexers, setIndexers] = useState([]);
@@ -239,6 +240,7 @@ export default function Settings() {
           removeCompletedDownloads: res.data.data.removeCompletedDownloads ?? false,
           deleteTorrentFiles: res.data.data.deleteTorrentFiles ?? false,
           hideCompletedDownloads: res.data.data.hideCompletedDownloads ?? true,
+          downloadPathMapping: Array.isArray(res.data.data.downloadPathMapping) ? res.data.data.downloadPathMapping : ['', ''],
           defaultQualityProfileId: res.data.data.defaultQualityProfileId || null
         });
         setIndexers(res.data.data.indexers || []);
