@@ -10,11 +10,6 @@ export default function ProfilesTab({ profiles, newProfile, setNewProfile, editi
           <Settings2 className="w-7 h-7" /> Quality Profiles
         </h2>
       </div>
-      <div className="bg-amber-500/10 border border-amber-500/20 text-amber-400 p-4 rounded-xl mb-6 flex gap-3 text-sm">
-        <Settings2 className="w-5 h-5 shrink-0" />
-        <p>Quality profiles allow you to restrict automated searches to specific resolutions. They are assigned per movie or TV show. Qualities at the top of the list are preferred over the ones at the bottom.</p>
-      </div>
-      
       <div className="glass-panel p-8 rounded-2xl border border-white/10 space-y-6 mb-8 shadow-xl relative overflow-hidden">
         <div className="flex justify-between items-center">
           <h3 className="font-bold text-lg text-slate-200">{editingProfile ? 'Edit Profile' : 'Add New Profile'}</h3>
@@ -22,6 +17,7 @@ export default function ProfilesTab({ profiles, newProfile, setNewProfile, editi
             <button onClick={() => { setEditingProfile(null); setNewProfile({ name: '', qualities: ['720p', '1080p', '2160p'], cutoff: '1080p', upgrade_allowed: true }); }} className="text-xs bg-slate-800 text-slate-300 px-3 py-1.5 rounded-lg hover:bg-slate-700">Cancel Edit</button>
           )}
         </div>
+        <p className="text-xs text-slate-500">Quality profiles restrict automated searches to specific resolutions. Higher list position means higher preference.</p>
         
         <div className="space-y-4">
           <div>

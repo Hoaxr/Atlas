@@ -1,7 +1,6 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../config/database');
-const tmdbService = require('../services/tmdbService');
 
 const requireAdmin = (req, res, next) => {
   if (!req.user || req.user.role !== 'admin') {
@@ -10,24 +9,32 @@ const requireAdmin = (req, res, next) => {
   next();
 };
 
+// GET /api/requests/pending-count
+router.get('/pending-count', (req, res) => {
+  try {
+    let count = 0;
+    if (req.user && req.user.role === 'admin') {
+      const result = db.prepare("SELECT COUNT(*) as count FROM requests WHERE status = 'pending'").get();
+      count = result ? result.count : 0;
+    } else {
+      const result = db.prepare("SELECT COUNT(*) as count FROM requests WHERE user_id = ? AND status = 'pending'").get(req.user?.id);
+      count = result ? result.count : 0;
+    }
+    res.json({ status: 'success', data: { count } });
+  } catch (err) {
+    res.status(500).json({ status: 'error', message: err.message });
+  }
+});
+
 // GET /api/requests
 router.get('/', (req, res) => {
   try {
-    let requests;
-    if (req.user && req.user.role === 'admin') {
-      requests = db.prepare(`
-        SELECT r.*, u.username as requested_by 
-        FROM requests r 
-        LEFT JOIN users u ON r.user_id = u.id 
-        ORDER BY r.created_at DESC
-      `).all();
-    } else {
-      requests = db.prepare(`
-        SELECT * FROM requests 
-        WHERE user_id = ? 
-        ORDER BY created_at DESC
-      `).all(req.user?.id);
-    }
+    const requests = db.prepare(`
+      SELECT r.*, u.username as requested_by 
+      FROM requests r 
+      LEFT JOIN users u ON r.user_id = u.id 
+      ORDER BY r.created_at DESC
+    `).all();
     res.json({ status: 'success', data: requests });
   } catch (err) {
     res.status(500).json({ status: 'error', message: err.message });
@@ -44,13 +51,16 @@ router.post('/', (req, res) => {
       return res.status(401).json({ status: 'error', message: 'Must be logged in to request' });
     }
 
-    // Check if already requested by this user
-    const existing = db.prepare('SELECT id FROM requests WHERE user_id = ? AND tmdb_id = ? AND type = ?').get(user_id, tmdb_id, type);
+    // Check if already requested globally
+    const existing = db.prepare('SELECT id, user_id FROM requests WHERE tmdb_id = ? AND type = ?').get(tmdb_id, type);
     if (existing) {
-      return res.status(400).json({ status: 'error', message: 'You have already requested this item' });
+      if (existing.user_id === user_id) {
+        return res.status(400).json({ status: 'error', message: 'You have already requested this item' });
+      }
+      return res.status(400).json({ status: 'error', message: 'This item has already been requested by another user' });
     }
 
-    const result = db.prepare('INSERT INTO requests (user_id, tmdb_id, type, title, status) VALUES (?, ?, ?, ?, "pending")').run(
+    const result = db.prepare('INSERT INTO requests (user_id, tmdb_id, type, title, status) VALUES (?, ?, ?, ?, \'pending\')').run(
       user_id, tmdb_id, type, title
     );
 
@@ -79,7 +89,7 @@ router.put('/:id/approve', requireAdmin, async (req, res) => {
     // We will just change status to "approved" here and let the frontend prompt the "Add Library Item" modal.
     // The frontend can call the standard library add route, and then call this endpoint.
     
-    db.prepare('UPDATE requests SET status = "approved" WHERE id = ?').run(req.params.id);
+    db.prepare("UPDATE requests SET status = 'approved' WHERE id = ?").run(req.params.id);
     res.json({ status: 'success', message: 'Request approved' });
   } catch (err) {
     res.status(500).json({ status: 'error', message: err.message });
@@ -89,7 +99,7 @@ router.put('/:id/approve', requireAdmin, async (req, res) => {
 // PUT /api/requests/:id/deny (Admin only)
 router.put('/:id/deny', requireAdmin, (req, res) => {
   try {
-    db.prepare('UPDATE requests SET status = "denied" WHERE id = ?').run(req.params.id);
+    db.prepare("UPDATE requests SET status = 'denied' WHERE id = ?").run(req.params.id);
     res.json({ status: 'success', message: 'Request denied' });
   } catch (err) {
     res.status(500).json({ status: 'error', message: err.message });

@@ -1,59 +1,13 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../lib/api';
-import { Search as SearchIcon, Plus, Info, Tv, Film, Star, CheckCircle2, ChevronRight, ChevronLeft, CheckSquare, Square, ListFilter } from 'lucide-react';
+import { Search as SearchIcon, Plus, Info, Tv, Film, Star, CheckCircle2, ChevronRight, ChevronLeft, CheckSquare, Square, ListFilter, X } from 'lucide-react';
 import MediaDetailsModal from '../components/MediaDetailsModal';
+import MediaRow from '../components/MediaRow';
 import { customAlert } from '../utils/alerts';
+import { useOutsideClick } from '../lib/useOutsideClick';
 
-function MediaRow({ title, items, badgeText, isTrending = false, renderMediaCard }) {
-  const scrollContainerRef = useRef(null);
-  const firstIdRef = useRef(null);
 
-  // Auto-scroll to start when new items are prepended
-  useEffect(() => {
-    if (items && items.length > 0 && items[0].id !== firstIdRef.current && scrollContainerRef.current) {
-      scrollContainerRef.current.scrollTo({ left: 0, behavior: 'smooth' });
-    }
-    firstIdRef.current = items && items.length > 0 ? items[0].id : null;
-  }, [items]);
-
-  const scroll = (direction) => {
-    if (scrollContainerRef.current) {
-      const scrollAmount = window.innerWidth > 768 ? 800 : 300;
-      scrollContainerRef.current.scrollBy({ left: direction === 'right' ? scrollAmount : -scrollAmount, behavior: 'smooth' });
-    }
-  };
-
-  if (!items || items.length === 0) return null;
-  return (
-    <div className="mb-10 group/row relative">
-      <div className="flex justify-between items-center mb-4">
-        <h2 className="text-xl font-bold text-slate-200 flex items-center space-x-2">
-          <span className="bg-gradient-to-r from-orange-400 to-pink-500 text-transparent bg-clip-text">
-            {title}
-          </span>
-          {badgeText && (
-            <span className="text-xs font-normal text-slate-500 bg-slate-900 px-2 py-1 rounded-md ml-4 border border-white/5">
-              {badgeText}
-            </span>
-          )}
-        </h2>
-        <div className="flex gap-2">
-           <button onClick={() => scroll('left')} className="p-2 bg-slate-900/50 hover:bg-slate-800 rounded-full text-slate-400 hover:text-white transition-colors border border-white/5 backdrop-blur-sm">
-             <ChevronLeft className="w-5 h-5" />
-           </button>
-           <button onClick={() => scroll('right')} className="p-2 bg-slate-900/50 hover:bg-slate-800 rounded-full text-slate-400 hover:text-white transition-colors border border-white/5 backdrop-blur-sm">
-             <ChevronRight className="w-5 h-5" />
-           </button>
-        </div>
-      </div>
-      
-      <div ref={scrollContainerRef} className="flex overflow-x-auto gap-6 snap-x snap-mandatory pb-4 hide-scrollbar">
-        {items.map(item => renderMediaCard(item, isTrending, false))}
-      </div>
-    </div>
-  );
-}
 
 export default function Discover() {
   const navigate = useNavigate();
@@ -65,9 +19,9 @@ export default function Discover() {
   const [upcomingResults, setUpcomingResults] = useState([]);
   const [loading, setLoading] = useState(true);
   const [rowsMenuOpen, setRowsMenuOpen] = useState(false);
-  const rowsMenuRef = useRef(null);
-  
-  const ROW_KEYS = ['trending', 'recent', 'upcoming', 'recommended'];
+  const rowsMenuRef = useOutsideClick(() => setRowsMenuOpen(false), rowsMenuOpen);
+
+  const ROW_KEYS = ['recent', 'trending', 'upcoming', 'recommended'];
   const ROW_LABELS = { trending: 'Trending', recent: 'Recently Added', upcoming: 'In Cinemas', recommended: 'Recommended' };
   const [visibleRows, setVisibleRows] = useState(() => {
     try {
@@ -100,20 +54,12 @@ export default function Discover() {
     }
   }, [mode]);
 
-  // Close rows menu on outside click
-  useEffect(() => {
-    if (!rowsMenuOpen) return;
-    const handler = (e) => {
-      if (rowsMenuRef.current && !rowsMenuRef.current.contains(e.target)) {
-        setRowsMenuOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [rowsMenuOpen]);
+  // Close rows menu on outside click — handled by useOutsideClick hook above
 
   useEffect(() => {
     let interval;
+    let searchTimer;
+    
     if (!query) {
       setResults([]);
 
@@ -127,25 +73,30 @@ export default function Discover() {
         setLoading(false);
       }
 
-      // Always refresh in background
+      // Fire both in parallel — library data populates badges, media data
+      // populates the posters. Loading clears on first completed request.
       fetchAllData();
-      interval = setInterval(() => fetchAllData(true), 60000);
+      fetchLibrary();
+      interval = setInterval(() => {
+        fetchLibrary();
+        fetchAllData(true);
+      }, 60000);
     } else {
-      const timer = setTimeout(() => {
+      searchTimer = setTimeout(() => {
         executeSearch(query);
       }, 500);
-      return () => clearTimeout(timer);
     }
-    fetchLibrary();
     
     return () => {
       if (interval) clearInterval(interval);
+      if (searchTimer) clearTimeout(searchTimer);
     };
   }, [query, mode]);
 
   const fetchLibrary = async () => {
     try {
-      const endpoint = mode === 'movies' ? '/library/movies' : '/library/shows';
+      // Use ?badges=true to skip expensive subtitle scanning on movies
+      const endpoint = mode === 'movies' ? '/library/movies?badges=true' : '/library/shows';
       const res = await api.get(endpoint);
       if (res.data.status === 'success') {
         const items = res.data.data;
@@ -181,41 +132,48 @@ export default function Discover() {
   const fetchAllData = async (isBackgroundRefresh = false) => {
     if (!isBackgroundRefresh) setError('');
     
+    const trendingEnd = mode === 'movies' ? '/trakt/trending/movies' : '/trakt/trending/shows';
+    const recEnd = mode === 'movies' ? '/tmdb/recommended/movies' : '/tmdb/recommended/shows';
+
+    // Fire all requests — each updates state independently as it resolves
+    const setters = [
+      api.get(trendingEnd).then(res => {
+        if (res.data?.status === 'success') setTrendingResults(res.data.data);
+        return res;
+      }),
+      api.get(recEnd).then(res => {
+        if (res.data?.status === 'success') setRecommendedResults(res.data.data);
+        return res;
+      }),
+      mode === 'movies' ? api.get('/tmdb/movies/upcoming').then(res => {
+        if (res.data?.status === 'success') setUpcomingResults(res.data.data);
+        return res;
+      }) : Promise.resolve(null),
+    ];
+
+    // Clear loading as soon as the FIRST request completes
+    let loaded = false;
+
     try {
-      const trendingEnd = mode === 'movies' ? '/trakt/trending/movies' : '/trakt/trending/shows';
-      const recEnd = mode === 'movies' ? '/tmdb/recommended/movies' : '/tmdb/recommended/shows';
+      const results = await Promise.all(setters.map(p =>
+        p.then(r => {
+          if (!loaded) { loaded = true; if (!isBackgroundRefresh) setLoading(false); }
+          return r;
+        }).catch(() => null)
+      ));
       
-      const [trendRes, recRes, upRes] = await Promise.all([
-        api.get(trendingEnd),
-        api.get(recEnd),
-        mode === 'movies' ? api.get('/tmdb/movies/upcoming') : Promise.resolve({ data: { status: 'success', data: [] } }),
-      ]);
-      
-      if (trendRes.data?.status === 'success') {
-        setTrendingResults(trendRes.data.data);
-      }
-      if (recRes.data?.status === 'success') {
-        setRecommendedResults(recRes.data.data);
-      }
-      if (upRes.data?.status === 'success') {
-        setUpcomingResults(upRes.data.data);
-      }
-      
-      // Update cache for current mode
       cacheRef.current[mode] = {
-        trending: trendRes.data?.status === 'success' ? trendRes.data.data : (cacheRef.current[mode]?.trending || []),
-        recommended: recRes.data?.status === 'success' ? recRes.data.data : (cacheRef.current[mode]?.recommended || []),
-        upcoming: upRes.data?.status === 'success' ? upRes.data.data : (cacheRef.current[mode]?.upcoming || []),
+        trending: results[0]?.data?.status === 'success' ? results[0].data.data : (cacheRef.current[mode]?.trending || []),
+        recommended: results[1]?.data?.status === 'success' ? results[1].data.data : (cacheRef.current[mode]?.recommended || []),
+        upcoming: results[2]?.data?.status === 'success' ? results[2].data.data : (cacheRef.current[mode]?.upcoming || []),
         recent: cacheRef.current[mode]?.recent || [],
         libraryIds: cacheRef.current[mode]?.libraryIds || new Map(),
       };
-      
     } catch (err) {
       if (!isBackgroundRefresh) {
-        setError(err.response?.data?.message || 'Failed to load media. Make sure APIs are configured.');
+        setError(err.response?.data?.message || 'Failed to load media.');
+        setLoading(false);
       }
-    } finally {
-      if (!isBackgroundRefresh) setLoading(false);
     }
   };
 
@@ -262,8 +220,8 @@ export default function Discover() {
     const rating = media.vote_average ? media.vote_average.toFixed(1) : '?';
     const watchers = media.watchers;
     const poster = media.poster_path ? (media.poster_path.startsWith('http') ? media.poster_path : `https://image.tmdb.org/t/p/w500${media.poster_path}`) : null;
-    const tmdbId = media.id || (media.ids && media.ids.tmdb);
-    const keyId = tmdbId || media.title || media.name || index; // Fallback to title, name, or index
+    const tmdbId = media.ids?.tmdb || media.id;
+    const keyId = tmdbId || media.title || media.name || Math.random().toString();
     const isInLibrary = tmdbId ? libraryItems.has(tmdbId) : false;
     const displayType = media.media_type === 'tv' ? 'show' : media.media_type === 'movie' ? 'movie' : mode === 'movies' ? 'movie' : 'show';
 
@@ -307,9 +265,9 @@ export default function Discover() {
             {!isInLibrary ? (
               <button 
                 onClick={() => handleAddMedia(tmdbId, displayType)}
-                className="bg-cyan-500 hover:bg-cyan-400 text-slate-950 w-full py-2 rounded-lg font-bold flex items-center justify-center gap-2 shadow-lg"
+                className="bg-cyan-500 hover:bg-cyan-400 text-slate-950 w-full py-1.5 px-2 text-sm rounded-lg font-bold flex items-center justify-center gap-1.5 shadow-lg"
               >
-                <Plus className="w-4 h-4" /> Add {mode === 'movies' ? 'Movie' : 'Show'}
+                <Plus className="w-4 h-4 flex-shrink-0" /> Add {mode === 'movies' ? 'Movie' : 'Show'}
               </button>
             ) : (
               <button 
@@ -318,9 +276,9 @@ export default function Discover() {
                   const libraryId = libraryItems.get(tmdbId);
                   navigate(displayType === 'movie' ? `/movies/${libraryId}` : `/shows/${libraryId}`);
                 }}
-                className="bg-emerald-500/20 hover:bg-emerald-500/30 transition-colors text-emerald-400 border border-emerald-500/30 w-full py-2 rounded-lg font-bold flex items-center justify-center gap-2 shadow-lg cursor-pointer"
+                className="bg-emerald-500/20 hover:bg-emerald-500/30 transition-colors text-emerald-400 border border-emerald-500/30 w-full py-1.5 px-2 text-sm rounded-lg font-bold flex items-center justify-center gap-1.5 shadow-lg cursor-pointer"
               >
-                <CheckCircle2 className="w-4 h-4" /> In Library
+                <CheckCircle2 className="w-4 h-4 flex-shrink-0" /> In Library
               </button>
             )}
           </div>
@@ -404,16 +362,26 @@ export default function Discover() {
 
       <div className="glass-panel rounded-2xl p-6 shadow-2xl">
         <form onSubmit={searchMovies} className="flex gap-4">
-          <div className="relative flex-1">
-            <SearchIcon className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+          <div className="relative flex-1 flex items-center">
+            <SearchIcon className="absolute left-4 w-5 h-5 text-slate-400" />
             <input
               ref={searchInputRef}
               type="text"
               placeholder="Search by title, IMDb ID (e.g. tt1234567), or TMDB ID..."
-              className="glass-input w-full !pl-12 h-12 text-lg shadow-inner"
+              className="glass-input w-full !pl-12 !pr-14 h-12 text-lg shadow-inner"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
             />
+            {query && (
+              <button
+                type="button"
+                onClick={() => setQuery('')}
+                className="absolute right-3 p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"
+                title="Clear search"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            )}
           </div>
         </form>
       </div>
@@ -433,8 +401,8 @@ export default function Discover() {
             </div>
           ) : (
             <>
-              <MediaRow title="Trending Right Now" items={trendingResults} badgeText="Powered by Trakt.tv" isTrending={true} renderMediaCard={renderMediaCard} />
               {visibleRows.recent && <MediaRow title="Recently Added" items={recentResults} badgeText="From your library" renderMediaCard={renderMediaCard} />}
+              <MediaRow title="Trending Right Now" items={trendingResults} badgeText="Powered by Trakt.tv" isTrending={true} renderMediaCard={renderMediaCard} />
               {visibleRows.upcoming && <MediaRow title="In Cinemas & Upcoming" items={upcomingResults} badgeText="Powered by TMDB" renderMediaCard={renderMediaCard} />}
               {visibleRows.recommended && <MediaRow title="Recommended For You" items={recommendedResults} badgeText="Powered by TMDB" renderMediaCard={renderMediaCard} />}
             </>

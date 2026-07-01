@@ -9,6 +9,7 @@ import {
 import useWebSocket from '../lib/useWebSocket';
 import EmptyState from '../components/shared/EmptyState';
 import HealthWidget from '../components/shared/HealthWidget';
+import Spinner from '../components/shared/Spinner';
 
 const statusIcons = {
   tmdb: Database,
@@ -135,7 +136,7 @@ export default function Status() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-96">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-cyan-500" />
+        <Spinner size="lg" />
       </div>
     );
   }
@@ -296,7 +297,7 @@ export default function Status() {
         {downloadClients.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {downloadClients.map((client, i) => (
-              <div key={i} className={`glass-panel rounded-2xl p-5 border ${statusColors[client.status]?.border} flex items-center gap-4`}>
+              <div key={`row-${i}`} className={`glass-panel rounded-2xl p-5 border ${statusColors[client.status]?.border} flex items-center gap-4`}>
                 <div className={`p-3 rounded-2xl ${statusColors[client.status]?.bg}`}>
                   <Server className={`w-6 h-6 ${statusColors[client.status]?.text}`} />
                 </div>
@@ -377,7 +378,7 @@ export default function Status() {
                 ? { bg: 'bg-amber-500/10', text: 'text-amber-400', dot: 'bg-amber-400', border: 'border-amber-500/20' }
                 : { bg: 'bg-rose-500/10', text: 'text-rose-400', dot: 'bg-rose-400', border: 'border-rose-500/20' };
               return (
-                <div key={i} className={`flex items-center gap-3 p-3 rounded-xl border ${colors.border} ${colors.bg}`}>
+                <div key={`row-${i}`} className={`flex items-center gap-3 p-3 rounded-xl border ${colors.border} ${colors.bg}`}>
                   <span className={`w-2 h-2 rounded-full shrink-0 ${colors.dot}`} />
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-slate-200 break-all">{entry.path}</p>
@@ -402,7 +403,7 @@ export default function Status() {
         <div className="space-y-4">
           {logsLoading && logs.length === 0 ? (
             <div className="flex justify-center py-12">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-cyan-500" />
+              <Spinner />
             </div>
           ) : logs.length === 0 ? (
             <EmptyState

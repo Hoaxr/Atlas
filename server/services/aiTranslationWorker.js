@@ -19,35 +19,56 @@ ${text}`;
 
 const translateWithGoogleTranslate = async (text, targetLang) => {
   const axios = require('axios');
-  // Free Google Translate endpoint (no API key needed)
-  const langMap = { 'Dutch': 'nl', 'French': 'fr', 'German': 'de', 'Spanish': 'es', 'Italian': 'it', 'Portuguese': 'pt' };
-  const target = langMap[targetLang] || 'nl';
+  const { LANG_CODE } = require('../routes/library/helpers');
+  const target = LANG_CODE[targetLang] || 'nl';
 
-  // Split SRT into lines, translate only the text lines (not timestamps/numbers)
+  // Split SRT into lines
   const lines = text.split('\n');
   const translatedLines = [];
   
-  for (const line of lines) {
-    // Skip timestamp lines and sequence numbers — translate only text content
+  // Collect text lines with their indices for batch translation
+  const textIndices = [];
+  const textContents = [];
+  
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
     if (/^\d+$/.test(line.trim()) || /^\d{2}:\d{2}:\d{2}/.test(line.trim()) || line.trim() === '') {
-      translatedLines.push(line);
+      translatedLines[i] = line;
     } else {
-      try {
-        const res = await axios.get('https://translate.googleapis.com/translate_a/single', {
-          params: {
-            client: 'gtx',
-            sl: 'en',
-            tl: target,
-            dt: 't',
-            q: line
-          },
-          timeout: 5000
-        });
-        // Response format: [[["translated","original",...]],...]
-        const translated = res.data[0][0][0];
-        translatedLines.push(translated || line);
-      } catch {
-        translatedLines.push(line); // fallback to original on error
+      textIndices.push(i);
+      textContents.push(line);
+    }
+  }
+  
+  // Batch translate: send groups of lines joined by newlines
+  const BATCH_SIZE = 20;
+  for (let b = 0; b < textContents.length; b += BATCH_SIZE) {
+    const batch = textContents.slice(b, b + BATCH_SIZE);
+    const joined = batch.join('\n');
+    
+    try {
+      const res = await axios.get('https://translate.googleapis.com/translate_a/single', {
+        params: {
+          client: 'gtx',
+          sl: 'en',
+          tl: target,
+          dt: 't',
+          q: joined
+        },
+        timeout: 10000
+      });
+      
+      // Response: [[["translated","original",...]], ...] per input line
+      const results = res.data[0] || [];
+      for (let j = 0; j < batch.length; j++) {
+        const result = results[j];
+        const translated = result?.[0]?.[0] || batch[j];
+        translatedLines[textIndices[b + j]] = translated;
+      }
+    } catch {
+      // Fallback to original lines on error
+      for (let j = 0; j < batch.length; j++) {
+        translatedLines[textIndices[b + j]] = batch[j];
       }
     }
   }
@@ -108,7 +129,8 @@ const translateSubtitles = async () => {
     throw new Error(`${providerChecks[activeProvider].name} missing. Please set it in Settings.`);
   }
 
-  const langCode = { 'Dutch': 'nl', 'French': 'fr', 'German': 'de', 'Spanish': 'es', 'Italian': 'it', 'Portuguese': 'pt' }[targetLang] || 'nl';
+  const { LANG_CODE } = require('../routes/library/helpers');
+  const langCode = LANG_CODE[targetLang] || 'nl';
 
   const translateFile = async (filePath, displayName, seasonNum, episodeNum) => {
     if (!fs.existsSync(filePath)) return null;

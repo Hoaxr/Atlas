@@ -1,7 +1,10 @@
 const express = require('express');
 const router = express.Router();
+const bcrypt = require('bcrypt');
 const db = require('../config/database');
 const userProvisioningService = require('../services/userProvisioningService');
+
+const hashPassword = (password) => bcrypt.hash(password, 12);
 
 // Middleware to ensure admin role for user management
 const requireAdmin = (req, res, next) => {
@@ -40,13 +43,18 @@ router.post('/', requireAdmin, async (req, res) => {
       return res.status(400).json({ status: 'error', message: 'Username and password are required' });
     }
 
+    if (password.length < 8) {
+      return res.status(400).json({ status: 'error', message: 'Password must be at least 8 characters' });
+    }
+
     const existing = db.prepare('SELECT id FROM users WHERE username = ?').get(username);
     if (existing) {
       return res.status(400).json({ status: 'error', message: 'Username already exists' });
     }
 
+    const hashed = await hashPassword(password);
     const result = db.prepare('INSERT INTO users (username, password, email, role) VALUES (?, ?, ?, ?)').run(
-      username, password, email || null, role || 'user'
+      username, hashed, email || null, role || 'user'
     );
 
     let provisionResults = null;
@@ -90,7 +98,7 @@ router.delete('/:id', requireAdmin, (req, res) => {
 });
 
 // PUT /api/users/:id
-router.put('/:id', requireAdmin, (req, res) => {
+router.put('/:id', requireAdmin, async (req, res) => {
   try {
     const { id } = req.params;
     const { username, password, email, role } = req.body;
@@ -119,8 +127,12 @@ router.put('/:id', requireAdmin, (req, res) => {
     }
 
     if (password) {
+      if (password.length < 8) {
+        return res.status(400).json({ status: 'error', message: 'Password must be at least 8 characters' });
+      }
+      const hashed = await hashPassword(password);
       db.prepare('UPDATE users SET username = ?, password = ?, email = ?, role = ? WHERE id = ?').run(
-        username, password, email || null, role || 'user', id
+        username, hashed, email || null, role || 'user', id
       );
     } else {
       db.prepare('UPDATE users SET username = ?, email = ?, role = ? WHERE id = ?').run(

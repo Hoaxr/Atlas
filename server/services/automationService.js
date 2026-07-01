@@ -12,7 +12,6 @@ const DEFAULT_SCHEDULES = {
   refresh_ratings:    '0 3 * * 0',  // Weekly on Sunday at 3 AM
   update_air_dates:   '0 2 * * 0',  // Weekly on Sunday at 2 AM
   trakt_watched_sync: '0 */6 * * *',
-  stale_cleanup:      '0 */6 * * *', // Every 6 hours
 };
 
 const getSchedule = (taskId) => {
@@ -30,7 +29,14 @@ const getProfile = (id) => {
 };
 
 const runSearchCycle = async () => {
-  const monitoredMovies = db.prepare("SELECT * FROM movies WHERE status = 'monitored' OR status = 'downloaded'").all();
+  // Skip movies not yet released (release_date is in the future).
+  // Only include downloaded movies if their profile allows upgrades.
+  const monitoredMovies = db.prepare(`
+    SELECT m.* FROM movies m
+    LEFT JOIN quality_profiles qp ON m.quality_profile_id = qp.id
+    WHERE (m.status = 'monitored' OR (m.status = 'downloaded' AND qp.upgrade_allowed = 1))
+      AND (m.release_date IS NULL OR date(m.release_date) <= date('now'))
+  `).all();
   
   for (const movie of monitoredMovies) {
     try {
@@ -55,7 +61,7 @@ const runSearchCycle = async () => {
         }
       }
 
-      const results = await indexerService.searchMovie(movie.title, movie.year, profile, currentQuality);
+      const results = await indexerService.searchMovie(movie.title, movie.year, profile, currentQuality, false, movie.tmdb_id);
       
       if (results.length > 0) {
         const bestRelease = results[0]; 
@@ -69,11 +75,13 @@ const runSearchCycle = async () => {
   }
 
   const monitoredEpisodes = db.prepare(`
-    SELECT e.*, s.title as show_title, s.quality_profile_id 
+    SELECT e.*, s.title as show_title, s.quality_profile_id, s.tmdb_id as show_tmdb_id
     FROM episodes e 
-    JOIN shows s ON e.show_id = s.id 
-    WHERE (e.status = 'monitored' OR e.status = 'downloaded')
+    JOIN shows s ON e.show_id = s.id
+    LEFT JOIN quality_profiles qp ON s.quality_profile_id = qp.id
+    WHERE (e.status = 'monitored' OR (e.status = 'downloaded' AND qp.upgrade_allowed = 1))
       AND e.monitored = 1
+      AND (e.air_date IS NULL OR date(e.air_date) <= date('now'))
   `).all();
 
   for (const ep of monitoredEpisodes) {
@@ -98,7 +106,7 @@ const runSearchCycle = async () => {
         }
       }
 
-      const results = await indexerService.searchEpisode(ep.show_title, ep.season_number, ep.episode_number, profile, currentQuality);
+      const results = await indexerService.searchEpisode(ep.show_title, ep.season_number, ep.episode_number, profile, currentQuality, false, ep.show_tmdb_id);
       
       if (results.length > 0) {
         const bestRelease = results[0];
@@ -113,14 +121,16 @@ const runSearchCycle = async () => {
 };
 
 const runRefreshAllRatings = async () => {
-  console.log('[Automation] Refreshing all movie ratings...');
-  const movies = db.prepare('SELECT id, tmdb_id FROM movies').all();
+  // Only refresh items with missing or zero ratings — established ratings rarely change
+  // and this avoids burning 1000+ TMDB API calls every week.
+  console.log('[Automation] Refreshing movie ratings...');
+  const movies = db.prepare("SELECT id, tmdb_id FROM movies WHERE rating IS NULL OR rating = 0").all();
   let updated = 0;
   for (const movie of movies) {
     try {
       const tmdbData = await tmdbService.getMovieById(movie.tmdb_id);
       if (tmdbData && tmdbData.vote_average !== undefined) {
-        db.prepare('UPDATE movies SET rating = ? WHERE id = ? AND rating != ?').run(tmdbData.vote_average, movie.id, tmdbData.vote_average);
+        db.prepare('UPDATE movies SET rating = ? WHERE id = ? AND (rating IS NULL OR rating = 0 OR rating != ?)').run(tmdbData.vote_average, movie.id, tmdbData.vote_average);
         updated++;
       }
     } catch (err) {
@@ -128,13 +138,13 @@ const runRefreshAllRatings = async () => {
     }
   }
 
-  console.log('[Automation] Refreshing all show ratings...');
-  const shows = db.prepare('SELECT id, tmdb_id FROM shows').all();
+  console.log('[Automation] Refreshing show ratings...');
+  const shows = db.prepare("SELECT id, tmdb_id FROM shows WHERE rating IS NULL OR rating = 0").all();
   for (const show of shows) {
     try {
       const tmdbData = await tmdbService.getShowById(show.tmdb_id);
       if (tmdbData && tmdbData.vote_average !== undefined) {
-        db.prepare('UPDATE shows SET rating = ? WHERE id = ? AND rating != ?').run(tmdbData.vote_average, show.id, tmdbData.vote_average);
+        db.prepare('UPDATE shows SET rating = ? WHERE id = ? AND (rating IS NULL OR rating = 0 OR rating != ?)').run(tmdbData.vote_average, show.id, tmdbData.vote_average);
         updated++;
       }
     } catch (err) {
@@ -146,8 +156,14 @@ const runRefreshAllRatings = async () => {
 };
 
 const runUpdateAirDates = async () => {
+  // Only process shows that have episodes without air dates (i.e. currently/previously airing).
+  // Fully aired shows where every episode has a date are skipped.
   console.log('[Automation] Updating episode air dates...');
-  const shows = db.prepare("SELECT id, tmdb_id FROM shows WHERE status != 'unmonitored'").all();
+  const shows = db.prepare(`
+    SELECT DISTINCT s.id, s.tmdb_id FROM shows s
+    JOIN episodes e ON e.show_id = s.id
+    WHERE s.status != 'unmonitored' AND (e.air_date IS NULL OR e.air_date = '')
+  `).all();
   const updateEp = db.prepare(`
     UPDATE episodes SET air_date = ? 
     WHERE show_id = ? AND season_number = ? AND episode_number = ?
@@ -175,45 +191,6 @@ const runTraktWatchedSync = async () => {
   await traktService.syncWatched();
 };
 
-const runStaleCleanup = async () => {
-  console.log('[Automation] Checking for stale downloads...');
-  const stale = db.prepare(`
-    SELECT id, title, 'movie' as type FROM movies WHERE status = 'downloading'
-    UNION ALL
-    SELECT e.id, s.title, 'episode' as type 
-    FROM episodes e JOIN shows s ON e.show_id = s.id 
-    WHERE e.status = 'downloading'
-  `).all();
-
-  const torrents = await downloadClientService.getTorrents();
-  const torrentNames = new Set(torrents.map(t => t.name?.toLowerCase()));
-
-  let reset = 0;
-  for (const item of stale) {
-    try {
-      const isActive = [...torrentNames].some(name => {
-        const normalized = item.title.toLowerCase().replace(/[^a-z0-9]/g, '');
-        const torrentNorm = name.replace(/[^a-z0-9]/g, '');
-        return torrentNorm.includes(normalized) || normalized.includes(torrentNorm);
-      });
-
-      if (!isActive) {
-        const table = item.type === 'movie' ? 'movies' : 'episodes';
-        db.prepare(`UPDATE ${table} SET status = 'monitored', scene_name = NULL WHERE id = ?`).run(item.id);
-        reset++;
-        console.log(`[Automation] Reset stale download: ${item.title}`);
-      }
-    } catch (err) {
-      console.error(`[Automation] Stale cleanup error for ${item.title}:`, err.message);
-    }
-  }
-
-  if (reset > 0) {
-    console.log(`[Automation] Reset ${reset} stale download(s) back to monitored`);
-    eventBus.info(`Reset ${reset} stale download(s)`, { type: 'cleanup' });
-  }
-};
-
 // Holds references to active node-cron jobs so we can stop/restart them
 const activeJobs = {};
 
@@ -226,8 +203,7 @@ const scheduleTask = (taskId, cronExp) => {
 
 const init = () => {
   const tasks = [
-    { id: 'search_cycle',       name: 'Torrent Search Cycle',      desc: 'Searches for missing monitored movies and sends them to the download client.',             fn: runSearchCycle },
-    { id: 'stale_cleanup',      name: 'Stale Download Cleanup',    desc: 'Resets items stuck in downloading back to monitored if torrent was removed.',               fn: runStaleCleanup },
+    { id: 'search_cycle',       name: 'Torrent Search Cycle',      desc: 'Searches for missing monitored movies and episodes and sends them to the download client.', fn: runSearchCycle },
     { id: 'refresh_ratings',    name: 'Refresh All Ratings',       desc: 'Refreshes all ratings from TMDB to pick up rating changes (weekly).',                      fn: runRefreshAllRatings },
     { id: 'trakt_watched_sync', name: 'Trakt Watched Sync',        desc: 'Syncs watched status from your Trakt account to your local library.',                     fn: runTraktWatchedSync },
     { id: 'update_air_dates',   name: 'Update Air Dates',          desc: 'Fetches missing and upcoming episode air dates from TMDB (weekly).',                      fn: runUpdateAirDates },
@@ -239,7 +215,7 @@ const init = () => {
     scheduleTask(task.id, cronExp);
   }
 
-  console.log('[Automation] Background search, rating, air date, Trakt sync, and ratings refresh schedulers initialized.');
+  console.log('[Automation] Background search, rating, air date, Trakt sync schedulers initialized.');
 };
 
 // Called by settings API to hot-reload schedules without restart
@@ -255,6 +231,5 @@ const rescheduleAll = (newSchedules) => {
 module.exports = {
   init,
   runSearchCycle,
-  runStaleCleanup,
   rescheduleAll,
 };

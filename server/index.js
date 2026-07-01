@@ -1,5 +1,6 @@
 require('dotenv').config();
 const express = require('express');
+const path = require('path');
 const http = require('http');
 const { WebSocketServer } = require('ws');
 const compression = require('compression');
@@ -17,6 +18,8 @@ const authRoutes = require('./routes/auth');
 const releaseProfilesRoutes = require('./routes/releaseProfiles');
 const usersRoutes = require('./routes/users');
 const requestsRoutes = require('./routes/requests');
+const watcherRoutes = require('./routes/watcher');
+const watcherService = require('./services/watcherService');
 
 const errorHandler = require('./middleware/errorHandler');
 const eventBus = require('./services/eventBus');
@@ -91,7 +94,7 @@ const authMiddleware = require('./middleware/authMiddleware');
 // Routes
 // Apply auth middleware to all /api routes except /api/auth
 app.use('/api', (req, res, next) => {
-  if (req.path.startsWith('/auth')) {
+  if (req.path.startsWith('/auth') || req.path.startsWith('/watcher/image')) {
     return next();
   }
   return authMiddleware(req, res, next);
@@ -108,12 +111,22 @@ app.use('/api/auth', authRoutes);
 app.use('/api/release-profiles', releaseProfilesRoutes);
 app.use('/api/users', usersRoutes);
 app.use('/api/requests', requestsRoutes);
+app.use('/api/watcher', watcherRoutes);
+
+// ---- Production: serve the built client ----
+if (process.env.NODE_ENV === 'production') {
+  app.use(express.static(path.join(__dirname, '../client/dist')));
+  app.get('*', (req, res) => {
+    res.sendFile(path.join(__dirname, '../client/dist', 'index.html'));
+  });
+}
 
 app.use(errorHandler);
 
 // Graceful shutdown
 const shutdown = (signal) => {
   console.log(`[Backend] ${signal} received — shutting down...`);
+  watcherService.stopPolling();
   server.close(() => { console.log('[Backend] Closed.'); process.exit(0); });
   setTimeout(() => process.exit(1), 10000);
 };
@@ -122,5 +135,5 @@ process.on('SIGINT', () => shutdown('SIGINT'));
 
 server.listen(PORT, () => {
   console.log(`[Backend] Server op poort ${PORT}`);
-  notificationService.sendNotification('System', 'Atlas Media Manager has started successfully.', { title: 'Atlas Started' });
+  notificationService.sendNotification('Atlas', 'Atlas Media Manager has started successfully.', { title: '' });
 });

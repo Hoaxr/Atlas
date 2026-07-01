@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Shield, Lock, User, ArrowRight } from 'lucide-react';
 import api from '../lib/api';
-import { toast } from 'react-hot-toast';
+import { customAlert } from '../utils/alerts';
 
 export default function Login() {
   const [username, setUsername] = useState('');
@@ -18,10 +18,10 @@ export default function Login() {
       const res = await api.post('/auth/login', { username, password });
       if (res.data.status === 'success') {
         if (res.data.data?.token) {
-          localStorage.setItem('atlas_token', res.data.data.token);
-          localStorage.setItem('atlas_user', JSON.stringify(res.data.data.user));
+          try { localStorage.setItem('atlas_token', res.data.data.token); } catch {}
+          try { localStorage.setItem('atlas_user', JSON.stringify(res.data.data.user)); } catch {}
         }
-        toast.success('Login successful');
+        customAlert('Login successful');
         
         if (res.data.data?.user?.role === 'user') {
           navigate('/portal');
@@ -29,13 +29,13 @@ export default function Login() {
           navigate('/');
         }
       } else {
-        toast.error(res.data.message || 'Login failed');
+        customAlert(res.data.message || 'Login failed');
       }
     } catch (err) {
       if (err.response?.status === 401) {
-        toast.error('Invalid username or password');
+        customAlert('Invalid username or password');
       } else {
-        toast.error('Failed to connect to server');
+        customAlert('Failed to connect to server');
       }
     } finally {
       setLoading(false);

@@ -14,11 +14,12 @@ export default function TrailerModal({ trailerKey, onClose }) {
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-md">
-      <div className="relative w-full max-w-5xl">
+      <div className="relative w-full max-w-5xl" role="dialog" aria-modal="true" aria-label="Movie trailer">
         <div className="flex justify-end mb-4">
           <button 
             onClick={onClose}
             className="text-slate-400 hover:text-white transition-colors bg-slate-900/50 p-2 rounded-full border border-white/10 hover:bg-slate-800"
+            aria-label="Close trailer"
           >
             <X className="w-6 h-6" />
           </button>

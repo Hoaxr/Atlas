@@ -1,12 +1,8 @@
 const axios = require('axios');
 const db = require('../config/database');
+const { getSetting } = require('../utils/settings');
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
-
-const getSetting = (key) => {
-  const row = db.prepare('SELECT value FROM settings WHERE key = ?').get(key);
-  return row ? row.value : null;
-};
 
 const cleanTitle = (title) =>
   title.replace(/['']/g, '').replace(/[^a-zA-Z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
@@ -20,6 +16,12 @@ const parseQuality = (title) => {
   if (t.includes('720p')) return '720p';
   if (t.includes('480p') || t.includes('dvdrip') || t.includes('xvid') || t.includes('hdtv')) return 'SD';
   return 'Unknown';
+};
+
+// Extract a 4-digit release year (1900-2099) from a release title
+const extractReleaseYear = (title) => {
+  const match = title.match(/\b(19\d{2}|20\d{2})\b/);
+  return match ? parseInt(match[1], 10) : null;
 };
 
 // ─── Prowlarr JSON Search ─────────────────────────────────────────────
@@ -80,7 +82,7 @@ const searchProwlarr = async (query, type = 'search') => {
 
 // ─── Filter & Sort ────────────────────────────────────────────────────────────
 
-const filterAndSortResults = (results, profile, type, currentQuality = null, isManualSearch = false, expectedTitle = null) => {
+const filterAndSortResults = (results, profile, type, currentQuality = null, isManualSearch = false, expectedTitle = null, expectedYear = null) => {
   let releaseProfiles = [];
   if (!isManualSearch) {
     try {
@@ -101,19 +103,44 @@ const filterAndSortResults = (results, profile, type, currentQuality = null, isM
   let camFiltered = 0;
   let filtered = results.filter(r => {
     if (expectedTitle) {
-      const normalizedExpected = expectedTitle.toLowerCase().replace(/[^a-z0-9]/g, '');
-      const normalizedResult = r.title.toLowerCase().replace(/[^a-z0-9]/g, '');
-      
       const expectedWords = expectedTitle.toLowerCase().replace(/['"]/g, '').split(/[^a-z0-9]+/).filter(Boolean);
-      const resultWords = r.title.toLowerCase().replace(/['"]/g, '').split(/[^a-z0-9]+/).filter(Boolean);
+      const cleanTitle = r.title.replace(/\[.*?\]|\(.*?\)/g, '').trim();
+      const resultWords = cleanTitle.toLowerCase().replace(/['"]/g, '').split(/[^a-z0-9]+/).filter(Boolean);
       
-      const hasAllWords = expectedWords.every(w => resultWords.includes(w));
-      const isLooseMatch = normalizedResult.includes(normalizedExpected);
-      
-      if (normalizedExpected.length < 5) {
-        if (!hasAllWords) return false;
+      let matchIdx = -1;
+      for (let i = 0; i <= resultWords.length - expectedWords.length; i++) {
+        let isMatch = true;
+        for (let j = 0; j < expectedWords.length; j++) {
+          if (resultWords[i + j] !== expectedWords[j]) {
+            isMatch = false;
+            break;
+          }
+        }
+        if (isMatch) {
+          matchIdx = i;
+          break;
+        }
+      }
+
+      if (matchIdx === -1) return false;
+
+      // For single-word titles, require match at position 0, or position 1 if
+      // preceded by a year or common article (the/a/an)
+      if (expectedWords.length === 1) {
+        const firstWord = resultWords[0];
+        const firstIsYear = /^\d{4}$/.test(firstWord);
+        const firstIsArticle = ['the', 'a', 'an'].includes(firstWord);
+        const maxPos = (firstIsYear || firstIsArticle) ? 1 : 0;
+        if (matchIdx > maxPos) return false;
       } else {
-        if (!hasAllWords && !isLooseMatch) return false;
+        // For multi-word titles, allow within first 3 positions
+        if (matchIdx > 3) return false;
+      }
+
+      // Validate year if expected — allow ±2 years for edge cases
+      if (expectedYear) {
+        const releaseYear = extractReleaseYear(r.title);
+        if (releaseYear && Math.abs(releaseYear - expectedYear) > 2) return false;
       }
     }
 
@@ -168,10 +195,41 @@ const filterAndSortResults = (results, profile, type, currentQuality = null, isM
 
 const searchMovie = async (title, year, profile = null, currentQuality = null, isManualSearch = false) => {
   const cleanedTitle = cleanTitle(title);
-  const searchTerm = year ? `${cleanedTitle} ${year}` : cleanedTitle;
   
-  const results = await searchProwlarr(searchTerm, 'movie');
-  return filterAndSortResults(results, profile, 'movies', currentQuality, isManualSearch, title);
+  let allResults = [];
+  
+  if (year) {
+    // Try the given year first
+    let rawResults = await searchProwlarr(`${cleanedTitle} ${year}`, 'movie');
+    let filtered = filterAndSortResults(rawResults, profile, 'movies', currentQuality, isManualSearch, title, year);
+    allResults = filtered;
+
+    // If no good results, try the previous year (release may have been grouped differently)
+    if (allResults.length === 0) {
+      console.log(`[IndexerService] No matches for "${cleanedTitle} ${year}", trying year ${year - 1}`);
+      rawResults = await searchProwlarr(`${cleanedTitle} ${year - 1}`, 'movie');
+      filtered = filterAndSortResults(rawResults, profile, 'movies', currentQuality, isManualSearch, title, year - 1);
+      allResults = filtered;
+    }
+
+    // If still no good results, try without any year but still validate the year
+    if (allResults.length === 0) {
+      console.log(`[IndexerService] No matches with year, trying without: "${cleanedTitle}"`);
+      rawResults = await searchProwlarr(cleanedTitle, 'movie');
+      // Allow years within ±2 of the expected year for the no-year fallback
+      filtered = filterAndSortResults(rawResults, profile, 'movies', currentQuality, isManualSearch, title, year);
+      // If year validation is too strict, fall back to no year check at all
+      if (filtered.length === 0) {
+        filtered = filterAndSortResults(rawResults, profile, 'movies', currentQuality, isManualSearch, title);
+      }
+      allResults = filtered;
+    }
+  } else {
+    const rawResults = await searchProwlarr(cleanedTitle, 'movie');
+    allResults = filterAndSortResults(rawResults, profile, 'movies', currentQuality, isManualSearch, title);
+  }
+  
+  return allResults;
 };
 
 const searchEpisode = async (showTitle, season, episode, profile = null, currentQuality = null, isManualSearch = false) => {

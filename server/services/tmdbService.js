@@ -169,6 +169,25 @@ const searchShows = async (query) => {
   }
 };
 
+const searchMulti = async (query) => {
+  try {
+    const trimmedQuery = query.trim();
+    if (!trimmedQuery) return [];
+
+    const response = await tmdbApi.get('/search/multi', {
+      params: { query: trimmedQuery, page: 1, include_adult: false }
+    });
+    
+    // Filter out people, only return movies and tv shows
+    return (response.data.results || []).filter(item => item.media_type === 'movie' || item.media_type === 'tv');
+  } catch (error) {
+    if (error.response) {
+      throw new Error(`TMDB Error: ${error.response.data.status_message}`, { cause: error });
+    }
+    throw error;
+  }
+};
+
 const getMovieById = async (id) => {
   try {
     const response = await tmdbApi.get(`/movie/${id}`, { params: { append_to_response: 'videos,credits' } });
@@ -299,9 +318,44 @@ const getPersonById = async (personId) => {
   }
 };
 
+/**
+ * Get the earliest digital (4) or physical (5) release date for a movie.
+ * Falls back to theatrical release_date if no digital/physical date found.
+ */
+const getMovieReleaseDates = async (tmdbId) => {
+  try {
+    const res = await tmdbApi.get(`/movie/${tmdbId}/release_dates`);
+    const results = res.data.results || [];
+    let digitalDate = null;
+    let physicalDate = null;
+
+    for (const country of results) {
+      for (const rd of country.release_dates || []) {
+        // Type 4 = Digital, Type 5 = Physical
+        if (rd.type === 4 && rd.release_date) {
+          if (!digitalDate || rd.release_date < digitalDate) digitalDate = rd.release_date;
+        }
+        if (rd.type === 5 && rd.release_date) {
+          if (!physicalDate || rd.release_date < physicalDate) physicalDate = rd.release_date;
+        }
+      }
+    }
+
+    // Return earliest of digital or physical, or null if neither found
+    if (digitalDate && physicalDate) return digitalDate < physicalDate ? digitalDate : physicalDate;
+    if (digitalDate) return digitalDate;
+    if (physicalDate) return physicalDate;
+    return null;
+  } catch (err) {
+    console.error(`[TMDB] Failed to fetch release dates for movie ${tmdbId}:`, err.message);
+    return null;
+  }
+};
+
 module.exports = {
   searchMovies,
   searchShows,
+  searchMulti,
   getMovieById,
   getShowById,
   getSeasonById,
@@ -313,4 +367,5 @@ module.exports = {
   getRecommendationsForMovies,
   getRecommendationsForShows,
   getPersonById,
+  getMovieReleaseDates,
 };

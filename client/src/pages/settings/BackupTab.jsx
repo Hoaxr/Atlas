@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import api from '../../lib/api';
-import { Download, RefreshCw, FileText, Database } from 'lucide-react';
+import { Download, RefreshCw, FileText } from 'lucide-react';
 import { customAlert, customConfirm } from '../../utils/alerts';
 
 export default function BackupTab() {
@@ -65,16 +65,12 @@ export default function BackupTab() {
         <h2 className="text-2xl font-bold text-slate-300">Database Backup & Restore</h2>
       </div>
 
-      <div className="bg-slate-500/10 border border-slate-500/20 text-slate-300 p-4 rounded-xl mb-6 flex gap-3 text-sm">
-        <Database className="w-5 h-5 shrink-0" />
-        <p>Download a complete copy of your database, or restore from an existing backup file. Restoring will replace all current data.</p>
-      </div>
-
       <div className="glass-panel rounded-2xl p-6 space-y-6">
         <div>
           <h2 className="text-xl font-bold text-slate-200 flex items-center gap-2">
             <Download className="w-5 h-5 text-cyan-400" /> Backup Database
           </h2>
+          <p className="text-xs text-slate-500 mt-1">Download a complete snapshot of your Atlas database for safekeeping.</p>
         </div>
         <button
           onClick={handleBackup}
@@ -95,9 +91,7 @@ export default function BackupTab() {
           <h2 className="text-xl font-bold text-slate-200 flex items-center gap-2">
             <RefreshCw className="w-5 h-5 text-amber-400" /> Restore Database
           </h2>
-          <p className="text-slate-400 text-sm mt-1">
-            Restore from a previous backup. This will replace all current data. A backup of the current database will be saved automatically.
-          </p>
+          <p className="text-xs text-slate-500 mt-1">Restore from a previous backup. This will replace all current data. A backup of the current database will be saved automatically.</p>
         </div>
 
         <div className="space-y-4">

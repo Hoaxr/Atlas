@@ -1,138 +1,59 @@
 const axios = require('axios');
 const db = require('../config/database');
-const FormData = require('form-data');
+const adapters = {
+  qbittorrent: require('./clients/qbittorrent'),
+  deluge: require('./clients/deluge'),
+  transmission: require('./clients/transmission'),
+  rtorrent: require('./clients/rtorrent'),
+  nzbget: require('./clients/nzbget'),
+  sabnzbd: require('./clients/sabnzbd'),
+};
 
 const getClient = () => {
-  return db.prepare('SELECT * FROM download_clients LIMIT 1').get();
+  const client = db.prepare('SELECT * FROM download_clients LIMIT 1').get();
+  if (!client) return null;
+  if (!client.host.startsWith('http')) client.host = `http://${client.host}`;
+  client.type = client.type || 'qbittorrent';
+  return client;
 };
 
-const login = async (client) => {
-  try {
-    const response = await axios.post(`${client.host}:${client.port}/api/v2/auth/login`, 
-      `username=${encodeURIComponent(client.username)}&password=${encodeURIComponent(client.password)}`,
-      {
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
-      }
-    );
-    
-    const cookie = response.headers['set-cookie'] ? response.headers['set-cookie'][0] : null;
-    return cookie;
-  } catch (err) {
-    console.error('qBittorrent login failed:', err.message);
-    return null;
-  }
+const getAdapter = (client) => {
+  const adapter = adapters[client.type];
+  if (!adapter) throw new Error(`Unsupported download client type: ${client.type}`);
+  return adapter;
 };
 
-const addTorrent = async (torrentUrl) => {
+const addTorrent = async (torrentUrl, type = 'movie') => {
   const client = getClient();
   if (!client) throw new Error('No download client configured');
-
-  const cookie = await login(client);
-  if (!cookie) throw new Error('Failed to authenticate with qBittorrent');
-
-  const formData = new FormData();
-  let finalUrl = torrentUrl;
-  
-  if (torrentUrl.startsWith('http')) {
-    console.log(`[DownloadClient] Fetching torrent file from URL: ${torrentUrl}`);
-    const torrentRes = await axios.get(torrentUrl, { 
-      responseType: 'arraybuffer', 
-      timeout: 15000,
-      maxRedirects: 0,
-      validateStatus: (status) => status >= 200 && status < 400
-    });
-    
-    if (torrentRes.status >= 300 && torrentRes.status < 400 && torrentRes.headers.location) {
-      console.log(`[DownloadClient] URL redirected to: ${torrentRes.headers.location}`);
-      finalUrl = torrentRes.headers.location;
-    } else {
-      formData.append('torrents', Buffer.from(torrentRes.data), 'download.torrent');
-      finalUrl = null; // No URL to append, we appended the file
-    }
-  }
-  
-  if (finalUrl) {
-    formData.append('urls', finalUrl);
-  }
-  formData.append('savepath', '/downloads'); // Could be configurable
-
-  try {
-    await axios.post(`${client.host}:${client.port}/api/v2/torrents/add`, formData, {
-      headers: {
-        ...formData.getHeaders(),
-        'Cookie': cookie
-      }
-    });
-    return true;
-  } catch (err) {
-    console.error('Failed to add torrent:', err.message);
-    throw err;
-  }
+  console.log(`[DownloadClient] Adding ${type} torrent via ${client.type}: ${String(torrentUrl).substring(0, 80)}...`);
+  return getAdapter(client).addTorrent(client, torrentUrl);
 };
 
 const getTorrents = async () => {
   const client = getClient();
   if (!client) return [];
-
-  const cookie = await login(client);
-  if (!cookie) return [];
-
-  try {
-    const response = await axios.get(`${client.host}:${client.port}/api/v2/torrents/info`, {
-      headers: { 'Cookie': cookie }
-    });
-    return response.data;
-  } catch (err) {
-    console.error('Failed to get torrents:', err.message);
-    return [];
-  }
+  return getAdapter(client).getTorrents(client);
 };
 
 const getTransferInfo = async () => {
   const client = getClient();
   if (!client) return null;
-
-  const cookie = await login(client);
-  if (!cookie) return null;
-
-  try {
-    const response = await axios.get(`${client.host}:${client.port}/api/v2/transfer/info`, {
-      headers: { 'Cookie': cookie }
-    });
-    return response.data;
-  } catch (err) {
-    console.error('Failed to get transfer info:', err.message);
-    return null;
-  }
+  return getAdapter(client).getTransferInfo(client);
 };
 
 const deleteTorrent = async (hash, deleteFiles = false) => {
   const client = getClient();
   if (!client) throw new Error('No download client configured');
+  return getAdapter(client).deleteTorrent(client, hash, deleteFiles);
+};
 
-  const cookie = await login(client);
-  if (!cookie) throw new Error('Failed to authenticate');
-
-  try {
-    await axios.post(`${client.host}:${client.port}/api/v2/torrents/delete`, 
-      `hashes=${hash}&deleteFiles=${deleteFiles}`, 
-      {
-        headers: { 
-          'Cookie': cookie,
-          'Content-Type': 'application/x-www-form-urlencoded'
-        }
-      }
-    );
-    return true;
-  } catch (err) {
-    console.error('Failed to delete torrent:', err.message);
-    throw err;
-  }
+const testClientConnection = async (client) => {
+  if (!client.host.startsWith('http')) client.host = `http://${client.host}`;
+  client.type = client.type || 'qbittorrent';
+  return getAdapter(client).testConnection(client);
 };
 
 module.exports = {
-  addTorrent,
-  getTorrents,
-  getTransferInfo,
-  deleteTorrent
+  addTorrent, getTorrents, getTransferInfo, deleteTorrent, testClientConnection
 };

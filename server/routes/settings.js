@@ -1,15 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../config/database');
-
-const getSetting = (key) => {
-  const row = db.prepare('SELECT value FROM settings WHERE key = ?').get(key);
-  return row ? row.value : null;
-};
-
-const setSetting = (key, value) => {
-  db.prepare('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run(key, value);
-};
+const { getSetting, setSetting } = require('../utils/settings');
+const downloadClientService = require('../services/downloadClientService');
 
 router.get('/', (req, res, next) => {
   try {
@@ -108,7 +101,8 @@ router.get('/', (req, res, next) => {
         telegramBotToken: mask(getSetting('telegramBotToken')),
         telegramChatId: getSetting('telegramChatId'),
         notifyOnGrab: getSetting('notifyOnGrab') || 'false',
-        notifyOnDownload: getSetting('notifyOnDownload') || 'false'
+        notifyOnDownload: getSetting('notifyOnDownload') || 'false',
+        notifyOnPlaybackStart: getSetting('notifyOnPlaybackStart') || 'false'
       }
     });
   } catch (e) {
@@ -118,7 +112,7 @@ router.get('/', (req, res, next) => {
 
 router.post('/', (req, res, next) => {
   try {
-    const { tmdbApiKey, traktClientId, osApiKey, subdlApiKey, subsourceApiKey, geminiApiKey, deepseekApiKey, claudeApiKey, prowlarrUrl, prowlarrApiKey, translationProvider, targetLang, targetLangs, providerLangs, autoTranslate, traktWatchedSync, traktAccessToken, traktClientSecret, renameMovies, replaceIllegalCharacters, colonReplacement, standardMovieFormat, renameEpisodes, standardEpisodeFormat, seasonFolderFormat, removeCompletedDownloads, deleteTorrentFiles, hideCompletedDownloads, downloadPathMapping, defaultQualityProfileId, authEnabled, authBypassLocalhost, authUsername, authPassword, plexUrl, plexToken, jellyfinUrl, jellyfinApiKey, embyUrl, embyApiKey, discordWebhookUrl, telegramBotToken, telegramChatId, notifyOnGrab, notifyOnDownload } = req.body;
+    const { tmdbApiKey, traktClientId, osApiKey, subdlApiKey, subsourceApiKey, geminiApiKey, deepseekApiKey, claudeApiKey, prowlarrUrl, prowlarrApiKey, translationProvider, targetLang, targetLangs, providerLangs, autoTranslate, traktWatchedSync, traktAccessToken, traktClientSecret, renameMovies, replaceIllegalCharacters, colonReplacement, standardMovieFormat, renameEpisodes, standardEpisodeFormat, seasonFolderFormat, removeCompletedDownloads, deleteTorrentFiles, hideCompletedDownloads, downloadPathMapping, defaultQualityProfileId, authEnabled, authBypassLocalhost, authUsername, authPassword, plexUrl, plexToken, jellyfinUrl, jellyfinApiKey, embyUrl, embyApiKey, discordWebhookUrl, telegramBotToken, telegramChatId, notifyOnGrab, notifyOnDownload, notifyOnPlaybackStart } = req.body;
     
     const isMasked = (val) => val && /^\*+$/.test(val);
     
@@ -179,6 +173,7 @@ router.post('/', (req, res, next) => {
     if (telegramChatId !== undefined) setSetting('telegramChatId', telegramChatId);
     if (notifyOnGrab !== undefined) setSetting('notifyOnGrab', notifyOnGrab);
     if (notifyOnDownload !== undefined) setSetting('notifyOnDownload', notifyOnDownload);
+    if (notifyOnPlaybackStart !== undefined) setSetting('notifyOnPlaybackStart', notifyOnPlaybackStart);
     
     res.json({ status: 'success', message: 'Settings saved successfully' });
   } catch (e) {
@@ -254,6 +249,126 @@ router.post('/media-server/test', async (req, res) => {
   }
 });
 
+// Plex OAuth PIN flow
+const crypto = require('crypto');
+
+function getPlexClientId() {
+  let clientId = getSetting('plexClientId');
+  if (!clientId) {
+    clientId = crypto.randomUUID();
+    setSetting('plexClientId', clientId);
+  }
+  return clientId;
+}
+
+router.post('/plex/pin', async (req, res, next) => {
+  try {
+    const axios = require('axios');
+    const clientId = getPlexClientId();
+
+    const response = await axios.post('https://plex.tv/api/v2/pins', null, {
+      headers: {
+        'Accept': 'application/json',
+        'X-Plex-Product': 'Atlas',
+        'X-Plex-Client-Identifier': clientId
+      },
+      params: {
+        strong: true
+      },
+      timeout: 10000
+    });
+
+    const { id, code } = response.data;
+
+    // Store the pin ID temporarily so we can poll it
+    res.json({
+      status: 'success',
+      data: {
+        pinId: id,
+        code: code,
+        clientId: clientId,
+        authUrl: `https://app.plex.tv/auth#?clientID=${encodeURIComponent(clientId)}&code=${encodeURIComponent(code)}&context%5Bdevice%5D%5Bproduct%5D=Atlas`
+      }
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get('/plex/pin/:pinId', async (req, res, next) => {
+  try {
+    const axios = require('axios');
+    const clientId = getPlexClientId();
+    const { pinId } = req.params;
+
+    const response = await axios.get(`https://plex.tv/api/v2/pins/${pinId}`, {
+      headers: {
+        'Accept': 'application/json',
+        'X-Plex-Client-Identifier': clientId
+      },
+      timeout: 5000
+    });
+
+    const { authToken, expiresAt } = response.data;
+
+    if (authToken) {
+      // Auto-discover the Plex server URL using the token
+      try {
+        const resourcesRes = await axios.get('https://plex.tv/api/v2/resources?includeHttps=1', {
+          headers: {
+            'Accept': 'application/json',
+            'X-Plex-Token': authToken,
+            'X-Plex-Client-Identifier': clientId
+          },
+          timeout: 5000
+        });
+
+        const servers = resourcesRes.data || [];
+        // Find the first owned Plex Media Server (owned can be 1, "1", or true)
+        const server = servers.find(s =>
+          s.provides?.includes('server') &&
+          (s.owned === true || s.owned === 1 || s.owned === '1')
+        );
+        // Prefer local connection, fall back to first available
+        const connections = server?.connections || [];
+        const localConn = connections.find(c => c.local);
+        const plexUrl = (localConn || connections[0])?.uri || '';
+
+        console.log('[PlexOAuth] Discovered Plex server URL:', plexUrl || '(none found)');
+
+        return res.json({
+          status: 'success',
+          data: {
+            authorized: true,
+            authToken,
+            plexUrl
+          }
+        });
+      } catch (discoverErr) {
+        // Still return token even if we can't discover the server URL
+        return res.json({
+          status: 'success',
+          data: {
+            authorized: true,
+            authToken,
+            plexUrl: ''
+          }
+        });
+      }
+    }
+
+    res.json({
+      status: 'success',
+      data: {
+        authorized: false,
+        expiresAt
+      }
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // Download Clients
 router.post('/clients', (req, res) => {
   const { name, host, port, username, password, type } = req.body;
@@ -270,19 +385,12 @@ router.get('/clients/test', async (req, res) => {
   try {
     const clients = db.prepare('SELECT * FROM download_clients').all();
     const statuses = {};
-    const axios = require('axios');
     for (const c of clients) {
-      if (c.type === 'qbittorrent') {
-        try {
-          await axios.get(`${c.host}:${c.port}/api/v2/app/webapiVersion`, { timeout: 2000 });
-          statuses[c.id] = 'live';
-        } catch(e) {
-          if (e.response && (e.response.status === 401 || e.response.status === 403)) {
-            statuses[c.id] = 'live';
-          } else {
-            statuses[c.id] = 'offline';
-          }
-        }
+      try {
+        const result = await downloadClientService.testClientConnection(c);
+        statuses[c.id] = result.status === 'connected' ? 'live' : 'offline';
+      } catch {
+        statuses[c.id] = 'offline';
       }
     }
     res.json({ status: 'success', data: statuses });
@@ -356,22 +464,26 @@ router.get('/issues', async (req, res) => {
       });
     } else {
       // Check Client Connectivity
-      const axios = require('axios');
       for (const c of clients) {
-        if (c.type === 'qbittorrent') {
-          try {
-            await axios.get(`${c.host}:${c.port}/api/v2/app/webapiVersion`, { timeout: 2000 });
-          } catch(e) {
-            if (!(e.response && (e.response.status === 401 || e.response.status === 403))) {
-              issues.push({
-                id: `client_offline_${c.id}`,
-                type: 'error',
-                message: `Download client "${c.name}" is unreachable. Please check the URL and port.`,
-                actionText: 'Check Settings',
-                actionLink: '/settings'
-              });
-            }
+        try {
+          const result = await downloadClientService.testClientConnection(c);
+          if (result.status !== 'connected') {
+            issues.push({
+              id: `client_offline_${c.id}`,
+              type: 'error',
+              message: `Download client "${c.name}" (${c.type}) is unreachable. Please check the URL and port.`,
+              actionText: 'Check Settings',
+              actionLink: '/settings'
+            });
           }
+        } catch {
+          issues.push({
+            id: `client_offline_${c.id}`,
+            type: 'error',
+            message: `Download client "${c.name}" (${c.type}) is unreachable. Please check the URL and port.`,
+            actionText: 'Check Settings',
+            actionLink: '/settings'
+          });
         }
       }
     }
@@ -497,7 +609,7 @@ router.get('/status', async (req, res) => {
   if (osKey) {
     await test('opensubtitles', 'OpenSubtitles', async () => {
       const r = await axios.get('https://api.opensubtitles.com/api/v1/subtitles', {
-        headers: { 'Api-Key': osKey },
+        headers: { 'Api-Key': osKey, 'User-Agent': 'Atlas/1.0' },
         params: { tmdb_id: 27205, languages: 'en', limit: 1 },
         timeout: 5000
       });
@@ -581,19 +693,15 @@ router.get('/status', async (req, res) => {
   const clients = db.prepare('SELECT * FROM download_clients').all();
   services.downloadClients = [];
   for (const c of clients) {
-    if (c.type === 'qbittorrent') {
-      try {
-        await axios.get(`${c.host}:${c.port}/api/v2/app/webapiVersion`, { timeout: 3000 });
+    try {
+      const result = await downloadClientService.testClientConnection(c);
+      if (result.status === 'connected') {
         services.downloadClients.push({ name: c.name, status: 'connected' });
-      } catch (e) {
-        if (e.response && (e.response.status === 401 || e.response.status === 403)) {
-          services.downloadClients.push({ name: c.name, status: 'connected' });
-        } else {
-          services.downloadClients.push({ name: c.name, status: 'error', message: 'Unreachable' });
-        }
+      } else {
+        services.downloadClients.push({ name: c.name, status: 'error', message: result.message });
       }
-    } else {
-      services.downloadClients.push({ name: c.name, status: 'unknown' });
+    } catch {
+      services.downloadClients.push({ name: c.name, status: 'error', message: 'Unreachable' });
     }
   }
 

@@ -1,4 +1,4 @@
-import { Save, Plus, Trash2, Key, Languages, Globe, Download, CheckCircle2, CheckSquare, Square } from 'lucide-react';
+import { Save, Plus, Trash2, Key, Languages, CheckCircle2, CheckSquare, Square } from 'lucide-react';
 import CustomSelect from '../../components/shared/CustomSelect';
 import LanguageInput from './LanguageInput';
 
@@ -13,13 +13,9 @@ export default function SubtitlesTab({ settings, setSettings, keyStatuses, handl
             <Languages className="w-7 h-7" /> Subtitle Providers
           </h2>
         </div>
-        <div className="bg-pink-500/10 border border-pink-500/20 text-pink-400 p-4 rounded-xl mb-6 flex gap-3 text-sm">
-          <Download className="w-5 h-5 shrink-0" />
-          <p>Configure subtitle sources. Providers are tried in order — if one fails, the next is used. Select which languages to search for.</p>
-        </div>
-
         <div className="glass-panel p-4 rounded-xl border border-white/5 mb-5">
           <p className="text-xs text-slate-400 font-medium mb-2">Search Languages</p>
+          <p className="text-xs text-slate-500 mb-3">Select which languages to search for when downloading subtitles.</p>
           <LanguageInput
             selected={settings.providerLangs || ['en']}
             onChange={(langs) => setSettings({ ...settings, providerLangs: langs.length ? langs : ['en'] })}

@@ -34,7 +34,7 @@ const TagInput = ({ tags, setTags, placeholder, colorClass }) => {
     <div className="w-full">
       <div className="flex flex-wrap gap-2 mb-2">
         {tags.map((tag, index) => (
-          <div key={index} className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-sm font-medium ${colorClass}`}>
+          <div key={tag || index} className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-sm font-medium ${colorClass}`}>
             <span>{tag}</span>
             <button onClick={() => removeTag(index)} className="hover:opacity-75 focus:outline-none">
               <X className="w-3 h-3" />
@@ -75,11 +75,6 @@ export default function ReleaseProfilesTab({ releaseProfiles, indexers, newProfi
           <ShieldAlert className="w-7 h-7" /> Release Profiles
         </h2>
       </div>
-      <div className="bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 p-4 rounded-xl mb-6 flex gap-3 text-sm">
-        <ShieldAlert className="w-5 h-5 shrink-0" />
-        <p>Release profiles allow you to globally accept or reject releases based on their names. You can require specific terms (like "MeGusta") or block others (like "CAM" or "TS").</p>
-      </div>
-      
       <div className="glass-panel p-8 rounded-2xl border border-white/10 space-y-6 mb-8 shadow-xl relative overflow-hidden">
         <div className="flex justify-between items-center">
           <h3 className="font-bold text-lg text-slate-200">{editingProfile ? 'Edit Profile' : 'Add New Profile'}</h3>
@@ -87,6 +82,7 @@ export default function ReleaseProfilesTab({ releaseProfiles, indexers, newProfi
             <button onClick={() => setEditingProfile(null)} className="text-xs bg-slate-800 text-slate-300 px-3 py-1.5 rounded-lg hover:bg-slate-700">Cancel Edit</button>
           )}
         </div>
+        <p className="text-xs text-slate-500">Release profiles globally accept or reject releases based on their names. Require specific terms or block unwanted ones.</p>
         
         <div className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -175,7 +171,7 @@ export default function ReleaseProfilesTab({ releaseProfiles, indexers, newProfi
       </div>
 
       <div className="space-y-4">
-        {releaseProfiles.length === 0 ? <p className="text-slate-500 italic p-4 text-center">No release profiles configured yet.</p> : releaseProfiles.map(p => {
+        {(!releaseProfiles || releaseProfiles.length === 0) ? <p className="text-slate-500 italic p-4 text-center">No release profiles configured yet.</p> : releaseProfiles.map(p => {
           return (
             <div key={p.id} className={`flex justify-between items-center glass-panel p-5 rounded-2xl border hover:border-indigo-500/30 transition-colors group shadow-lg ${!p.enabled ? 'opacity-50 border-white/5' : 'border-indigo-500/20'}`}>
               <div>

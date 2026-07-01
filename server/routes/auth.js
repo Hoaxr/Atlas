@@ -1,23 +1,32 @@
 const express = require('express');
 const router = express.Router();
 const axios = require('axios');
+const bcrypt = require('bcrypt');
+const rateLimit = require('express-rate-limit');
 const db = require('../config/database');
+const { getSetting, setSetting } = require('../utils/settings');
 
 const jwt = require('jsonwebtoken');
 
-const getSetting = (key) => {
-  const row = db.prepare('SELECT value FROM settings WHERE key = ?').get(key);
-  return row ? row.value : null;
-};
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+  console.error('[FATAL] JWT_SECRET environment variable is not set. Authentication will be insecure.');
+  process.exit(1);
+}
 
-const setSetting = (key, value) => {
-  db.prepare('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run(key, value);
-};
+const authMiddleware = require('../middleware/authMiddleware');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'atlas_super_secret_key_change_me';
+// Rate limiter: max 5 attempts per 15 minutes per IP
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { status: 'error', message: 'Too many login attempts. Please try again in 15 minutes.' },
+});
 
 // Login endpoint
-router.post('/login', (req, res) => {
+router.post('/login', loginLimiter, async (req, res) => {
   const { username, password } = req.body;
   const authEnabled = getSetting('authEnabled') === 'true';
 
@@ -27,13 +36,48 @@ router.post('/login', (req, res) => {
 
   const user = db.prepare('SELECT id, username, password, role FROM users WHERE username = ?').get(username);
   
-  if (user && user.password === password) {
+  if (user && await bcrypt.compare(password, user.password)) {
     const token = jwt.sign({ id: user.id, username: user.username, role: user.role }, JWT_SECRET, { expiresIn: '7d' });
     res.json({ status: 'success', data: { token, user: { id: user.id, username: user.username, role: user.role } } });
   } else {
     res.status(401).json({ status: 'error', message: 'Invalid credentials' });
   }
 });
+
+// Change password endpoint
+router.put('/password', authMiddleware, async (req, res) => {
+  try {
+    if (!req.user || !req.user.id) {
+      return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+    }
+    
+    const { currentPassword, newPassword } = req.body;
+    
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ status: 'error', message: 'Current and new passwords are required' });
+    }
+    
+    if (newPassword.length < 8) {
+      return res.status(400).json({ status: 'error', message: 'New password must be at least 8 characters' });
+    }
+    
+    const user = db.prepare('SELECT id, password FROM users WHERE id = ?').get(req.user.id);
+    if (!user) {
+      return res.status(404).json({ status: 'error', message: 'User not found' });
+    }
+    
+    if (!await bcrypt.compare(currentPassword, user.password)) {
+      return res.status(400).json({ status: 'error', message: 'Incorrect current password' });
+    }
+    
+    const hashed = await bcrypt.hash(newPassword, 12);
+    db.prepare('UPDATE users SET password = ? WHERE id = ?').run(hashed, req.user.id);
+    res.json({ status: 'success', message: 'Password updated successfully' });
+  } catch (err) {
+    res.status(500).json({ status: 'error', message: err.message });
+  }
+});
+
 
 
 // Step 1: Request a device code from Trakt

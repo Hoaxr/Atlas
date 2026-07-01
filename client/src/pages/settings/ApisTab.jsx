@@ -1,5 +1,5 @@
 import api from '../../lib/api';
-import { Save, AlertCircle, CheckSquare, Square, Key } from 'lucide-react';
+import { Save, CheckSquare, Square, Key } from 'lucide-react';
 import { customAlert, customConfirm } from '../../utils/alerts';
 
 export default function ApisTab({
@@ -14,11 +14,7 @@ export default function ApisTab({
           <Key className="w-7 h-7" /> API's & Integrations
         </h2>
       </div>
-      <div className="bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 p-4 rounded-xl mb-6 flex gap-3 text-sm">
-        <AlertCircle className="w-5 h-5 shrink-0" />
-        <p>TMDB provides all metadata, posters, and search results. Trakt provides trending lists and can sync your watched status.</p>
-      </div>
-      
+
       <div className="space-y-6">
         {/* ---- TMDB Section ---- */}
         <div className="glass-panel p-6 rounded-2xl border border-white/10 space-y-4">
@@ -29,7 +25,7 @@ export default function ApisTab({
               <div className="w-3 h-3 rounded-full bg-slate-600"></div>
               <div>
                 <p className="font-bold text-slate-400">TMDB API key required</p>
-                <p className="text-xs text-slate-500 mt-0.5">Required for metadata, posters and search</p>
+                <p className="text-xs text-slate-500 mt-0.5">TMDB provides all metadata, posters, and search results.</p>
               </div>
             </div>
           ) : /^\*+$/.test(settings.tmdbApiKey) ? (
@@ -92,7 +88,7 @@ export default function ApisTab({
               <div className="w-3 h-3 rounded-full bg-slate-600"></div>
               <div>
                 <p className="font-bold text-slate-400">Not connected to Trakt</p>
-                <p className="text-xs text-slate-500 mt-0.5">Watched sync requires Trakt authentication</p>
+                <p className="text-xs text-slate-500 mt-0.5">Trakt provides trending lists and can sync your watched status.</p>
               </div>
             </div>
           )}

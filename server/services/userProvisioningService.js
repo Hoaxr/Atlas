@@ -1,20 +1,17 @@
 const axios = require('axios');
+const bcrypt = require('bcrypt');
 const db = require('../config/database');
+const { getSetting } = require('../utils/settings');
 
 class UserProvisioningService {
   
-  getSetting(key) {
-    const row = db.prepare('SELECT value FROM settings WHERE key = ?').get(key);
-    return row ? row.value : null;
-  }
-
   async provisionUser(username, password, email) {
-    const jellyfinUrl = this.getSetting('jellyfinUrl');
-    const jellyfinApiKey = this.getSetting('jellyfinApiKey');
-    const embyUrl = this.getSetting('embyUrl');
-    const embyApiKey = this.getSetting('embyApiKey');
-    const plexUrl = this.getSetting('plexUrl');
-    const plexToken = this.getSetting('plexToken');
+    const jellyfinUrl = getSetting('jellyfinUrl');
+    const jellyfinApiKey = getSetting('jellyfinApiKey');
+    const embyUrl = getSetting('embyUrl');
+    const embyApiKey = getSetting('embyApiKey');
+    const plexUrl = getSetting('plexUrl');
+    const plexToken = getSetting('plexToken');
 
     const results = {
       jellyfin: 'skipped',
@@ -102,11 +99,11 @@ class UserProvisioningService {
   }
 
   async importUsers() {
-    const jellyfinUrl = this.getSetting('jellyfinUrl');
-    const jellyfinApiKey = this.getSetting('jellyfinApiKey');
-    const embyUrl = this.getSetting('embyUrl');
-    const embyApiKey = this.getSetting('embyApiKey');
-    const plexToken = this.getSetting('plexToken');
+    const jellyfinUrl = getSetting('jellyfinUrl');
+    const jellyfinApiKey = getSetting('jellyfinApiKey');
+    const embyUrl = getSetting('embyUrl');
+    const embyApiKey = getSetting('embyApiKey');
+    const plexToken = getSetting('plexToken');
 
     if ((!jellyfinUrl || !jellyfinApiKey) && (!embyUrl || !embyApiKey) && !plexToken) {
       throw new Error('No media servers configured. Please configure Jellyfin, Emby, or Plex in Settings.');
@@ -195,7 +192,7 @@ class UserProvisioningService {
 
     // Save to database
     let importCount = 0;
-    const defaultPassword = 'atlas123';
+    const defaultPassword = await bcrypt.hash('atlas123', 12);
 
     for (const [username, origin] of importedUsers.entries()) {
       const existing = db.prepare('SELECT id FROM users WHERE username = ?').get(username);

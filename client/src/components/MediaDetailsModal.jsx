@@ -2,11 +2,12 @@ import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import api from '../lib/api';
-import { X, Star, Calendar, Clock, Plus, ExternalLink, PlayCircle, CheckCircle2, ArrowRight, CheckSquare, Square } from 'lucide-react';
+import { X, Star, Calendar, Clock, Plus, ExternalLink, PlayCircle, CheckCircle2, ArrowRight, CheckSquare, Square, XCircle } from 'lucide-react';
 import { customAlert } from '../utils/alerts';
 import TrailerModal from './TrailerModal';
+import Spinner from './shared/Spinner';
 
-export default function MediaDetailsModal({ isOpen, onClose, mediaId, mediaType, isInLibrary, libraryId, onAdded, mode = 'add' }) {
+export default function MediaDetailsModal({ isOpen, onClose, mediaId, mediaType, isInLibrary, libraryId, onAdded, onRequest, mode = 'add', requestStatus }) {
   const navigate = useNavigate();
   const [details, setDetails] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -58,7 +59,8 @@ export default function MediaDetailsModal({ isOpen, onClose, mediaId, mediaType,
     setLoading(true);
     setError('');
     try {
-      const res = await api.get(`/tmdb/${mediaType}/${mediaId}?_t=${Date.now()}`);
+      const endpointType = mediaType === 'tv' ? 'show' : mediaType;
+      const res = await api.get(`/tmdb/${endpointType}/${mediaId}?_t=${Date.now()}`);
       if (res.data.status === 'success') {
         setDetails(res.data.data);
       }
@@ -103,7 +105,7 @@ export default function MediaDetailsModal({ isOpen, onClose, mediaId, mediaType,
 
         {loading && (
           <div className="flex items-center justify-center h-64 text-slate-400">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-cyan-500 mr-3"></div>
+            <Spinner className="mr-3" />
             Loading details...
           </div>
         )}
@@ -173,6 +175,19 @@ export default function MediaDetailsModal({ isOpen, onClose, mediaId, mediaType,
                   {details.overview || 'No overview available.'}
                 </p>
 
+                {details.seasons && details.seasons.length > 0 && (
+                  <div className="mb-8">
+                    <h3 className="font-bold text-slate-200 mb-3">Seasons</h3>
+                    <div className="flex flex-wrap gap-2">
+                      {details.seasons.filter(s => s.season_number > 0).map(season => (
+                        <div key={season.id} className="bg-slate-800 border border-slate-700 text-slate-300 px-3 py-1.5 rounded-lg text-sm font-medium">
+                          {season.name} <span className="text-slate-500 text-xs ml-1">({season.episode_count} eps)</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 {!isInLibrary && mode === 'add' && (
                   <div className="grid grid-cols-[140px_1fr] items-center gap-y-5 gap-x-4">
                     {/* Root Folder */}
@@ -232,9 +247,9 @@ export default function MediaDetailsModal({ isOpen, onClose, mediaId, mediaType,
                   </div>
                 )}
                 
-                {/* Extra Actions */}
+                {/* Extra Actions / Status */}
                 <div className="mt-8 flex gap-4">
-                  {isInLibrary && (
+                  {mode === 'add' && isInLibrary ? (
                     <button
                       onClick={() => {
                         onClose();
@@ -246,7 +261,33 @@ export default function MediaDetailsModal({ isOpen, onClose, mediaId, mediaType,
                       <CheckCircle2 className="w-4 h-4" />
                       View in Library
                     </button>
-                  )}
+                  ) : (isInLibrary || requestStatus) ? (
+                    <button 
+                      onClick={() => {
+                        if (mode === 'details' && onRequest && !isInLibrary) {
+                          onRequest(details);
+                        }
+                      }}
+                      className={`border font-bold py-2 px-4 rounded-lg flex items-center justify-center gap-2 text-sm capitalize 
+                      ${isInLibrary ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30 cursor-default' : 
+                        (mode === 'details' && onRequest ? 'bg-slate-800/80 text-slate-300 border-slate-700 hover:bg-slate-700/80 cursor-pointer' : 'bg-slate-800/80 text-slate-300 border-slate-700 cursor-default')}
+                    `}>
+                      {isInLibrary ? 'In Library' : requestStatus}
+                      {isInLibrary ? <CheckCircle2 className="w-4 h-4" /> : (
+                        requestStatus === 'approved' ? <CheckCircle2 className="w-4 h-4 text-emerald-400" /> :
+                        requestStatus === 'denied' ? <XCircle className="w-4 h-4 text-rose-400" /> :
+                        <Clock className="w-4 h-4 text-amber-400" />
+                      )}
+                    </button>
+                  ) : mode === 'details' && onRequest ? (
+                    <button
+                      onClick={() => onRequest(details)}
+                      className="bg-cyan-600 hover:bg-cyan-500 text-white font-bold py-2 px-4 rounded-lg flex items-center justify-center gap-2 transition-colors cursor-pointer text-sm"
+                    >
+                      <Plus className="w-4 h-4" />
+                      Request {mediaType === 'movie' ? 'Movie' : 'Show'}
+                    </button>
+                  ) : null}
                 </div>
               </div>
             </div>

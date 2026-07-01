@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Shield, Key, Loader2, Save, Eye, EyeOff, CheckSquare, Square } from 'lucide-react';
 import api from '../../lib/api';
-import { toast } from 'react-hot-toast';
+import { customAlert } from '../../utils/alerts';
 
 export default function SecurityTab() {
   const [settings, setSettings] = useState({
@@ -31,7 +31,7 @@ export default function SecurityTab() {
       }
     } catch (err) {
       console.error(err);
-      toast.error('Failed to load security settings');
+      customAlert('Failed to load security settings');
     } finally {
       setLoading(false);
     }
@@ -57,10 +57,10 @@ export default function SecurityTab() {
         payload.authPassword = settings.authPassword; // only send if filled out
       }
       await api.post('/settings', payload);
-      toast.success('Security settings saved');
+      customAlert('Security settings saved');
     } catch (err) {
       console.error(err);
-      toast.error('Failed to save security settings');
+      customAlert('Failed to save security settings');
     } finally {
       setSaving(false);
     }
@@ -69,7 +69,7 @@ export default function SecurityTab() {
   if (loading) return null;
 
   return (
-    <div className="space-y-8 animate-fade-in">
+    <div className="space-y-8 animate-fade-in max-w-5xl mx-auto">
       {/* Authentication */}
       <div className="glass-panel p-6 rounded-2xl">
         <h2 className="text-xl font-bold text-slate-200 flex items-center gap-2 mb-6">

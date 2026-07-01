@@ -53,6 +53,7 @@ const getTrendingMovies = async (limit = 20) => {
           
           return {
             ...item.movie,
+            media_type: 'movie',
             watchers: item.watchers,
             poster_path: tmdbData.poster_path,
             vote_average: tmdbData.vote_average,
@@ -90,6 +91,7 @@ const getTrendingShows = async (limit = 20) => {
           
           return {
             ...item.show,
+            media_type: 'tv',
             watchers: item.watchers,
             poster_path: tmdbData.poster_path,
             vote_average: tmdbData.vote_average,

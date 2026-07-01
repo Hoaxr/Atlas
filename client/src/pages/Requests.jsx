@@ -1,8 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Clock, CheckCircle2, XCircle, Loader2, Trash2 } from 'lucide-react';
 import api from '../lib/api';
-import toast from 'react-hot-toast';
-import { customConfirm } from '../utils/alerts';
+import { customAlert, customConfirm } from '../utils/alerts';
 import MediaDetailsModal from '../components/MediaDetailsModal';
 
 export default function Requests() {
@@ -17,7 +16,7 @@ export default function Requests() {
       const res = await api.get('/requests');
       setRequests(res.data.data);
     } catch (err) {
-      toast.error('Failed to load requests');
+      customAlert('Failed to load requests');
     } finally {
       setLoading(false);
     }
@@ -37,10 +36,10 @@ export default function Requests() {
     setSelectedMedia(null);
     try {
       await api.put(`/requests/${currentRequestId}/approve`);
-      toast.success('Request marked as approved');
+      customAlert('Request marked as approved');
       fetchRequests();
     } catch (err) {
-      toast.error('Failed to update request status');
+      customAlert('Failed to update request status');
     }
   };
 
@@ -50,10 +49,10 @@ export default function Requests() {
 
     try {
       await api.put(`/requests/${id}/deny`);
-      toast.success('Request denied');
+      customAlert('Request denied');
       fetchRequests();
     } catch (err) {
-      toast.error('Failed to deny request');
+      customAlert('Failed to deny request');
     }
   };
 
@@ -63,10 +62,10 @@ export default function Requests() {
 
     try {
       await api.delete(`/requests/${id}`);
-      toast.success('Request deleted');
+      customAlert('Request deleted');
       fetchRequests();
     } catch (err) {
-      toast.error('Failed to delete request');
+      customAlert('Failed to delete request');
     }
   };
 
@@ -87,7 +86,7 @@ export default function Requests() {
   }
 
   return (
-    <div className="p-6 max-w-7xl mx-auto space-y-8 animate-fade-in">
+    <div className="space-y-8 animate-fade-in">
       <div>
         <h1 className="text-3xl font-black text-white tracking-tight">Requests</h1>
         <p className="text-slate-400 mt-2">Manage user requests for movies and TV shows.</p>

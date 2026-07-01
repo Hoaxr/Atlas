@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import api from '../lib/api';
-import { formatSize, parseResolution } from '../lib/format';
+import { formatSize, parseResolution, LANG_LABEL, LANG_NAME } from '../lib/format';
 import { useSettings } from '../lib/useSettings';
 import { useTMDBDetails } from '../lib/useTMDBDetails';
 import { ArrowLeft, HardDrive, Tv, PlayCircle, ChevronDown, ChevronRight, Bookmark, BookmarkMinus, Search, Star, X, RefreshCw, Loader2, Download, Heart, CheckSquare, Trash2 } from 'lucide-react';
@@ -9,6 +9,9 @@ import { customAlert, customConfirm } from '../utils/alerts';
 import TrailerModal from '../components/TrailerModal';
 import ManualSearchModal from '../components/ManualSearchModal';
 import EpisodeDetailsModal from '../components/EpisodeDetailsModal';
+import RemapModal from '../components/RemapModal';
+import SubSearchModal from '../components/SubSearchModal';
+import SubtitleLanguageBadge from '../components/shared/SubtitleLanguageBadge';
 
 export default function ShowDetails() {
   const { id } = useParams();
@@ -181,10 +184,14 @@ export default function ShowDetails() {
   }, {});
 
   const toggleSeason = (season) => {
-    setCollapsedSeasons(prev => ({
-      ...prev,
-      [season]: !prev[season]
-    }));
+    setCollapsedSeasons(prev => {
+      // Default: latest season expanded, older seasons collapsed
+      const sortedKeys = Object.keys(seasons).sort((a, b) => Number(b) - Number(a));
+      const latestSeason = sortedKeys.length > 0 ? sortedKeys[0] : null;
+      const defaultCollapsed = season !== latestSeason;
+      const isCurrentlyCollapsed = prev[season] !== undefined ? prev[season] : defaultCollapsed;
+      return { ...prev, [season]: !isCurrentlyCollapsed };
+    });
   };
 
   if (loading) {
@@ -227,6 +234,7 @@ export default function ShowDetails() {
             <button 
               onClick={() => setIsTrailerOpen(true)}
               className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity duration-300"
+              aria-label="Play trailer"
             >
               <PlayCircle className="w-16 h-16 text-white drop-shadow-xl hover:scale-110 transition-transform duration-300" />
             </button>
@@ -248,6 +256,7 @@ export default function ShowDetails() {
               }}
               className="hover:scale-110 transition-transform cursor-pointer focus:outline-none"
               title={show.monitored ? "Monitored" : "Unmonitored"}
+              aria-label={show.monitored ? "Unmonitor show" : "Monitor show"}
             >
               {show.monitored ? (
                 <Bookmark className="w-8 h-8 md:w-10 md:h-10 text-purple-400 fill-purple-400" />
@@ -264,6 +273,7 @@ export default function ShowDetails() {
               disabled={isRefreshing}
               className="mr-2 p-2 bg-slate-800/50 hover:bg-slate-700 rounded-lg transition-colors text-slate-400 hover:text-purple-400 disabled:opacity-50"
               title="Refresh show information from TMDB"
+              aria-label="Refresh show information from TMDB"
             >
               <RefreshCw className={`w-5 h-5 ${isRefreshing ? 'animate-spin' : ''}`} />
             </button>
@@ -378,19 +388,32 @@ export default function ShowDetails() {
 
             {/* TMDB Link / Remap */}
             <div className="col-span-full border-t border-white/5 pt-4 mt-2 flex items-center justify-between">
-              <div>
-                <p className="text-slate-500 text-[10px] uppercase tracking-widest font-bold mb-1">TMDB ID</p>
-                <p className="font-mono text-sm text-slate-300">
-                  {show.tmdb_id}
+              <div className="flex items-center gap-6">
+                <div>
+                  <p className="text-slate-500 text-[10px] uppercase tracking-widest font-bold mb-1">TMDB ID</p>
                   <a
                     href={`https://www.themoviedb.org/tv/${show.tmdb_id}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="ml-2 text-purple-400 hover:text-purple-300 underline text-xs"
+                    className="font-mono text-sm text-purple-400 hover:text-purple-300 underline"
                   >
-                    View on TMDB
+                    {show.tmdb_id}
                   </a>
-                </p>
+                </div>
+                {show.tmdb_status && (
+                  <div>
+                    <p className="text-slate-500 text-[10px] uppercase tracking-widest font-bold mb-1">Status</p>
+                    <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                      show.tmdb_status === 'Ended' ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30' :
+                      show.tmdb_status === 'Returning Series' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' :
+                      show.tmdb_status === 'Canceled' ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30' :
+                      show.tmdb_status === 'In Production' ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30' :
+                      'bg-slate-500/20 text-slate-400 border border-slate-500/30'
+                    }`}>
+                      {show.tmdb_status}
+                    </span>
+                  </div>
+                )}
               </div>
               <button
                 onClick={() => {
@@ -511,7 +534,9 @@ export default function ShowDetails() {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-white/5">
-                        {seasons[season].map(ep => (
+                        {(() => {
+                          const seasonHasDownloads = seasons[season].some(e => e.file_path || e.status === 'downloaded');
+                          return seasons[season].map(ep => (
                           <tr 
                             key={ep.id} 
                             className="hover:bg-slate-800/50 transition-colors group cursor-pointer"
@@ -547,15 +572,21 @@ export default function ShowDetails() {
                                     }
                                   }
                                 }}
-                                className={`text-[10px] uppercase font-bold px-3 py-1 rounded-full mx-auto inline-block cursor-pointer transition-colors ${
+                                className={`text-[10px] uppercase font-bold px-3 py-1 rounded-full mx-auto inline-block cursor-pointer transition-colors whitespace-nowrap ${
                                   ep.status === 'downloading' ? 'hover:bg-red-500/20 hover:text-red-400 hover:border-red-500/30 bg-blue-500/20 text-blue-400 border border-blue-500/30' : 
                                   ep.status === 'downloaded' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 hover:bg-slate-700' : 
-                                  !ep.monitored ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30 hover:bg-emerald-500/20 hover:text-emerald-400 hover:border-emerald-500/30' : 
+                                  !ep.monitored ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30 hover:bg-emerald-500/20 hover:text-emerald-400 hover:border-emerald-500/30' :
+                                  (!ep.file_path && !ep.air_date && !seasonHasDownloads) || (ep.air_date && new Date(ep.air_date) > new Date()) ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30 cursor-default' :
                                   'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 hover:bg-rose-500/20 hover:text-rose-400 hover:border-rose-500/30'
                                 }`}
-                                title={ep.status === 'downloading' ? "Click to reset if stuck" : "Click to toggle monitor status"}
+                                title={
+                                  ep.status === 'downloading' ? "Click to reset if stuck" :
+                                  (!ep.file_path && !ep.air_date && !seasonHasDownloads) ? "Season has not started airing yet" :
+                                  (ep.air_date && new Date(ep.air_date) > new Date()) ? `Airs on ${new Date(ep.air_date).toLocaleDateString()}` :
+                                  "Click to toggle monitor status"
+                                }
                               >
-                                {ep.status === 'downloading' ? 'Downloading' : ep.status === 'downloaded' ? 'Downloaded' : ep.monitored ? 'Monitored' : 'Unmonitored'}
+                                {ep.status === 'downloading' ? 'Downloading' : ep.status === 'downloaded' ? 'Downloaded' : !ep.monitored ? 'Unmonitored' : (!ep.file_path && !ep.air_date && !seasonHasDownloads) || (ep.air_date && new Date(ep.air_date) > new Date()) ? 'Not Released' : 'Monitored'}
                               </button>
                             </td>
                             <td className="px-6 py-4">
@@ -564,96 +595,53 @@ export default function ShowDetails() {
                                   <span className="text-[10px] text-slate-600">—</span>
                                 ) : (
                                   <>
-                                    {/* Clickable badges for all provider languages */}
                                     {(() => {
-                                      const langCode = { en: 'EN', nl: 'NL', fr: 'FR', de: 'DE', es: 'ES', it: 'IT', pt: 'PT' };
-                                      const langName = { en: 'English', nl: 'Dutch', fr: 'French', de: 'German', es: 'Spanish', it: 'Italian', pt: 'Portuguese' };
                                       const existingCodes = ep.subtitles?.map(s => s.lang) || [];
                                       const hasExistingSub = ep.subtitles?.length > 0;
                                       const subKey = `${ep.id}`;
-                                      return providerLangs.map(code => {
-                                        const exists = existingCodes.includes(code);
-                                        return (
-                                          <span key={code} className="relative">
-                                            <span
-                                              data-lang-badge
-                                              role="button"
-                                              tabIndex={0}
-                                              onClick={(e) => { e.stopPropagation(); e.preventDefault(); setOpenLangMenu(openLangMenu === `${subKey}-${code}` ? null : `${subKey}-${code}`); }}
-                                              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); e.preventDefault(); setOpenLangMenu(openLangMenu === `${subKey}-${code}` ? null : `${subKey}-${code}`); } }}
-                                              className={`text-xs uppercase font-bold px-2.5 py-1 rounded-md transition-colors cursor-pointer ${
-                                                exists
-                                                  ? 'bg-slate-800 text-slate-300 border border-white/5 hover:bg-slate-700 hover:text-white'
-                                                  : 'bg-amber-500/15 text-amber-400 hover:bg-amber-500/25 hover:text-amber-300 border border-amber-500/30 hover:border-amber-400/50'
-                                              }`}
-                                            >
-                                              {langCode[code] || code}
-                                            </span>
-                                            {openLangMenu === `${subKey}-${code}` && (
-                                              <div data-lang-menu className="absolute left-0 top-full mt-1 bg-slate-800 border border-white/10 rounded-xl py-1 shadow-2xl z-50 min-w-[150px]">
-                                                {!exists && (
-                                                  <button
-                                                    onClick={async (e) => {
-                                                      e.stopPropagation(); e.preventDefault();
-                                                      setOpenLangMenu(null);
-                                                      setDownloadingSubs(prev => ({ ...prev, [`${subKey}-${code}`]: true }));
-                                                      try {
-                                                        const res = await api.post(`/library/episodes/${ep.id}/download-subs`, { langCode: code });
-                                                        customAlert(res.data.message);
-                                                        fetchShowData();
-                                                      } catch (err) {
-                                                        customAlert(err.response?.data?.message || 'Auto search failed', 'error');
-                                                      } finally {
-                                                        setDownloadingSubs(prev => ({ ...prev, [`${subKey}-${code}`]: false }));
-                                                      }
-                                                    }}
-                                                    disabled={downloadingSubs[`${subKey}-${code}`]}
-                                                    className="block w-full text-left text-xs font-medium px-3 py-2 text-slate-300 hover:bg-slate-700/50 transition-colors disabled:opacity-50 flex items-center gap-2"
-                                                  >
-                                                    {downloadingSubs[`${subKey}-${code}`] ? <Loader2 className="w-3 h-3 animate-spin" /> : <Search className="w-3 h-3" />}
-                                                    Auto Search
-                                                  </button>
-                                                )}
-                                                <button
-                                                  onClick={(e) => {
-                                                    e.stopPropagation(); e.preventDefault();
-                                                    setOpenLangMenu(null);
-                                                    setSubSearchModal({ open: true, code, label: langName[code] || code, episodeId: ep.id });
-                                                    setSubSearchResults([]);
-                                                    setSubSearched(false);
-                                                  }}
-                                                  className="block w-full text-left text-xs font-medium px-3 py-2 text-slate-300 hover:bg-slate-700/50 transition-colors flex items-center gap-2"
-                                                >
-                                                  <Download className="w-3 h-3" />
-                                                  Manual Search
-                                                </button>
-                                                {hasExistingSub && (
-                                                  <button
-                                                    onClick={async (e) => {
-                                                      e.stopPropagation(); e.preventDefault();
-                                                      setOpenLangMenu(null);
-                                                      customAlert(`Translating to ${langName[code]}...`, 'info');
-                                                      try {
-                                                        const res = await api.post(`/library/episodes/${ep.id}/translate-subs`, { targetLang: langName[code] });
-                                                        if (res.data.status === 'success') {
-                                                          customAlert(res.data.message);
-                                                          fetchShowData();
-                                                        }
-                                                      } catch (err) {
-                                                        customAlert(err.response?.data?.message || 'Translation failed', 'error');
-                                                      }
-                                                    }}
-                                                    className="block w-full text-left text-xs font-medium px-3 py-2 text-slate-300 hover:bg-slate-700/50 transition-colors flex items-center gap-2"
-                                                  >
-                                                    <RefreshCw className="w-3 h-3" />
-                                                    Auto Translate
-                                                  </button>
-                                                )}
-                                              </div>
-                                            )}
-                                          </span>
-                                        );
-                                      });
+                                      return providerLangs.map(code => (
+                                        <SubtitleLanguageBadge
+                                          key={code}
+                                          code={code}
+                                          exists={existingCodes.includes(code)}
+                                          hasExistingSub={hasExistingSub}
+                                          isOpen={openLangMenu === `${subKey}-${code}`}
+                                          downloading={downloadingSubs[`${subKey}-${code}`]}
+                                          onOpenMenu={() => setOpenLangMenu(openLangMenu === `${subKey}-${code}` ? null : `${subKey}-${code}`)}
+                                          onAutoSearch={async () => {
+                                            setOpenLangMenu(null);
+                                            setDownloadingSubs(prev => ({ ...prev, [`${subKey}-${code}`]: true }));
+                                            try {
+                                              const res = await api.post(`/library/episodes/${ep.id}/download-subs`, { langCode: code });
+                                              customAlert(res.data.message);
+                                              fetchShowData();
+                                            } catch (err) {
+                                              customAlert(err.response?.data?.message || 'Auto search failed', 'error');
+                                            } finally {
+                                              setDownloadingSubs(prev => ({ ...prev, [`${subKey}-${code}`]: false }));
+                                            }
+                                          }}
+                                          onManualSearch={() => {
+                                            setOpenLangMenu(null);
+                                            setSubSearchModal({ open: true, code, label: LANG_NAME[code] || code, episodeId: ep.id });
+                                            setSubSearchResults([]);
+                                            setSubSearched(false);
+                                          }}
+                                          onAutoTranslate={async () => {
+                                            setOpenLangMenu(null);
+                                            customAlert(`Translating to ${LANG_NAME[code]}...`, 'info');
+                                            try {
+                                              const res = await api.post(`/library/episodes/${ep.id}/translate-subs`, { targetLang: LANG_NAME[code] });
+                                              if (res.data.status === 'success') {
+                                                customAlert(res.data.message);
+                                                fetchShowData();
+                                              }
+                                            } catch (err) {
+                                              customAlert(err.response?.data?.message || 'Translation failed', 'error');
+                                            }
+                                          }}
+                                        />
+                                      ));
                                     })()}
                                   </>
                                 )}
@@ -695,7 +683,8 @@ export default function ShowDetails() {
                                 </div>
                             </td>
                           </tr>
-                        ))}
+                        ));
+                        })()}
                       </tbody>
                     </table>
                   </div>
@@ -782,112 +771,21 @@ export default function ShowDetails() {
       />
       
       {/* Remap Modal */}
-      {remapModalOpen && (
-        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
-          <div className="bg-slate-900 p-6 rounded-2xl w-full max-w-2xl border border-white/10 max-h-[80vh] flex flex-col shadow-2xl">
-            <div className="flex justify-between items-center mb-4 shrink-0">
-              <h2 className="text-2xl font-bold text-white flex items-center gap-2">
-                <RefreshCw className="w-6 h-6 text-amber-400" /> Remap Show
-              </h2>
-              <button onClick={() => setRemapModalOpen(false)} className="text-slate-400 hover:text-white p-1 rounded-lg transition-colors">
-                <X className="w-6 h-6" />
-              </button>
-            </div>
-            <p className="text-sm text-slate-400 mb-4">
-              Search TMDB for the correct show to link <strong className="text-slate-700 dark:text-slate-200">{show.title}</strong> to.
-            </p>
-
-            <div className="flex gap-2 mb-4 shrink-0">
-              <input
-                type="text"
-                value={remapQuery}
-                onChange={(e) => setRemapQuery(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    handleRemapSearch();
-                  }
-                }}
-                placeholder="Search for the correct show..."
-                className="flex-1 bg-slate-800 border border-white/10 rounded-xl px-4 py-2.5 text-white placeholder-slate-500 focus:outline-none focus:border-purple-500/50 text-sm"
-              />
-              <button
-                onClick={handleRemapSearch}
-                disabled={!remapQuery.trim() || remapSearching}
-                className="bg-purple-500 hover:bg-purple-400 text-white font-bold px-5 py-2 rounded-xl flex items-center gap-2 transition-colors disabled:opacity-50 text-sm"
-              >
-                {remapSearching ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
-                Search
-              </button>
-            </div>
-
-            <div className="overflow-y-auto flex-1 min-h-0 space-y-2">
-              {remapSearching ? (
-                <div className="flex flex-col items-center justify-center py-10 text-purple-400">
-                  <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-purple-500 mb-4"></div>
-                  <p className="font-bold">Searching TMDB...</p>
-                </div>
-              ) : !remapResults.length && remapHasSearched ? (
-                <div className="flex flex-col items-center justify-center py-10 text-slate-400">
-                  <p>No shows found. Try a different search term.</p>
-                </div>
-              ) : (
-                remapResults.map((result, i) => {
-                  const resultYear = result.first_air_date ? result.first_air_date.split('-')[0] : '—';
-                  const isCurrent = result.id === show.tmdb_id;
-                  return (
-                    <div
-                      key={i}
-                      className={`bg-slate-800 p-3 rounded-xl flex gap-3 items-center border transition-colors ${
-                        isCurrent ? 'border-purple-500/40 bg-purple-500/5' : 'border-white/5 hover:bg-slate-750'
-                      }`}
-                    >
-                      <div className="w-12 h-[66px] rounded-lg shrink-0 bg-slate-700 flex items-center justify-center overflow-hidden">
-                        {result.poster_path ? (
-                          <img
-                            src={`https://image.tmdb.org/t/p/w92${result.poster_path}`}
-                            alt={result.name}
-                            className="w-full h-full object-cover"
-                          />
-                        ) : (
-                          <span className="text-[10px] text-slate-500 font-medium text-center leading-tight px-1">No<br/>Image</span>
-                        )}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="font-bold text-slate-200 truncate">
-                          {result.name} <span className="text-slate-400 font-light">({resultYear})</span>
-                        </p>
-                        {result.overview && (
-                          <p className="text-xs text-slate-500 line-clamp-1 mt-0.5">{result.overview}</p>
-                        )}
-                        <div className="flex items-center gap-2 mt-1">
-                          {result.vote_average > 0 && (
-                            <span className="flex items-center gap-0.5 text-xs text-yellow-400">
-                              <Star className="w-3 h-3 fill-yellow-400" /> {result.vote_average.toFixed(1)}
-                            </span>
-                          )}
-                          <span className="text-[10px] font-mono text-slate-600">TMDB: {result.id}</span>
-                          {isCurrent && (
-                            <span className="text-[10px] font-bold text-purple-400 bg-purple-500/10 px-1.5 py-0.5 rounded">Current</span>
-                          )}
-                        </div>
-                      </div>
-                      {!isCurrent && (
-                        <button
-                          onClick={() => handleRemapConfirm(result)}
-                          disabled={remapping}
-                          className="shrink-0 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold px-3 py-2 rounded-lg text-xs transition-colors disabled:opacity-50"
-                        >
-                          {remapping ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Use This'}
-                        </button>
-                      )}
-                    </div>
-                  );
-                })
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+      <RemapModal
+        type="tv"
+        title={show?.title}
+        currentTmdbId={show?.tmdb_id}
+        open={remapModalOpen}
+        onClose={() => setRemapModalOpen(false)}
+        query={remapQuery}
+        setQuery={setRemapQuery}
+        searching={remapSearching}
+        hasSearched={remapHasSearched}
+        results={remapResults}
+        remapping={remapping}
+        onSearch={handleRemapSearch}
+        onConfirm={handleRemapConfirm}
+      />
 
       {isTrailerOpen && trailerKey && (
         <TrailerModal trailerKey={trailerKey} onClose={() => setIsTrailerOpen(false)} />
@@ -930,8 +828,8 @@ export default function ShowDetails() {
                 </div>
               ) : (
                 <div className="space-y-5">
-                  {subSearchResults.map((provider, pi) => (
-                    <div key={pi}>
+                  {subSearchResults.map((provider) => (
+                    <div key={provider.provider}>
                       <div className="flex items-center gap-2 mb-3">
                         <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">{provider.provider}</span>
                         <span className="text-[10px] text-slate-600 bg-slate-800 px-2 py-0.5 rounded-full">{provider.items.length} result{provider.items.length > 1 ? 's' : ''}</span>
@@ -1023,17 +921,13 @@ export default function ShowDetails() {
                                   const subKey = `${subSearchModal.episodeId}`;
                                   setDownloadingSubs(prev => ({ ...prev, [`${subKey}-${subSearchModal.code}`]: true }));
                                   try {
-                                    if (item.fileId) {
-                                      const res = await api.post(`/library/episodes/${subSearchModal.episodeId}/download-subs`, {
-                                        langCode: subSearchModal.code, fileId: item.fileId
-                                      });
-                                      customAlert(res.data.message);
-                                    } else {
-                                      const res = await api.post(`/library/episodes/${subSearchModal.episodeId}/download-subs`, {
-                                        langCode: subSearchModal.code, fileId: item.fileId || item.subId || item.subdlId
-                                      });
-                                      customAlert(res.data.message);
-                                    }
+                                    const res = await api.post(`/library/episodes/${subSearchModal.episodeId}/download-subs`, {
+                                      langCode: subSearchModal.code,
+                                      url: provider.provider === 'SubDL' ? (item.url || null) : null,
+                                      fileId: item.fileId || null,
+                                      provider: provider.provider
+                                    });
+                                    customAlert(res.data.message);
                                     setSubSearchModal({ open: false, code: '', label: '', episodeId: null });
                                     fetchShowData();
                                   } catch (err) {

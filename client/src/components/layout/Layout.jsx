@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
-import { Search, Settings as SettingsIcon, Film, Activity, Tv as TvIcon, DownloadCloud, ArrowDown, ArrowUp, Heart, Menu, Calendar as CalendarIcon, BarChart3, Keyboard } from 'lucide-react';
+import { Search, Settings as SettingsIcon, Film, Activity, Tv as TvIcon, DownloadCloud, ArrowDown, ArrowUp, Heart, Menu, Calendar as CalendarIcon, BarChart3, Keyboard, Key, LogOut, Eye } from 'lucide-react';
 import Logo from './Logo';
 import clsx from 'clsx';
 import api from '../../lib/api';
@@ -8,6 +8,7 @@ import useWebSocket from '../../lib/useWebSocket';
 import { setCachedMovies, setCachedShows } from '../../lib/libraryCache';
 import useKeyboardShortcuts from '../../lib/useKeyboardShortcuts';
 import ShortcutsModal from '../shared/ShortcutsModal';
+import ChangePasswordModal from '../ChangePasswordModal';
 
 const navItems = [
   { name: 'Discover', path: '/discover', icon: Search },
@@ -15,22 +16,32 @@ const navItems = [
   { name: 'TV Shows', path: '/shows', icon: TvIcon },
   { name: 'Calendar', path: '/calendar', icon: CalendarIcon },
   { name: 'Downloads', path: '/downloads', icon: DownloadCloud },
-  { name: 'Stats', path: '/stats', icon: BarChart3 },
+  { name: 'Statistics', path: '/stats', icon: BarChart3 },
   { name: 'Requests', path: '/requests', icon: Heart },
   { name: 'Tasks', path: '/tasks', icon: Activity },
+  { name: 'Watchers', path: '/watcher', icon: Eye },
   { name: 'Settings', path: '/settings', icon: SettingsIcon },
 ];
 
 export default function Layout() {
-  useWebSocket(); // Connect to real-time event stream
+  const { onEvent } = useWebSocket(); // Connect to real-time event stream
   const navigate = useNavigate();
   const [libStats, setLibStats] = useState({ movies: 0, shows: 0 });
   const [clientStats, setClientStats] = useState({ dl_info_speed: 0, up_info_speed: 0 });
   const [downloads, setDownloads] = useState([]);
   const [clientConnected, setClientConnected] = useState(null);
   const [systemIssues, setSystemIssues] = useState([]);
+  const [pendingRequests, setPendingRequests] = useState(0);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
+  const [watcherCount, setWatcherCount] = useState(0);
+
+  const handleLogout = () => {
+    localStorage.removeItem('atlas_token');
+    localStorage.removeItem('atlas_user');
+    navigate('/login');
+  };
 
   // Prefetch library data into shared cache so Dashboard loads instantly
   const prefetchLibrary = async () => {
@@ -60,13 +71,34 @@ export default function Layout() {
   };
 
   useEffect(() => {
+    // Initial fetch for watchers
+    api.get('/watcher/sessions')
+      .then(res => {
+        if (res.data.status === 'success') {
+          setWatcherCount(res.data.data.length);
+        }
+      })
+      .catch(() => {});
+
+    const cleanupWebSocket = onEvent((data) => {
+      if (data.type === 'WATCHERS_UPDATE') {
+        setWatcherCount(data.count);
+      }
+      // Invalidate library cache when a scan completes (new/removed items)
+      if (data.message && data.message.toLowerCase().includes('scan complete')) {
+        setCachedMovies(null);
+        setCachedShows(null);
+      }
+    });
+
     const fetchData = async () => {
       try {
-        const [libRes, statsRes, torrentsRes, issuesRes] = await Promise.allSettled([
+        const [libRes, statsRes, torrentsRes, issuesRes, requestsRes] = await Promise.allSettled([
           api.get('/library/stats'),
           api.get('/clients/stats'),
           api.get('/clients/torrents'),
-          api.get('/settings/issues')
+          api.get('/settings/issues'),
+          api.get('/requests/pending-count')
         ]);
         
         if (libRes.status === 'fulfilled' && libRes.value.data.status === 'success') {
@@ -83,6 +115,9 @@ export default function Layout() {
         }
         if (issuesRes.status === 'fulfilled' && issuesRes.value.data.status === 'success') {
           setSystemIssues(issuesRes.value.data.data || []);
+        }
+        if (requestsRes.status === 'fulfilled' && requestsRes.value.data.status === 'success') {
+          setPendingRequests(requestsRes.value.data.data.count || 0);
         }
       } catch (err) {
         console.error('Failed to fetch data', err);
@@ -111,8 +146,9 @@ export default function Layout() {
     return () => {
       clearInterval(interval);
       document.removeEventListener('visibilitychange', onVisibility);
+      if (cleanupWebSocket) cleanupWebSocket();
     };
-  }, []);
+  }, [onEvent]);
 
   // Global keyboard shortcuts
   useKeyboardShortcuts({
@@ -154,16 +190,27 @@ export default function Layout() {
           sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
         )}
       >
-        <div className="p-6 flex items-center space-x-3">
-          <Logo className="w-12 h-12" />
-          <span className="text-3xl font-black tracking-wider drop-shadow-[0_0_12px_rgba(6,182,212,0.4)]">
-            <span className="bg-gradient-to-r from-cyan-300 via-cyan-400 to-sky-400 bg-clip-text text-transparent">
-              Atlas
+        <div className="p-6 pb-4 flex items-center justify-between">
+          <div className="flex items-center space-x-3">
+            <Logo className="w-12 h-12" />
+            <span className="text-3xl font-black tracking-wider drop-shadow-[0_0_12px_rgba(6,182,212,0.4)]">
+              <span className="bg-gradient-to-r from-cyan-300 via-cyan-400 to-sky-400 bg-clip-text text-transparent">
+                Atlas
+              </span>
             </span>
-          </span>
+          </div>
+          <button
+            onClick={handleLogout}
+            className="p-2 rounded-xl bg-slate-100 dark:bg-slate-900/50 border border-slate-200/60 dark:border-white/5 hover:bg-rose-500/10 dark:hover:bg-rose-500/10 hover:border-rose-500/30 transition-colors text-slate-500 dark:text-slate-400 hover:text-rose-500 dark:hover:text-rose-400"
+            title="Logout"
+            aria-label="Logout"
+          >
+            <LogOut className="w-5 h-5" />
+          </button>
         </div>
 
-        <nav className="flex-1 px-4 py-4 space-y-2">
+
+        <nav className="flex-1 px-4 py-2 space-y-2">
           {navItems.map((item) => (
             <NavLink
               key={item.name}
@@ -182,11 +229,23 @@ export default function Layout() {
                 <item.icon className="w-5 h-5" />
                 <span className="font-medium">{item.name}</span>
               </div>
-              {item.name === 'Downloads' && downloads.length > 0 && (
-                <span className="bg-emerald-500/20 text-emerald-400 text-[10px] font-bold px-2 py-0.5 rounded-full border border-emerald-500/30">
-                  {downloads.length}
-                </span>
-              )}
+              <div className="flex items-center space-x-2">
+                {item.name === 'Requests' && pendingRequests > 0 && (
+                  <span className="bg-amber-500/20 text-amber-400 text-[10px] font-bold px-2 py-0.5 rounded-full border border-amber-500/30">
+                    {pendingRequests}
+                  </span>
+                )}
+                {item.name === 'Downloads' && downloads.length > 0 && (
+                  <span className="bg-emerald-500/20 text-emerald-400 text-[10px] font-bold px-2 py-0.5 rounded-full border border-emerald-500/30">
+                    {downloads.length}
+                  </span>
+                )}
+                {item.name === 'Watchers' && watcherCount > 0 && (
+                  <span className="bg-cyan-500/20 text-cyan-400 text-[10px] font-bold px-2 py-0.5 rounded-full border border-cyan-500/30">
+                    {watcherCount}
+                  </span>
+                )}
+              </div>
             </NavLink>
           ))}
         </nav>
@@ -222,11 +281,12 @@ export default function Layout() {
           href="https://www.paypal.com/donate/?business=C5EDZZUFSMX4J&no_recurring=0&item_name=Thanks+for+the+coffee&currency_code=EUR"
           target="_blank"
           rel="noopener noreferrer"
-          className="mx-4 mb-4 px-4 py-3 rounded-2xl flex items-center justify-center gap-2 bg-gradient-to-r from-rose-500/20 to-pink-500/20 border border-rose-500/30 text-rose-300 hover:from-rose-500/30 hover:to-pink-500/30 hover:text-rose-200 hover:border-rose-500/50 transition-all duration-300 group"
+          className="mx-4 mb-2 px-4 py-3 rounded-2xl flex items-center justify-center gap-2 bg-gradient-to-r from-rose-500/20 to-pink-500/20 border border-rose-500/30 text-rose-300 hover:from-rose-500/30 hover:to-pink-500/30 hover:text-rose-200 hover:border-rose-500/50 transition-all duration-300 group"
         >
           <Heart className="w-4 h-4 group-hover:scale-110 transition-transform duration-300 fill-rose-400/30 group-hover:fill-rose-400/60" />
           <span className="text-sm font-semibold">Donate</span>
         </a>
+
       </aside>
 
       {/* Main Content */}
@@ -236,6 +296,7 @@ export default function Layout() {
           <button
             onClick={() => setSidebarOpen(true)}
             className="p-2 rounded-xl hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors"
+            aria-label="Open navigation menu"
           >
             <Menu className="w-6 h-6 text-slate-600 dark:text-slate-300" />
           </button>
@@ -258,6 +319,11 @@ export default function Layout() {
           <Outlet />
         </div>
       </main>
+
+      <ChangePasswordModal
+        isOpen={isPasswordModalOpen}
+        onClose={() => setIsPasswordModalOpen(false)}
+      />
     </div>
   );
 }

@@ -1,6 +1,7 @@
 const axios = require('axios');
 const db = require('../config/database');
 const eventBus = require('./eventBus');
+const { getSetting } = require('../utils/settings');
 
 class MediaServerService {
   constructor() {
@@ -9,11 +10,6 @@ class MediaServerService {
 
   init() {
     eventBus.on('event', this.handleEvent.bind(this));
-  }
-
-  getSetting(key) {
-    const row = db.prepare('SELECT value FROM settings WHERE key = ?').get(key);
-    return row ? row.value : null;
   }
 
   async handleEvent(event) {
@@ -25,12 +21,12 @@ class MediaServerService {
   }
 
   async triggerScans(path) {
-    const plexUrl = this.getSetting('plexUrl');
-    const plexToken = this.getSetting('plexToken');
-    const jellyfinUrl = this.getSetting('jellyfinUrl');
-    const jellyfinApiKey = this.getSetting('jellyfinApiKey');
-    const embyUrl = this.getSetting('embyUrl');
-    const embyApiKey = this.getSetting('embyApiKey');
+    const plexUrl = getSetting('plexUrl');
+    const plexToken = getSetting('plexToken');
+    const jellyfinUrl = getSetting('jellyfinUrl');
+    const jellyfinApiKey = getSetting('jellyfinApiKey');
+    const embyUrl = getSetting('embyUrl');
+    const embyApiKey = getSetting('embyApiKey');
 
     if (plexUrl && plexToken) {
       try {

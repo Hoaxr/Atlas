@@ -50,6 +50,7 @@ db.exec(`
     file_path TEXT,
     scene_name TEXT,
     quality_profile_id INTEGER,
+    release_date TEXT,
     added_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
 
@@ -144,10 +145,26 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_shows_status ON shows(status);
   CREATE INDEX IF NOT EXISTS idx_episodes_show_id ON episodes(show_id);
   CREATE INDEX IF NOT EXISTS idx_episodes_status ON episodes(status);
+
+  CREATE TABLE IF NOT EXISTS play_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id TEXT UNIQUE,
+    user TEXT,
+    title TEXT,
+    type TEXT,
+    server TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+  CREATE INDEX IF NOT EXISTS idx_play_history_type ON play_history(type);
+  CREATE INDEX IF NOT EXISTS idx_play_history_user ON play_history(user);
 `);
 
 try {
   db.exec("ALTER TABLE movies ADD COLUMN file_path TEXT;");
+} catch (e) {}
+
+try {
+  db.exec("ALTER TABLE play_history ADD COLUMN player TEXT;");
 } catch (e) {}
 
 try {
@@ -181,8 +198,11 @@ try { db.exec("ALTER TABLE shows ADD COLUMN folder_size INTEGER DEFAULT 0;"); } 
 try { db.exec("ALTER TABLE episodes ADD COLUMN file_size INTEGER DEFAULT 0;"); } catch (e) {}
 // Ensure watched columns exist
 try { db.exec("ALTER TABLE movies ADD COLUMN watched INTEGER DEFAULT 0;"); } catch (e) {}
-try { db.exec("ALTER TABLE shows ADD COLUMN watched INTEGER DEFAULT 0;"); } catch (e) {}
-// Ensure genres columns exist
+try { db.exec("ALTER TABLE shows ADD COLUMN watched INTEGER DEFAULT 0;"); } catch (e) {}// Ensure subtitle columns exist
+try { db.exec("ALTER TABLE movies ADD COLUMN subtitles TEXT DEFAULT '[]';"); } catch (e) {}
+try { db.exec("ALTER TABLE episodes ADD COLUMN subtitles TEXT DEFAULT '[]';"); } catch (e) {}
+// Ensure library_paths type column exists
+try { db.exec("ALTER TABLE library_paths ADD COLUMN type TEXT DEFAULT 'movies';"); } catch (e) {}// Ensure genres columns exist
 try { db.exec("ALTER TABLE movies ADD COLUMN genres TEXT DEFAULT '';"); } catch (e) {}
 try { db.exec("ALTER TABLE shows ADD COLUMN genres TEXT DEFAULT '';"); } catch (e) {}
 // Ensure monitored columns exist (separate from status which tracks download state)
@@ -190,6 +210,8 @@ try { db.exec("ALTER TABLE movies ADD COLUMN monitored INTEGER DEFAULT 1;"); } c
 try { db.exec("ALTER TABLE shows ADD COLUMN monitored INTEGER DEFAULT 1;"); } catch (e) {}
 try { db.exec("ALTER TABLE episodes ADD COLUMN monitored INTEGER DEFAULT 1;"); } catch (e) {}
 try { db.exec("ALTER TABLE episodes ADD COLUMN air_date TEXT;"); } catch (e) {}
+try { db.exec("ALTER TABLE movies ADD COLUMN release_date TEXT;"); } catch (e) {}
+try { db.exec("ALTER TABLE shows ADD COLUMN tmdb_status TEXT DEFAULT '';"); } catch (e) {}
 // Fix existing items: if they have a file on disk, restore 'downloaded' status
 try { db.exec("UPDATE movies SET status = 'downloaded' WHERE file_path IS NOT NULL AND file_path != '' AND status != 'downloading'"); } catch (e) {}
 try { db.exec("UPDATE shows SET status = 'downloaded' WHERE folder_path IS NOT NULL AND folder_path != '' AND status != 'downloading'"); } catch (e) {}

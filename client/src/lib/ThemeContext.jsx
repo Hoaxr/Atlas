@@ -5,7 +5,7 @@ const ThemeContext = createContext();
 export function ThemeProvider({ children }) {
   const [theme, setTheme] = useState(() => {
     if (typeof window !== 'undefined') {
-      return localStorage.getItem('atlas-theme') || 'dark';
+      try { return localStorage.getItem('atlas-theme') || 'dark'; } catch { return 'dark'; }
     }
     return 'dark';
   });

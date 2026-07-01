@@ -41,13 +41,13 @@ export default function Calendar() {
     }
   };
 
-  // Group episodes by date
+  // Group episodes and movies by date
   const groupedByDate = {};
-  episodes.forEach(ep => {
-    if (!ep.air_date) return;
-    const date = ep.air_date.split('T')[0];
+  episodes.forEach(item => {
+    if (!item.date) return;
+    const date = item.date.split('T')[0];
     if (!groupedByDate[date]) groupedByDate[date] = [];
-    groupedByDate[date].push(ep);
+    groupedByDate[date].push(item);
   });
 
   const today = new Date().toISOString().split('T')[0];
@@ -221,7 +221,7 @@ export default function Calendar() {
           <div className="grid grid-cols-7 gap-px bg-slate-700/20 rounded-b-xl overflow-hidden">
             {calendarGrid.flat().map((cell, i) => (
               <div
-                key={i}
+                key={`row-${i}`}
                 className={`min-h-[80px] p-1.5 bg-slate-800/20 ${cell ? 'hover:bg-slate-800/50 transition-colors' : 'opacity-20'} ${cell?.isToday ? 'ring-1 ring-inset ring-cyan-500/40' : ''}`}
               >
                 {cell && (
@@ -230,8 +230,10 @@ export default function Calendar() {
                       {cell.day}
                     </div>
                     {(() => {
+                      const movies = cell.episodes.filter(e => e.type === 'movie');
+                      const tvEps = cell.episodes.filter(e => e.type !== 'movie');
                       const grouped = {};
-                      cell.episodes.forEach(ep => {
+                      tvEps.forEach(ep => {
                         if (!grouped[ep.show_id]) grouped[ep.show_id] = [];
                         grouped[ep.show_id].push(ep);
                       });
@@ -239,6 +241,16 @@ export default function Calendar() {
                       const remaining = Object.values(grouped).length - 3;
                       return (
                         <>
+                          {movies.map((m, j) => (
+                            <div
+                              key={`movie-${j}`}
+                              onClick={() => navigate(`/movies/${m.show_id}`)}
+                              className="text-[10px] leading-tight truncate text-cyan-400 hover:text-cyan-300 cursor-pointer mb-0.5"
+                              title={m.title}
+                            >
+                              🎬 {m.title}
+                            </div>
+                          ))}
                           {showGroups.map((eps, j) => (
                             <div
                               key={j}
@@ -266,8 +278,8 @@ export default function Calendar() {
           {filteredDates.length === 0 ? (
             <EmptyState
               icon="tv"
-              title={viewMode === 'day' ? 'No episodes this day' : 'No episodes this week'}
-              description="Add more shows to your library to see upcoming episodes."
+              title={viewMode === 'day' ? 'Nothing this day' : 'Nothing this week'}
+              description="Add movies and shows to your library to see upcoming releases."
             />
           ) : (
             <div className="space-y-4">
@@ -285,47 +297,38 @@ export default function Calendar() {
                         {d.toLocaleDateString('en-US', { weekday: 'long' })}
                         {isToday && <span className="ml-2 px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-400 font-bold">Today</span>}
                       </div>
-                      <div className="ml-auto text-xs font-bold text-slate-500">{eps.length} episode{eps.length > 1 ? 's' : ''}</div>
+                      <div className="ml-auto text-xs font-bold text-slate-500">
+                        {eps.length} item{eps.length > 1 ? 's' : ''}
+                      </div>
                     </div>
                     <div className="divide-y divide-slate-700/30">
-                      {(() => {
-                        const groupedByShow = {};
-                        eps.forEach(ep => {
-                          if (!groupedByShow[ep.show_id]) groupedByShow[ep.show_id] = [];
-                          groupedByShow[ep.show_id].push(ep);
-                        });
-                        return Object.values(groupedByShow).map((showEps, i) => {
-                          const first = showEps[0];
-                          const isMulti = showEps.length > 1;
+                      {eps.map((item, i) => {
+                        if (item.type === 'movie') {
                           return (
-                            <div
-                              key={i}
-                              onClick={() => navigate(`/shows/${first.show_id}`)}
-                              className="px-5 py-3 flex items-start gap-3 hover:bg-slate-800/20 transition-colors cursor-pointer"
-                            >
-                              <Tv className="w-4 h-4 text-purple-400 shrink-0 mt-0.5" />
+                            <div key={`movie-${i}`} onClick={() => navigate(`/movies/${item.show_id}`)}
+                              className="px-5 py-3 flex items-start gap-3 hover:bg-slate-800/20 transition-colors cursor-pointer">
+                              <span className="text-lg shrink-0 mt-0.5">🎬</span>
                               <div className="flex-1 min-w-0">
-                                <p className="text-sm font-bold text-slate-200 truncate">{first.show_title}</p>
-                                {isMulti ? (
-                                  <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1">
-                                    {showEps.map(ep => (
-                                      <span key={ep.episode_number} className="text-xs text-slate-400">
-                                        S{String(ep.season_number).padStart(2, '0')}E{String(ep.episode_number).padStart(2, '0')}
-                                        {ep.title && ` — ${ep.title}`}
-                                      </span>
-                                    ))}
-                                  </div>
-                                ) : (
-                                  <p className="text-xs text-slate-400">
-                                    S{String(first.season_number).padStart(2, '0')}E{String(first.episode_number).padStart(2, '0')}
-                                    {first.title && ` — ${first.title}`}
-                                  </p>
-                                )}
+                                <p className="text-sm font-bold text-slate-200 truncate">{item.title}</p>
+                                <p className="text-xs text-slate-400">Movie Release</p>
                               </div>
                             </div>
                           );
-                        });
-                      })()}
+                        }
+                        return (
+                          <div key={`ep-${i}`} onClick={() => navigate(`/shows/${item.show_id}`)}
+                            className="px-5 py-3 flex items-start gap-3 hover:bg-slate-800/20 transition-colors cursor-pointer">
+                            <Tv className="w-4 h-4 text-purple-400 shrink-0 mt-0.5" />
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-bold text-slate-200 truncate">{item.show_title}</p>
+                              <p className="text-xs text-slate-400">
+                                S{String(item.season_number).padStart(2, '0')}E{String(item.episode_number).padStart(2, '0')}
+                                {item.title && ` — ${item.title}`}
+                              </p>
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 );

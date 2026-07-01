@@ -1,9 +1,5 @@
 const db = require('../../config/database');
-
-const isWatchedSyncEnabled = () => {
-  const row = db.prepare("SELECT value FROM settings WHERE key = 'traktWatchedSync'").get();
-  return row && row.value === 'true';
-};
+const { isWatchedSyncEnabled } = require('../../utils/settings');
 
 const SUBTITLE_EXTS = ['.srt', '.sub', '.vtt', '.ass', '.ssa', '.smi', '.idx'];
 
@@ -21,8 +17,10 @@ const getSubtitlesInDir = async (dir, fsp, pathLib) => {
 
 const extractLang = (filename, pathLib) => {
   const name = pathLib.basename(filename, pathLib.extname(filename));
-  // Match pattern: .en, _en at end, or .eng, _eng, .english
-  const match = name.match(/[._]([a-z]{2,3})(?:[._]|$)/i);
+  // Try language code at the very end first (e.g. .en, _nl)
+  let match = name.match(/[._]([a-z]{2,3})$/i);
+  // Fallback: language code followed by another separator (e.g. .en.forced)
+  if (!match) match = name.match(/[._]([a-z]{2,3})(?=[._])/i);
   if (match) {
     const code = match[1].toLowerCase();
     // Map 3-letter and full codes to 2-letter
@@ -62,4 +60,7 @@ const translateSrt = async (enSrtContent, targetLang) => {
   }
 };
 
-module.exports = { isWatchedSyncEnabled, translateSrt, getSubtitlesInDir, extractLang };
+// Shared language name → ISO 639-1 code mapping
+const LANG_CODE = { 'Dutch': 'nl', 'French': 'fr', 'German': 'de', 'Spanish': 'es', 'Italian': 'it', 'Portuguese': 'pt' };
+
+module.exports = { isWatchedSyncEnabled, translateSrt, getSubtitlesInDir, extractLang, LANG_CODE };

@@ -12,10 +12,10 @@ router.get('/', (req, res) => {
       must_contain: JSON.parse(p.must_contain || '[]'),
       must_not_contain: JSON.parse(p.must_not_contain || '[]')
     }));
-    res.json(profiles);
+    res.json({ status: 'success', data: profiles });
   } catch (error) {
     console.error('Error fetching release profiles:', error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ status: 'error', message: error.message });
   }
 });
 
@@ -35,10 +35,10 @@ router.post('/', (req, res) => {
       indexer_id || null,
       apply_to || 'all'
     );
-    res.json({ id: info.lastInsertRowid });
+    res.json({ status: 'success', data: { id: info.lastInsertRowid } });
   } catch (error) {
     console.error('Error creating release profile:', error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ status: 'error', message: error.message });
   }
 });
 
@@ -61,10 +61,10 @@ router.put('/:id', (req, res) => {
       apply_to || 'all',
       id
     );
-    res.json({ success: true });
+    res.json({ status: 'success' });
   } catch (error) {
     console.error('Error updating release profile:', error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ status: 'error', message: error.message });
   }
 });
 
@@ -74,10 +74,10 @@ router.delete('/:id', (req, res) => {
     const { id } = req.params;
     const stmt = db.prepare('DELETE FROM release_profiles WHERE id = ?');
     stmt.run(id);
-    res.json({ success: true });
+    res.json({ status: 'success' });
   } catch (error) {
     console.error('Error deleting release profile:', error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ status: 'error', message: error.message });
   }
 });
 

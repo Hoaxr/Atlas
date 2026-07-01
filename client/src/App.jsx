@@ -1,7 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { lazy, Suspense, useEffect } from 'react';
-import { Toaster, useToasterStore, toast } from 'react-hot-toast';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { lazy, Suspense } from 'react';
+import { Toaster } from 'react-hot-toast';
 import { ThemeProvider } from './lib/ThemeContext';
 import ErrorBoundary from './components/shared/ErrorBoundary';
 import Layout from './components/layout/Layout';
@@ -9,6 +8,7 @@ import Dashboard from './pages/Dashboard';
 import Discover from './pages/Discover';
 import ShowDetails from './pages/ShowDetails';
 import MovieDetails from './pages/MovieDetails';
+import Spinner from './components/shared/Spinner';
 
 const Settings = lazy(() => import('./pages/Settings'));
 const SystemTasks = lazy(() => import('./pages/SystemTasks'));
@@ -20,20 +20,12 @@ const PersonDetails = lazy(() => import('./pages/PersonDetails'));
 const Login = lazy(() => import('./pages/Login'));
 const UserPortal = lazy(() => import('./pages/UserPortal'));
 const Requests = lazy(() => import('./pages/Requests'));
-
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      refetchOnWindowFocus: false,
-      retry: 1,
-    },
-  },
-});
+const Watcher = lazy(() => import('./pages/Watcher'));
 
 function PageFallback() {
   return (
     <div className="flex items-center justify-center h-96">
-      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-cyan-500" />
+      <Spinner size="lg" />
     </div>
   );
 }
@@ -42,28 +34,20 @@ function LazyPage({ children }) {
   return <Suspense fallback={<PageFallback />}>{children}</Suspense>;
 }
 
-function ToastLimiter() {
-  const { toasts } = useToasterStore();
-
-  useEffect(() => {
-    toasts
-      .filter((t) => t.visible)
-      .filter((_, i) => i >= 3)
-      .forEach((t) => toast.dismiss(t.id));
-  }, [toasts]);
-
-  return null;
-}
-
 function App() {
   return (
     <ErrorBoundary>
-      <QueryClientProvider client={queryClient}>
         <ThemeProvider>
-          <ToastLimiter />
           <Toaster
             position="bottom-right"
-            toastOptions={{ className: 'bg-slate-800 text-white border border-slate-700' }}
+            toastOptions={{
+              style: {
+                background: 'transparent',
+                boxShadow: 'none',
+                padding: '0',
+                maxWidth: '100%',
+              },
+            }}
           />
           <BrowserRouter>
             <Routes>
@@ -82,13 +66,13 @@ function App() {
                 <Route path="calendar" element={<LazyPage><Calendar /></LazyPage>} />
                 <Route path="stats" element={<LazyPage><Statistics /></LazyPage>} />
                 <Route path="requests" element={<LazyPage><Requests /></LazyPage>} />
+                <Route path="watcher" element={<LazyPage><Watcher /></LazyPage>} />
                 <Route path="person/:id" element={<LazyPage><PersonDetails /></LazyPage>} />
               </Route>
               <Route path="/portal" element={<LazyPage><UserPortal /></LazyPage>} />
             </Routes>
           </BrowserRouter>
         </ThemeProvider>
-      </QueryClientProvider>
     </ErrorBoundary>
   );
 }

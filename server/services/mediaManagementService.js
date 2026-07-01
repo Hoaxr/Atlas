@@ -7,9 +7,9 @@ const taskRegistry = require('./taskRegistry');
 const eventBus = require('./eventBus');
 const tmdbService = require('./tmdbService');
 const axios = require('axios');
+const { getSetting } = require('../utils/settings');
 
 const getNamingConfig = () => {
-  const getSetting = (key) => db.prepare('SELECT value FROM settings WHERE key = ?').get(key)?.value;
   return {
     renameMovies: getSetting('renameMovies') !== 'false',
     replaceIllegalCharacters: getSetting('replaceIllegalCharacters') !== 'false',
@@ -279,11 +279,10 @@ const importMovie = async (torrent, movie) => {
     const isDedicatedPath = libraryRoot.toLowerCase().includes('movie');
     const config = getNamingConfig();
     
-    let folderName = `${movie.title} (${movie.year})`;
-    let fileName = folderName;
-    
+    // Build folder and file names from the naming format
+    let folderName, fileName;
     if (config.renameMovies) {
-      let format = config.standardMovieFormat;
+      let format = config.standardMovieFormat || '{Movie Title} ({Release Year})';
       format = format.replace('{Movie Title}', sanitizeTitle(movie.title, config));
       format = format.replace('{Release Year}', movie.year);
       folderName = format;
@@ -300,25 +299,51 @@ const importMovie = async (torrent, movie) => {
     await fs.promises.mkdir(destFolder, { recursive: true });
     const destFile = path.join(destFolder, `${fileName}${ext}`);
     
-    if (!fs.existsSync(destFile)) {
+    if (movie.file_path && movie.file_path !== destFile && fs.existsSync(movie.file_path)) {
+      console.log(`[MediaManagement] Deleting old file at ${movie.file_path}.`);
+      await fs.promises.unlink(movie.file_path).catch(e => {});
+    }
+
+    if (fs.existsSync(destFile)) {
+      console.log(`[MediaManagement] File ${destFile} already exists. Overwriting with new import.`);
+      await fs.promises.unlink(destFile);
+    }
+
+    try {
+      console.log(`[MediaManagement] Hardlinking ${videoFile} to ${destFile}`);
+      await fs.promises.link(videoFile, destFile);
+      console.log(`[MediaManagement] Hardlink complete for ${movie.title}`);
+    } catch (linkErr) {
+      if (linkErr.code === 'EXDEV') {
+        console.log(`[MediaManagement] Cross-device link failed. Falling back to copy for ${movie.title}`);
+        await fs.promises.copyFile(videoFile, destFile);
+        console.log(`[MediaManagement] Copy complete for ${movie.title}. Deleting original file.`);
+        await fs.promises.unlink(videoFile).catch(e => {
+          if (e.code !== 'ENOENT') throw e;
+        });
+      } else {
+        throw linkErr;
+      }
+    }
+
+    // Remove torrent from client first (if enabled), so failed removal keeps status as 'downloading' for retry
+    const removeSetting = db.prepare('SELECT value FROM settings WHERE key = ?').get('removeCompletedDownloads');
+    const deleteFilesSetting = db.prepare('SELECT value FROM settings WHERE key = ?').get('deleteTorrentFiles');
+    if (removeSetting && removeSetting.value === 'true') {
+      const deleteFiles = deleteFilesSetting && deleteFilesSetting.value === 'true';
+      console.log(`[MediaManagement] Removing torrent ${torrent.name} from client (deleteFiles: ${deleteFiles})`);
       try {
-        console.log(`[MediaManagement] Hardlinking ${videoFile} to ${destFile}`);
-        await fs.promises.link(videoFile, destFile);
-        console.log(`[MediaManagement] Hardlink complete for ${movie.title}`);
-      } catch (linkErr) {
-        if (linkErr.code === 'EXDEV') {
-          console.log(`[MediaManagement] Cross-device link failed. Falling back to copy for ${movie.title}`);
-          await fs.promises.copyFile(videoFile, destFile);
-          console.log(`[MediaManagement] Copy complete for ${movie.title}`);
-        } else {
-          throw linkErr;
-        }
+        await downloadClientService.deleteTorrent(torrent.hash, deleteFiles);
+        console.log(`[MediaManagement] Torrent ${torrent.name} removed successfully.`);
+      } catch (delErr) {
+        console.error(`[MediaManagement] Failed to remove torrent ${torrent.name}, will retry next cycle:`, delErr.message);
+        return; // Keep status as 'downloading' so it retries next cycle
       }
     }
 
     db.prepare("UPDATE movies SET status = 'downloaded', file_path = ?, scene_name = ? WHERE id = ?").run(destFile, torrent.name, movie.id);
     console.log(`[MediaManagement] Movie ${movie.title} marked as downloaded.`);
-    eventBus.success('Download complete', { title: movie.title, type: 'movie', destinationPath: finalDestPath });
+    eventBus.success('Download complete', { title: movie.title, type: 'movie', destinationPath: destFile });
 
     // Auto-refresh: detect resolution and update TMDB metadata
     try {
@@ -370,18 +395,6 @@ const importMovie = async (torrent, movie) => {
     } catch (metaErr) {
       console.error(`[MediaManagement] Failed to generate metadata for movie ${movie.title}:`, metaErr.message);
     }
-    
-    // Check if we should remove the torrent
-    const removeSetting = db.prepare('SELECT value FROM settings WHERE key = ?').get('removeCompletedDownloads');
-    if (removeSetting && removeSetting.value === 'true') {
-      const deleteFilesSetting = db.prepare('SELECT value FROM settings WHERE key = ?').get('deleteTorrentFiles');
-      const deleteFiles = deleteFilesSetting && deleteFilesSetting.value === 'true';
-      console.log(`[MediaManagement] Removing torrent ${torrent.name} from client (deleteFiles: ${deleteFiles})`);
-      const downloadClientService = require('./downloadClientService');
-      await downloadClientService.deleteTorrent(torrent.hash, deleteFiles);
-    }
-
-
 
   } catch (err) {
     console.error(`[MediaManagement] Failed to import movie ${movie.title}:`, err);
@@ -455,25 +468,51 @@ const importEpisode = async (torrent, episode) => {
     
     const destFile = path.join(destFolder, `${fileName}${ext}`);
     
-    if (!fs.existsSync(destFile)) {
+    if (episode.file_path && episode.file_path !== destFile && fs.existsSync(episode.file_path)) {
+      console.log(`[MediaManagement] Deleting old file at ${episode.file_path}.`);
+      await fs.promises.unlink(episode.file_path).catch(e => {});
+    }
+
+    if (fs.existsSync(destFile)) {
+      console.log(`[MediaManagement] File ${destFile} already exists. Overwriting with new import.`);
+      await fs.promises.unlink(destFile);
+    }
+
+    try {
+      console.log(`[MediaManagement] Hardlinking ${videoFile} to ${destFile}`);
+      await fs.promises.link(videoFile, destFile);
+      console.log(`[MediaManagement] Hardlink complete for episode.`);
+    } catch (linkErr) {
+      if (linkErr.code === 'EXDEV') {
+        console.log(`[MediaManagement] Cross-device link failed. Falling back to copy for episode.`);
+        await fs.promises.copyFile(videoFile, destFile);
+        console.log(`[MediaManagement] Copy complete for episode. Deleting original file.`);
+        await fs.promises.unlink(videoFile).catch(e => {
+          if (e.code !== 'ENOENT') throw e;
+        });
+      } else {
+        throw linkErr;
+      }
+    }
+
+    // Remove torrent from client first (if enabled), so failed removal keeps status as 'downloading' for retry
+    const removeSettingEp = db.prepare('SELECT value FROM settings WHERE key = ?').get('removeCompletedDownloads');
+    const deleteFilesSettingEp = db.prepare('SELECT value FROM settings WHERE key = ?').get('deleteTorrentFiles');
+    if (removeSettingEp && removeSettingEp.value === 'true') {
+      const deleteFiles = deleteFilesSettingEp && deleteFilesSettingEp.value === 'true';
+      console.log(`[MediaManagement] Removing torrent ${torrent.name} from client (deleteFiles: ${deleteFiles})`);
       try {
-        console.log(`[MediaManagement] Hardlinking ${videoFile} to ${destFile}`);
-        await fs.promises.link(videoFile, destFile);
-        console.log(`[MediaManagement] Hardlink complete for episode.`);
-      } catch (linkErr) {
-        if (linkErr.code === 'EXDEV') {
-          console.log(`[MediaManagement] Cross-device link failed. Falling back to copy for episode.`);
-          await fs.promises.copyFile(videoFile, destFile);
-          console.log(`[MediaManagement] Copy complete for episode.`);
-        } else {
-          throw linkErr;
-        }
+        await downloadClientService.deleteTorrent(torrent.hash, deleteFiles);
+        console.log(`[MediaManagement] Torrent ${torrent.name} removed successfully.`);
+      } catch (delErr) {
+        console.error(`[MediaManagement] Failed to remove torrent ${torrent.name}, will retry next cycle:`, delErr.message);
+        return; // Keep status as 'downloading' so it retries next cycle
       }
     }
 
     db.prepare("UPDATE episodes SET status = 'downloaded', file_path = ?, scene_name = ? WHERE id = ?").run(destFile, torrent.name, episode.id);
     console.log(`[MediaManagement] Episode marked as downloaded.`);
-    eventBus.success('Download complete', { title: `${episode.show_title} S${episode.season_number}E${episode.episode_number}`, type: 'episode', destinationPath: finalDestPath });
+    eventBus.success('Download complete', { title: `${episode.show_title} S${episode.season_number}E${episode.episode_number}`, type: 'episode', destinationPath: destFile });
 
     // Auto-refresh: detect resolution and update TMDB metadata
     try {
@@ -538,26 +577,14 @@ const importEpisode = async (torrent, episode) => {
       console.error(`[MediaManagement] Failed to calculate folder size for episode:`, metaErr.message);
     }
 
-    // Check if we should remove the torrent
-    const removeSetting = db.prepare('SELECT value FROM settings WHERE key = ?').get('removeCompletedDownloads');
-    if (removeSetting && removeSetting.value === 'true') {
-      const deleteFilesSetting = db.prepare('SELECT value FROM settings WHERE key = ?').get('deleteTorrentFiles');
-      const deleteFiles = deleteFilesSetting && deleteFilesSetting.value === 'true';
-      console.log(`[MediaManagement] Removing torrent ${torrent.name} from client (deleteFiles: ${deleteFiles})`);
-      const downloadClientService = require('./downloadClientService');
-      await downloadClientService.deleteTorrent(torrent.hash, deleteFiles);
-    }
-
-
-
   } catch (err) {
     console.error(`[MediaManagement] Failed to import episode:`, err);
   }
 };
 
 const init = () => {
-  // Check every minute
-  const cronExp = '* * * * *';
+  // Check every 5 minutes
+  const cronExp = '*/5 * * * *';
   
   taskRegistry.registerTask(
     'media_mover', 

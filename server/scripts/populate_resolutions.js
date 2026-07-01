@@ -1,5 +1,5 @@
 const sqlite3 = require('better-sqlite3');
-const { execSync } = require('child_process');
+const { execFileSync } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 
@@ -8,7 +8,7 @@ const db = sqlite3('/home/silence/Development/Atlas/server/data/database.sqlite'
 const getResolution = (filePath) => {
   if (!fs.existsSync(filePath)) return null;
   try {
-    const height = execSync(`ffprobe -v error -select_streams v:0 -show_entries stream=height -of default=noprint_wrappers=1:nokey=1 "${filePath}"`).toString().trim();
+    const height = execFileSync('ffprobe', ['-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=height', '-of', 'default=noprint_wrappers=1:nokey=1', filePath]).toString().trim();
     if (!height) return null;
     const h = parseInt(height, 10);
     if (h >= 2160) return '2160p';

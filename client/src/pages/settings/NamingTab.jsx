@@ -29,7 +29,7 @@ const TagsModal = ({ title, tags, onClose }) => {
 
         <ul className="space-y-2 max-h-[60vh] overflow-y-auto pr-2 custom-scrollbar">
           {tags.map((tag, idx) => (
-            <li key={idx} className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2 text-sm bg-slate-800/50 border border-white/5 rounded-lg p-3">
+            <li key={tag.name} className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2 text-sm bg-slate-800/50 border border-white/5 rounded-lg p-3">
               <span className="text-cyan-400 font-mono">{tag.name}</span>
               {tag.desc && <span className="text-slate-400 sm:ml-auto">{tag.desc}</span>}
             </li>
@@ -95,16 +95,12 @@ export default function NamingTab({ settings, setSettings, handleSave }) {
         </h2>
       </div>
 
-      <div className="bg-orange-500/10 border border-orange-500/20 text-orange-400 p-4 rounded-xl mb-6 flex gap-3 text-sm">
-        <FileText className="w-5 h-5 shrink-0" />
-        <p>Configure how Atlas renames your media files when moving them to your library. Use the tags to build your custom format.</p>
-      </div>
-
       {/* Movie Naming Section */}
       <div className="glass-panel p-8 rounded-2xl border border-white/10 space-y-6 shadow-xl relative overflow-hidden">
         <h3 className="text-lg font-bold text-slate-200 flex items-center gap-2">
           Movie Naming
         </h3>
+        <p className="text-xs text-slate-500">Configure how Atlas renames your movie files using custom format tags.</p>
         
         <div className="space-y-6">
           <div className="flex items-start gap-4">
@@ -191,6 +187,7 @@ export default function NamingTab({ settings, setSettings, handleSave }) {
         <h3 className="text-lg font-bold text-slate-200 flex items-center gap-2">
           Episode Naming
         </h3>
+        <p className="text-xs text-slate-500">Configure how Atlas renames your TV episode files using custom format tags.</p>
         
         <div className="space-y-6">
           <div className="flex items-start gap-4">

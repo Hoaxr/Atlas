@@ -43,6 +43,19 @@ router.get('/search/show', async (req, res, next) => {
   }
 });
 
+router.get('/search/multi', async (req, res, next) => {
+  try {
+    const query = req.query.query;
+    if (!query) {
+      return res.status(400).json({ status: 'error', message: 'Query is required' });
+    }
+    const results = await tmdbService.searchMulti(query);
+    res.json({ status: 'success', data: results });
+  } catch (e) {
+    next(e);
+  }
+});
+
 router.get('/movie/:id', async (req, res, next) => {
   try {
     const movie = await tmdbService.getMovieById(req.params.id);

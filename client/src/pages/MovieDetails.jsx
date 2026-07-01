@@ -1,13 +1,18 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import api from '../lib/api';
-import { formatSize, parseResolution } from '../lib/format';
+import { formatSize, parseResolution, LANG_LABEL, LANG_NAME } from '../lib/format';
 import { useSettings } from '../lib/useSettings';
 import { useTMDBDetails } from '../lib/useTMDBDetails';
 import { ArrowLeft, Search, Download, HardDrive, Film, PlayCircle, Bookmark, BookmarkMinus, Star, X, RefreshCw, Loader2, Heart, Trash2, ChevronDown, ChevronRight, Folder } from 'lucide-react';
 import { customAlert, customConfirm } from '../utils/alerts';
+import { useOutsideClick } from '../lib/useOutsideClick';
 import TrailerModal from '../components/TrailerModal';
 import ManualSearchModal from '../components/ManualSearchModal';
+import RemapModal from '../components/RemapModal';
+import SubSearchModal from '../components/SubSearchModal';
+import FolderBrowserModal from '../components/FolderBrowserModal';
+import SubtitleLanguageBadge from '../components/shared/SubtitleLanguageBadge';
 
 export default function MovieDetails() {
   const { id } = useParams();
@@ -46,6 +51,12 @@ export default function MovieDetails() {
   const [subSearching, setSubSearching] = useState(false);
   const [subSearched, setSubSearched] = useState(false);
 
+  // Folder browser modal
+  const [folderBrowserOpen, setFolderBrowserOpen] = useState(false);
+
+  const [deleteMenuOpen, setDeleteMenuOpen] = useState(false);
+  const deleteMenuRef = useOutsideClick(() => setDeleteMenuOpen(false), deleteMenuOpen);
+
   // Close lang menu on outside click
   useEffect(() => {
     if (!openLangMenu) return;
@@ -62,7 +73,9 @@ export default function MovieDetails() {
     try {
       const res = await api.get(`/library/movies/${id}`);
       if (res.data.status === 'success') {
-        setMovie(res.data.data);
+        const data = res.data.data;
+        setMovie(data);
+        if (data.files) setMovieFiles(data.files);
       }
     } catch (e) {
       console.error(e);
@@ -72,25 +85,11 @@ export default function MovieDetails() {
     }
   }, [id]);
 
-  // Fetch file list eagerly so the count badge is correct before expanding
-  const fetchFiles = useCallback(async () => {
-    setLoadingFiles(true);
-    try {
-      const res = await api.get(`/library/movies/${id}/files`);
-      if (res.data.status === 'success') setMovieFiles(res.data.data || []);
-    } catch (err) {
-      // silently ignore
-    } finally {
-      setLoadingFiles(false);
-    }
-  }, [id]);
-
   const toggleFiles = () => setFilesExpanded(prev => !prev);
 
   useEffect(() => {
     fetchMovieData(false);
-    fetchFiles();
-  }, [fetchMovieData, fetchFiles]);
+  }, [fetchMovieData]);
 
   const refreshAll = useCallback(async () => {
     setIsRefreshing(true);
@@ -100,11 +99,10 @@ export default function MovieDetails() {
       console.error('Failed to rescan folder', e);
     }
     await fetchMovieData(true);
-    await fetchFiles();
     await refetchTMDB();
     setIsRefreshing(false);
     customAlert('Movie refreshed!');
-  }, [fetchMovieData, fetchFiles, refetchTMDB, id]);
+  }, [fetchMovieData, refetchTMDB, id]);
 
   const handleQualityChange = async (profileId) => {
     setUpdatingQuality(true);
@@ -214,8 +212,8 @@ export default function MovieDetails() {
       </button>
 
       {/* Hero / Banner Section */}
-      <div className="glass-panel rounded-3xl overflow-hidden flex flex-col md:flex-row relative">
-        <div className="md:w-1/3 lg:w-1/4 shrink-0 relative group">
+      <div className="glass-panel rounded-3xl flex flex-col md:flex-row relative z-10">
+        <div className="md:w-1/3 lg:w-1/4 shrink-0 relative group overflow-hidden rounded-t-3xl md:rounded-l-3xl">
           <img 
             src={`https://image.tmdb.org/t/p/w500${movie.poster_path}`} 
             alt={movie.title}
@@ -226,6 +224,7 @@ export default function MovieDetails() {
             <button 
               onClick={() => setIsTrailerOpen(true)}
               className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity duration-300"
+              aria-label="Play trailer"
             >
               <PlayCircle className="w-16 h-16 text-white drop-shadow-xl hover:scale-110 transition-transform duration-300" />
             </button>
@@ -262,6 +261,7 @@ export default function MovieDetails() {
               disabled={isRefreshing}
               className="mr-2 p-2 bg-slate-800/50 hover:bg-slate-700 rounded-lg transition-colors text-slate-400 hover:text-purple-400 disabled:opacity-50"
               title="Refresh movie information from TMDB"
+              aria-label="Refresh movie information from TMDB"
             >
               <RefreshCw className={`w-5 h-5 ${isRefreshing ? 'animate-spin' : ''}`} />
             </button>
@@ -274,14 +274,21 @@ export default function MovieDetails() {
                 <span className="text-sm font-bold text-slate-700 dark:text-slate-200">{Number(movie.rating).toFixed(1)}</span>
               </div>
             )}
-            <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${
-              movie.status === 'downloaded' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 
-              movie.status === 'downloading' ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30' : 
-              movie.status === 'monitored' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 
-              'bg-rose-500/20 text-rose-400 border border-rose-500/30'
-            }`}>
-              {movie.status}
-            </span>
+            {(() => {
+              const isNotReleased = movie.release_date && new Date(movie.release_date) > new Date();
+              const statusLabel = (movie.status === 'monitored' && isNotReleased) ? 'not released' : movie.status;
+              const statusColor = (movie.status === 'monitored' && isNotReleased)
+                ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
+                : movie.status === 'downloaded' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                : movie.status === 'downloading' ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
+                : movie.status === 'monitored' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                : 'bg-rose-500/20 text-rose-400 border border-rose-500/30';
+              return (
+                <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${statusColor}`}>
+                  {statusLabel}
+                </span>
+              );
+            })()}
             {movie.file_path && (
               <span className="bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1">
                 <HardDrive className="w-3 h-3" /> Available locally
@@ -295,7 +302,16 @@ export default function MovieDetails() {
           
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-x-4 gap-y-6 w-full mt-4 text-sm bg-slate-900/50 p-5 rounded-xl border border-white/5">
             <div className="col-span-full">
-              <p className="text-slate-500 text-[10px] uppercase tracking-widest font-bold mb-1">Path</p>
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-slate-500 text-[10px] uppercase tracking-widest font-bold mb-1">Path</p>
+                <button
+                  onClick={() => setFolderBrowserOpen(true)}
+                  className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-amber-400 hover:text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/20 px-2 py-1 rounded-lg transition-colors"
+                  title="Browse and import folder"
+                >
+                  <Folder className="w-3 h-3" /> Import
+                </button>
+              </div>
               <p className="font-mono text-xs text-slate-300 truncate" title={movie.file_path}>{movie.file_path || 'Not downloaded'}</p>
             </div>
             {movie.scene_name && (
@@ -371,93 +387,52 @@ export default function MovieDetails() {
                 <p className="text-slate-500 italic text-xs">No file on disk</p>
               ) : (
                 <div className="flex items-center gap-1.5 flex-wrap">
-                  {/* Clickable badges for all provider languages */}
                   {(() => {
-                    const langCode = { en: 'EN', nl: 'NL', fr: 'FR', de: 'DE', es: 'ES', it: 'IT', pt: 'PT' };
-                    const langName = { en: 'English', nl: 'Dutch', fr: 'French', de: 'German', es: 'Spanish', it: 'Italian', pt: 'Portuguese' };
                     const existingCodes = movie.subtitles?.map(s => s.lang) || [];
                     const hasExistingSub = movie.subtitles?.length > 0;
-                    return providerLangs.map(code => {
-                      const exists = existingCodes.includes(code);
-                      return (
-                        <span key={code} className="relative">
-                          <span
-                            data-lang-badge
-                            role="button"
-                            tabIndex={0}
-                            onClick={() => setOpenLangMenu(openLangMenu === `${movie.id}-${code}` ? null : `${movie.id}-${code}`)}
-                            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpenLangMenu(openLangMenu === `${movie.id}-${code}` ? null : `${movie.id}-${code}`); } }}
-                            className={`text-xs uppercase font-bold px-2.5 py-1 rounded-md transition-colors cursor-pointer ${
-                              exists
-                                ? 'bg-slate-800 text-slate-300 border border-white/5 hover:bg-slate-700 hover:text-white'
-                                : 'bg-amber-500/15 text-amber-400 hover:bg-amber-500/25 hover:text-amber-300 border border-amber-500/30 hover:border-amber-400/50'
-                            }`}
-                          >
-                            {langCode[code] || code}
-                          </span>
-                          {openLangMenu === `${movie.id}-${code}` && (
-                            <div data-lang-menu className="absolute left-0 top-full mt-1 bg-slate-800 border border-white/10 rounded-xl py-1 shadow-2xl z-50 min-w-[150px]">
-                              {!exists && (
-                                <button
-                                  onClick={async () => {
-                                    setOpenLangMenu(null);
-                                    setDownloadingSubs(prev => ({ ...prev, [code]: true }));
-                                    try {
-                                      const res = await api.post(`/library/movies/${movie.id}/download-subs`, { langCode: code });
-                                      customAlert(res.data.message);
-                                      fetchMovieData();
-                                    } catch (err) {
-                                      customAlert(err.response?.data?.message || 'Auto search failed', 'error');
-                                    } finally {
-                                      setDownloadingSubs(prev => ({ ...prev, [code]: false }));
-                                    }
-                                  }}
-                                  disabled={downloadingSubs[code]}
-                                  className="block w-full text-left text-xs font-medium px-3 py-2 text-slate-300 hover:bg-slate-700/50 transition-colors disabled:opacity-50 flex items-center gap-2"
-                                >
-                                  {downloadingSubs[code] ? <Loader2 className="w-3 h-3 animate-spin" /> : <Search className="w-3 h-3" />}
-                                  Auto Search
-                                </button>
-                              )}
-                              <button
-                                onClick={() => {
-                                  setOpenLangMenu(null);
-                                  setSubSearchModal({ open: true, code, label: langName[code] || code });
-                                  setSubSearchResults([]);
-                                  setSubSearched(false);
-                                }}
-                                className="block w-full text-left text-xs font-medium px-3 py-2 text-slate-300 hover:bg-slate-700/50 transition-colors flex items-center gap-2"
-                              >
-                                <Download className="w-3 h-3" />
-                                Manual Search
-                              </button>
-                              {hasExistingSub && (
-                                <button
-                                  onClick={async () => {
-                                    setOpenLangMenu(null);
-                                    customAlert(`Translating to ${langName[code]}...`, 'info');
-                                    try {
-                                      const targetName = Object.entries(langName).find(([, v]) => v === langName[code])?.[0] || langName[code];
-                                      const res = await api.post(`/library/movies/${movie.id}/translate-subs`, { targetLang: langName[code] });
-                                      if (res.data.status === 'success') {
-                                        customAlert(res.data.message);
-                                        fetchMovieData();
-                                      }
-                                    } catch (err) {
-                                      customAlert(err.response?.data?.message || 'Translation failed', 'error');
-                                    }
-                                  }}
-                                  className="block w-full text-left text-xs font-medium px-3 py-2 text-slate-300 hover:bg-slate-700/50 transition-colors flex items-center gap-2"
-                                >
-                                  <RefreshCw className="w-3 h-3" />
-                                  Auto Translate
-                                </button>
-                              )}
-                            </div>
-                          )}
-                        </span>
-                      );
-                    });
+                    return providerLangs.map(code => (
+                      <SubtitleLanguageBadge
+                        key={code}
+                        code={code}
+                        exists={existingCodes.includes(code)}
+                        hasExistingSub={hasExistingSub}
+                        isOpen={openLangMenu === `${movie.id}-${code}`}
+                        downloading={downloadingSubs[code]}
+                        onOpenMenu={() => setOpenLangMenu(openLangMenu === `${movie.id}-${code}` ? null : `${movie.id}-${code}`)}
+                        onAutoSearch={async () => {
+                          setOpenLangMenu(null);
+                          setDownloadingSubs(prev => ({ ...prev, [code]: true }));
+                          try {
+                            const res = await api.post(`/library/movies/${movie.id}/download-subs`, { langCode: code });
+                            customAlert(res.data.message);
+                            fetchMovieData();
+                          } catch (err) {
+                            customAlert(err.response?.data?.message || 'Auto search failed', 'error');
+                          } finally {
+                            setDownloadingSubs(prev => ({ ...prev, [code]: false }));
+                          }
+                        }}
+                        onManualSearch={() => {
+                          setOpenLangMenu(null);
+                          setSubSearchModal({ open: true, code, label: LANG_NAME[code] || code });
+                          setSubSearchResults([]);
+                          setSubSearched(false);
+                        }}
+                        onAutoTranslate={async () => {
+                          setOpenLangMenu(null);
+                          customAlert(`Translating to ${LANG_NAME[code]}...`, 'info');
+                          try {
+                            const res = await api.post(`/library/movies/${movie.id}/translate-subs`, { targetLang: LANG_NAME[code] });
+                            if (res.data.status === 'success') {
+                              customAlert(res.data.message);
+                              fetchMovieData();
+                            }
+                          } catch (err) {
+                            customAlert(err.response?.data?.message || 'Translation failed', 'error');
+                          }
+                        }}
+                      />
+                    ));
                   })()}
                 </div>
               )}
@@ -467,17 +442,14 @@ export default function MovieDetails() {
             <div className="col-span-full border-t border-white/5 pt-4 mt-2 flex items-center justify-between">
               <div>
                 <p className="text-slate-500 text-[10px] uppercase tracking-widest font-bold mb-1">TMDB ID</p>
-                <p className="font-mono text-sm text-slate-300">
+                <a
+                  href={`https://www.themoviedb.org/movie/${movie.tmdb_id}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-mono text-sm text-cyan-400 hover:text-cyan-300 underline"
+                >
                   {movie.tmdb_id}
-                  <a
-                    href={`https://www.themoviedb.org/movie/${movie.tmdb_id}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="ml-2 text-cyan-400 hover:text-cyan-300 underline text-xs"
-                  >
-                    View on TMDB
-                  </a>
-                </p>
+                </a>
               </div>
               <button
                 onClick={() => {
@@ -517,25 +489,62 @@ export default function MovieDetails() {
             >
               <Search className="w-4 h-4" /> Manual Search
             </button>
-            <button 
-              onClick={async () => {
-                const deleteFiles = await customConfirm(
-                  `Remove "${movie.title}" from your library?\n\nAlso delete files from disk?`,
-                  { confirmText: 'Remove + Delete Files', cancelText: 'Remove Only', thirdOptionText: 'Cancel' }
-                );
-                if (deleteFiles === null) return; // cancelled
-                try {
-                  await api.delete(`/library/movies/${movie.id}?deleteFiles=${deleteFiles === true}`);
-                  customAlert('Movie removed from library.', 'success');
-                  navigate('/movies');
-                } catch (err) {
-                  customAlert(err.response?.data?.message || 'Failed to remove movie.', 'error');
-                }
-              }}
-              className="ml-auto bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 font-bold px-4 py-2 rounded-xl flex items-center gap-2 transition-colors"
-            >
-              <Trash2 className="w-4 h-4" /> Delete
-            </button>
+            <div ref={deleteMenuRef} className="relative ml-auto">
+              <button
+                onClick={() => setDeleteMenuOpen(!deleteMenuOpen)}
+                className="bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 font-bold px-4 py-2 rounded-xl flex items-center gap-2 transition-colors"
+              >
+                <Trash2 className="w-4 h-4" /> Delete
+                <ChevronDown className="w-3.5 h-3.5 opacity-60" />
+              </button>
+
+              {deleteMenuOpen && (
+                <div className="absolute right-0 top-full mt-2 w-64 bg-slate-800 border border-white/10 rounded-xl shadow-xl z-50 overflow-hidden">
+                  <div className="p-2 border-b border-white/5">
+                    <p className="text-xs font-semibold text-slate-400 px-2 py-1">Remove from Library</p>
+                  </div>
+                  <button
+                    onClick={async () => {
+                      setDeleteMenuOpen(false);
+                      try {
+                        await api.delete(`/library/movies/${movie.id}?deleteFiles=true`);
+                        customAlert('Movie and files removed from library.', 'success');
+                        navigate('/movies');
+                      } catch (err) {
+                        customAlert(err.response?.data?.message || 'Failed to remove movie.', 'error');
+                      }
+                    }}
+                    className="w-full flex items-center gap-3 px-4 py-3 text-sm text-red-400 hover:bg-red-500/10 transition-colors text-left"
+                  >
+                    <Trash2 className="w-4 h-4 shrink-0" />
+                    <div>
+                      <p className="font-semibold">Delete + Files</p>
+                      <p className="text-xs text-slate-500">Remove from library and delete files from disk</p>
+                    </div>
+                  </button>
+                  <div className="border-t border-white/5" />
+                  <button
+                    onClick={async () => {
+                      setDeleteMenuOpen(false);
+                      try {
+                        await api.delete(`/library/movies/${movie.id}?deleteFiles=false`);
+                        customAlert('Movie removed from library.', 'success');
+                        navigate('/movies');
+                      } catch (err) {
+                        customAlert(err.response?.data?.message || 'Failed to remove movie.', 'error');
+                      }
+                    }}
+                    className="w-full flex items-center gap-3 px-4 py-3 text-sm text-slate-300 hover:bg-white/5 transition-colors text-left"
+                  >
+                    <X className="w-4 h-4 shrink-0" />
+                    <div>
+                      <p className="font-semibold">Remove Only</p>
+                      <p className="text-xs text-slate-500">Remove from library, keep files on disk</p>
+                    </div>
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -574,8 +583,8 @@ export default function MovieDetails() {
                 </div>
               ) : (
                 <div className="divide-y divide-white/5">
-                  {movieFiles.map((file, idx) => (
-                    <div key={idx} className="flex items-center justify-between p-4 bg-slate-900/20 hover:bg-slate-800/30 transition-colors">
+                  {movieFiles.map((file) => (
+                    <div key={file.name} className="flex items-center justify-between p-4 bg-slate-900/20 hover:bg-slate-800/30 transition-colors">
                       <div className="flex items-center gap-3 min-w-0">
                         <HardDrive className="w-4 h-4 text-slate-500 shrink-0" />
                         <span className="text-sm text-slate-300 truncate">{file.name}</span>
@@ -644,112 +653,21 @@ export default function MovieDetails() {
       )}
       
       {/* Remap Modal */}
-      {remapModalOpen && (
-        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
-          <div className="bg-slate-900 p-6 rounded-2xl w-full max-w-2xl border border-white/10 max-h-[80vh] flex flex-col shadow-2xl">
-            <div className="flex justify-between items-center mb-4 shrink-0">
-              <h2 className="text-2xl font-bold text-white flex items-center gap-2">
-                <RefreshCw className="w-6 h-6 text-amber-400" /> Remap Movie
-              </h2>
-              <button onClick={() => setRemapModalOpen(false)} className="text-slate-400 hover:text-white p-1 rounded-lg transition-colors">
-                <X className="w-6 h-6" />
-              </button>
-            </div>
-            <p className="text-sm text-slate-400 mb-4">
-              Search TMDB for the correct movie to link <strong className="text-slate-700 dark:text-slate-200">{movie.title}</strong> to.
-            </p>
-
-            <div className="flex gap-2 mb-4 shrink-0">
-              <input
-                type="text"
-                value={remapQuery}
-                onChange={(e) => setRemapQuery(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    handleRemapSearch();
-                  }
-                }}
-                placeholder="Search for the correct movie..."
-                className="flex-1 bg-slate-800 border border-white/10 rounded-xl px-4 py-2.5 text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500/50 text-sm"
-              />
-              <button
-                onClick={handleRemapSearch}
-                disabled={!remapQuery.trim() || remapSearching}
-                className="bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold px-5 py-2 rounded-xl flex items-center gap-2 transition-colors disabled:opacity-50 text-sm"
-              >
-                {remapSearching ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
-                Search
-              </button>
-            </div>
-
-            <div className="overflow-y-auto flex-1 min-h-0 space-y-2">
-              {remapSearching ? (
-                <div className="flex flex-col items-center justify-center py-10 text-cyan-400">
-                  <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-cyan-500 mb-4"></div>
-                  <p className="font-bold">Searching TMDB...</p>
-                </div>
-              ) : !remapResults.length && remapHasSearched ? (
-                <div className="flex flex-col items-center justify-center py-10 text-slate-400">
-                  <p>No movies found. Try a different search term.</p>
-                </div>
-              ) : (
-                remapResults.map((result, i) => {
-                  const resultYear = result.release_date ? result.release_date.split('-')[0] : '—';
-                  const isCurrent = result.id === movie.tmdb_id;
-                  return (
-                    <div
-                      key={i}
-                      className={`bg-slate-800 p-3 rounded-xl flex gap-3 items-center border transition-colors ${
-                        isCurrent ? 'border-cyan-500/40 bg-cyan-500/5' : 'border-white/5 hover:bg-slate-750'
-                      }`}
-                    >
-                      <div className="w-12 h-[66px] rounded-lg shrink-0 bg-slate-700 flex items-center justify-center overflow-hidden">
-                        {result.poster_path ? (
-                          <img
-                            src={`https://image.tmdb.org/t/p/w92${result.poster_path}`}
-                            alt={result.title}
-                            className="w-full h-full object-cover"
-                          />
-                        ) : (
-                          <span className="text-[10px] text-slate-500 font-medium text-center leading-tight px-1">No<br/>Image</span>
-                        )}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="font-bold text-slate-200 truncate">
-                          {result.title} <span className="text-slate-400 font-light">({resultYear})</span>
-                        </p>
-                        {result.overview && (
-                          <p className="text-xs text-slate-500 line-clamp-1 mt-0.5">{result.overview}</p>
-                        )}
-                        <div className="flex items-center gap-2 mt-1">
-                          {result.vote_average > 0 && (
-                            <span className="flex items-center gap-0.5 text-xs text-yellow-400">
-                              <Star className="w-3 h-3 fill-yellow-400" /> {result.vote_average.toFixed(1)}
-                            </span>
-                          )}
-                          <span className="text-[10px] font-mono text-slate-600">TMDB: {result.id}</span>
-                          {isCurrent && (
-                            <span className="text-[10px] font-bold text-cyan-400 bg-cyan-500/10 px-1.5 py-0.5 rounded">Current</span>
-                          )}
-                        </div>
-                      </div>
-                      {!isCurrent && (
-                        <button
-                          onClick={() => handleRemapConfirm(result)}
-                          disabled={remapping}
-                          className="shrink-0 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold px-3 py-2 rounded-lg text-xs transition-colors disabled:opacity-50"
-                        >
-                          {remapping ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Use This'}
-                        </button>
-                      )}
-                    </div>
-                  );
-                })
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+      <RemapModal
+        type="movie"
+        title={movie?.title}
+        currentTmdbId={movie?.tmdb_id}
+        open={remapModalOpen}
+        onClose={() => setRemapModalOpen(false)}
+        query={remapQuery}
+        setQuery={setRemapQuery}
+        searching={remapSearching}
+        hasSearched={remapHasSearched}
+        results={remapResults}
+        remapping={remapping}
+        onSearch={handleRemapSearch}
+        onConfirm={handleRemapConfirm}
+      />
 
       {isTrailerOpen && trailerKey && (
         <TrailerModal trailerKey={trailerKey} onClose={() => setIsTrailerOpen(false)} />
@@ -789,8 +707,8 @@ export default function MovieDetails() {
                 </div>
               ) : (
                 <div className="space-y-5">
-                  {subSearchResults.map((provider, pi) => (
-                    <div key={pi}>
+                  {subSearchResults.map((provider) => (
+                    <div key={provider.provider}>
                       <div className="flex items-center gap-2 mb-3">
                         <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">{provider.provider}</span>
                         <span className="text-[10px] text-slate-600 bg-slate-800 px-2 py-0.5 rounded-full">{provider.items.length} result{provider.items.length > 1 ? 's' : ''}</span>
@@ -929,6 +847,18 @@ export default function MovieDetails() {
           </div>
         </div>
       )}
+
+      {/* Folder Browser Modal */}
+      <FolderBrowserModal
+        open={folderBrowserOpen}
+        onClose={() => setFolderBrowserOpen(false)}
+        onSelect={(folderPath, message) => {
+          customAlert(message);
+          fetchMovieData();
+        }}
+        itemId={movie?.id}
+        itemType="movies"
+      />
     </div>
   );
 }

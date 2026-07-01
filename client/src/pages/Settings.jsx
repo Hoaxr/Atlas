@@ -3,7 +3,6 @@ import api from '../lib/api';
 import { AlertCircle, CheckCircle2, Key, Search, Download, Settings2, FolderTree, Languages, ShieldAlert, Network, Users } from 'lucide-react';
 import { customAlert } from '../utils/alerts';
 
-import ApisTab from './settings/ApisTab';
 import IndexersTab from './settings/IndexersTab';
 import ClientsTab from './settings/ClientsTab';
 import ProfilesTab from './settings/ProfilesTab';
@@ -17,7 +16,7 @@ import SecurityTab from './settings/SecurityTab';
 import UsersTab from './settings/UsersTab';
 
 export default function Settings() {
-  const [activeTab, setActiveTab] = useState('apis');
+  const [activeTab, setActiveTab] = useState('connections');
   const [settings, setSettings] = useState({
     tmdbApiKey: '',
     traktClientId: '',
@@ -38,9 +37,10 @@ export default function Settings() {
     renameMovies: true,
     replaceIllegalCharacters: true,
     colonReplacement: 'dash',
-    standardMovieFormat: '{Movie Title} ({Release Year})',
+    standardMovieFormat: '{Movie Title} - {Release Year}',
     renameEpisodes: true,
     standardEpisodeFormat: '{Show Title} - S{Season}E{Episode} - {Episode Title}',
+    seasonFolderFormat: 'Season {Season Number}',
     removeCompletedDownloads: false,
     deleteTorrentFiles: false,
     hideCompletedDownloads: true,
@@ -53,6 +53,7 @@ export default function Settings() {
   const [releaseProfiles, setReleaseProfiles] = useState([]);
 
   const [newPath, setNewPath] = useState('');
+  const [newPathType, setNewPathType] = useState('movies');
   const [newClient, setNewClient] = useState({ name: '', host: '', port: 8080, username: '', password: '', type: 'qbittorrent' });
   const [newProfile, setNewProfile] = useState({ name: '', qualities: ['720p', '1080p', '2160p'], cutoff: '1080p', upgrade_allowed: true });
   const [editingProfile, setEditingProfile] = useState(null);
@@ -234,9 +235,10 @@ export default function Settings() {
           renameMovies: res.data.data.renameMovies ?? true,
           replaceIllegalCharacters: res.data.data.replaceIllegalCharacters ?? true,
           colonReplacement: res.data.data.colonReplacement || 'dash',
-          standardMovieFormat: res.data.data.standardMovieFormat || '{Movie Title} ({Release Year})',
+          standardMovieFormat: res.data.data.standardMovieFormat || '{Movie Title} - {Release Year}',
           renameEpisodes: res.data.data.renameEpisodes ?? true,
           standardEpisodeFormat: res.data.data.standardEpisodeFormat || '{Show Title} - S{Season}E{Episode} - {Episode Title}',
+          seasonFolderFormat: res.data.data.seasonFolderFormat || 'Season {Season Number}',
           removeCompletedDownloads: res.data.data.removeCompletedDownloads ?? false,
           deleteTorrentFiles: res.data.data.deleteTorrentFiles ?? false,
           hideCompletedDownloads: res.data.data.hideCompletedDownloads ?? true,
@@ -263,7 +265,7 @@ export default function Settings() {
   const fetchReleaseProfiles = async () => {
     try {
       const res = await api.get('/release-profiles');
-      setReleaseProfiles(res.data);
+      setReleaseProfiles(res.data.data);
     } catch (err) {
       console.error('Failed to fetch release profiles', err);
     }
@@ -312,7 +314,7 @@ export default function Settings() {
   const handleAddPath = async () => {
     if (!newPath.trim()) return;
     try {
-      await api.post('/library/paths', { path: newPath.trim() });
+      await api.post('/library/paths', { path: newPath.trim(), type: newPathType });
       setNewPath('');
       fetchPaths();
     } catch { /* path add failed silently — fetchPaths not called */ }
@@ -331,6 +333,12 @@ export default function Settings() {
       setStatus({ type: 'error', message: 'Failed to start library scan.' });
       setIsScanning(false);
     }
+  };
+
+  const handleStopScan = async () => {
+    try {
+      await api.post('/library/scan/stop');
+    } catch { /* ignore */ }
   };
 
   // Trakt helpers
@@ -413,7 +421,6 @@ export default function Settings() {
   };
 
   const TABS = [
-    { id: 'apis', label: "API's & Integrations", icon: <Key className="w-4 h-4" /> },
     { id: 'connections', label: "Connections", icon: <Network className="w-4 h-4" /> },
     { id: 'security', label: "Security", icon: <ShieldAlert className="w-4 h-4" /> },
     { id: 'indexers', label: "Indexers", icon: <Search className="w-4 h-4" /> },
@@ -468,8 +475,8 @@ export default function Settings() {
             </div>
           )}
 
-          {activeTab === 'apis' && (
-            <ApisTab
+          {activeTab === 'connections' && (
+            <ConnectionsTab
               settings={settings}
               setSettings={setSettings}
               handleSave={handleSave}
@@ -481,8 +488,6 @@ export default function Settings() {
               fetchSettings={fetchSettings}
             />
           )}
-
-          {activeTab === 'connections' && <ConnectionsTab />}
           {activeTab === 'security' && <SecurityTab />}
           {activeTab === 'users' && <UsersTab />}
 
@@ -560,10 +565,13 @@ export default function Settings() {
             <LibraryTab
               paths={paths}
               newPath={newPath}
+              newPathType={newPathType}
               setNewPath={setNewPath}
+              setNewPathType={setNewPathType}
               handleAddPath={handleAddPath}
               fetchPaths={fetchPaths}
               handleScan={handleScan}
+              handleStopScan={handleStopScan}
               isScanning={isScanning}
               scanProgress={scanProgress}
               scanResults={scanResults}

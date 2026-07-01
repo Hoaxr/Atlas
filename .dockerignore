@@ -1,0 +1,15 @@
+node_modules
+npm-debug.log
+.git
+.gitignore
+.env
+.env.*
+*.md
+assets
+server/data/database.sqlite*
+server/tests
+server/eslint.config.js
+client/eslint.config.js
+client/public/sw.js
+client/scripts
+.DS_Store

@@ -2,8 +2,13 @@ import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import api from '../../lib/api';
 import { Users, UserPlus, Trash2, Shield, User, Loader2, Edit, X, CheckSquare, Square } from 'lucide-react';
-import toast from 'react-hot-toast';
-import { customConfirm } from '../../utils/alerts';
+import { customAlert, customConfirm } from '../../utils/alerts';
+import CustomSelect from '../../components/shared/CustomSelect';
+
+const roleOptions = [
+  { label: 'User (Request Portal Only)', value: 'user' },
+  { label: 'Admin (Full Access)', value: 'admin' }
+];
 
 export default function UsersTab() {
   const [users, setUsers] = useState([]);
@@ -26,7 +31,7 @@ export default function UsersTab() {
       const res = await api.get('/users');
       setUsers(res.data.data);
     } catch (err) {
-      toast.error('Failed to load users');
+      customAlert('Failed to load users');
     } finally {
       setLoading(false);
     }
@@ -41,23 +46,23 @@ export default function UsersTab() {
     setAdding(true);
     try {
       const res = await api.post('/users', newUser);
-      toast.success(res.data.message);
+      customAlert(res.data.message);
       
       const provision = res.data.data.provisionResults;
       if (provision) {
         if (provision.plex === 'failed (email required)') {
-          toast.error('User created, but Plex invite failed (Email is required)');
+          customAlert('User created, but Plex invite failed (Email is required)');
         } else if (provision.jellyfin === 'failed' || provision.emby === 'failed' || provision.plex === 'failed') {
-          toast.error('User created, but failed to provision in some media servers');
+          customAlert('User created, but failed to provision in some media servers');
         } else if (provision.jellyfin === 'success' || provision.emby === 'success' || provision.plex === 'success') {
-          toast.success('Successfully provisioned/invited in media servers');
+          customAlert('Successfully provisioned/invited in media servers');
         }
       }
 
       setNewUser({ username: '', password: '', email: '', role: 'user', autoCreateMedia: false });
       fetchUsers();
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Failed to create user');
+      customAlert(err.response?.data?.message || 'Failed to create user');
     } finally {
       setAdding(false);
     }
@@ -69,10 +74,10 @@ export default function UsersTab() {
 
     try {
       await api.delete(`/users/${id}`);
-      toast.success('User deleted');
+      customAlert('User deleted');
       fetchUsers();
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Failed to delete user');
+      customAlert(err.response?.data?.message || 'Failed to delete user');
     }
   };
 
@@ -81,10 +86,10 @@ export default function UsersTab() {
     try {
       const res = await api.post('/users/import');
       const data = res.data.data;
-      toast.success(`Import complete! Found ${data.totalDiscovered} users and imported ${data.importedCount} new users.`);
+      customAlert(`Import complete! Found ${data.totalDiscovered} users and imported ${data.importedCount} new users.`);
       fetchUsers();
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Failed to import users from media servers.');
+      customAlert(err.response?.data?.message || 'Failed to import users from media servers.');
     } finally {
       setImporting(false);
     }
@@ -105,11 +110,11 @@ export default function UsersTab() {
       }
 
       const res = await api.put(`/users/${editingUser.id}`, payload);
-      toast.success(res.data.message || 'User updated successfully');
+      customAlert(res.data.message || 'User updated successfully');
       setEditingUser(null);
       fetchUsers();
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Failed to update user');
+      customAlert(err.response?.data?.message || 'Failed to update user');
     } finally {
       setUpdating(false);
     }
@@ -123,6 +128,7 @@ export default function UsersTab() {
         <h2 className="text-xl font-bold text-slate-200 flex items-center gap-2 mb-6">
           <UserPlus className="w-5 h-5 text-cyan-400" /> Create User
         </h2>
+        <p className="text-xs text-slate-500 mb-6">Create new users with role-based access. Users can be provisioned in connected media servers automatically.</p>
         <form onSubmit={handleAddUser} className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-2">
@@ -132,7 +138,7 @@ export default function UsersTab() {
                 required
                 value={newUser.username}
                 onChange={(e) => setNewUser({...newUser, username: e.target.value})}
-                className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-slate-200 focus:outline-none focus:border-cyan-500"
+                className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-sm text-slate-200 focus:outline-none focus:border-cyan-500"
               />
             </div>
             <div className="space-y-2">
@@ -142,7 +148,7 @@ export default function UsersTab() {
                 required
                 value={newUser.password}
                 onChange={(e) => setNewUser({...newUser, password: e.target.value})}
-                className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-slate-200 focus:outline-none focus:border-cyan-500"
+                className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-sm text-slate-200 focus:outline-none focus:border-cyan-500"
               />
             </div>
             <div className="space-y-2">
@@ -154,19 +160,16 @@ export default function UsersTab() {
                 type="email"
                 value={newUser.email}
                 onChange={(e) => setNewUser({...newUser, email: e.target.value})}
-                className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-slate-200 focus:outline-none focus:border-cyan-500"
+                className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-sm text-slate-200 focus:outline-none focus:border-cyan-500"
               />
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium text-slate-400">Role</label>
-              <select
+              <CustomSelect
                 value={newUser.role}
                 onChange={(e) => setNewUser({...newUser, role: e.target.value})}
-                className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2.5 text-slate-200 focus:outline-none focus:border-cyan-500"
-              >
-                <option value="user">User (Request Portal Only)</option>
-                <option value="admin">Admin (Full Access)</option>
-              </select>
+                options={roleOptions}
+              />
             </div>
           </div>
           
@@ -182,7 +185,7 @@ export default function UsersTab() {
                 {newUser.autoCreateMedia ? <CheckSquare className="w-5 h-5 text-cyan-500" /> : <Square className="w-5 h-5 text-slate-500" />}
               </div>
               <div>
-                <span className="font-medium text-slate-300 group-hover:text-cyan-400 transition-colors">Auto-create user / invite in configured Media Servers (Jellyfin/Emby/Plex)</span>
+                <span className="text-sm font-medium text-slate-300 group-hover:text-cyan-400 transition-colors">Auto-create user / invite in configured Media Servers (Jellyfin/Emby/Plex)</span>
               </div>
             </label>
           </div>
@@ -362,7 +365,7 @@ export default function UsersTab() {
                     required
                     value={editingUser.username}
                     onChange={(e) => setEditingUser({...editingUser, username: e.target.value})}
-                    className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2 text-slate-200 focus:outline-none focus:border-cyan-500"
+                    className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2 text-sm text-slate-200 focus:outline-none focus:border-cyan-500"
                   />
                 </div>
                 
@@ -372,7 +375,7 @@ export default function UsersTab() {
                     type="password"
                     value={editingUser.password}
                     onChange={(e) => setEditingUser({...editingUser, password: e.target.value})}
-                    className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2 text-slate-200 focus:outline-none focus:border-cyan-500"
+                    className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2 text-sm text-slate-200 focus:outline-none focus:border-cyan-500"
                     placeholder="••••••••"
                   />
                 </div>
@@ -383,20 +386,17 @@ export default function UsersTab() {
                     type="email"
                     value={editingUser.email || ''}
                     onChange={(e) => setEditingUser({...editingUser, email: e.target.value})}
-                    className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2 text-slate-200 focus:outline-none focus:border-cyan-500"
+                    className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2 text-sm text-slate-200 focus:outline-none focus:border-cyan-500"
                   />
                 </div>
 
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-slate-400">Role</label>
-                  <select
+                  <CustomSelect
                     value={editingUser.role}
                     onChange={(e) => setEditingUser({...editingUser, role: e.target.value})}
-                    className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2 text-slate-200 focus:outline-none focus:border-cyan-500"
-                  >
-                    <option value="user">User (Request Portal Only)</option>
-                    <option value="admin">Admin (Full Access)</option>
-                  </select>
+                    options={roleOptions}
+                  />
                 </div>
               </div>
 

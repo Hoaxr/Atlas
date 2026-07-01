@@ -1,14 +1,77 @@
 const express = require('express');
 const router = express.Router();
+const fs = require('fs');
+const fsp = require('fs/promises');
+const path = require('path');
 const db = require('../../config/database');
 const libraryService = require('../../services/libraryService');
 const indexerService = require('../../services/indexerService');
 const downloadClientService = require('../../services/downloadClientService');
-const { isWatchedSyncEnabled, getSubtitlesInDir, extractLang } = require('./helpers');
+const eventBus = require('../../services/eventBus');
+const { isWatchedSyncEnabled, getSubtitlesInDir, extractLang, translateSrt, LANG_CODE } = require('./helpers');
 
-router.get('/', (req, res, next) => {
+// In-memory cache for network mount directory scans — movies are on a CIFS/SMB
+// mount with actimeo=1, so every fresh request hits the NAS. Cache avoids that.
+const dirCache = new Map();
+const DIR_CACHE_TTL = 60_000; // 60 seconds
+
+const scanDirectory = async (dirPath) => {
+  const cached = dirCache.get(dirPath);
+  if (cached && Date.now() - cached.timestamp < DIR_CACHE_TTL) {
+    return cached.data;
+  }
+  const items = await Promise.race([
+    fsp.readdir(dirPath),
+    new Promise((_, reject) => setTimeout(() => reject(new Error('readdir timeout')), 3000))
+  ]);
+  const result = [];
+  for (const item of items) {
+    const fullPath = path.join(dirPath, item);
+    try {
+      const stats = await Promise.race([
+        fsp.stat(fullPath),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('stat timeout')), 2000))
+      ]);
+      if (stats.isFile()) result.push({ name: item, size: stats.size });
+    } catch { /* skip unstatable files */ }
+  }
+  dirCache.set(dirPath, { data: result, timestamp: Date.now() });
+  return result;
+};
+
+router.get('/', async (req, res, next) => {
   try {
-    const movies = libraryService.getMovies();
+    const limit = parseInt(req.query.limit) || 0;
+    const offset = parseInt(req.query.offset) || 0;
+    const sort = req.query.sort || 'added_desc';
+    const movies = libraryService.getMovies(limit, offset, sort);
+
+    // Skip expensive subtitle scanning when paginating
+    if (limit > 0) {
+      return res.json({ status: 'success', data: movies });
+    }
+
+    // Skip expensive subtitle scanning when only badge data is needed
+    if (req.query.badges === 'true') {
+      return res.json({ status: 'success', data: movies });
+    }
+
+    // Add subtitle info for movies with a file path
+    for (const movie of movies) {
+      movie.subtitles = [];
+      if (movie.file_path) {
+        try {
+          const dir = path.dirname(movie.file_path);
+          const subFiles = await getSubtitlesInDir(dir, fsp, path);
+          movie.subtitles = subFiles.map(f => ({
+            file: f,
+            lang: extractLang(f, path),
+          }));
+        } catch (err) {
+          console.warn('[movies] Could not read subtitle directory:', err.message);
+        }
+      }
+    }
     res.json({ status: 'success', data: movies });
   } catch (error) {
     next(error);
@@ -17,26 +80,44 @@ router.get('/', (req, res, next) => {
 
 router.get('/:id', async (req, res, next) => {
   try {
-    const fs = require('fs/promises');
-    const path = require('path');
     const movie = db.prepare('SELECT m.*, qp.name as quality_profile_name FROM movies m LEFT JOIN quality_profiles qp ON m.quality_profile_id = qp.id WHERE m.id = ?').get(req.params.id);
     if (!movie) return res.status(404).json({ status: 'error', message: 'Movie not found' });
     if (!isWatchedSyncEnabled()) movie.watched = 0;
     
     let subtitles = [];
     if (movie.file_path) {
-      try {
-        const dir = path.dirname(movie.file_path);
-        const subFiles = await getSubtitlesInDir(dir, fs, path);
-        subtitles = subFiles.map(f => {
-          return { file: f, lang: extractLang(f, path) };
-        });
-        const stats = await fs.stat(movie.file_path);
-        movie.size = stats.size;
-        // Persist size to DB so list view can use it
-        db.prepare('UPDATE movies SET file_size = ? WHERE id = ?').run(movie.size, movie.id);
-      } catch (err) {
-        // Ignore if directory cannot be read
+      const dir = path.dirname(movie.file_path);
+      
+      // Single cached directory scan — avoids multiple network round-trips to NAS
+      const [scanResult, statResult] = await Promise.allSettled([
+        scanDirectory(dir),
+        // File stat — skip if file_size is already known
+        (async () => {
+          if (movie.file_size) return null;
+          const stats = await Promise.race([
+            fsp.stat(movie.file_path),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('stat timeout')), 3000))
+          ]);
+          movie.size = stats.size;
+          db.prepare('UPDATE movies SET file_size = ? WHERE id = ?').run(movie.size, movie.id);
+          return null;
+        })(),
+      ]);
+      
+      if (scanResult.status === 'fulfilled') {
+        const files = scanResult.value;
+        subtitles = files
+          .filter(f => ['.srt', '.sub', '.vtt', '.ass', '.ssa', '.smi', '.idx'].includes(path.extname(f.name).toLowerCase()))
+          .map(f => ({ file: f.name, lang: extractLang(f.name, path) }));
+        movie.files = files; // same data the /files endpoint returns
+        // Persist subtitle languages for stats
+        const subLangs = [...new Set(subtitles.map(s => s.lang).filter(Boolean))];
+        db.prepare('UPDATE movies SET subtitles = ? WHERE id = ?').run(JSON.stringify(subLangs), movie.id);
+      }
+      if (statResult.status === 'rejected' && (statResult.reason?.message === 'stat timeout' || statResult.reason?.code === 'ENOENT')) {
+        db.prepare("UPDATE movies SET file_path = NULL, file_size = NULL, status = 'monitored' WHERE id = ?").run(movie.id);
+        movie.file_path = null;
+        movie.status = 'monitored';
       }
     }
     movie.subtitles = subtitles;
@@ -49,21 +130,12 @@ router.get('/:id', async (req, res, next) => {
 
 router.get('/:id/files', async (req, res, next) => {
   try {
-    const fs = require('fs/promises');
-    const path = require('path');
     const movie = db.prepare('SELECT file_path FROM movies WHERE id = ?').get(req.params.id);
-
     const dir = movie?.file_path ? path.dirname(movie.file_path) : null;
     if (!dir) return res.json({ status: 'success', data: [] });
 
     try {
-      const items = await fs.readdir(dir);
-      const files = [];
-      for (const item of items) {
-        const fullPath = path.join(dir, item);
-        const stats = await fs.stat(fullPath);
-        if (stats.isFile()) files.push({ name: item, size: stats.size });
-      }
+      const files = await scanDirectory(dir);
       res.json({ status: 'success', data: files });
     } catch (e) {
       res.json({ status: 'success', data: [] });
@@ -75,8 +147,6 @@ router.get('/:id/files', async (req, res, next) => {
 
 router.delete('/:id/files/:filename', async (req, res, next) => {
   try {
-    const fs = require('fs/promises');
-    const path = require('path');
     const movie = db.prepare('SELECT file_path FROM movies WHERE id = ?').get(req.params.id);
 
     const dir = movie?.file_path ? path.dirname(movie.file_path) : null;
@@ -87,10 +157,12 @@ router.delete('/:id/files/:filename', async (req, res, next) => {
     const targetPath = path.join(dir, safeFilename);
 
     try {
-      await fs.unlink(targetPath);
+      await fsp.unlink(targetPath);
+      // Update database — clear the file reference
+      db.prepare("UPDATE movies SET file_path = NULL, file_size = 0, status = 'monitored' WHERE id = ?").run(req.params.id);
       res.json({ status: 'success' });
     } catch (e) {
-      res.status(500).json({ status: 'error', message: 'Failed to delete file' });
+      next(e);
     }
   } catch (err) {
     next(err);
@@ -99,8 +171,6 @@ router.delete('/:id/files/:filename', async (req, res, next) => {
 
 router.post('/:id/refresh', async (req, res, next) => {
   try {
-    const fs = require('fs/promises');
-    const path = require('path');
     const movie = db.prepare('SELECT * FROM movies WHERE id = ?').get(req.params.id);
 
     if (!movie) return res.status(404).json({ status: 'error', message: 'Movie not found' });
@@ -110,11 +180,11 @@ router.post('/:id/refresh', async (req, res, next) => {
       let best = null;
       let max = -1;
       let items;
-      try { items = await fs.readdir(dirPath); } catch { return null; }
+      try { items = await fsp.readdir(dirPath); } catch { return null; }
       for (const item of items) {
         const fullPath = path.join(dirPath, item);
         try {
-          const stats = await fs.stat(fullPath);
+          const stats = await fsp.stat(fullPath);
           if (stats.isDirectory()) {
             const sub = await findBestFile(fullPath);
             if (sub && sub.size > max) { max = sub.size; best = sub; }
@@ -148,7 +218,7 @@ router.post('/:id/refresh', async (req, res, next) => {
         // Scan up to two levels deep (e.g. /library/<title> or /library/Movies/<title>)
         const scanLevel = async (basePath) => {
           let entries;
-          try { entries = await fs.readdir(basePath, { withFileTypes: true }); } catch { return; }
+          try { entries = await fsp.readdir(basePath, { withFileTypes: true }); } catch { return; }
           for (const entry of entries) {
             if (!entry.isDirectory()) continue;
             const nameNorm = normalize(entry.name);
@@ -161,7 +231,7 @@ router.post('/:id/refresh', async (req, res, next) => {
         await scanLevel(lp.path);
         // Also one level deeper
         let topLevel = [];
-        try { topLevel = await fs.readdir(lp.path, { withFileTypes: true }); } catch (e) {}
+        try { topLevel = await fsp.readdir(lp.path, { withFileTypes: true }); } catch (e) {}
         for (const sub of topLevel) {
           if (sub.isDirectory()) await scanLevel(path.join(lp.path, sub.name));
         }
@@ -176,12 +246,16 @@ router.post('/:id/refresh', async (req, res, next) => {
 
     if (bestFile) {
       const { getResolution } = require('../../utils/videoUtils');
-      let resName = bestFile.name;
-      const t = resName.toLowerCase();
-      const hasRes = t.includes('2160p') || t.includes('4k') || t.includes('1080p') || t.includes('720p') || t.includes('480p') || t.includes('sd');
-      if (!hasRes) {
-        const res = await getResolution(bestFile.path);
-        if (res) resName = `Unknown ${res}`;
+      // Preserve existing scene_name unless it's empty/missing/auto-generated
+      let resName = movie.scene_name;
+      if (!resName || resName === '' || resName.startsWith('Unknown ')) {
+        resName = bestFile.name;
+        const t = resName.toLowerCase();
+        const hasRes = t.includes('2160p') || t.includes('4k') || t.includes('1080p') || t.includes('720p') || t.includes('480p') || t.includes('sd');
+        if (!hasRes) {
+          const res = await getResolution(bestFile.path);
+          if (res) resName = `Unknown ${res}`;
+        }
       }
       db.prepare('UPDATE movies SET file_path = ?, file_size = ?, scene_name = ?, status = ? WHERE id = ?')
         .run(bestFile.path, bestFile.size, resName, 'downloaded', movie.id);
@@ -194,7 +268,17 @@ router.post('/:id/refresh', async (req, res, next) => {
     try {
       const tmdbService = require('../../services/tmdbService');
       const data = await tmdbService.getMovieById(movie.tmdb_id);
-      if (data) db.prepare('UPDATE movies SET rating = ?, poster_path = ?, overview = ? WHERE id = ?').run(data.vote_average || 0, data.poster_path, data.overview, movie.id);
+      if (data) {
+        let releaseDate = await tmdbService.getMovieReleaseDates(movie.tmdb_id);
+        if (!releaseDate && data.release_date) {
+          const theatrical = new Date(data.release_date);
+          theatrical.setDate(theatrical.getDate() + 90);
+          releaseDate = theatrical.toISOString().split('T')[0];
+        }
+        if (!releaseDate) releaseDate = data.release_date || null;
+        db.prepare('UPDATE movies SET rating = ?, poster_path = ?, overview = ?, release_date = ? WHERE id = ?')
+          .run(data.vote_average || 0, data.poster_path, data.overview, releaseDate, movie.id);
+      }
     } catch (e) { console.error('TMDB refresh failed for movie:', e.message); }
 
     res.json({ status: 'success', message: 'Movie refreshed' });
@@ -205,11 +289,10 @@ router.post('/:id/refresh', async (req, res, next) => {
 
 router.get('/:id/search', async (req, res, next) => {
   try {
-    const indexerService = require('../../services/indexerService');
     const movie = db.prepare('SELECT * FROM movies WHERE id = ?').get(req.params.id);
     if (!movie) return res.status(404).json({ status: 'error', message: 'Movie not found' });
 
-    const results = await indexerService.searchMovie(movie.title, movie.year, null, null, true);
+    const results = await indexerService.searchMovie(movie.title, movie.year, null, null, true, movie.tmdb_id);
     res.json({ status: 'success', data: results });
   } catch (err) {
     next(err);
@@ -247,6 +330,11 @@ router.post('/:id/toggle-monitor', async (req, res, next) => {
 router.put('/:id/quality', (req, res, next) => {
   try {
     const { profileId } = req.body;
+    // Validate profileId exists if provided
+    if (profileId) {
+      const profile = db.prepare('SELECT id FROM quality_profiles WHERE id = ?').get(profileId);
+      if (!profile) return res.status(400).json({ status: 'error', message: 'Quality profile not found' });
+    }
     db.prepare('UPDATE movies SET quality_profile_id = ? WHERE id = ?').run(profileId || null, req.params.id);
     res.json({ status: 'success', message: 'Quality profile updated' });
   } catch (err) {
@@ -256,8 +344,10 @@ router.put('/:id/quality', (req, res, next) => {
 
 router.post('/:id/download', async (req, res, next) => {
   try {
-    const downloadClientService = require('../../services/downloadClientService');
     const { torrentUrl } = req.body;
+    if (!torrentUrl || typeof torrentUrl !== 'string' || !/^https?:\/\//.test(torrentUrl)) {
+      return res.status(400).json({ status: 'error', message: 'Valid torrent URL (http/https) is required' });
+    }
     
     await downloadClientService.addTorrent(torrentUrl);
     db.prepare("UPDATE movies SET status = 'downloading', scene_name = ? WHERE id = ?").run(null, req.params.id);
@@ -270,15 +360,13 @@ router.post('/:id/download', async (req, res, next) => {
 
 router.post('/:id/auto-search', async (req, res, next) => {
   try {
-    const indexerService = require('../../services/indexerService');
-    const downloadClientService = require('../../services/downloadClientService');
     
     const movie = db.prepare('SELECT * FROM movies WHERE id = ?').get(req.params.id);
     if (!movie) return res.status(404).json({ status: 'error', message: 'Movie not found' });
 
-    const results = await indexerService.searchMovie(movie.title, movie.year);
+    const results = await indexerService.searchMovie(movie.title, movie.year, null, null, false, movie.tmdb_id);
     if (!results || results.length === 0) {
-      return res.status(404).json({ status: 'error', message: 'No torrents found for this movie' });
+      return res.json({ status: 'error', message: 'No torrents found for this movie' });
     }
 
     const bestResult = results[0];
@@ -310,35 +398,11 @@ router.post('/', async (req, res, next) => {
   }
 });
 
-const translateSrt = async (enSrtContent, targetLang) => {
-  const provider = db.prepare("SELECT value FROM settings WHERE key = 'translationProvider'").get();
-  const activeProvider = (provider && provider.value) || 'googleTranslate';
-  const { translateWithGemini, translateWithGoogleTranslate, translateWithDeepSeek, translateWithClaude } = require('../../services/aiTranslationWorker');
-
-  if (activeProvider === 'gemini') {
-    const geminiApiKeyRow = db.prepare("SELECT value FROM settings WHERE key = 'geminiApiKey'").get();
-    if (!geminiApiKeyRow || !geminiApiKeyRow.value) throw new Error('Gemini API Key missing. Set it in Settings.');
-    return await translateWithGemini(enSrtContent, targetLang, geminiApiKeyRow.value);
-  } else if (activeProvider === 'deepseek') {
-    const deepseekApiKeyRow = db.prepare("SELECT value FROM settings WHERE key = 'deepseekApiKey'").get();
-    if (!deepseekApiKeyRow || !deepseekApiKeyRow.value) throw new Error('DeepSeek API Key missing. Set it in Settings.');
-    return await translateWithDeepSeek(enSrtContent, targetLang, deepseekApiKeyRow.value);
-  } else if (activeProvider === 'claude') {
-    const claudeApiKeyRow = db.prepare("SELECT value FROM settings WHERE key = 'claudeApiKey'").get();
-    if (!claudeApiKeyRow || !claudeApiKeyRow.value) throw new Error('Claude API Key missing. Set it in Settings.');
-    return await translateWithClaude(enSrtContent, targetLang, claudeApiKeyRow.value);
-  } else {
-    return await translateWithGoogleTranslate(enSrtContent, targetLang);
-  }
-};
-
 router.post('/:id/translate-subs', async (req, res, next) => {
   try {
-    const fs = require('fs');
-    const path = require('path');
     const targetLangRow = db.prepare("SELECT value FROM settings WHERE key = 'targetLang'").get();
     const targetLang = req.body.targetLang || (targetLangRow && targetLangRow.value ? targetLangRow.value : 'Dutch');
-    const langCode = { 'Dutch': 'nl', 'French': 'fr', 'German': 'de', 'Spanish': 'es', 'Italian': 'it', 'Portuguese': 'pt' }[targetLang] || 'nl';
+    const langCode = LANG_CODE[targetLang] || 'nl';
 
     const movie = db.prepare('SELECT * FROM movies WHERE id = ?').get(req.params.id);
     if (!movie) return res.status(404).json({ status: 'error', message: 'Movie not found' });
@@ -357,11 +421,10 @@ router.post('/:id/translate-subs', async (req, res, next) => {
       return res.status(400).json({ status: 'error', message: 'Translated subtitle already exists.' });
     }
 
-    const enSrtContent = fs.readFileSync(enSubPath, 'utf8');
+    const enSrtContent = await fsp.readFile(enSubPath, 'utf8');
     const translatedText = await translateSrt(enSrtContent, targetLang);
-    fs.writeFileSync(targetSubPath, translatedText);
+    await fsp.writeFile(targetSubPath, translatedText);
 
-    const eventBus = require('../../services/eventBus');
     eventBus.success('Subtitle translated', { title: movie.title, type: 'movie', language: targetLang });
 
     res.json({ status: 'success', message: `Translated to ${targetLang}`, data: { file: `${parsedPath.name}.${langCode}.srt` } });
@@ -372,8 +435,6 @@ router.post('/:id/translate-subs', async (req, res, next) => {
 
 router.post('/:id/download-subs', async (req, res, next) => {
   try {
-    const fs = require('fs');
-    const path = require('path');
     const { downloadSubtitlesForMovie } = require('../../services/subtitleService');
     const axios = require('axios');
     const { langCode, url, fileId } = req.body;
@@ -394,10 +455,10 @@ router.post('/:id/download-subs', async (req, res, next) => {
       if (!osApiKeyRow?.value) throw new Error('OpenSubtitles API key not set');
       const downloadRes = await axios.post('https://api.opensubtitles.com/api/v1/download',
         { file_id: fileId },
-        { headers: { 'Api-Key': osApiKeyRow.value, 'Content-Type': 'application/json', 'Accept': 'application/json' } }
+        { headers: { 'Api-Key': osApiKeyRow.value, 'Content-Type': 'application/json', 'Accept': 'application/json', 'User-Agent': 'Atlas/1.0' } }
       );
-      const srtRes = await axios.get(downloadRes.data.link, { responseType: 'text' });
-      fs.writeFileSync(subPath, srtRes.data);
+      const srtRes = await axios.get(downloadRes.data.link, { responseType: 'text', headers: { 'User-Agent': 'Atlas/1.0' } });
+      await fsp.writeFile(subPath, srtRes.data);
       return res.json({ status: 'success', message: `Downloaded "${langCode}" subtitle via OpenSubtitles` });
     }
 
@@ -409,7 +470,7 @@ router.post('/:id/download-subs', async (req, res, next) => {
       const parsedPath = path.parse(movie.file_path);
       const subPath = path.join(parsedPath.dir, `${parsedPath.name}.${langCode}.srt`);
       const srtRes = await axios.get(url, { responseType: 'text' });
-      fs.writeFileSync(subPath, srtRes.data);
+      await fsp.writeFile(subPath, srtRes.data);
       return res.json({ status: 'success', message: `Downloaded "${langCode}" subtitle from URL` });
     }
 
@@ -419,7 +480,7 @@ router.post('/:id/download-subs', async (req, res, next) => {
     }
     res.json({ status: 'success', message: `Downloaded "${langCode}" subtitle` });
   } catch (err) {
-    res.status(500).json({ status: 'error', message: err.message });
+    next(err);
   }
 });
 
@@ -457,21 +518,27 @@ router.put('/:id/remap', async (req, res, next) => {
 
 router.delete('/:id', async (req, res, next) => {
   try {
-    const fs = require('fs/promises');
-    const path = require('path');
     const deleteFiles = req.query.deleteFiles === 'true';
     const movie = db.prepare('SELECT * FROM movies WHERE id = ?').get(req.params.id);
     if (!movie) return res.status(404).json({ status: 'error', message: 'Movie not found' });
 
     if (deleteFiles) {
       try {
-        const dir = movie.file_path ? path.dirname(movie.file_path) : null;
+        const dir = movie.file_path ? path.dirname(movie.file_path) : movie.folder_path;
         if (dir) {
-          const files = await fs.readdir(dir).catch(() => []);
-          await Promise.all(files.map(f => fs.unlink(path.join(dir, f)).catch(() => {})));
-          await fs.rmdir(dir).catch(() => {});
+          const deleteFolderRecursive = async (folderPath) => {
+            const entries = await fsp.readdir(folderPath, { withFileTypes: true });
+            await Promise.all(entries.map(entry => {
+              const full = path.join(folderPath, entry.name);
+              return entry.isDirectory() ? deleteFolderRecursive(full) : fs.unlink(full).catch(() => {});
+            }));
+            await fsp.rmdir(folderPath).catch(() => {});
+          };
+          await deleteFolderRecursive(dir);
         }
-      } catch { /* ignore fs errors */ }
+      } catch (e) {
+        console.warn('[movies] Could not delete folder:', e?.message);
+      }
     }
 
     db.prepare('DELETE FROM movies WHERE id = ?').run(req.params.id);
@@ -494,7 +561,7 @@ router.get('/:id/search-subs', async (req, res, next) => {
     const results = await searchSubtitlesForMovie(movie, lang);
     res.json({ status: 'success', data: results });
   } catch (err) {
-    res.status(500).json({ status: 'error', message: err.message });
+    next(err);
   }
 });
 
@@ -511,8 +578,6 @@ router.post('/:id/grab', async (req, res, next) => {
   try {
     const { link, title } = req.body;
     if (!link) return res.status(400).json({ status: 'error', message: 'link is required' });
-    const downloadClientService = require('../../services/downloadClientService');
-    const eventBus = require('../../services/eventBus');
     await downloadClientService.addTorrent(link);
     db.prepare("UPDATE movies SET status = 'downloading', scene_name = ? WHERE id = ?").run(title || null, req.params.id);
     eventBus.info('Manual grab started', { title: title || 'Unknown', type: 'movie' });
@@ -541,6 +606,124 @@ router.post('/:id/collections', (req, res, next) => {
     for (const cid of collectionIds) stmt.run(req.params.id, cid);
     res.json({ status: 'success', message: 'Collections updated' });
   } catch (err) { next(err); }
+});
+
+// Browse directories for manual folder import
+router.get('/:id/browse', async (req, res, next) => {
+  try {
+    const dirPath = req.query.path || null;
+
+    if (!dirPath) {
+      // Return library root paths as starting points
+      const paths = db.prepare('SELECT path FROM library_paths').all();
+      const roots = [];
+      for (const p of paths) {
+        try {
+          const stat = await fsp.stat(p.path);
+          if (stat.isDirectory()) roots.push({ path: p.path, name: path.basename(p.path) || p.path });
+        } catch {
+          console.warn('[movies] Could not stat library path:', p.path);
+        }
+      }
+      return res.json({ status: 'success', data: roots, parent: null });
+    }
+
+    // Security: resolve and verify the path is within allowed locations
+    const resolved = path.resolve(dirPath);
+    // Prevent traversal outside library paths
+    const libraryPaths = db.prepare('SELECT path FROM library_paths').all().map(p => path.resolve(p.path));
+    const isAllowed = libraryPaths.some(lp => resolved.startsWith(lp));
+    if (!isAllowed) {
+      return res.status(403).json({ status: 'error', message: 'Access denied' });
+    }
+    try {
+      await fsp.access(resolved);
+    } catch {
+      return res.status(404).json({ status: 'error', message: 'Directory not found' });
+    }
+
+    const entries = await fsp.readdir(resolved, { withFileTypes: true });
+    const dirs = entries
+      .filter(e => e.isDirectory() && !e.name.startsWith('.'))
+      .map(e => ({ path: path.join(resolved, e.name), name: e.name }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+
+    const parentPath = path.dirname(resolved);
+    res.json({
+      status: 'success',
+      data: dirs,
+      parent: parentPath !== resolved ? parentPath : null,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Set folder path for a movie and trigger re-scan
+router.post('/:id/set-path', async (req, res, next) => {
+  try {
+    const { folderPath } = req.body;
+    if (!folderPath) return res.status(400).json({ status: 'error', message: 'folderPath is required' });
+
+    const movie = db.prepare('SELECT * FROM movies WHERE id = ?').get(req.params.id);
+    if (!movie) return res.status(404).json({ status: 'error', message: 'Movie not found' });
+
+    // Verify the folder exists
+    try {
+      await fsp.access(folderPath);
+    } catch {
+      return res.status(400).json({ status: 'error', message: 'Folder does not exist' });
+    }
+
+    // Update folder_path
+    db.prepare('UPDATE movies SET folder_path = ? WHERE id = ?').run(folderPath, req.params.id);
+
+    // Scan the folder for the largest video file
+    const findBestFile = async (dirPath) => {
+      let best = null;
+      let max = -1;
+      let items;
+      try { items = await fsp.readdir(dirPath); } catch { return null; }
+      for (const item of items) {
+        const fullPath = path.join(dirPath, item);
+        try {
+          const stats = await fsp.stat(fullPath);
+          if (stats.isDirectory()) {
+            const sub = await findBestFile(fullPath);
+            if (sub && sub.size > max) { max = sub.size; best = sub; }
+          } else {
+            const ext = path.extname(item).toLowerCase();
+            if (['.mp4', '.mkv', '.avi', '.mov', '.wmv', '.webm', '.ts', '.m2ts'].includes(ext) && stats.size > max) {
+              max = stats.size;
+              best = { path: fullPath, name: item, size: stats.size, dir: dirPath };
+            }
+          }
+        } catch {}
+      }
+      return best;
+    };
+
+    const best = await findBestFile(folderPath);
+    if (best) {
+      db.prepare("UPDATE movies SET file_path = ?, file_size = ?, status = 'downloaded' WHERE id = ?")
+        .run(best.path, best.size, req.params.id);
+      res.json({
+        status: 'success',
+        message: `Found "${best.name}" (${(best.size / 1e6).toFixed(1)} MB). Folder imported.`,
+        data: { file_path: best.path, file_name: best.name, file_size: best.size },
+      });
+    } else {
+      // Folder set but no video found
+      db.prepare("UPDATE movies SET file_path = NULL, file_size = NULL, status = 'monitored' WHERE id = ?")
+        .run(req.params.id);
+      res.json({
+        status: 'success',
+        message: 'Folder set but no video file found inside. It will be monitored.',
+      });
+    }
+  } catch (err) {
+    next(err);
+  }
 });
 
 

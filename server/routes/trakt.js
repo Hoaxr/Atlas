@@ -8,6 +8,9 @@ router.get('/trending/movies', async (req, res, next) => {
     const results = await traktService.getTrendingMovies(limit);
     res.json({ status: 'success', data: results });
   } catch (e) {
+    if (e.message && e.message.includes('not configured')) {
+      return res.json({ status: 'success', data: [] });
+    }
     next(e);
   }
 });
@@ -18,6 +21,9 @@ router.get('/trending/shows', async (req, res, next) => {
     const results = await traktService.getTrendingShows(limit);
     res.json({ status: 'success', data: results });
   } catch (e) {
+    if (e.message && e.message.includes('not configured')) {
+      return res.json({ status: 'success', data: [] });
+    }
     next(e);
   }
 });

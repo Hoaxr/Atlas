@@ -1,4 +1,5 @@
 import { Plus, Trash2, Download, Save, Info, CheckSquare, Square } from 'lucide-react';
+import CustomSelect from '../../components/shared/CustomSelect';
 
 export default function ClientsTab({ clients, newClient, setNewClient, clientStatuses, handleAddEntity, handleDeleteEntity, settings, setSettings, handleSave }) {
   return (
@@ -13,13 +14,9 @@ export default function ClientsTab({ clients, newClient, setNewClient, clientSta
           </button>
         )}
       </div>
-      <div className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 p-4 rounded-xl mb-6 flex gap-3 text-sm">
-        <Download className="w-5 h-5 shrink-0" />
-        <p>Configure where your torrents are sent. We currently support qBittorrent via its WebUI API. Make sure your WebUI is enabled in qBittorrent settings!</p>
-      </div>
-
       <div className="glass-panel p-8 rounded-2xl border border-white/10 space-y-6 mb-8 shadow-xl relative overflow-hidden">
         <h3 className="font-bold text-lg text-slate-200">Global Preferences</h3>
+        <p className="text-xs text-slate-500">Configure global download behavior, cleanup rules, and remote path mappings for your download clients.</p>
         
         <div className="space-y-4">
           <label className="flex items-start gap-3 cursor-pointer p-4 rounded-xl bg-slate-900/50 border border-white/5 hover:border-emerald-500/30 transition-colors group">
@@ -94,12 +91,28 @@ export default function ClientsTab({ clients, newClient, setNewClient, clientSta
         </div>
       </div>
       
-      <div className="glass-panel p-8 rounded-2xl border border-white/10 space-y-6 mb-8 shadow-xl relative overflow-hidden">
+      <div className="glass-panel p-8 rounded-2xl border border-white/10 space-y-6 mb-8 shadow-xl relative z-10">
         <h3 className="font-bold text-lg text-slate-200">Add New Client</h3>
+        <p className="text-xs text-slate-500">Add a download client for Atlas to send downloads to.</p>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div>
             <label className="block text-sm font-medium text-slate-400 mb-2">Name</label>
-            <input type="text" placeholder="e.g. My qBittorrent" className="glass-input w-full" value={newClient.name} onChange={e => setNewClient({...newClient, name: e.target.value})} />
+            <input type="text" placeholder="e.g. My Downloader" className="glass-input w-full" value={newClient.name} onChange={e => setNewClient({...newClient, name: e.target.value})} />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-400 mb-2">Type</label>
+            <CustomSelect
+              value={newClient.type || 'qbittorrent'}
+              onChange={(e) => setNewClient({...newClient, type: e.target.value})}
+              options={[
+                { label: 'qBittorrent', value: 'qbittorrent' },
+                { label: 'Deluge', value: 'deluge' },
+                { label: 'Transmission', value: 'transmission' },
+                { label: 'rTorrent', value: 'rtorrent' },
+                { label: 'NZBGet', value: 'nzbget' },
+                { label: 'SABnzbd', value: 'sabnzbd' },
+              ]}
+            />
           </div>
           <div>
             <label className="block text-sm font-medium text-slate-400 mb-2">Host URL</label>

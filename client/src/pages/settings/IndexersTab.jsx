@@ -46,7 +46,7 @@ export default function IndexersTab({ settings, setSettings, handleSave }) {
   };
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
+    <div className="max-w-5xl mx-auto space-y-6">
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-2xl font-bold text-purple-400 flex items-center gap-2">
           <Search className="w-7 h-7" /> Indexer Settings
@@ -62,10 +62,7 @@ export default function IndexersTab({ settings, setSettings, handleSave }) {
       <div className="glass-panel p-8 rounded-2xl border border-white/10 space-y-6 shadow-xl relative overflow-hidden">
         <div>
           <h3 className="font-bold text-lg text-slate-200 mb-2">Prowlarr Configuration</h3>
-          <p className="text-slate-400 text-sm mb-6">
-            Atlas uses Prowlarr's aggregate search API to query all your configured indexers simultaneously. 
-            Just enter your Prowlarr details below, and you're good to go!
-          </p>
+          <p className="text-xs text-slate-500">Atlas uses Prowlarr's aggregate search API to query all your configured indexers simultaneously.</p>
         </div>
 
         <div className="space-y-5">

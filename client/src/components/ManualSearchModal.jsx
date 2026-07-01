@@ -62,6 +62,9 @@ export default function ManualSearchModal({ mediaId, mediaType, title, onClose, 
     <div className="fixed inset-0 z-[150] flex items-center justify-center p-4" onClick={onClose}>
       <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="manual-search-title"
         className="relative z-10 bg-slate-900 border border-white/10 rounded-2xl shadow-2xl w-full max-w-3xl max-h-[85vh] flex flex-col"
         onClick={e => e.stopPropagation()}
       >
@@ -72,11 +75,11 @@ export default function ManualSearchModal({ mediaId, mediaType, title, onClose, 
               <Search className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="font-bold text-white">Manual Search</h2>
+              <h2 id="manual-search-title" className="font-bold text-white">Manual Search</h2>
               <p className="text-xs text-slate-400 mt-0.5 truncate max-w-sm">{title}</p>
             </div>
           </div>
-          <button onClick={onClose} className="p-2 rounded-xl hover:bg-white/5 text-slate-400 hover:text-white transition-colors">
+          <button onClick={onClose} className="p-2 rounded-xl hover:bg-white/5 text-slate-400 hover:text-white transition-colors" aria-label="Close">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -112,7 +115,7 @@ export default function ManualSearchModal({ mediaId, mediaType, title, onClose, 
                 const isMagnet = (r.link || '').startsWith('magnet:');
                 return (
                   <div
-                    key={idx}
+                    key={r.guid || r.link || `${r.title}-${idx}`}
                     className="flex items-center gap-3 p-3 rounded-xl bg-slate-800/60 border border-white/5 hover:border-white/10 hover:bg-slate-800 transition-all group"
                   >
                     {/* Quality badge */}

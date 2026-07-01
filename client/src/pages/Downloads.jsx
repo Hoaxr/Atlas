@@ -128,7 +128,7 @@ export default function Downloads() {
                   <div className="bg-emerald-500 h-2.5 rounded-full transition-all duration-1000" style={{ width: `${Math.round(t.progress * 100)}%` }}></div>
                 </div>
                 <div className="flex justify-between mt-2 text-xs text-slate-500">
-                  <span className="uppercase">{t.state}</span>
+                  <span><span className="uppercase">{t.state}</span> • File Size: {formatBytes(t.total_size || t.size || 0)}</span>
                   <span>{Math.round(t.progress * 100)}%</span>
                 </div>
               </div>

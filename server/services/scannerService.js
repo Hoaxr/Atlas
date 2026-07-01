@@ -10,6 +10,45 @@ const isVideoFile = (filename) => {
   return ['.mp4', '.mkv', '.avi', '.mov', '.wmv'].includes(ext);
 };
 
+const RECYCLE_DIRS = new Set([
+  '$Recycle.Bin',     // Windows
+  '.Trash',           // Linux root trash
+  '.Trashes',         // macOS
+  '.recycle',         // Common NAS
+  '#recycle',         // Synology
+  '@Recycle',         // Some NAS
+  '@Recycle.Bin',     // Some NAS
+  '.Trash-1000',      // Linux user trash
+]);
+
+const shouldSkipDir = (dirName) => {
+  if (RECYCLE_DIRS.has(dirName)) return true;
+  // Match .Trash-$UID patterns (Linux)
+  if (/^\.Trash-\d+$/.test(dirName)) return true;
+  return false;
+};
+
+const SUBTITLE_EXTS = ['.srt', '.sub', '.vtt', '.ass', '.ssa', '.smi', '.idx'];
+
+const scanSubtitleLangs = async (filePath) => {
+  const dir = path.dirname(filePath);
+  try {
+    const items = await fs.readdir(dir);
+    return [...new Set(
+      items
+        .filter(item => SUBTITLE_EXTS.includes(path.extname(item).toLowerCase()))
+        .map(item => {
+          const name = path.basename(item, path.extname(item));
+          const match = name.match(/[._-]([a-z]{2,3})(?:\.[a-z0-9]+)?$/i);
+          return match ? match[1].toLowerCase() : null;
+        })
+        .filter(Boolean)
+    )];
+  } catch {
+    return [];
+  }
+};
+
 const parseMediaTitle = (filename, folderPath) => {
   const cleanName = filename.replace(/\.(mp4|mkv|avi|mov|wmv)$/i, '');
   
@@ -64,10 +103,13 @@ const parseMediaTitle = (filename, folderPath) => {
 
 let scanProgress = {
   isScanning: false,
+  cancelled: false,
   totalFiles: 0,
   processedFiles: 0,
   currentFile: '',
   currentPhase: '',
+  currentStage: 0,
+  totalStages: 5,
   addedCount: 0,
   addedMoviesCount: 0,
   addedShowsCount: 0,
@@ -86,18 +128,35 @@ const getScanProgress = () => {
   return scanProgress;
 };
 
+const stopScan = () => {
+  if (!scanProgress.isScanning) return false;
+  scanProgress.cancelled = true;
+  return true;
+};
+
 const { getResolution } = require('../utils/videoUtils');
 
+const setStage = (stage, phase) => {
+  scanProgress.currentStage = stage;
+  scanProgress.currentPhase = phase;
+  scanProgress.processedFiles = 0;
+  scanProgress.totalFiles = 0;
+};
+
 const doScan = async () => {
-  const paths = db.prepare('SELECT * FROM library_paths').all();
+  const allPaths = db.prepare('SELECT * FROM library_paths').all();
+  // Only scan movies and tv paths — skip downloads
+  const paths = allPaths.filter(p => p.type !== 'downloads');
   if (!paths || paths.length === 0) {
     scanProgress.isScanning = false;
     return;
   }
 
   try {
-    // Phase 1: Pre-scan to count total video files
-    scanProgress.currentFile = 'Gathering files...';
+    // ════════════════════════════════════════════
+    // Stage 1/5: Gather files
+    // ════════════════════════════════════════════
+    setStage(1, 'Gathering files...');
     const allFiles = [];
 
     async function getFiles(dir) {
@@ -106,6 +165,10 @@ const doScan = async () => {
         for (const dirent of dirents) {
           const res = path.join(dir, dirent.name);
           if (dirent.isDirectory()) {
+            if (shouldSkipDir(dirent.name)) {
+              console.log(`[Scanner] Skipping recycle/trash directory: ${res}`);
+              continue;
+            }
             await getFiles(res);
           } else if (dirent.isFile() && isVideoFile(dirent.name)) {
             allFiles.push({
@@ -144,12 +207,19 @@ const doScan = async () => {
       }
     }
 
-    scanProgress.totalFiles = allFiles.length;
-    scanProgress.processedFiles = 0;
-    scanProgress.currentPhase = 'Processing files...';
+    if (scanProgress.cancelled) throw new Error('Scan cancelled by user');
 
-    // Phase 2: Process files
+    scanProgress.totalFiles = allFiles.length;
+
+    // ════════════════════════════════════════════
+    // Stage 2/5: Process files (match to TMDB)
+    // ════════════════════════════════════════════
+    setStage(2, 'Processing files...');
+    scanProgress.totalFiles = allFiles.length;
+
     for (const file of allFiles) {
+      if (scanProgress.cancelled) throw new Error('Scan cancelled by user');
+      scanProgress.currentFile = file.name;
       scanProgress.currentFile = file.name;
       
       const fileDir = file.parentPath || file.path;
@@ -157,14 +227,15 @@ const doScan = async () => {
       const { title, year, isShow, seasonNumber, episodeNumber } = parseMediaTitle(file.name, fileDir);
       if (!title) {
         scanProgress.skippedCount++;
-        scanProgress.skippedFiles.push({ name: file.name, reason: 'Could not parse title from filename' });
+        scanProgress.skippedFiles.push({ name: file.name, reason: 'Could not parse title from filename', path: file.path });
         continue;
       }
 
       if (isShow) {
         // TV Show logic
         let showFolderPath = fileDir;
-        if (showFolderPath.match(/Season\s*\d+/i)) {
+        // Strip season subfolder — walk up until we're at the actual show directory
+        while (path.basename(showFolderPath).match(/season\s*\d+/i)) {
           showFolderPath = path.dirname(showFolderPath);
         }
 
@@ -203,8 +274,8 @@ const doScan = async () => {
             const results = await tmdbService.searchShows(title);
             if (results.length === 0) {
               scanProgress.skippedCount++;
-              scanProgress.skippedFiles.push({ name: file.name, reason: `TMDB search returned no results for show "${title}"` });
-              scanProgress.failedShows.push({ title, reason: 'TMDB search returned no results', file: file.name });
+              scanProgress.skippedFiles.push({ name: file.name, reason: `TMDB search returned no results for show "${title}"`, path: file.path });
+              scanProgress.failedShows.push({ title, reason: 'TMDB search returned no results', file: file.name, path: file.path });
             }
             if (results.length > 0) {
               const matchedShow = results[0];
@@ -284,7 +355,7 @@ const doScan = async () => {
             }
           } catch (tmdbErr) {
             console.error(`TMDB error for show ${title}:`, tmdbErr.message);
-            scanProgress.failedShows.push({ title, reason: `TMDB error: ${tmdbErr.message}`, file: file.name });
+            scanProgress.failedShows.push({ title, reason: `TMDB error: ${tmdbErr.message}`, file: file.name, path: file.path });
           }
         }
         
@@ -303,6 +374,13 @@ const doScan = async () => {
             SET file_path = ?, status = 'downloaded', file_size = ?
             WHERE show_id = ? AND season_number = ? AND episode_number = ?
           `).run(fullPath, fileSize, showId, seasonNumber, episodeNumber);
+
+          // Scan for subtitle files in the episode's directory
+          const epLangs = await scanSubtitleLangs(fullPath);
+          if (epLangs.length > 0) {
+            db.prepare('UPDATE episodes SET subtitles = ? WHERE show_id = ? AND season_number = ? AND episode_number = ?')
+              .run(JSON.stringify(epLangs), showId, seasonNumber, episodeNumber);
+          }
         }
 
       } else {
@@ -310,7 +388,7 @@ const doScan = async () => {
         const existingMovie = db.prepare('SELECT id FROM movies WHERE file_path = ?').get(fullPath);
         if (existingMovie) {
           scanProgress.skippedCount++;
-          scanProgress.skippedFiles.push({ name: file.name, reason: 'Already in library with this file path' });
+          scanProgress.skippedFiles.push({ name: file.name, reason: 'Already in library with this file path', path: file.path });
           continue;
         }
 
@@ -327,7 +405,7 @@ const doScan = async () => {
           if (!matchedMovie) {
             scanProgress.skippedCount++;
             scanProgress.skippedFiles.push({ name: file.name, reason: `TMDB search returned no results for "${title}"` });
-            scanProgress.failedMovies.push({ title, year, reason: 'TMDB search returned no results', file: file.name });
+            scanProgress.failedMovies.push({ title, year, reason: 'TMDB search returned no results', file: file.name, path: file.path });
           }
 
           if (matchedMovie) {
@@ -355,8 +433,8 @@ const doScan = async () => {
                 .run(fullPath, 'downloaded', movieRating, fileSize, defaultProfileId, matchedMovie.id);
             } else {
               db.prepare(`
-                INSERT INTO movies (tmdb_id, title, year, poster_path, overview, status, file_path, rating, file_size, quality_profile_id)
-                VALUES (?, ?, ?, ?, ?, 'downloaded', ?, ?, ?, ?)
+                INSERT INTO movies (tmdb_id, title, year, poster_path, overview, status, file_path, rating, file_size, quality_profile_id, release_date)
+                VALUES (?, ?, ?, ?, ?, 'downloaded', ?, ?, ?, ?, ?)
               `).run(
                 matchedMovie.id,
                 matchedMovie.title,
@@ -366,159 +444,255 @@ const doScan = async () => {
                 fullPath,
                 movieRating,
                 fileSize,
-                defaultProfileId
+                defaultProfileId,
+                matchedMovie.release_date || null
               );
               scanProgress.addedMoviesCount++;
               scanProgress.addedMovies.push({ title: matchedMovie.title, year: movieYear });
             }
+
+            // Scan for subtitle files in the movie's directory
+            const movieLangs = await scanSubtitleLangs(fullPath);
+            if (movieLangs.length > 0) {
+              const movieId = existingMonitored?.id || db.prepare('SELECT id FROM movies WHERE tmdb_id = ?').get(matchedMovie.id)?.id;
+              if (movieId) {
+                db.prepare('UPDATE movies SET subtitles = ? WHERE id = ?').run(JSON.stringify(movieLangs), movieId);
+              }
+            }
           }
         } catch (tmdbErr) {
           console.error(`TMDB error for movie ${title}:`, tmdbErr.message);
-          scanProgress.failedMovies.push({ title, year, reason: `TMDB error: ${tmdbErr.message}`, file: file.name });
+          scanProgress.failedMovies.push({ title, year, reason: `TMDB error: ${tmdbErr.message}`, file: file.name, path: file.path });
         }
       }
       scanProgress.processedFiles++;
     }
 
-    // Phase 3: Post-processing — refresh sizes for ALL existing items
+    if (scanProgress.cancelled) throw new Error('Scan cancelled by user');
+
+    // ════════════════════════════════════════════
+    // Stage 3/5: Update sizes & ratings
+    // ════════════════════════════════════════════
     const existingMovies = db.prepare("SELECT id, title, file_path, scene_name FROM movies WHERE status = 'downloaded' AND file_path IS NOT NULL").all();
     const existingShows = db.prepare("SELECT id, title, folder_path FROM shows WHERE status = 'downloaded' AND folder_path IS NOT NULL").all();
     const allMovies = db.prepare("SELECT id, title, tmdb_id FROM movies WHERE tmdb_id IS NOT NULL").all();
     const allShows = db.prepare("SELECT id, title, tmdb_id FROM shows WHERE tmdb_id IS NOT NULL").all();
 
-    // Phase 3a: File/folder sizes
+    // File/folder sizes
     const sizeTotal = existingMovies.length + existingShows.length;
-    let postTotal = sizeTotal;
-    if (sizeTotal > 0) {
-      scanProgress.currentPhase = 'Updating file sizes...';
-      scanProgress.totalFiles = sizeTotal;
-      scanProgress.processedFiles = 0;
+    const ratingTotal = allMovies.length + allShows.length;
+    const stage3Total = sizeTotal + ratingTotal;
 
-      for (const m of existingMovies) {
-        scanProgress.currentFile = m.title;
+    setStage(3, 'Updating file sizes...');
+    scanProgress.totalFiles = stage3Total;
+
+    for (const m of existingMovies) {
+      if (scanProgress.cancelled) throw new Error('Scan cancelled by user');
+      scanProgress.currentFile = m.title;
+      try {
+        const stat = await fs.stat(m.file_path);
+        let resName = null;
         try {
-          const stat = await fs.stat(m.file_path);
-          let resName = null;
+          if (!m.scene_name || m.scene_name === '' || m.scene_name.startsWith('Unknown ')) {
+            const res = await getResolution(m.file_path);
+            if (res) resName = `Unknown ${res}`;
+          }
+        } catch { /* ignore */ }
+        
+        if (resName) {
+          db.prepare('UPDATE movies SET file_size = ?, scene_name = ? WHERE id = ?').run(stat.size, resName, m.id);
+        } else {
+          db.prepare('UPDATE movies SET file_size = ? WHERE id = ?').run(stat.size, m.id);
+        }
+      } catch { /* skip */ }
+      scanProgress.processedFiles++;
+    }
+
+    scanProgress.currentPhase = 'Calculating folder sizes...';
+    for (const s of existingShows) {
+      if (scanProgress.cancelled) throw new Error('Scan cancelled by user');
+      scanProgress.currentFile = s.title;
+      try {
+        let folderSize = 0;
+        const getSize = async (dir) => {
+          let total = 0;
           try {
-            if (!m.scene_name || m.scene_name === '' || m.scene_name.startsWith('Unknown ')) {
-              const res = await getResolution(m.file_path);
-              if (res) resName = `Unknown ${res}`;
+            const entries = await fs.readdir(dir, { withFileTypes: true });
+            for (const entry of entries) {
+              const entryPath = path.join(dir, entry.name);
+              if (entry.isDirectory()) {
+                total += await getSize(entryPath);
+              } else if (isVideoFile(entry.name)) {
+                const st = await fs.stat(entryPath);
+                total += st.size;
+              }
             }
           } catch { /* ignore */ }
-          
-          if (resName) {
-            db.prepare('UPDATE movies SET file_size = ?, scene_name = ? WHERE id = ?').run(stat.size, resName, m.id);
-          } else {
-            db.prepare('UPDATE movies SET file_size = ? WHERE id = ?').run(stat.size, m.id);
-          }
-        } catch { /* skip */ }
-        scanProgress.processedFiles++;
-      }
-
-      scanProgress.currentPhase = 'Calculating folder sizes...';
-      for (const s of existingShows) {
-        scanProgress.currentFile = s.title;
-        try {
-          let folderSize = 0;
-          const getSize = async (dir) => {
-            let total = 0;
-            try {
-              const entries = await fs.readdir(dir, { withFileTypes: true });
-              for (const entry of entries) {
-                const entryPath = path.join(dir, entry.name);
-                if (entry.isDirectory()) {
-                  total += await getSize(entryPath);
-                } else if (isVideoFile(entry.name)) {
-                  const st = await fs.stat(entryPath);
-                  total += st.size;
-                }
-              }
-            } catch { /* ignore */ }
-            return total;
-          };
-          folderSize = await getSize(s.folder_path);
-          db.prepare('UPDATE shows SET folder_size = ? WHERE id = ?').run(folderSize, s.id);
-        } catch { /* skip */ }
-        scanProgress.processedFiles++;
-      }
+          return total;
+        };
+        folderSize = await getSize(s.folder_path);
+        db.prepare('UPDATE shows SET folder_size = ? WHERE id = ?').run(folderSize, s.id);
+      } catch { /* skip */ }
+      scanProgress.processedFiles++;
     }
 
-    // Phase 3b: Refresh ratings from TMDB
-    const ratingTotal = allMovies.length + allShows.length;
-    if (ratingTotal > 0) {
-      postTotal += ratingTotal;
-      scanProgress.currentPhase = 'Refreshing ratings...';
-      scanProgress.totalFiles = postTotal;
-      // processedFiles carries over from size phase
-
-      for (const m of allMovies) {
-        scanProgress.currentFile = m.title;
-        try {
-          const data = await tmdbService.getMovieById(m.tmdb_id);
-          if (data) {
-            const updates = [];
-            const values = [];
-            if (data.vote_average !== undefined) {
-              updates.push('rating = ?');
-              values.push(data.vote_average);
-            }
-            if (data.genres && Array.isArray(data.genres)) {
-              updates.push('genres = ?');
-              values.push(data.genres.map(g => g.name).join(', '));
-            }
-            if (updates.length > 0) {
-              values.push(m.id);
-              db.prepare(`UPDATE movies SET ${updates.join(', ')} WHERE id = ?`).run(...values);
-            }
+    // Refresh ratings from TMDB
+    scanProgress.currentPhase = 'Refreshing ratings...';
+    for (const m of allMovies) {
+      if (scanProgress.cancelled) throw new Error('Scan cancelled by user');
+      scanProgress.currentFile = m.title;
+      try {
+        const data = await tmdbService.getMovieById(m.tmdb_id);
+        if (data) {
+          const updates = [];
+          const values = [];
+          if (data.vote_average !== undefined) {
+            updates.push('rating = ?');
+            values.push(data.vote_average);
           }
-          // Small delay to respect TMDB rate limits
-          await new Promise(r => setTimeout(r, 50));
-        } catch { /* skip */ }
-        scanProgress.processedFiles++;
-      }
-
-      for (const s of allShows) {
-        scanProgress.currentFile = s.title;
-        try {
-          const data = await tmdbService.getShowById(s.tmdb_id);
-          if (data) {
-            const updates = [];
-            const values = [];
-            if (data.vote_average !== undefined) {
-              updates.push('rating = ?');
-              values.push(data.vote_average);
-            }
-            if (data.genres && Array.isArray(data.genres)) {
-              updates.push('genres = ?');
-              values.push(data.genres.map(g => g.name).join(', '));
-            }
-            if (updates.length > 0) {
-              values.push(s.id);
-              db.prepare(`UPDATE shows SET ${updates.join(', ')} WHERE id = ?`).run(...values);
-            }
+          if (data.genres && Array.isArray(data.genres)) {
+            updates.push('genres = ?');
+            values.push(data.genres.map(g => g.name).join(', '));
           }
-          await new Promise(r => setTimeout(r, 50));
-        } catch { /* skip */ }
-        scanProgress.processedFiles++;
-      }
+          if (updates.length > 0) {
+            values.push(m.id);
+            db.prepare(`UPDATE movies SET ${updates.join(', ')} WHERE id = ?`).run(...values);
+          }
+        }
+        await new Promise(r => setTimeout(r, 50));
+      } catch { /* skip */ }
+      scanProgress.processedFiles++;
     }
 
-    // Phase 3c: Sync Trakt watched status
-    postTotal += 1; // Single step for Trakt sync
-    scanProgress.currentPhase = 'Syncing Trakt watched status...';
+    for (const s of allShows) {
+      if (scanProgress.cancelled) throw new Error('Scan cancelled by user');
+      scanProgress.currentFile = s.title;
+      try {
+        const data = await tmdbService.getShowById(s.tmdb_id);
+        if (data) {
+          const updates = [];
+          const values = [];
+          if (data.vote_average !== undefined) {
+            updates.push('rating = ?');
+            values.push(data.vote_average);
+          }
+          if (data.genres && Array.isArray(data.genres)) {
+            updates.push('genres = ?');
+            values.push(data.genres.map(g => g.name).join(', '));
+          }
+          if (updates.length > 0) {
+            values.push(s.id);
+            db.prepare(`UPDATE shows SET ${updates.join(', ')} WHERE id = ?`).run(...values);
+          }
+        }
+        await new Promise(r => setTimeout(r, 50));
+      } catch { /* skip */ }
+      scanProgress.processedFiles++;
+    }
+
+    if (scanProgress.cancelled) throw new Error('Scan cancelled by user');
+
+    // ════════════════════════════════════════════
+    // Stage 4/5: Sync Trakt
+    // ════════════════════════════════════════════
+    setStage(4, 'Syncing Trakt watched status...');
+    scanProgress.totalFiles = 1;
     scanProgress.currentFile = 'Trakt';
-    scanProgress.totalFiles = postTotal;
     try {
       const traktService = require('./traktService');
       await traktService.syncWatched();
     } catch { /* Trakt may not be configured */ }
-    scanProgress.processedFiles++;
+    scanProgress.processedFiles = 1;
+
+    if (scanProgress.cancelled) throw new Error('Scan cancelled by user');
+
+    // ════════════════════════════════════════════
+    // Stage 5/5: Scan subtitles
+    // ════════════════════════════════════════════
+    const subMoviesList = db.prepare("SELECT id, file_path FROM movies WHERE status = 'downloaded' AND file_path IS NOT NULL").all();
+    const subEpisodesList = db.prepare("SELECT id, file_path FROM episodes WHERE status = 'downloaded' AND file_path IS NOT NULL").all();
+    const subTotal = subMoviesList.length + subEpisodesList.length;
+
+    setStage(5, 'Scanning movie subtitles...');
+    scanProgress.totalFiles = subTotal;
+
+    for (const m of subMoviesList) {
+      if (scanProgress.cancelled) throw new Error('Scan cancelled by user');
+      scanProgress.currentFile = path.basename(m.file_path);
+      try {
+        const langs = await scanSubtitleLangs(m.file_path);
+        db.prepare('UPDATE movies SET subtitles = ? WHERE id = ?').run(JSON.stringify(langs), m.id);
+      } catch (e) {
+        console.warn(`[Scanner] Failed to scan subtitles for ${m.file_path}:`, e.message);
+      }
+      scanProgress.processedFiles++;
+    }
+
+    scanProgress.currentPhase = 'Scanning episode subtitles...';
+    // Group episodes by directory to avoid re-reading the same dir
+    const epDirMap = {};
+    for (const ep of subEpisodesList) {
+      const dir = path.dirname(ep.file_path);
+      if (!epDirMap[dir]) epDirMap[dir] = [];
+      epDirMap[dir].push(ep);
+    }
+
+    for (const [dir, eps] of Object.entries(epDirMap)) {
+      if (scanProgress.cancelled) throw new Error('Scan cancelled by user');
+      let subFiles = [];
+      try {
+        subFiles = await fs.readdir(dir);
+        subFiles = subFiles.filter(f => SUBTITLE_EXTS.includes(path.extname(f).toLowerCase()));
+      } catch { /* skip */ }
+
+      for (const ep of eps) {
+        scanProgress.currentFile = path.basename(ep.file_path);
+        const baseName = path.basename(ep.file_path, path.extname(ep.file_path));
+        const s = ep.season_number;
+        const e = ep.episode_number;
+        const matchStr1 = `s${String(s).padStart(2, '0')}e${String(e).padStart(2, '0')}`;
+        const matchStr2 = `${s}x${String(e).padStart(2, '0')}`;
+
+        const matchingSubs = subFiles.filter(f => {
+          if (f.startsWith(baseName)) return true;
+          const fLower = f.toLowerCase();
+          return fLower.includes(matchStr1) || fLower.includes(matchStr2);
+        });
+
+        const langs = [...new Set(
+          matchingSubs.map(f => {
+            const name = path.basename(f, path.extname(f));
+            const m = name.match(/[._-]([a-z]{2,3})(?:\.[a-z0-9]+)?$/i);
+            return m ? m[1].toLowerCase() : null;
+          }).filter(Boolean)
+        )];
+
+        try {
+          db.prepare('UPDATE episodes SET subtitles = ? WHERE id = ?').run(JSON.stringify(langs), ep.id);
+        } catch (e) {
+          console.warn(`[Scanner] Failed to update subtitles for ${ep.file_path}:`, e.message);
+        }
+        scanProgress.processedFiles++;
+      }
+    }
   } catch (error) {
-    console.error('Scan error:', error);
+    const isCancelled = error?.message === 'Scan cancelled by user';
+    if (isCancelled) {
+      console.log('[Scanner] Scan cancelled by user');
+    } else {
+      console.error('Scan error:', error);
+    }
   } finally {
     scanProgress.isScanning = false;
+    scanProgress.cancelled = false;
     scanProgress.currentFile = 'Finished';
+    scanProgress.currentStage = 5;
     const eventBus = require('./eventBus');
+    if (scanProgress.currentPhase === 'Scan cancelled by user') {
+      scanProgress.currentPhase = 'Cancelled';
+    } else {
+      scanProgress.currentPhase = 'Finished';
+    }
     const added = scanProgress.addedMoviesCount + scanProgress.addedShowsCount;
     const failed = (scanProgress.failedMovies?.length || 0) + (scanProgress.failedShows?.length || 0);
     if (added > 0 || failed > 0) {
@@ -564,5 +738,6 @@ const scanLibrary = async () => {
 
 module.exports = {
   scanLibrary,
-  getScanProgress
+  getScanProgress,
+  stopScan
 };
