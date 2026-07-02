@@ -69,13 +69,11 @@ export default function ReleaseProfilesTab({ releaseProfiles, indexers, newProfi
   ];
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6">
-      <div className="flex items-center justify-between mb-2">
-        <h2 className="text-2xl font-bold text-indigo-400 flex items-center gap-2">
-          <ShieldAlert className="w-7 h-7" /> Release Profiles
-        </h2>
-      </div>
-      <div className="glass-panel p-8 rounded-2xl border border-white/10 space-y-6 mb-8 shadow-xl relative overflow-hidden">
+    <div className="max-w-5xl mx-auto space-y-8 animate-fade-in">
+      <h2 className="text-2xl font-bold text-indigo-400 flex items-center gap-2">
+        <ShieldAlert className="w-7 h-7" /> Release Profiles
+      </h2>
+      <div className="glass-panel p-6 rounded-2xl border border-white/10 space-y-6 mb-8 shadow-xl relative overflow-hidden">
         <div className="flex justify-between items-center">
           <h3 className="font-bold text-lg text-slate-200">{editingProfile ? 'Edit Profile' : 'Add New Profile'}</h3>
           {editingProfile && (

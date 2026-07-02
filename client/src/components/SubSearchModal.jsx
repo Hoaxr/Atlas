@@ -1,14 +1,7 @@
 import { Search, X, Download, Loader2 } from 'lucide-react';
 import { customAlert } from '../utils/alerts';
-
-const ProviderLabel = ({ provider }) => {
-  switch (provider) {
-    case 'OpenSubtitles': return <span className="text-cyan-400">OpenSubtitles</span>;
-    case 'SubDL': return <span className="text-amber-400">SubDL</span>;
-    case 'SubSource': return <span className="text-purple-400">SubSource</span>;
-    default: return provider;
-  }
-};
+import ModalShell from './shared/ModalShell';
+import { ProviderLabel } from '../utils/providerColors';
 
 export default function SubSearchModal({ open, onClose, label, filePath, sceneName, results, searching, searched, onSearch, onDownload, onRefresh }) {
   if (!open) return null;
@@ -24,9 +17,8 @@ export default function SubSearchModal({ open, onClose, label, filePath, sceneNa
   };
 
   return (
-    <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4" onClick={onClose}>
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
-      <div className="relative bg-slate-900 border border-white/10 rounded-2xl w-full max-w-3xl max-h-[85vh] flex flex-col shadow-2xl" onClick={e => e.stopPropagation()}>
+    <ModalShell open={open} onClose={onClose} size="2xl" noHeader noPadding noFloatingClose>
+      <div className="flex flex-col max-h-[85vh]">
         <div className="p-5 border-b border-white/5 flex items-center justify-between shrink-0">
           <div>
             <h3 className="text-lg font-bold text-slate-200 flex items-center gap-2">
@@ -35,8 +27,8 @@ export default function SubSearchModal({ open, onClose, label, filePath, sceneNa
             </h3>
             {filePath && (
               <>
-                <p className="text-xs text-slate-500 mt-2 font-mono truncate max-w-[550px]" title={filePath}>{filePath}</p>
-                {sceneName && <p className="text-[10px] text-slate-600 mt-1 font-mono truncate max-w-[550px]">{sceneName}</p>}
+                <p className="text-xs text-slate-500 mt-2 font-mono truncate max-w-[200px] sm:max-w-[400px] md:max-w-[550px]" title={filePath}>{filePath}</p>
+                {sceneName && <p className="text-[10px] text-slate-600 mt-1 font-mono truncate max-w-[200px] sm:max-w-[400px] md:max-w-[550px]">{sceneName}</p>}
               </>
             )}
           </div>
@@ -67,10 +59,48 @@ export default function SubSearchModal({ open, onClose, label, filePath, sceneNa
                     <span className="w-16 text-center hidden lg:block">Date</span>
                     <span className="w-10 text-center">Get</span>
                   </div>
-                  <div className="space-y-1">
+                  <div className="space-y-1.5">
                     {provider.items.map((item, ii) => (
                       <div key={ii} className="w-full bg-slate-800/30 hover:bg-slate-700/50 rounded-lg border border-white/5 hover:border-cyan-500/30 transition-all group">
-                        <div className="flex items-center gap-3 px-3 py-2.5">
+                        {/* ===== MOBILE LAYOUT ===== */}
+                        <div className="flex flex-col px-3 py-3 md:hidden">
+                          {/* Row 1: score, lang, provider + download button */}
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center gap-2">
+                              <span className={`w-10 text-center text-xs font-bold shrink-0 ${
+                                item.rating >= 100 ? 'text-emerald-400' : item.rating >= 80 ? 'text-emerald-400' :
+                                item.rating >= 60 ? 'text-yellow-400' : item.rating > 0 ? 'text-slate-400' : 'text-slate-600'
+                              }`}>{item.rating > 0 ? `${Math.round(item.rating)}%` : '—'}</span>
+                              <span className="text-[10px] uppercase font-bold shrink-0 relative">
+                                <span className="bg-slate-800 text-slate-300 px-1.5 py-0.5 rounded">{item.language || label}</span>
+                                {item.hearingImpaired && <span className="ml-0.5 w-2 h-2 bg-yellow-400 rounded-full inline-block align-middle" title="Hearing Impaired" />}
+                              </span>
+                              <a href={item.url || '#'} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} className="text-[10px] truncate max-w-[80px] font-medium hover:underline">
+                                <ProviderLabel provider={provider.provider} />
+                              </a>
+                            </div>
+                            <button
+                              onClick={() => handleDownload(item, label)}
+                              className="shrink-0 bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-400 border border-cyan-500/30 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors"
+                            >
+                              <Download className="w-4 h-4" />
+                            </button>
+                          </div>
+                          {/* Row 2: subtitle file name — full width, wrapping */}
+                          <div className="text-sm text-slate-200 leading-snug mb-2" style={{ overflowWrap: 'break-word', wordBreak: 'break-word' }}>{item.release || item.name}</div>
+                          {/* Row 3: metadata tags + date */}
+                          <div className="flex items-center flex-wrap gap-x-2 gap-y-1">
+                            {item.uploader && <span className="text-[11px] text-slate-500 truncate max-w-[90px]" title={item.uploader}>{item.uploader}</span>}
+                            {item.fromTrusted && <span className="text-[11px] text-emerald-400/80 font-medium">✓ Trusted</span>}
+                            {item.aiTranslated && <span className="text-[11px] text-amber-400/80">AI</span>}
+                            {item.downloads > 0 && <span className="text-[11px] text-slate-500">{item.downloads} DL</span>}
+                            {item.format && <span className="text-[11px] text-slate-400 uppercase font-semibold">{item.format}</span>}
+                            {item.uploadDate && <span className="text-[11px] text-slate-500 ml-auto">{item.uploadDate}</span>}
+                          </div>
+                        </div>
+
+                        {/* ===== DESKTOP LAYOUT ===== */}
+                        <div className="hidden md:flex items-center gap-3 px-3 py-2.5">
                           <span className={`w-14 text-center text-xs font-bold shrink-0 ${
                             item.rating >= 100 ? 'text-emerald-400' : item.rating >= 80 ? 'text-emerald-400' :
                             item.rating >= 60 ? 'text-yellow-400' : item.rating > 0 ? 'text-slate-400' : 'text-slate-600'
@@ -93,7 +123,10 @@ export default function SubSearchModal({ open, onClose, label, filePath, sceneNa
                             </div>
                           </span>
                           <span className="text-[10px] text-slate-500 text-right shrink-0 max-w-[80px] truncate hidden lg:block" title={item.uploadDate || ''}>{item.uploadDate || ''}</span>
-                          <button onClick={() => handleDownload(item, label)} className="shrink-0 bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-400 border border-cyan-500/30 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-colors">
+                          <button
+                            onClick={() => handleDownload(item, label)}
+                            className="shrink-0 bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-400 border border-cyan-500/30 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-colors"
+                          >
                             <Download className="w-3.5 h-3.5" />
                           </button>
                         </div>
@@ -113,6 +146,6 @@ export default function SubSearchModal({ open, onClose, label, filePath, sceneNa
           </button>
         </div>
       </div>
-    </div>
+    </ModalShell>
   );
 }

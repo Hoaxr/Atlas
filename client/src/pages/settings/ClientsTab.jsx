@@ -1,20 +1,15 @@
-import { Plus, Trash2, Download, Save, Info, CheckSquare, Square } from 'lucide-react';
+import { Plus, Trash2, Download, Save, Info, CheckSquare, Square, Search } from 'lucide-react';
+import api from '../../lib/api';
+import { customAlert } from '../../utils/alerts';
 import CustomSelect from '../../components/shared/CustomSelect';
 
 export default function ClientsTab({ clients, newClient, setNewClient, clientStatuses, handleAddEntity, handleDeleteEntity, settings, setSettings, handleSave }) {
   return (
-    <div className="max-w-5xl mx-auto space-y-6">
-      <div className="flex items-center justify-between mb-2">
-        <h2 className="text-2xl font-bold text-emerald-400 flex items-center gap-2">
-          <Download className="w-7 h-7" /> Download Clients
-        </h2>
-        {handleSave && (
-          <button onClick={handleSave} className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold py-2 px-4 rounded-xl flex items-center gap-2 transition-all shadow-lg shadow-emerald-500/20">
-            <Save className="w-4 h-4" /> Save Global Settings
-          </button>
-        )}
-      </div>
-      <div className="glass-panel p-8 rounded-2xl border border-white/10 space-y-6 mb-8 shadow-xl relative overflow-hidden">
+    <div className="max-w-5xl mx-auto space-y-8 animate-fade-in">
+      <h2 className="text-2xl font-bold text-emerald-400 flex items-center gap-2">
+        <Download className="w-7 h-7" /> Download Clients
+      </h2>
+      <div className="glass-panel p-6 rounded-2xl border border-white/10 space-y-6 mb-8 shadow-xl relative overflow-hidden">
         <h3 className="font-bold text-lg text-slate-200">Global Preferences</h3>
         <p className="text-xs text-slate-500">Configure global download behavior, cleanup rules, and remote path mappings for your download clients.</p>
         
@@ -87,9 +82,32 @@ export default function ClientsTab({ clients, newClient, setNewClient, clientSta
                 />
               </div>
             </div>
+            <button
+              type="button"
+              onClick={async () => {
+                try {
+                  const res = await api.get('/settings/clients/detect-mapping');
+                  if (res.data.status === 'success' && res.data.data) {
+                    setSettings({...settings, downloadPathMapping: res.data.data});
+                    customAlert('Mapping detected: ' + res.data.data.join(' → '), 'success');
+                  } else {
+                    customAlert('Could not detect mapping — set it manually', 'error');
+                  }
+                } catch {
+                  customAlert('Detection failed', 'error');
+                }
+              }}
+              className="text-xs text-cyan-400 hover:text-cyan-300 underline mt-2"
+            >
+              Auto-detect mapping
+            </button>
           </div>
         </div>
-      </div>
+        <div className="flex justify-end">
+          <button onClick={handleSave} className="px-6 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-white font-bold rounded-xl shadow-lg shadow-emerald-500/20 flex items-center gap-2 transition-all">
+            <Save className="w-5 h-5" /> Save Changes
+          </button>
+        </div>      </div>
       
       <div className="glass-panel p-8 rounded-2xl border border-white/10 space-y-6 mb-8 shadow-xl relative z-10">
         <h3 className="font-bold text-lg text-slate-200">Add New Client</h3>

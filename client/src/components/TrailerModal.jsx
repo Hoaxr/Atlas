@@ -1,3 +1,4 @@
+import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import { useEffect } from 'react';
 
@@ -12,9 +13,9 @@ export default function TrailerModal({ trailerKey, onClose }) {
 
   if (!trailerKey) return null;
 
-  return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-md">
-      <div className="relative w-full max-w-5xl" role="dialog" aria-modal="true" aria-label="Movie trailer">
+  return createPortal(
+    <div className="fixed inset-0 z-40 flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-md" onClick={onClose}>
+      <div className="relative w-full max-w-5xl" role="dialog" aria-modal="true" aria-label="Movie trailer" onClick={(e) => e.stopPropagation()}>
         <div className="flex justify-end mb-4">
           <button 
             onClick={onClose}
@@ -34,6 +35,7 @@ export default function TrailerModal({ trailerKey, onClose }) {
           ></iframe>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

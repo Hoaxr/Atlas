@@ -1,3 +1,4 @@
+import ModalShell from './shared/ModalShell';
 import React from 'react';
 import { X, HardDrive, CheckCircle2, Zap, Search, Trash2 } from 'lucide-react';
 import { formatSize, parseResolution } from '../lib/format';
@@ -8,11 +9,8 @@ const EpisodeDetailsModal = ({ episode, show, onClose, onAutoSearch, onManualSea
   const resolution = parseResolution(episode.scene_name || episode.file_path);
 
   return (
-    <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4" onClick={onClose}>
-      <div 
-        className="bg-slate-900 rounded-2xl w-full max-w-2xl border border-white/10 flex flex-col shadow-2xl max-h-[85vh] overflow-hidden"
-        onClick={(e) => e.stopPropagation()}
-      >
+    <ModalShell open onClose={onClose} size="xl" noHeader noPadding noBackdropBlur noFloatingClose>
+      <div className="flex flex-col max-h-[85vh] overflow-hidden">
         {/* Header */}
         <div className="flex justify-between items-start p-6 border-b border-white/5 bg-slate-800/50 shrink-0">
           <div>
@@ -87,31 +85,33 @@ const EpisodeDetailsModal = ({ episode, show, onClose, onAutoSearch, onManualSea
             </div>
           </div>
 
-          <div className="flex justify-end gap-3 mt-6">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-2 sm:gap-3 mt-6">
+            <div className="flex flex-row gap-2 sm:flex-1">
+              <button
+                onClick={() => onAutoSearch && onAutoSearch(episode)}
+                className="flex-1 bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-sm font-bold px-5 py-3 sm:py-2.5 rounded-xl flex items-center justify-center gap-2 transition-colors"
+              >
+                <Zap className="w-4 h-4 fill-current" /> Auto Search
+              </button>
+              <button
+                onClick={() => onManualSearch && onManualSearch(episode)}
+                className="flex-1 bg-purple-500 hover:bg-purple-400 text-white text-sm font-bold px-5 py-3 sm:py-2.5 rounded-xl flex items-center justify-center gap-2 transition-colors"
+              >
+                <Search className="w-4 h-4" /> Manual Search
+              </button>
+            </div>
             {episode.file_path && onDeleteFile && (
               <button
                 onClick={() => onDeleteFile(episode)}
-                className="mr-auto bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 text-sm font-bold px-4 py-2.5 rounded-xl flex items-center justify-center gap-2 transition-colors"
+                className="sm:mr-auto sm:order-first bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 text-sm font-bold px-4 py-3 sm:py-2.5 rounded-xl flex items-center justify-center gap-2 transition-colors"
               >
                 <Trash2 className="w-4 h-4" /> Delete File
               </button>
             )}
-            <button
-              onClick={() => onAutoSearch && onAutoSearch(episode)}
-              className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-sm font-bold px-5 py-2.5 rounded-xl flex items-center justify-center gap-2 transition-colors"
-            >
-              <Zap className="w-4 h-4 fill-current" /> Auto Search
-            </button>
-            <button
-              onClick={() => onManualSearch && onManualSearch(episode)}
-              className="bg-purple-500 hover:bg-purple-400 text-white text-sm font-bold px-5 py-2.5 rounded-xl flex items-center justify-center gap-2 transition-colors"
-            >
-              <Search className="w-4 h-4" /> Manual Search
-            </button>
           </div>
         </div>
       </div>
-    </div>
+    </ModalShell>
   );
 };
 

@@ -12,8 +12,8 @@ export default function LibraryTab({
   const data = scanResults || scanProgress;
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6">
-      <div className="flex items-center justify-between mb-2">
+    <div className="max-w-5xl mx-auto space-y-8 animate-fade-in">
+      <div className="flex items-center justify-between">
         <h2 className="text-2xl font-bold text-blue-400 flex items-center gap-2">
           <FolderTree className="w-7 h-7" /> Library & Root Folders
         </h2>

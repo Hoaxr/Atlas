@@ -131,12 +131,15 @@ router.post('/trakt/device-token', async (req, res) => {
     // Trakt returns 400 while waiting — body can be "authorization_pending" (string) or { error: "authorization_pending" } (JSON)
     if (status === 400) {
       const errorStr = typeof body === 'string' ? body : body?.error || '';
-      if (errorStr === 'authorization_pending' || errorStr === 'slow_down') {
+      // Empty or pending body = still waiting for user to authorize
+      if (!errorStr || errorStr === 'authorization_pending' || errorStr === 'slow_down') {
         return res.json({ status: 'pending' });
       }
       if (errorStr === 'denied') {
         return res.status(400).json({ status: 'error', message: 'Authorization denied by user.' });
       }
+      console.error('[Trakt Device Auth] Unexpected 400:', JSON.stringify(body));
+      return res.status(400).json({ status: 'error', message: `Trakt error: ${errorStr}` });
     }
     if (status === 404) {
       return res.status(404).json({ status: 'error', message: 'Device code expired. Please start over.' });
@@ -144,6 +147,27 @@ router.post('/trakt/device-token', async (req, res) => {
     console.error('[Trakt Device Auth] Token poll failed:', err.response?.data || err.message);
     res.status(500).json({ status: 'error', message: 'Failed to get token from Trakt' });
   }
+});
+
+// Check if authentication is enabled and whether the current request is bypassed
+router.get('/status', (req, res) => {
+  const { getSetting } = require('../utils/settings');
+  const authEnabled = getSetting('authEnabled') === 'true';
+  const bypassLocalhost = getSetting('authBypassLocalhost') !== 'false';
+  
+  let isPrivate = false;
+  if (bypassLocalhost) {
+    const ip = (req.socket?.remoteAddress || req.connection?.remoteAddress || '').replace(/^::ffff:/, '');
+    isPrivate = ip === '127.0.0.1' || ip === '::1' ||
+      ip.startsWith('192.168.') || ip.startsWith('10.') ||
+      ip.startsWith('fc') || ip.startsWith('fd');
+    if (ip.startsWith('172.')) {
+      const octet = parseInt(ip.split('.')[1], 10);
+      if (octet >= 16 && octet <= 31) isPrivate = true;
+    }
+  }
+  
+  res.json({ status: 'success', data: { authEnabled, bypassLocalhost, isPrivate } });
 });
 
 // Check if Trakt is connected and token is still valid

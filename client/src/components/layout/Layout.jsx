@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Outlet, NavLink, useNavigate } from 'react-router-dom';
+import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { Search, Settings as SettingsIcon, Film, Activity, Tv as TvIcon, DownloadCloud, ArrowDown, ArrowUp, Heart, Menu, Calendar as CalendarIcon, BarChart3, Keyboard, Key, LogOut, Eye } from 'lucide-react';
 import Logo from './Logo';
 import clsx from 'clsx';
@@ -26,6 +26,8 @@ const navItems = [
 export default function Layout() {
   const { onEvent } = useWebSocket(); // Connect to real-time event stream
   const navigate = useNavigate();
+  const location = useLocation();
+  const isDetailPage = /^\/(movies|shows)\/\d+$/.test(location.pathname);
   const [libStats, setLibStats] = useState({ movies: 0, shows: 0 });
   const [clientStats, setClientStats] = useState({ dl_info_speed: 0, up_info_speed: 0 });
   const [downloads, setDownloads] = useState([]);
@@ -56,8 +58,8 @@ export default function Layout() {
       }
 
       const [moviesRes, showsRes] = await Promise.allSettled([
-        api.get('/library/movies'),
-        api.get('/library/shows')
+        api.get('/library/movies?sort=added_desc'),
+        api.get('/library/shows?sort=added_desc')
       ]);
       if (moviesRes.status === 'fulfilled' && moviesRes.value.data.status === 'success') {
         setCachedMovies(moviesRes.value.data.data);
@@ -251,13 +253,13 @@ export default function Layout() {
         </nav>
 
         <div className="p-4 mt-auto space-y-4 max-h-[50vh] overflow-y-auto hide-scrollbar pb-6">
-          <div className="bg-slate-100 border border-slate-200/60 dark:bg-slate-900/50 dark:border-white/5 p-4 rounded-2xl flex flex-col gap-3">
+          <div className="hidden lg:block bg-slate-100 border border-slate-200/60 dark:bg-slate-900/50 dark:border-white/5 p-5 rounded-2xl flex flex-col gap-4">
             <h3 className="text-xs font-bold text-slate-400 dark:text-slate-400 uppercase tracking-wider">Library</h3>
-            <div className="flex justify-between items-center text-sm">
+            <div className="flex justify-between items-center text-sm py-1">
               <span className="text-slate-500 dark:text-slate-300 flex items-center gap-2"><Film className="w-4 h-4 text-cyan-500" /> Movies</span>
               <span className="font-bold bg-slate-200 dark:bg-slate-800 text-slate-800 dark:text-white px-2 py-0.5 rounded-md">{libStats.movies}</span>
             </div>
-            <div className="flex justify-between items-center text-sm">
+            <div className="flex justify-between items-center text-sm py-1">
               <span className="text-slate-500 dark:text-slate-300 flex items-center gap-2"><TvIcon className="w-4 h-4 text-purple-500" /> Shows</span>
               <span className="font-bold bg-slate-200 dark:bg-slate-800 text-slate-800 dark:text-white px-2 py-0.5 rounded-md">{libStats.shows}</span>
             </div>
@@ -281,7 +283,7 @@ export default function Layout() {
           href="https://www.paypal.com/donate/?business=C5EDZZUFSMX4J&no_recurring=0&item_name=Thanks+for+the+coffee&currency_code=EUR"
           target="_blank"
           rel="noopener noreferrer"
-          className="mx-4 mb-2 px-4 py-3 rounded-2xl flex items-center justify-center gap-2 bg-gradient-to-r from-rose-500/20 to-pink-500/20 border border-rose-500/30 text-rose-300 hover:from-rose-500/30 hover:to-pink-500/30 hover:text-rose-200 hover:border-rose-500/50 transition-all duration-300 group"
+          className="hidden lg:flex mx-4 mb-2 px-4 py-3 rounded-2xl items-center justify-center gap-2 bg-gradient-to-r from-rose-500/20 to-pink-500/20 border border-rose-500/30 text-rose-300 hover:from-rose-500/30 hover:to-pink-500/30 hover:text-rose-200 hover:border-rose-500/50 transition-all duration-300 group"
         >
           <Heart className="w-4 h-4 group-hover:scale-110 transition-transform duration-300 fill-rose-400/30 group-hover:fill-rose-400/60" />
           <span className="text-sm font-semibold">Donate</span>
@@ -292,7 +294,7 @@ export default function Layout() {
       {/* Main Content */}
       <main className="flex-1 overflow-y-auto relative z-10">
         {/* Mobile header */}
-        <div className="lg:hidden flex items-center justify-between p-4 glass-panel border-b">
+        <div className={`lg:hidden flex items-center justify-between p-4 glass-panel ${isDetailPage ? 'hidden' : ''}`}>
           <button
             onClick={() => setSidebarOpen(true)}
             className="p-2 rounded-xl hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors"
@@ -306,7 +308,7 @@ export default function Layout() {
         </div>
 
         {/* Download speed indicator - mobile */}
-        <div className="lg:hidden px-4 py-2 flex items-center gap-4 text-xs text-slate-500 border-b border-slate-200 dark:border-slate-800">
+        <div className={`lg:hidden px-4 py-2 flex items-center gap-4 text-xs text-slate-500 ${isDetailPage ? 'hidden' : ''}`}>
           {downloads.length > 0 && (
             <>
               <span className="flex items-center gap-1"><ArrowDown className="w-3 h-3 text-emerald-400" /> {formatSpeed(clientStats.dl_info_speed)}</span>

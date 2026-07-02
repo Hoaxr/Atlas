@@ -69,7 +69,25 @@ aiTranslationWorker.init();
 // Notification and Media Server services auto-init in constructor
 
 app.use(compression());
-app.use(helmet());
+app.use(helmet({
+  hsts: false,
+  contentSecurityPolicy: {
+    useDefaults: false,
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      imgSrc: ["'self'", "data:", "https://image.tmdb.org"],
+      fontSrc: ["'self'", "data:"],
+      connectSrc: ["'self'", "ws:", "wss:"],
+      manifestSrc: ["'self'"],
+      baseUri: ["'self'"],
+      formAction: ["'self'"],
+      frameAncestors: ["'self'"],
+      objectSrc: ["'none'"],
+    },
+  },
+}));
 app.use(morgan('dev', {
   skip: (req, res) => {
     const ignoredPaths = [

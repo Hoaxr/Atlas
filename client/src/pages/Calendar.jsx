@@ -159,21 +159,21 @@ export default function Calendar() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
         <div>
-          <h1 className="text-3xl font-black text-slate-100 dark:text-slate-100 text-slate-800 flex items-center gap-3">
-            <CalendarIcon className="w-8 h-8 text-cyan-400" /> Calendar
+          <h1 className="text-xl sm:text-3xl font-black text-slate-100 dark:text-slate-100 text-slate-800 flex items-center gap-2 sm:gap-3">
+            <CalendarIcon className="w-6 h-6 sm:w-8 sm:h-8 text-cyan-400" /> Calendar
           </h1>
-          <p className="text-slate-400 mt-1">Upcoming episodes from your shows.</p>
+          <p className="text-xs sm:text-base text-slate-400 mt-0.5 sm:mt-1 hidden sm:block">Upcoming episodes from your shows.</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center justify-center sm:justify-end gap-1.5 sm:gap-2">
           {/* View toggle */}
           <div className="flex bg-slate-800/50 rounded-lg border border-white/5 p-0.5">
             {['month', 'week', 'day'].map(mode => (
               <button
                 key={mode}
                 onClick={() => setViewMode(mode)}
-                className={`px-3 py-1.5 text-xs font-bold rounded-md transition-colors capitalize ${
+                className={`px-2 sm:px-3 py-1.5 text-[11px] sm:text-xs font-bold rounded-md transition-colors capitalize ${
                   viewMode === mode ? 'bg-cyan-500/20 text-cyan-400' : 'text-slate-400 hover:text-slate-300'
                 }`}
               >
@@ -181,53 +181,58 @@ export default function Calendar() {
               </button>
             ))}
           </div>
-          <button
-            onClick={() => fetchUpcoming(true)}
-            disabled={refreshing}
-            className="p-2 rounded-xl hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors disabled:opacity-50"
-            title="Refresh calendar"
-          >
-            <RefreshCw className={`w-4 h-4 text-slate-400 ${refreshing ? 'animate-spin' : ''}`} />
-          </button>
-          <button onClick={prev} className="p-2 rounded-xl hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors">
-            <ChevronLeft className="w-5 h-5 text-slate-400" />
-          </button>
-          <span className="text-lg font-bold text-slate-200 min-w-[160px] text-center whitespace-nowrap">
-            {displayLabel}
-          </span>
-          <button onClick={next} className="p-2 rounded-xl hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors">
-            <ChevronRight className="w-5 h-5 text-slate-400" />
-          </button>
-          <button
-            onClick={goToToday}
-            className="ml-2 px-3 py-1.5 text-xs font-bold rounded-lg bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 hover:bg-cyan-500/20 transition-colors"
-          >
-            Today
-          </button>
+          <div className="flex items-center gap-1 sm:gap-2">
+            <button
+              onClick={() => fetchUpcoming(true)}
+              disabled={refreshing}
+              className="p-1.5 sm:p-2 rounded-xl hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors disabled:opacity-50"
+              title="Refresh calendar"
+            >
+              <RefreshCw className={`w-4 h-4 text-slate-400 ${refreshing ? 'animate-spin' : ''}`} />
+            </button>
+            <button onClick={prev} className="p-1.5 sm:p-2 rounded-xl hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors">
+              <ChevronLeft className="w-4 h-4 sm:w-5 sm:h-5 text-slate-400" />
+            </button>
+            <span className="text-sm sm:text-lg font-bold text-slate-200 min-w-[120px] sm:min-w-[160px] text-center whitespace-nowrap">
+              {displayLabel}
+            </span>
+            <button onClick={next} className="p-1.5 sm:p-2 rounded-xl hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors">
+              <ChevronRight className="w-4 h-4 sm:w-5 sm:h-5 text-slate-400" />
+            </button>
+            <button
+              onClick={goToToday}
+              className="px-2 sm:px-3 py-1 text-xs font-bold rounded-lg bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 hover:bg-cyan-500/20 transition-colors"
+            >
+              Today
+            </button>
+          </div>
         </div>
       </div>
 
-      {viewMode === 'month' && calendarGrid ? (
-        <div>
+      {viewMode === 'month' && calendarGrid ? (<>
+        <div className="glass-panel rounded-2xl overflow-hidden border border-white/10">
           {/* Day-of-week header */}
-          <div className="grid grid-cols-7 gap-px bg-slate-700/20 rounded-t-xl overflow-hidden">
+          <div className="grid grid-cols-7 border-b border-white/5">
             {DAYS.map(d => (
-              <div key={d} className="text-center py-2 text-xs font-bold text-slate-400 uppercase tracking-wider bg-slate-800/30">
+              <div key={d} className="text-center py-3 text-xs font-bold text-slate-500 uppercase tracking-wider bg-slate-900/30">
                 {d}
               </div>
             ))}
           </div>
           {/* Calendar grid */}
-          <div className="grid grid-cols-7 gap-px bg-slate-700/20 rounded-b-xl overflow-hidden">
+          <div className="grid grid-cols-7">
             {calendarGrid.flat().map((cell, i) => (
               <div
                 key={`row-${i}`}
-                className={`min-h-[80px] p-1.5 bg-slate-800/20 ${cell ? 'hover:bg-slate-800/50 transition-colors' : 'opacity-20'} ${cell?.isToday ? 'ring-1 ring-inset ring-cyan-500/40' : ''}`}
+                className={`min-h-[80px] sm:min-h-[100px] p-2 border-b border-r border-white/5 ${cell ? 'bg-slate-900/20 hover:bg-slate-800/30 transition-colors cursor-pointer group' : 'bg-slate-950/20'} ${cell?.isToday ? 'bg-cyan-500/5' : ''} ${(i % 7 === 6) ? 'border-r-0' : ''}`}
+                style={cell && (i >= calendarGrid.flat().length - 7) ? { borderBottom: 'none' } : {}}
               >
                 {cell && (
                   <>
-                    <div className={`text-xs font-bold mb-0.5 ${cell.isToday ? 'text-cyan-400' : 'text-slate-400'}`}>
-                      {cell.day}
+                    <div className={`text-sm font-bold mb-1.5 ${cell.isToday ? 'text-cyan-400' : 'text-slate-500'}`}>
+                      <span className={cell.isToday ? 'bg-cyan-500/15 text-cyan-400 px-2 py-0.5 rounded-full' : ''}>
+                        {cell.day}
+                      </span>
                     </div>
                     {(() => {
                       const movies = cell.episodes.filter(e => e.type === 'movie');
@@ -237,34 +242,42 @@ export default function Calendar() {
                         if (!grouped[ep.show_id]) grouped[ep.show_id] = [];
                         grouped[ep.show_id].push(ep);
                       });
-                      const showGroups = Object.values(grouped).slice(0, 3);
-                      const remaining = Object.values(grouped).length - 3;
+                      const showGroups = Object.values(grouped).slice(0, 2);
+                      const remaining = Object.values(grouped).length - 2;
+                      const totalItems = movies.length + showGroups.length;
+                      if (totalItems === 0) return null;
                       return (
-                        <>
+                        <div className="space-y-1">
                           {movies.map((m, j) => (
                             <div
                               key={`movie-${j}`}
-                              onClick={() => navigate(`/movies/${m.show_id}`)}
-                              className="text-[10px] leading-tight truncate text-cyan-400 hover:text-cyan-300 cursor-pointer mb-0.5"
+                              onClick={(e) => { e.stopPropagation(); navigate(`/movies/${m.show_id}`); }}
+                              className="flex items-center gap-1.5 group/item cursor-pointer"
                               title={m.title}
                             >
-                              🎬 {m.title}
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
+                              <span className="text-[11px] leading-tight truncate text-slate-300 group-hover/item:text-cyan-300 transition-colors">{m.title}</span>
                             </div>
                           ))}
-                          {showGroups.map((eps, j) => (
-                            <div
-                              key={j}
-                              onClick={() => navigate(`/shows/${eps[0].show_id}`)}
-                              className="text-[10px] leading-tight truncate text-purple-400 hover:text-purple-300 cursor-pointer mb-0.5"
-                              title={eps.map(e => `${e.show_title} S${String(e.season_number).padStart(2,'0')}E${String(e.episode_number).padStart(2,'0')}${e.title ? ' — ' + e.title : ''}`).join('\n')}
-                            >
-                              {eps[0].show_title}{eps.length > 1 ? ` (${eps.length})` : ''}
-                            </div>
-                          ))}
+                          {showGroups.map((eps, j) => {
+                            const ep = eps[0];
+                            return (
+                              <div
+                                key={j}
+                                onClick={(e) => { e.stopPropagation(); navigate(`/shows/${ep.show_id}`); }}
+                                className="flex items-center gap-1.5 group/item cursor-pointer"
+                                title={eps.map(e => `${e.show_title} S${String(e.season_number).padStart(2,'0')}E${String(e.episode_number).padStart(2,'0')}${e.title ? ' — ' + e.title : ''}`).join('\n')}
+                              >
+                                <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" />
+                                <span className="text-[11px] leading-tight truncate text-slate-300 group-hover/item:text-purple-300 transition-colors">{ep.show_title}</span>
+                                {eps.length > 1 && <span className="text-[10px] text-slate-500 shrink-0">({eps.length})</span>}
+                              </div>
+                            );
+                          })}
                           {remaining > 0 && (
-                            <div className="text-[10px] text-slate-500">+{remaining} more</div>
+                            <div className="text-[10px] text-slate-600 font-medium">+{remaining} more</div>
                           )}
-                        </>
+                        </div>
                       );
                     })()}
                   </>
@@ -273,7 +286,18 @@ export default function Calendar() {
             ))}
           </div>
         </div>
-      ) : (
+        {/* Legend */}
+        <div className="flex items-center justify-center gap-5 text-xs text-slate-500">
+          <div className="flex items-center gap-2">
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-400" />
+            <span>Movies</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="w-2.5 h-2.5 rounded-full bg-amber-400" />
+            <span>TV Shows</span>
+          </div>
+        </div>
+      </>) : (
         <>
           {filteredDates.length === 0 ? (
             <EmptyState

@@ -268,11 +268,8 @@ export default function Dashboard() {
     setSort(localStorage.getItem(scopeKey('Sort')) || 'added_desc');
     setPage(1);
     
-    // Check if we need to show loading state when switching tabs
-    if (viewMode === 'movies' && movies.length === 0) setLoading(true);
-    if (viewMode === 'shows' && shows.length === 0) setLoading(true);
-    
-    // Fetch fresh data for the current view
+    // Fetch data for the current view
+    setLoading(true);
     fetchViewData(viewMode, false);
   }, [viewMode]);
 
@@ -355,8 +352,8 @@ export default function Dashboard() {
       const sortParam = `&sort=${encodeURIComponent(sort)}`;
 
       if (isBackground) {
-        // Background refresh: fetch full data
-        const res = await api.get(endpoint);
+        // Background refresh: fetch full data with current sort
+        const res = await api.get(`${endpoint}?sort=${encodeURIComponent(sort)}`);
         if (res.data.status === 'success') {
           const data = res.data.data;
           if (mode === 'movies') { setCachedMovies(data); setMovies(data); }
@@ -652,16 +649,16 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-black text-slate-800 dark:text-slate-100 flex items-center gap-3">
-            {viewMode === 'movies' ? <Film className="w-8 h-8 text-cyan-400" /> : <Tv className="w-8 h-8 text-purple-400" />} {viewMode === 'movies' ? 'Movies' : 'TV Shows'}
+      <div className="flex items-start sm:items-center justify-between gap-3">
+        <div className="min-w-0">
+          <h1 className="text-xl sm:text-3xl font-black text-slate-800 dark:text-slate-100 flex items-center gap-2 sm:gap-3">
+            {viewMode === 'movies' ? <Film className="w-6 h-6 sm:w-8 sm:h-8 text-cyan-400 shrink-0" /> : <Tv className="w-6 h-6 sm:w-8 sm:h-8 text-purple-400 shrink-0" />} <span className="truncate">{viewMode === 'movies' ? 'Movies' : 'TV Shows'}</span>
           </h1>
-          <p className="text-slate-400 mt-1">Your tracked and imported media collection.</p>
+          <p className="text-xs sm:text-base text-slate-400 mt-0.5 sm:mt-1 hidden sm:block">Your tracked and imported media collection.</p>
         </div>
         
         {/* Search Bar + View Toggle */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
           <div className="relative w-full max-w-md hidden sm:block">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none" />
             <input
@@ -748,26 +745,28 @@ export default function Dashboard() {
         <div className={`border-b ${viewMode === 'movies' ? 'border-cyan-500/30' : 'border-purple-500/30'} bg-slate-900/50 rounded-t-2xl`}>
           
           {/* Mobile search */}
-          <div className="relative w-full p-4 pb-0 sm:hidden">
-            <Search className="absolute left-7 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none" />
-            <input
-              autoFocus
-              type="text"
-              value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
-              placeholder={`Search ${viewMode === 'movies' ? 'movies' : 'shows'}...`}
-              className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-slate-700 dark:text-slate-200 text-sm rounded-lg pl-9 pr-8 py-2 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-400 dark:focus:border-cyan-500/50 placeholder-slate-400 dark:placeholder-slate-500 transition-all"
-            />
-            {searchQuery && (
-              <button onClick={() => setSearchQuery('')} className="absolute right-4 top-1/2 -translate-y-1/2 p-0.5 text-slate-500 hover:text-slate-300 transition-colors" aria-label="Clear search">
-                <X className="w-4 h-4" />
-              </button>
-            )}
+          <div className="w-full px-3 sm:px-4 pt-2 sm:hidden">
+            <div className="relative">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none" />
+              <input
+                autoFocus
+                type="text"
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                placeholder={`Search ${viewMode === 'movies' ? 'movies' : 'shows'}...`}
+                className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-slate-700 dark:text-slate-200 text-sm rounded-lg pl-9 pr-8 py-2 sm:py-2 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-400 dark:focus:border-cyan-500/50 placeholder-slate-400 dark:placeholder-slate-500 transition-all"
+              />
+              {searchQuery && (
+                <button onClick={() => setSearchQuery('')} className="absolute right-4 sm:right-5 top-1/2 -translate-y-1/2 p-0.5 text-slate-500 hover:text-slate-300 transition-colors" aria-label="Clear search">
+                  <X className="w-4 h-4" />
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Main Controls Row */}
-          <div className="flex flex-wrap items-center gap-2 p-4 pb-3 justify-between">
-            <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 p-3 sm:p-4 pb-2 sm:pb-3 justify-between">
+            <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
               <FilterSelect
                 value={sort}
                 onChange={e => setSort(e.target.value)}
@@ -953,7 +952,7 @@ export default function Dashboard() {
 
         {displayItems.length > 0 ? (
           viewStyle === 'grid' ? (
-            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 sm:gap-4">
               {paginatedItems.map(item => (
                 <div 
                   key={item.id}
@@ -1022,7 +1021,7 @@ export default function Dashboard() {
 
                   </div>
 
-                  <div className="aspect-[2/3] relative bg-slate-800">
+                  <div className="aspect-[2/3] relative bg-slate-800 min-h-[200px] flex-shrink-0">
                     {item.watched ? (
                       <div className="absolute bottom-2 left-2 z-20 flex items-center gap-1 bg-slate-950/80 backdrop-blur px-2 py-1 rounded-md border border-emerald-500/30 shadow-lg">
                         <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#34d399" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
@@ -1032,13 +1031,19 @@ export default function Dashboard() {
                     {viewMode === 'shows' && item.season_count > 0 && (
                       <div className="absolute bottom-2 right-2 z-20 flex items-center gap-1 bg-slate-950/80 backdrop-blur px-2 py-1 rounded-md border border-purple-500/30 shadow-lg">
                         <Tv className="w-3 h-3 text-purple-400" />
-                        <span className="text-[10px] font-bold text-purple-400">{item.season_count} Season{item.season_count !== 1 ? 's' : ''}</span>
+                        <span className="text-[10px] font-bold text-purple-400">{item.season_count}</span>
                       </div>
                     )}
+                    {/* Placeholder shown before image loads */}
+                    <div className="absolute inset-0 bg-gradient-to-br from-slate-700/50 to-slate-800/50 animate-pulse" />
                     <img 
                       src={`https://image.tmdb.org/t/p/w500${item.poster_path}`} 
                       alt={item.title}
-                      className="w-full h-full object-cover"
+                      width="500"
+                      height="750"
+                      loading="lazy"
+                      decoding="async"
+                      className="w-full h-full object-cover relative"
                     />
                     <div className="absolute inset-0 bg-slate-950/80 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col items-center justify-center gap-3 p-4 z-10">
                       <div className="flex flex-col gap-2 w-full">
@@ -1106,7 +1111,7 @@ export default function Dashboard() {
                   </div>
 
                   <div className="p-4 relative z-20 bg-slate-900/90 border-t border-white/5">
-                    <h3 className="font-bold text-slate-800 dark:text-slate-200 truncate" title={item.title}>{item.title}</h3>
+                    <h3 className="font-bold text-slate-800 dark:text-slate-200 truncate leading-tight" title={item.title}>{item.title}</h3>
                     <div className="flex justify-between items-center mt-1">
                       <p className="text-sm text-slate-400 font-medium">{item.year}</p>
                       <div className="flex items-center gap-2">
@@ -1295,7 +1300,14 @@ export default function Dashboard() {
           <div className="flex flex-col items-center justify-center h-[300px] text-slate-500 rounded-xl">
             {viewMode === 'movies' ? <Film className="w-12 h-12 mb-4 opacity-50" /> : <Tv className="w-12 h-12 mb-4 opacity-50" />}
             <p>No {viewMode === 'movies' ? 'movies' : 'TV shows'} in your library yet.</p>
-            <p className="text-sm mt-1">Add them from the Discover page or scan your NAS in Settings.</p>
+            <p className="text-sm mt-1 mb-5">Add them from the Discover page or scan your NAS in Settings.</p>
+            <button
+              onClick={() => navigate('/discover')}
+              className="flex items-center gap-2 px-5 py-2.5 bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 rounded-xl text-sm font-bold transition-all hover:scale-105"
+            >
+              <Search className="w-4 h-4" />
+              Browse Discover
+            </button>
           </div>
         )}
         

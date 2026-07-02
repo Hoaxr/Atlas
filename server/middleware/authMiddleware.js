@@ -54,9 +54,24 @@ const authMiddleware = (req, res, next) => {
     // client-controlled headers (X-Forwarded-For) when 'trust proxy' is enabled, which
     // would let a remote client spoof a localhost IP and bypass authentication.
     const ip = req.socket?.remoteAddress || req.connection?.remoteAddress || '';
-    const isLocalhost = ip === '127.0.0.1' || ip === '::ffff:127.0.0.1' || ip === '::1';
 
-    if (isLocalhost) {
+    const isPrivate = (addr) => {
+      // Strip IPv6 prefix if present
+      const clean = addr.replace(/^::ffff:/, '');
+      // Localhost
+      if (clean === '127.0.0.1' || clean === '::1') return true;
+      // Docker bridge / private subnets (172.17-31.x.x)
+      if (clean.startsWith('192.168.') || clean.startsWith('10.')) return true;
+      if (clean.startsWith('172.')) {
+        const octet = parseInt(clean.split('.')[1], 10);
+        if (octet >= 16 && octet <= 31) return true;
+      }
+      // IPv6 private (unique local address)
+      if (clean.startsWith('fc') || clean.startsWith('fd')) return true;
+      return false;
+    };
+
+    if (isPrivate(ip)) {
       attachDefaultAdmin();
       return next();
     }

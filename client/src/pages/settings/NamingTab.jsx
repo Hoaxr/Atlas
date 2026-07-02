@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
-import { HelpCircle, CheckSquare, Square, FileText, X, Tag } from 'lucide-react';
+import { HelpCircle, CheckSquare, Square, FileText, X, Tag, Save } from 'lucide-react';
 import CustomSelect from '../../components/shared/CustomSelect';
 
 const TagsModal = ({ title, tags, onClose }) => {
   return createPortal(
     <div
-      className="fixed inset-0 z-[200] flex items-center justify-center p-4"
+      className="fixed inset-0 z-40 flex items-center justify-center p-4"
       onClick={onClose}
     >
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
@@ -96,7 +96,7 @@ export default function NamingTab({ settings, setSettings, handleSave }) {
       </div>
 
       {/* Movie Naming Section */}
-      <div className="glass-panel p-8 rounded-2xl border border-white/10 space-y-6 shadow-xl relative overflow-hidden">
+      <div className="glass-panel p-6 rounded-2xl border border-white/10 space-y-6 shadow-xl relative overflow-hidden">
         <h3 className="text-lg font-bold text-slate-200 flex items-center gap-2">
           Movie Naming
         </h3>
@@ -183,7 +183,7 @@ export default function NamingTab({ settings, setSettings, handleSave }) {
       </div>
 
       {/* TV Naming Section */}
-      <div className="glass-panel p-8 rounded-2xl border border-white/10 space-y-6 shadow-xl relative overflow-hidden mt-8">
+      <div className="glass-panel p-6 rounded-2xl border border-white/10 space-y-6 shadow-xl relative overflow-hidden mt-8">
         <h3 className="text-lg font-bold text-slate-200 flex items-center gap-2">
           Episode Naming
         </h3>
@@ -259,11 +259,8 @@ export default function NamingTab({ settings, setSettings, handleSave }) {
       </div>
 
       <div className="flex justify-end">
-        <button 
-          onClick={handleSave}
-          className="bg-cyan-500 hover:bg-cyan-600 text-white px-6 py-2 rounded-lg font-bold shadow-lg shadow-cyan-500/20 transition-all active:scale-95"
-        >
-          Save Naming Settings
+        <button onClick={handleSave} className="px-6 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-white font-bold rounded-xl shadow-lg shadow-emerald-500/20 flex items-center gap-2 transition-all">
+          <Save className="w-5 h-5" /> Save Changes
         </button>
       </div>
 

@@ -4,7 +4,7 @@ import LanguageInput from './LanguageInput';
 
 export default function SubtitlesTab({ settings, setSettings, keyStatuses, handleSave }) {
   return (
-    <div className="max-w-5xl mx-auto space-y-10">
+    <div className="max-w-5xl mx-auto space-y-8 animate-fade-in">
 
       {/* === Section 1: Subtitle Providers === */}
       <div>
@@ -156,9 +156,24 @@ export default function SubtitlesTab({ settings, setSettings, keyStatuses, handl
             </div>
           </div>
 
-          <div className="pt-2">
-            <button onClick={handleSave} className="bg-pink-500 hover:bg-pink-400 text-white font-bold py-2.5 px-6 rounded-xl flex items-center gap-2">
-              <Save className="w-4 h-4" /> Save Settings
+          {settings.autoTranslate && (
+            <div 
+              className="flex items-center gap-3 p-4 bg-slate-900/50 border border-white/5 rounded-xl cursor-pointer select-none transition-colors hover:bg-slate-800/50"
+              onClick={() => setSettings({ ...settings, preferNativeBeforeTranslate: !settings.preferNativeBeforeTranslate })}
+            >
+              <div className="text-amber-400">
+                {settings.preferNativeBeforeTranslate ? <CheckSquare className="w-6 h-6" /> : <Square className="w-6 h-6 text-slate-500" />}
+              </div>
+              <div>
+                <span className="font-medium text-slate-200 block mb-0.5">Prefer native subtitles before auto-translate</span>
+                <p className="text-xs text-slate-500 mt-0.5">First search for native subtitles in your target languages. Only auto-translate from English if no native subtitles are found. When native subtitles become available later, they will replace translated ones.</p>
+              </div>
+            </div>
+          )}
+
+          <div className="flex justify-end pt-2">
+            <button onClick={handleSave} className="px-6 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-white font-bold rounded-xl shadow-lg shadow-emerald-500/20 flex items-center gap-2 transition-all">
+              <Save className="w-5 h-5" /> Save Changes
             </button>
           </div>
         </div>

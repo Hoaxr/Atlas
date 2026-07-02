@@ -83,4 +83,4 @@ const testConnection = async (client) => {
   }
 };
 
-module.exports = { addTorrent, getTorrents, getTransferInfo, deleteTorrent, testConnection };
+module.exports = { login, addTorrent, getTorrents, getTransferInfo, deleteTorrent, testConnection };

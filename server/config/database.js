@@ -236,9 +236,12 @@ if (!existingAdmin) {
   const authPasswordRow = db.prepare('SELECT value FROM settings WHERE key = ?').get('authPassword');
   
   if (authUsernameRow && authUsernameRow.value) {
+    const bcrypt = require('bcrypt');
+    const password = authPasswordRow ? authPasswordRow.value : '';
+    const hashedPassword = bcrypt.hashSync(password, 10);
     db.prepare("INSERT INTO users (username, password, role) VALUES (?, ?, 'admin')").run(
       authUsernameRow.value,
-      authPasswordRow ? authPasswordRow.value : ''
+      hashedPassword
     );
   } else {
     // If no auth is set at all, maybe create a default admin 'admin'/'admin' if we want, but better to just leave it until set.

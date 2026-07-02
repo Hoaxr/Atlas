@@ -28,7 +28,8 @@ export default function Settings() {
     subsourceApiKey: '',
     targetLangs: ['Dutch'],
     providerLangs: ['en'],
-    autoTranslate: false,
+    autoTranslate: true,
+    preferNativeBeforeTranslate: true,
     deepseekApiKey: '',
     claudeApiKey: '',
     traktWatchedSync: false,
@@ -278,16 +279,80 @@ export default function Settings() {
     } catch { /* paths unavailable */ }
   };
 
+  // Tab-specific saves — only send the fields that tab manages
+  const saveIndexers = async () => {
+    try {
+      await api.post('/settings', {
+        prowlarrUrl: settings.prowlarrUrl,
+        prowlarrApiKey: settings.prowlarrApiKey
+      });
+      customAlert('Indexer settings saved!', 'success');
+    } catch {
+      customAlert('Failed to save indexer settings.', 'error');
+    }
+  };
+
+  const saveClients = async () => {
+    try {
+      await api.post('/settings', {
+        hideCompletedDownloads: settings.hideCompletedDownloads,
+        removeCompletedDownloads: settings.removeCompletedDownloads,
+        deleteTorrentFiles: settings.deleteTorrentFiles,
+        downloadPathMapping: settings.downloadPathMapping
+      });
+      customAlert('Client settings saved!', 'success');
+    } catch {
+      customAlert('Failed to save client settings.', 'error');
+    }
+  };
+
+  const saveNaming = async () => {
+    try {
+      await api.post('/settings', {
+        renameMovies: settings.renameMovies,
+        replaceIllegalCharacters: settings.replaceIllegalCharacters,
+        colonReplacement: settings.colonReplacement,
+        standardMovieFormat: settings.standardMovieFormat,
+        renameEpisodes: settings.renameEpisodes,
+        standardEpisodeFormat: settings.standardEpisodeFormat,
+        seasonFolderFormat: settings.seasonFolderFormat
+      });
+      customAlert('Naming settings saved!', 'success');
+    } catch {
+      customAlert('Failed to save naming settings.', 'error');
+    }
+  };
+
+  const saveSubtitles = async () => {
+    try {
+      await api.post('/settings', {
+        osApiKey: settings.osApiKey,
+        subdlApiKey: settings.subdlApiKey,
+        subsourceApiKey: settings.subsourceApiKey,
+        providerLangs: settings.providerLangs,
+        translationProvider: settings.translationProvider,
+        geminiApiKey: settings.geminiApiKey,
+        deepseekApiKey: settings.deepseekApiKey,
+        claudeApiKey: settings.claudeApiKey,
+        targetLangs: settings.targetLangs,
+        autoTranslate: settings.autoTranslate
+      });
+      customAlert('Subtitle settings saved!', 'success');
+    } catch {
+      customAlert('Failed to save subtitle settings.', 'error');
+    }
+  };
+
+  // Legacy full-settings save (used by profile default selection)
   const handleSave = async () => {
     try {
       await api.post('/settings', settings);
-      setStatus({ type: 'success', message: 'Settings saved!' });
+      customAlert('Settings saved!', 'success');
       if (settings.traktWatchedSync && settings.traktAccessToken) {
         api.post('/tasks/trakt_watched_sync/run').catch(() => {});
       }
-      setTimeout(() => setStatus({ type: '', message: '' }), 3000);
     } catch (err) {
-      setStatus({ type: 'error', message: 'Failed to save settings.' });
+      customAlert('Failed to save settings.', 'error');
     }
   };
 
@@ -295,10 +360,9 @@ export default function Settings() {
     try {
       await api.post(`/settings/${endpoint}`, payload);
       fetchSettings();
-      setStatus({ type: 'success', message: 'Added successfully!' });
-      setTimeout(() => setStatus({ type: '', message: '' }), 3000);
+      customAlert('Added successfully!', 'success');
     } catch (err) {
-      setStatus({ type: 'error', message: 'Failed to add.' });
+      customAlert('Failed to add.', 'error');
     }
   };
 
@@ -306,8 +370,9 @@ export default function Settings() {
     try {
       await api.delete(`/settings/${endpoint}/${id}`);
       fetchSettings();
+      customAlert('Deleted successfully!', 'success');
     } catch (err) {
-      setStatus({ type: 'error', message: 'Failed to delete.' });
+      customAlert('Failed to delete.', 'error');
     }
   };
 
@@ -352,14 +417,21 @@ export default function Settings() {
           setTraktPolling(false);
           setTraktDeviceCode(null);
           customAlert('Trakt account linked successfully!');
-          setSettings(prev => ({ ...prev, traktAccessToken: '*****' }));
+          fetchSettings();
           return;
         }
         if (res.data.status === 'pending' && attempts < 60) {
           setTimeout(poll, interval * 1000);
           return;
         }
-      } catch { /* Trakt polling error — stop polling */ }
+        // Server returned an error message
+        if (res.data.status === 'error') {
+          customAlert(res.data.message || 'Trakt authorization failed', 'error');
+        }
+      } catch (err) {
+        const msg = err.response?.data?.message || err.message || 'Connection failed';
+        customAlert(`Trakt error: ${msg}`, 'error');
+      }
       setTraktPolling(false);
       setTraktDeviceCode(null);
     };
@@ -368,17 +440,25 @@ export default function Settings() {
 
   const connectTrakt = async () => {
     try {
-      await api.post('/settings', settings);
-      const res = await api.post('/auth/trakt/device-code');
-      if (res.data.status !== 'success') return;
-      const { device_code, user_code, verification_url, interval } = res.data.data;
+      const res = await api.post('/settings', settings);
+      if (res.data.status === 'error') {
+        customAlert('Failed to save settings: ' + (res.data.message || ''), 'error');
+        return;
+      }
+      const dcRes = await api.post('/auth/trakt/device-code');
+      if (dcRes.data.status !== 'success') {
+        customAlert(dcRes.data.message || 'Failed to get Trakt device code', 'error');
+        return;
+      }
+      const { device_code, user_code, verification_url, interval } = dcRes.data.data;
       setTraktDeviceCode(device_code);
       setTraktUserCode(user_code);
       setTraktVerificationUrl(verification_url);
       setTraktPolling(true);
       pollTrakt(device_code, interval || 5);
-    } catch {
-      customAlert('Failed to start Trakt authorization', 'error');
+    } catch (err) {
+      const msg = err.response?.data?.message || err.message || 'Failed to start Trakt authorization';
+      customAlert(msg, 'error');
     }
   };
 
@@ -386,12 +466,10 @@ export default function Settings() {
     try {
       await api.post('/release-profiles', profile);
       fetchReleaseProfiles();
-      setStatus({ type: 'success', message: 'Release profile added!' });
+      customAlert('Release profile added!', 'success');
       setNewReleaseProfile({ name: '', enabled: true, must_contain: [], must_not_contain: [], indexer_id: null });
-      setTimeout(() => setStatus({ type: '', message: '' }), 3000);
     } catch (err) {
-      setStatus({ type: 'error', message: 'Failed to add release profile' });
-      setTimeout(() => setStatus({ type: '', message: '' }), 3000);
+      customAlert('Failed to add release profile', 'error');
     }
   };
 
@@ -400,11 +478,9 @@ export default function Settings() {
       await api.put(`/release-profiles/${profile.id}`, profile);
       setEditingReleaseProfile(null);
       fetchReleaseProfiles();
-      setStatus({ type: 'success', message: 'Release profile updated!' });
-      setTimeout(() => setStatus({ type: '', message: '' }), 3000);
+      customAlert('Release profile updated!', 'success');
     } catch (err) {
-      setStatus({ type: 'error', message: 'Failed to update release profile' });
-      setTimeout(() => setStatus({ type: '', message: '' }), 3000);
+      customAlert('Failed to update release profile', 'error');
     }
   };
 
@@ -412,11 +488,9 @@ export default function Settings() {
     try {
       await api.delete(`/release-profiles/${id}`);
       fetchReleaseProfiles();
-      setStatus({ type: 'success', message: 'Release profile deleted!' });
-      setTimeout(() => setStatus({ type: '', message: '' }), 3000);
+      customAlert('Release profile deleted!', 'success');
     } catch (err) {
-      setStatus({ type: 'error', message: 'Failed to delete release profile' });
-      setTimeout(() => setStatus({ type: '', message: '' }), 3000);
+      customAlert('Failed to delete release profile', 'error');
     }
   };
 
@@ -438,10 +512,10 @@ export default function Settings() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-black text-slate-800 dark:text-slate-100 flex items-center gap-3">
-            <Settings2 className="w-8 h-8 text-cyan-400" /> Settings
+          <h1 className="text-xl sm:text-3xl font-black text-slate-800 dark:text-slate-100 flex items-center gap-2 sm:gap-3">
+            <Settings2 className="w-6 h-6 sm:w-8 sm:h-8 text-cyan-400" /> Settings
           </h1>
-          <p className="text-slate-400 mt-1">Manage your integrations, indexers, and application preferences.</p>
+          <p className="text-xs sm:text-base text-slate-400 mt-0.5 sm:mt-1 hidden sm:block">Manage your integrations, indexers, and application preferences.</p>
         </div>
       </div>
 
@@ -495,7 +569,7 @@ export default function Settings() {
             <IndexersTab
               settings={settings}
               setSettings={setSettings}
-              handleSave={handleSave}
+              handleSave={saveIndexers}
             />
           )}
 
@@ -509,7 +583,7 @@ export default function Settings() {
               handleDeleteEntity={handleDeleteEntity}
               settings={settings}
               setSettings={setSettings}
-              handleSave={handleSave}
+              handleSave={saveClients}
             />
           )}
 
@@ -548,7 +622,7 @@ export default function Settings() {
             <NamingTab
               settings={settings}
               setSettings={setSettings}
-              handleSave={handleSave}
+              handleSave={saveNaming}
             />
           )}
 
@@ -557,7 +631,7 @@ export default function Settings() {
               settings={settings}
               setSettings={setSettings}
               keyStatuses={keyStatuses}
-              handleSave={handleSave}
+              handleSave={saveSubtitles}
             />
           )}
 

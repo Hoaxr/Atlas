@@ -88,12 +88,13 @@ export default function Requests() {
   return (
     <div className="space-y-8 animate-fade-in">
       <div>
-        <h1 className="text-3xl font-black text-white tracking-tight">Requests</h1>
-        <p className="text-slate-400 mt-2">Manage user requests for movies and TV shows.</p>
+        <h1 className="text-xl sm:text-3xl font-black text-white tracking-tight">Requests</h1>
+        <p className="text-xs sm:text-base text-slate-400 mt-1 sm:mt-2 hidden sm:block">Manage user requests for movies and TV shows.</p>
       </div>
 
       <div className="glass-panel rounded-2xl border border-white/10 overflow-hidden">
-        <div className="overflow-x-auto">
+        {/* Desktop table */}
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-left text-sm">
             <thead>
               <tr className="border-b border-white/10 text-slate-400 bg-slate-900/50">
@@ -158,6 +159,66 @@ export default function Requests() {
               )}
             </tbody>
           </table>
+        </div>
+
+        {/* Mobile cards */}
+        <div className="md:hidden divide-y divide-white/5">
+          {requests.length === 0 ? (
+            <div className="py-12 text-center text-slate-500">No requests found.</div>
+          ) : (
+            requests.map(req => (
+              <div key={req.id} className="p-4 space-y-3 hover:bg-slate-800/20 transition-colors">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <h3 className="font-bold text-slate-200 text-sm truncate">{req.title}</h3>
+                    <div className="flex items-center gap-2 mt-1">
+                      <span className="text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 border border-white/5">
+                        {req.type}
+                      </span>
+                      <span className="text-[10px] text-slate-500">
+                        {new Date(req.created_at).toLocaleDateString()}
+                      </span>
+                    </div>
+                  </div>
+                  <span className="flex items-center gap-1.5 text-xs capitalize text-slate-300 shrink-0">
+                    {getStatusIcon(req.status)}
+                    {req.status}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-slate-500">
+                    by <span className="text-slate-400 font-medium">{req.requested_by}</span>
+                  </span>
+                  <div className="flex items-center gap-2">
+                    {req.status === 'pending' && (
+                      <>
+                        <button
+                          onClick={() => handleApproveInit(req)}
+                          className="px-3 py-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 font-medium transition-colors text-xs"
+                        >
+                          Approve
+                        </button>
+                        <button
+                          onClick={() => handleDeny(req.id)}
+                          className="px-3 py-1.5 rounded-lg bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 font-medium transition-colors text-xs"
+                        >
+                          Deny
+                        </button>
+                      </>
+                    )}
+                    <button
+                      onClick={() => handleDelete(req.id)}
+                      className="p-1.5 rounded-lg text-slate-500 hover:bg-slate-800 hover:text-rose-400 transition-colors"
+                      title="Delete Request"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
         </div>
       </div>
 

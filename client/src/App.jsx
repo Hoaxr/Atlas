@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useParams } from 'react-router-dom';
 import { lazy, Suspense } from 'react';
 import { Toaster } from 'react-hot-toast';
 import { ThemeProvider } from './lib/ThemeContext';
@@ -54,9 +54,9 @@ function App() {
               <Route path="/login" element={<LazyPage><Login /></LazyPage>} />
               <Route path="/" element={<Layout />}>
                 <Route index element={<Navigate to="/movies" replace />} />
-                <Route path="movies" element={<Dashboard />} />
+                <Route path="movies" element={<Dashboard key="movies-view" />} />
+                <Route path="shows" element={<Dashboard key="shows-view" />} />
                 <Route path="movies/:id" element={<MovieDetails />} />
-                <Route path="shows" element={<Dashboard />} />
                 <Route path="shows/:id" element={<ShowDetails />} />
                 <Route path="downloads" element={<LazyPage><Downloads /></LazyPage>} />
                 <Route path="discover" element={<Discover />} />

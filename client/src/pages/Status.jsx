@@ -160,15 +160,15 @@ export default function Status() {
       {/* Header with tabs */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-black text-slate-100 dark:text-slate-100 text-slate-800 flex items-center gap-3">
+          <h1 className="text-xl sm:text-3xl font-black text-slate-100 dark:text-slate-100 text-slate-800 flex items-center gap-2 sm:gap-3">
             {hasIssues ? (
-              <AlertCircle className="w-8 h-8 text-amber-400" />
+              <AlertCircle className="w-6 h-6 sm:w-8 sm:h-8 text-amber-400 shrink-0" />
             ) : (
-              <CheckCircle2 className="w-8 h-8 text-emerald-400" />
+              <CheckCircle2 className="w-6 h-6 sm:w-8 sm:h-8 text-emerald-400 shrink-0" />
             )}
             System Status
           </h1>
-          <p className="text-slate-400 mt-1">
+          <p className="text-xs sm:text-base text-slate-400 mt-0.5 sm:mt-1 hidden sm:block">
             {hasIssues
               ? `${issues.length} issue${issues.length !== 1 ? 's' : ''} need${issues.length === 1 ? 's' : ''} attention`
               : 'All systems are running smoothly'}

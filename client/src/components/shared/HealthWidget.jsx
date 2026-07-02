@@ -1,14 +1,7 @@
 import { useState, useEffect } from 'react';
-import { Activity, Database, HardDrive, Cpu, Clock, FolderOpen, ChevronDown, ChevronUp, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { Activity, Database, HardDrive, Cpu, Clock } from 'lucide-react';
 import api from '../../lib/api';
-
-const formatSize = (bytes) => {
-  if (!bytes) return '0 B';
-  const k = 1024;
-  const sizes = ['B', 'KB', 'MB', 'GB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
-};
+import { formatSize } from '../../lib/format';
 
 const formatUptime = (seconds) => {
   if (!seconds) return '—';

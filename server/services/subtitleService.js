@@ -139,11 +139,29 @@ const downloadSubtitlesForMovies = async () => {
 
   const autoTranslate = db.prepare("SELECT value FROM settings WHERE key = 'autoTranslate'").get();
   const isAutoTranslate = autoTranslate && autoTranslate.value === 'true';
+  const preferNative = db.prepare("SELECT value FROM settings WHERE key = 'preferNativeBeforeTranslate'").get();
+  const isPreferNative = preferNative && preferNative.value === 'true';
   let targetLangs = [];
   try {
     const row = db.prepare("SELECT value FROM settings WHERE key = 'targetLangs'").get();
     if (row) targetLangs = JSON.parse(row.value);
   } catch {}
+
+  const LANG_TO_CODE = { 'Dutch': 'nl', 'French': 'fr', 'German': 'de', 'Spanish': 'es', 'Italian': 'it', 'Portuguese': 'pt' };
+
+  const tryDownloadNative = async (movie, langCode) => {
+    let srtContent = null;
+    if (!srtContent && osApiKeyRow?.value) {
+      try { srtContent = await tryOpenSubtitles(osApiKeyRow.value, movie, langCode); } catch (e) { console.log(`[SubtitleService] OpenSubtitles ${langCode} failed: ${e.message}`); }
+    }
+    if (!srtContent && subdlApiKeyRow?.value) {
+      try { srtContent = await trySubdl(subdlApiKeyRow.value, movie, movie.year, langCode); } catch (e) { console.log(`[SubtitleService] SubDL ${langCode} failed: ${e.message}`); }
+    }
+    if (!srtContent && subsourceApiKeyRow?.value) {
+      try { srtContent = await trySubsource(subsourceApiKeyRow.value, movie, langCode); } catch (e) { console.log(`[SubtitleService] SubSource ${langCode} failed: ${e.message}`); }
+    }
+    return srtContent;
+  };
 
   const movies = db.prepare("SELECT * FROM movies WHERE status = 'downloaded' AND file_path IS NOT NULL").all();
 
@@ -192,10 +210,24 @@ const downloadSubtitlesForMovies = async () => {
           // Auto-translate: if we downloaded English and auto-translate is on, translate to target langs
           if (langCode === 'en' && isAutoTranslate && targetLangs.length > 0) {
             for (const lang of targetLangs) {
-              const tCode = { 'Dutch': 'nl', 'French': 'fr', 'German': 'de', 'Spanish': 'es', 'Italian': 'it', 'Portuguese': 'pt' }[lang];
+              const tCode = LANG_TO_CODE[lang];
               if (!tCode || providerLangs.includes(tCode)) continue;
               const targetSubPath = path.join(parsedPath.dir, `${parsedPath.name}.${tCode}.srt`);
               if (fs.existsSync(targetSubPath)) continue;
+
+              // When prefer native is on, try native download first
+              if (isPreferNative) {
+                console.log(`[SubtitleService] Prefer native: trying native ${tCode} for ${movie.title}`);
+                const nativeContent = await tryDownloadNative(movie, tCode);
+                if (nativeContent) {
+                  fs.writeFileSync(targetSubPath, nativeContent);
+                  console.log(`[SubtitleService] Got native ${tCode} for ${movie.title} (preferred over translate)`);
+                  eventBus.success('Subtitle downloaded', { title: movie.title, language: tCode });
+                  continue;
+                }
+                console.log(`[SubtitleService] Native ${tCode} not found for ${movie.title}, falling back to translate`);
+              }
+
               try {
                 const provider = db.prepare("SELECT value FROM settings WHERE key = 'translationProvider'").get();
                 const activeProvider = (provider && provider.value) || 'googleTranslate';
@@ -236,6 +268,27 @@ const autoTranslateExisting = async () => {
   const autoTranslate = db.prepare("SELECT value FROM settings WHERE key = 'autoTranslate'").get();
   if (!autoTranslate || autoTranslate.value !== 'true') return;
 
+  const preferNative = db.prepare("SELECT value FROM settings WHERE key = 'preferNativeBeforeTranslate'").get();
+  const isPreferNative = preferNative && preferNative.value === 'true';
+
+  const osApiKeyRow = db.prepare("SELECT value FROM settings WHERE key = 'osApiKey'").get();
+  const subdlApiKeyRow = db.prepare("SELECT value FROM settings WHERE key = 'subdlApiKey'").get();
+  const subsourceApiKeyRow = db.prepare("SELECT value FROM settings WHERE key = 'subsourceApiKey'").get();
+
+  const tryDownloadNative = async (movie, langCode) => {
+    let srtContent = null;
+    if (!srtContent && osApiKeyRow?.value) {
+      try { srtContent = await tryOpenSubtitles(osApiKeyRow.value, movie, langCode); } catch (e) {}
+    }
+    if (!srtContent && subdlApiKeyRow?.value) {
+      try { srtContent = await trySubdl(subdlApiKeyRow.value, movie, movie.year || (new Date()).getFullYear(), langCode); } catch (e) {}
+    }
+    if (!srtContent && subsourceApiKeyRow?.value) {
+      try { srtContent = await trySubsource(subsourceApiKeyRow.value, movie, langCode); } catch (e) {}
+    }
+    return srtContent;
+  };
+
   let targetLangs = [];
   try {
     const row = db.prepare("SELECT value FROM settings WHERE key = 'targetLangs'").get();
@@ -252,9 +305,51 @@ const autoTranslateExisting = async () => {
     }
   } catch {}
 
+  const LANG_TO_CODE = { 'Dutch': 'nl', 'French': 'fr', 'German': 'de', 'Spanish': 'es', 'Italian': 'it', 'Portuguese': 'pt' };
+
   const provider = db.prepare("SELECT value FROM settings WHERE key = 'translationProvider'").get();
   const activeProvider = (provider && provider.value) || 'googleTranslate';
   const { translateWithGemini, translateWithGoogleTranslate, translateWithDeepSeek, translateWithClaude } = require('./aiTranslationWorker');
+
+  const translateOrNative = async (fileBase, movieOrEp, lang, enSrtContent) => {
+    const tCode = LANG_TO_CODE[lang];
+    if (!tCode || providerLangs.includes(tCode)) return;
+    const targetSubPath = path.join(fileBase.dir, `${fileBase.name}.${tCode}.srt`);
+    if (fs.existsSync(targetSubPath)) return;
+
+    // When prefer native is on, try native download first
+    if (isPreferNative) {
+      const nativeContent = await tryDownloadNative(movieOrEp, tCode);
+      if (nativeContent) {
+        fs.writeFileSync(targetSubPath, nativeContent);
+        console.log(`[SubtitleService] Got native ${tCode} for ${movieOrEp.title || movieOrEp.show_title} (upgraded from translate)`);
+        eventBus.success('Subtitle downloaded', { title: movieOrEp.title || movieOrEp.show_title, language: tCode });
+        return;
+      }
+    }
+
+    // Fall back to translation
+    try {
+      let translated;
+      if (activeProvider === 'gemini') {
+        const keyRow = db.prepare("SELECT value FROM settings WHERE key = 'geminiApiKey'").get();
+        translated = await translateWithGemini(enSrtContent, lang, keyRow?.value);
+      } else if (activeProvider === 'deepseek') {
+        const keyRow = db.prepare("SELECT value FROM settings WHERE key = 'deepseekApiKey'").get();
+        translated = await translateWithDeepSeek(enSrtContent, lang, keyRow?.value);
+      } else if (activeProvider === 'claude') {
+        const keyRow = db.prepare("SELECT value FROM settings WHERE key = 'claudeApiKey'").get();
+        translated = await translateWithClaude(enSrtContent, lang, keyRow?.value);
+      } else {
+        translated = await translateWithGoogleTranslate(enSrtContent, lang);
+      }
+      fs.writeFileSync(targetSubPath, translated);
+      console.log(`[SubtitleService] Auto-translated ${movieOrEp.title || movieOrEp.show_title} to ${lang}`);
+      eventBus.success('Subtitle translated', { title: movieOrEp.title || movieOrEp.show_title, language: lang });
+    } catch (translateErr) {
+      console.error(`[SubtitleService] Auto-translate ${movieOrEp.title || movieOrEp.show_title} to ${lang} failed:`, translateErr.message);
+    }
+  };
 
   // Movies
   const movies = db.prepare("SELECT * FROM movies WHERE status = 'downloaded' AND file_path IS NOT NULL").all();
@@ -267,32 +362,7 @@ const autoTranslateExisting = async () => {
 
       const enSrtContent = fs.readFileSync(enSubPath, 'utf-8');
       for (const lang of targetLangs) {
-        const tCode = { 'Dutch': 'nl', 'French': 'fr', 'German': 'de', 'Spanish': 'es', 'Italian': 'it', 'Portuguese': 'pt' }[lang];
-        if (!tCode || providerLangs.includes(tCode)) continue;
-        const targetSubPath = path.join(parsedPath.dir, `${parsedPath.name}.${tCode}.srt`);
-        if (fs.existsSync(targetSubPath)) continue;
-
-        console.log(`[SubtitleService] Auto-translating ${movie.title} to ${lang}`);
-        try {
-          let translated;
-          if (activeProvider === 'gemini') {
-            const keyRow = db.prepare("SELECT value FROM settings WHERE key = 'geminiApiKey'").get();
-            translated = await translateWithGemini(enSrtContent, lang, keyRow?.value);
-          } else if (activeProvider === 'deepseek') {
-            const keyRow = db.prepare("SELECT value FROM settings WHERE key = 'deepseekApiKey'").get();
-            translated = await translateWithDeepSeek(enSrtContent, lang, keyRow?.value);
-          } else if (activeProvider === 'claude') {
-            const keyRow = db.prepare("SELECT value FROM settings WHERE key = 'claudeApiKey'").get();
-            translated = await translateWithClaude(enSrtContent, lang, keyRow?.value);
-          } else {
-            translated = await translateWithGoogleTranslate(enSrtContent, lang);
-          }
-          fs.writeFileSync(targetSubPath, translated);
-          console.log(`[SubtitleService] Auto-translated ${movie.title} to ${lang}`);
-          eventBus.success('Subtitle translated', { title: movie.title, language: lang });
-        } catch (translateErr) {
-          console.error(`[SubtitleService] Auto-translate ${movie.title} to ${lang} failed:`, translateErr.message);
-        }
+        await translateOrNative(parsedPath, movie, lang, enSrtContent);
       }
     } catch (err) {
       console.error(`[SubtitleService] Auto-translate check failed for ${movie.title}:`, err.message);
@@ -314,37 +384,96 @@ const autoTranslateExisting = async () => {
       if (!fs.existsSync(enSubPath)) continue;
 
       const enSrtContent = fs.readFileSync(enSubPath, 'utf-8');
-      const label = `${ep.show_title} S${String(ep.season_number).padStart(2, '0')}E${String(ep.episode_number).padStart(2, '0')}`;
+      // Build a movie-like object for the helper
+      const epLike = { ...ep, title: `${ep.show_title} S${String(ep.season_number).padStart(2, '0')}E${String(ep.episode_number).padStart(2, '0')}`, year: ep.year || (new Date()).getFullYear() };
       for (const lang of targetLangs) {
-        const tCode = { 'Dutch': 'nl', 'French': 'fr', 'German': 'de', 'Spanish': 'es', 'Italian': 'it', 'Portuguese': 'pt' }[lang];
-        if (!tCode || providerLangs.includes(tCode)) continue;
-        const targetSubPath = path.join(parsedPath.dir, `${parsedPath.name}.${tCode}.srt`);
-        if (fs.existsSync(targetSubPath)) continue;
-
-        console.log(`[SubtitleService] Auto-translating ${label} to ${lang}`);
-        try {
-          let translated;
-          if (activeProvider === 'gemini') {
-            const keyRow = db.prepare("SELECT value FROM settings WHERE key = 'geminiApiKey'").get();
-            translated = await translateWithGemini(enSrtContent, lang, keyRow?.value);
-          } else if (activeProvider === 'deepseek') {
-            const keyRow = db.prepare("SELECT value FROM settings WHERE key = 'deepseekApiKey'").get();
-            translated = await translateWithDeepSeek(enSrtContent, lang, keyRow?.value);
-          } else if (activeProvider === 'claude') {
-            const keyRow = db.prepare("SELECT value FROM settings WHERE key = 'claudeApiKey'").get();
-            translated = await translateWithClaude(enSrtContent, lang, keyRow?.value);
-          } else {
-            translated = await translateWithGoogleTranslate(enSrtContent, lang);
-          }
-          fs.writeFileSync(targetSubPath, translated);
-          console.log(`[SubtitleService] Auto-translated ${label} to ${lang}`);
-          eventBus.success('Subtitle translated', { title: label, language: lang });
-        } catch (translateErr) {
-          console.error(`[SubtitleService] Auto-translate ${label} to ${lang} failed:`, translateErr.message);
-        }
+        await translateOrNative(parsedPath, epLike, lang, enSrtContent);
       }
     } catch (err) {
       console.error(`[SubtitleService] Auto-translate check failed for episode:`, err.message);
+    }
+  }
+};
+
+const upgradeTranslatedToNative = async () => {
+  const preferNative = db.prepare("SELECT value FROM settings WHERE key = 'preferNativeBeforeTranslate'").get();
+  if (!preferNative || preferNative.value !== 'true') return;
+
+  const osApiKeyRow = db.prepare("SELECT value FROM settings WHERE key = 'osApiKey'").get();
+  const subdlApiKeyRow = db.prepare("SELECT value FROM settings WHERE key = 'subdlApiKey'").get();
+  const subsourceApiKeyRow = db.prepare("SELECT value FROM settings WHERE key = 'subsourceApiKey'").get();
+  if (!osApiKeyRow?.value && !subdlApiKeyRow?.value && !subsourceApiKeyRow?.value) return;
+
+  let targetLangs = [];
+  try {
+    const row = db.prepare("SELECT value FROM settings WHERE key = 'targetLangs'").get();
+    if (row) targetLangs = JSON.parse(row.value);
+  } catch {}
+  const LANG_TO_CODE = { 'Dutch': 'nl', 'French': 'fr', 'German': 'de', 'Spanish': 'es', 'Italian': 'it', 'Portuguese': 'pt' };
+  const targetCodes = targetLangs.map(l => LANG_TO_CODE[l]).filter(Boolean);
+
+  const tryDownloadNative = async (item, langCode) => {
+    let srtContent = null;
+    if (!srtContent && osApiKeyRow?.value) {
+      try { srtContent = await tryOpenSubtitles(osApiKeyRow.value, item, langCode); } catch (e) {}
+    }
+    if (!srtContent && subdlApiKeyRow?.value) {
+      try { srtContent = await trySubdl(subdlApiKeyRow.value, item, item.year || (new Date()).getFullYear(), langCode); } catch (e) {}
+    }
+    if (!srtContent && subsourceApiKeyRow?.value) {
+      try { srtContent = await trySubsource(subsourceApiKeyRow.value, item, langCode); } catch (e) {}
+    }
+    return srtContent;
+  };
+
+  // Movies
+  const movies = db.prepare("SELECT * FROM movies WHERE status = 'downloaded' AND file_path IS NOT NULL").all();
+  for (const movie of movies) {
+    try {
+      if (!fs.existsSync(movie.file_path)) continue;
+      const parsedPath = path.parse(movie.file_path);
+      for (const tCode of targetCodes) {
+        const subPath = path.join(parsedPath.dir, `${parsedPath.name}.${tCode}.srt`);
+        if (!fs.existsSync(subPath)) continue; // Only upgrade existing (translated) files
+        console.log(`[SubtitleService] Upgrade check: trying native ${tCode} for ${movie.title}`);
+        const nativeContent = await tryDownloadNative(movie, tCode);
+        if (nativeContent) {
+          fs.writeFileSync(subPath, nativeContent);
+          console.log(`[SubtitleService] Upgraded ${movie.title} ${tCode} from translated to native`);
+          eventBus.success('Subtitle upgraded', { title: movie.title, language: tCode });
+        }
+      }
+    } catch (err) {
+      console.error(`[SubtitleService] Upgrade check failed for ${movie.title}:`, err.message);
+    }
+  }
+
+  // Episodes
+  const episodes = db.prepare(`
+    SELECT e.*, s.title as show_title, s.tmdb_id, s.year
+    FROM episodes e
+    JOIN shows s ON e.show_id = s.id
+    WHERE e.status = 'downloaded' AND e.file_path IS NOT NULL
+  `).all();
+  for (const ep of episodes) {
+    try {
+      if (!fs.existsSync(ep.file_path)) continue;
+      const parsedPath = path.parse(ep.file_path);
+      const label = `${ep.show_title} S${String(ep.season_number).padStart(2, '0')}E${String(ep.episode_number).padStart(2, '0')}`;
+      for (const tCode of targetCodes) {
+        const subPath = path.join(parsedPath.dir, `${parsedPath.name}.${tCode}.srt`);
+        if (!fs.existsSync(subPath)) continue;
+        console.log(`[SubtitleService] Upgrade check: trying native ${tCode} for ${label}`);
+        const epLike = { ...ep, tmdb_id: ep.tmdb_id, title: label, year: ep.year || (new Date()).getFullYear() };
+        const nativeContent = await tryDownloadNative(epLike, tCode);
+        if (nativeContent) {
+          fs.writeFileSync(subPath, nativeContent);
+          console.log(`[SubtitleService] Upgraded ${label} ${tCode} from translated to native`);
+          eventBus.success('Subtitle upgraded', { title: label, language: tCode });
+        }
+      }
+    } catch (err) {
+      console.error(`[SubtitleService] Upgrade check failed for ${label}:`, err.message);
     }
   }
 };
@@ -356,6 +485,7 @@ const init = () => {
     await downloadSubtitlesForMovies();
     await downloadSubtitlesForEpisodes();
     await autoTranslateExisting();
+    await upgradeTranslatedToNative();
   };
   
   taskRegistry.registerTask(
@@ -595,9 +725,9 @@ const searchSubtitlesForMovie = async (movie, langCode) => {
         if (matching.length > 0) {
           results.push({ provider: 'SubDL', items: matching.map(item => ({
             id: item.sd_id || item.id,
-            name: item.filename || 'Subtitle',
+            name: item.release_name || item.name || 'Subtitle',
             language: item.language,
-            release: item.filename || '',
+            release: item.release_name || item.name || '',
             downloads: item.downloads || 0,
             rating: item.rating || 0,
             fps: item.fps || null,

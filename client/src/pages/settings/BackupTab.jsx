@@ -60,10 +60,8 @@ export default function BackupTab() {
   };
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6">
-      <div className="flex items-center justify-between mb-2">
-        <h2 className="text-2xl font-bold text-slate-300">Database Backup & Restore</h2>
-      </div>
+    <div className="max-w-5xl mx-auto space-y-8 animate-fade-in">
+      <h2 className="text-2xl font-bold text-slate-300 mb-2">Database Backup & Restore</h2>
 
       <div className="glass-panel rounded-2xl p-6 space-y-6">
         <div>

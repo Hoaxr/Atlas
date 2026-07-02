@@ -4,7 +4,7 @@ import api from '../lib/api';
 import { formatSize, parseResolution, LANG_LABEL, LANG_NAME } from '../lib/format';
 import { useSettings } from '../lib/useSettings';
 import { useTMDBDetails } from '../lib/useTMDBDetails';
-import { ArrowLeft, HardDrive, Tv, PlayCircle, ChevronDown, ChevronRight, Bookmark, BookmarkMinus, Search, Star, X, RefreshCw, Loader2, Download, Heart, CheckSquare, Trash2 } from 'lucide-react';
+import { ArrowLeft, HardDrive, Tv, PlayCircle, ChevronDown, ChevronRight, Bookmark, BookmarkMinus, Search, Star, X, RefreshCw, Loader2, Download, Heart, CheckSquare, Trash2, Film } from 'lucide-react';
 import { customAlert, customConfirm } from '../utils/alerts';
 import TrailerModal from '../components/TrailerModal';
 import ManualSearchModal from '../components/ManualSearchModal';
@@ -12,6 +12,7 @@ import EpisodeDetailsModal from '../components/EpisodeDetailsModal';
 import RemapModal from '../components/RemapModal';
 import SubSearchModal from '../components/SubSearchModal';
 import SubtitleLanguageBadge from '../components/shared/SubtitleLanguageBadge';
+import { ProviderLabel } from '../utils/providerColors';
 
 export default function ShowDetails() {
   const { id } = useParams();
@@ -213,12 +214,25 @@ export default function ShowDetails() {
   }
 
   return (
-    <div className="space-y-6 max-w-6xl mx-auto">
+    <div className="relative min-h-screen">
+      {/* Backdrop background */}
+      {tmdbDetails?.backdrop_path && (
+        <div className="fixed inset-0 z-0">
+          <img
+            src={`https://image.tmdb.org/t/p/original${tmdbDetails.backdrop_path}`}
+            alt=""
+            className="w-full h-full object-cover"
+          />
+          <div className="absolute inset-0 bg-gradient-to-b from-slate-950/85 via-slate-950/60 to-slate-950" />
+        </div>
+      )}
+
+      <div className="relative z-10 space-y-6 max-w-6xl mx-auto">
       <button 
         onClick={() => navigate('/shows')} 
-        className="flex items-center gap-2 text-slate-400 hover:text-white transition-colors"
+        className="w-full md:w-auto flex items-center justify-center gap-2 py-3 md:py-0 bg-slate-800/50 md:bg-transparent rounded-xl md:rounded-none border border-white/5 md:border-none text-slate-300 md:text-slate-400 hover:text-white transition-colors"
       >
-        <ArrowLeft className="w-4 h-4" /> Back to Shows
+        <ArrowLeft className="w-5 h-5 md:w-4 md:h-4" /> Back to Shows
       </button>
 
       {/* Hero / Banner Section */}
@@ -242,40 +256,40 @@ export default function ShowDetails() {
         </div>
         
         <div className="p-8 md:w-2/3 lg:w-3/4 flex flex-col justify-center">
-          <h1 className="text-4xl md:text-5xl font-black text-white mb-2 tracking-tight flex items-center gap-3">
+          <h1 className="text-2xl md:text-5xl font-black text-white mb-2 tracking-tight flex items-center gap-2 md:gap-3 min-w-0">
             <button 
               onClick={async () => {
                 try {
                   const res = await api.post(`/library/shows/${show.id}/toggle-monitor`);
                   if (res.data.status === 'success') {
-                    fetchShowData(); // refresh
+                    fetchShowData();
                   }
                 } catch (err) {
                   customAlert('Failed to toggle monitor status', 'error');
                 }
               }}
-              className="hover:scale-110 transition-transform cursor-pointer focus:outline-none"
+              className="shrink-0 hover:scale-110 transition-transform cursor-pointer focus:outline-none"
               title={show.monitored ? "Monitored" : "Unmonitored"}
               aria-label={show.monitored ? "Unmonitor show" : "Monitor show"}
             >
               {show.monitored ? (
-                <Bookmark className="w-8 h-8 md:w-10 md:h-10 text-purple-400 fill-purple-400" />
+                <Bookmark className="w-7 h-7 md:w-10 md:h-10 text-purple-400 fill-purple-400" />
               ) : (
-                <BookmarkMinus className="w-8 h-8 md:w-10 md:h-10 text-slate-500" />
+                <BookmarkMinus className="w-7 h-7 md:w-10 md:h-10 text-slate-500" />
               )}
             </button>
 
-            <span>
-              {show.title} <span className="text-slate-400 font-light">({show.year})</span>
+            <span className="flex-1 min-w-0 truncate text-2xl md:text-5xl">
+              {show.title} <span className="text-slate-400 font-light whitespace-nowrap">({show.year})</span>
             </span>
             <button
               onClick={refreshAll}
               disabled={isRefreshing}
-              className="mr-2 p-2 bg-slate-800/50 hover:bg-slate-700 rounded-lg transition-colors text-slate-400 hover:text-purple-400 disabled:opacity-50"
+              className="shrink-0 p-1.5 md:p-2 bg-slate-800/50 hover:bg-slate-700 rounded-lg transition-colors text-slate-400 hover:text-purple-400 disabled:opacity-50"
               title="Refresh show information from TMDB"
               aria-label="Refresh show information from TMDB"
             >
-              <RefreshCw className={`w-5 h-5 ${isRefreshing ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`w-4 h-4 md:w-5 md:h-5 ${isRefreshing ? 'animate-spin' : ''}`} />
             </button>
           </h1>
           
@@ -306,13 +320,17 @@ export default function ShowDetails() {
             {show.overview || 'No overview available for this show.'}
           </p>
           
-          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-x-4 gap-y-6 w-full mt-4 text-sm bg-slate-900/50 p-5 rounded-xl border border-white/5">
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-x-4 gap-y-5 w-full mt-4 text-sm bg-slate-900/50 p-5 rounded-xl border border-white/5">
             <div className="col-span-full">
-              <p className="text-slate-500 text-[10px] uppercase tracking-widest font-bold mb-1">Path</p>
-              <p className="font-mono text-xs text-slate-300 truncate" title={show.folder_path}>{show.folder_path || 'Not downloaded'}</p>
+              <div className="flex items-center gap-1.5 text-slate-500 text-[10px] uppercase tracking-widest font-bold mb-1">
+                <HardDrive className="w-3 h-3" /> Path
+              </div>
+              <p className="font-mono text-xs text-slate-300 truncate" title={show.folder_path}>{show.folder_path || <span className="text-slate-600 italic">Not downloaded</span>}</p>
             </div>
             <div>
-              <p className="text-slate-500 text-[10px] uppercase tracking-widest font-bold mb-1">Resolution</p>
+              <div className="flex items-center gap-1.5 text-slate-500 text-[10px] uppercase tracking-widest font-bold mb-1.5">
+                <Film className="w-3 h-3" /> Resolution
+              </div>
               {(() => {
                 let res = 'Unknown';
                 if (episodes && episodes.length > 0) {
@@ -326,18 +344,17 @@ export default function ShowDetails() {
                     }
                   }
                 }
-                
                 return res !== 'Unknown' ? (
-                  <span className="px-2 py-0.5 rounded text-xs font-medium bg-slate-800 text-slate-300 border border-slate-700">
-                    {res}
-                  </span>
+                  <span className="px-2 py-0.5 rounded text-xs font-medium bg-slate-800 text-slate-300 border border-slate-700">{res}</span>
                 ) : (
-                  <p className="font-medium text-slate-500">-</p>
+                  <p className="font-medium text-slate-500">—</p>
                 );
               })()}
             </div>
             <div className="lg:col-span-2">
-              <p className="text-slate-500 text-[10px] uppercase tracking-widest font-bold mb-1">Quality Profile</p>
+              <div className="flex items-center gap-1.5 text-slate-500 text-[10px] uppercase tracking-widest font-bold mb-1.5">
+                <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg> Quality Profile
+              </div>
               {updatingQuality ? (
                 <div className="flex items-center gap-2">
                   <Loader2 className="w-3 h-3 animate-spin text-cyan-400" />
@@ -357,48 +374,54 @@ export default function ShowDetails() {
               )}
             </div>
             <div>
-              <p className="text-slate-500 text-[10px] uppercase tracking-widest font-bold mb-1">Size</p>
+              <div className="flex items-center gap-1.5 text-slate-500 text-[10px] uppercase tracking-widest font-bold mb-1.5">
+                <HardDrive className="w-3 h-3" /> Size
+              </div>
               <p className="font-medium text-slate-300">{formatSize(show.folder_size)}</p>
             </div>
-            
             <div>
-              <p className="text-slate-500 text-[10px] uppercase tracking-widest font-bold mb-1">Watched</p>
-              <p className={`font-bold ${show.watched ? 'text-emerald-400' : 'text-slate-500'}`}>
-                {show.watched ? '✓ Yes' : 'No'}
-              </p>
+              <div className="flex items-center gap-1.5 text-slate-500 text-[10px] uppercase tracking-widest font-bold mb-1.5">
+                <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg> Watched
+              </div>
+              <p className={`font-bold ${show.watched ? 'text-emerald-400' : 'text-slate-500'}`}>{show.watched ? '✓ Yes' : 'No'}</p>
             </div>
-            {tmdbDetails && tmdbDetails.original_language && (
+            {tmdbDetails?.original_language && (
               <div>
-                <p className="text-slate-500 text-[10px] uppercase tracking-widest font-bold mb-1">Language</p>
+                <div className="flex items-center gap-1.5 text-slate-500 text-[10px] uppercase tracking-widest font-bold mb-1.5">
+                  <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg> Language
+                </div>
                 <p className="font-medium text-slate-300 uppercase">{tmdbDetails.original_language}</p>
               </div>
             )}
-            {tmdbDetails && tmdbDetails.networks?.length > 0 && (
-              <div className="col-span-2 md:col-span-2 lg:col-span-2">
-                <p className="text-slate-500 text-[10px] uppercase tracking-widest font-bold mb-1">Network</p>
+            {tmdbDetails?.networks?.length > 0 && (
+              <div className="col-span-2">
+                <div className="flex items-center gap-1.5 text-slate-500 text-[10px] uppercase tracking-widest font-bold mb-1.5">
+                  <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><path d="M8 21h8M12 17v4"/></svg> Network
+                </div>
                 <p className="font-medium text-slate-300 truncate" title={tmdbDetails.networks[0].name}>{tmdbDetails.networks[0].name}</p>
               </div>
             )}
-            {tmdbDetails && tmdbDetails.genres?.length > 0 && (
-              <div className="col-span-2 md:col-span-3 lg:col-span-3">
-                <p className="text-slate-500 text-[10px] uppercase tracking-widest font-bold mb-1">Genres</p>
-                <p className="font-medium text-slate-300 truncate">{tmdbDetails.genres.map(g => g.name).join(', ')}</p>
+            {tmdbDetails?.genres?.length > 0 && (
+              <div className="col-span-full">
+                <div className="flex items-center gap-1.5 text-slate-500 text-[10px] uppercase tracking-widest font-bold mb-2">
+                  <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg> Genres
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {tmdbDetails.genres.map(g => (
+                    <span key={g.id} className="px-2.5 py-1 rounded-lg text-xs font-medium bg-purple-500/10 text-purple-400 border border-purple-500/20">{g.name}</span>
+                  ))}
+                </div>
               </div>
             )}
 
             {/* TMDB Link / Remap */}
-            <div className="col-span-full border-t border-white/5 pt-4 mt-2 flex items-center justify-between">
+            <div className="col-span-full border-t border-white/5 pt-4 mt-1 flex items-center justify-between">
               <div className="flex items-center gap-6">
                 <div>
-                  <p className="text-slate-500 text-[10px] uppercase tracking-widest font-bold mb-1">TMDB ID</p>
-                  <a
-                    href={`https://www.themoviedb.org/tv/${show.tmdb_id}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="font-mono text-sm text-purple-400 hover:text-purple-300 underline"
-                  >
-                    {show.tmdb_id}
-                  </a>
+                  <div className="flex items-center gap-1.5 text-slate-500 text-[10px] uppercase tracking-widest font-bold mb-1">
+                    <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg> TMDB ID
+                  </div>
+                  <a href={`https://www.themoviedb.org/tv/${show.tmdb_id}`} target="_blank" rel="noopener noreferrer" className="font-mono text-sm text-purple-400 hover:text-purple-300 underline">{show.tmdb_id}</a>
                 </div>
                 {show.tmdb_status && (
                   <div>
@@ -409,18 +432,16 @@ export default function ShowDetails() {
                       show.tmdb_status === 'Canceled' ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30' :
                       show.tmdb_status === 'In Production' ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30' :
                       'bg-slate-500/20 text-slate-400 border border-slate-500/30'
-                    }`}>
-                      {show.tmdb_status}
-                    </span>
+                    }`}>{show.tmdb_status}</span>
                   </div>
                 )}
               </div>
               <button
                 onClick={() => {
-                  setRemapModalOpen(true);
-                  setRemapQuery('');
-                  setRemapResults([]);
-                  setRemapHasSearched(false);
+                  remap.setRemapModalOpen(true);
+                  remap.setRemapQuery('');
+                  remap.setRemapResults([]);
+                  remap.setRemapHasSearched(false);
                 }}
                 className="flex items-center gap-2 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors"
               >
@@ -430,26 +451,28 @@ export default function ShowDetails() {
           </div>
 
           {/* Action Buttons */}
-          <div className="flex gap-4 mt-6 border-t border-white/5 pt-6">
-            <button 
-              onClick={async () => {
-                const deleteFiles = await customConfirm(
-                  `Remove "${show.title}" from your library?\n\nAlso delete files from disk?`,
-                  { confirmText: 'Remove + Delete Files', cancelText: 'Remove Only', thirdOptionText: 'Cancel' }
-                );
-                if (deleteFiles === null) return; // cancelled
-                try {
-                  await api.delete(`/library/shows/${show.id}?deleteFiles=${deleteFiles === true}`);
-                  customAlert('Show removed from library.', 'success');
-                  navigate('/shows');
-                } catch (err) {
-                  customAlert(err.response?.data?.message || 'Failed to remove show.', 'error');
-                }
-              }}
-              className="ml-auto bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 font-bold px-4 py-2 rounded-xl flex items-center gap-2 transition-colors"
-            >
-              <Trash2 className="w-4 h-4" /> Delete Show
-            </button>
+          <div className="bg-slate-900/30 rounded-xl border border-white/5 p-4 mt-6">
+            <div className="flex justify-end">
+              <button 
+                onClick={async () => {
+                  const deleteFiles = await customConfirm(
+                    `Remove "${show.title}" from your library?\n\nAlso delete files from disk?`,
+                    { confirmText: 'Remove + Delete Files', cancelText: 'Remove Only', thirdOptionText: 'Cancel' }
+                  );
+                  if (deleteFiles === null) return;
+                  try {
+                    await api.delete(`/library/shows/${show.id}?deleteFiles=${deleteFiles === true}`);
+                    customAlert('Show removed from library.', 'success');
+                    navigate('/shows');
+                  } catch (err) {
+                    customAlert(err.response?.data?.message || 'Failed to remove show.', 'error');
+                  }
+                }}
+                className="bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 font-bold px-5 py-2.5 rounded-xl flex items-center gap-2 text-sm transition-colors"
+              >
+                <Trash2 className="w-4 h-4" /> Delete Show
+              </button>
+            </div>
           </div>
 
         </div>
@@ -470,12 +493,12 @@ export default function ShowDetails() {
                 : season !== latestSeason;
 
               return (
-              <div key={season} className="glass-panel rounded-2xl border border-white/5 overflow-hidden">
+              <div key={season} className="glass-panel rounded-2xl border border-white/5">
                 <div 
                   onClick={() => toggleSeason(season)}
-                  className="w-full flex justify-between items-center p-5 bg-slate-800/50 hover:bg-slate-800 transition-colors border-b border-white/5 cursor-pointer"
+                  className="w-full flex justify-between items-center p-4 sm:p-5 bg-slate-800/50 hover:bg-slate-800 transition-colors border-b border-white/5 cursor-pointer"
                 >
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-1.5 sm:gap-3">
                     <button 
                       onClick={async (e) => {
                         e.stopPropagation(); e.preventDefault();
@@ -486,13 +509,13 @@ export default function ShowDetails() {
                           customAlert('Failed to toggle season monitor', 'error');
                         }
                       }}
-                      className="p-2 hover:bg-slate-700 rounded-lg transition-colors text-slate-400 hover:text-white"
+                      className="p-1.5 sm:p-2 hover:bg-slate-700 rounded-lg transition-colors text-slate-400 hover:text-white"
                       title="Toggle Monitor for entire Season"
                     >
                       {seasons[season].some(ep => ep.monitored) ? (
-                        <Bookmark className="w-5 h-5 text-purple-400 fill-purple-400" />
+                        <Bookmark className="w-4 h-4 sm:w-5 sm:h-5 text-purple-400 fill-purple-400" />
                       ) : (
-                        <BookmarkMinus className="w-5 h-5 text-slate-500" />
+                        <BookmarkMinus className="w-4 h-4 sm:w-5 sm:h-5 text-slate-500" />
                       )}
                     </button>
                     <button 
@@ -513,17 +536,19 @@ export default function ShowDetails() {
                     </button>
                     <h3 className="text-xl font-bold text-purple-400">Season {season}</h3>
                   </div>
-                  <div className="flex items-center gap-4">
-                    <span className="text-sm font-medium text-slate-400 bg-slate-900 px-3 py-1 rounded-lg">
-                      {seasons[season].length} Episodes
+                  <div className="flex items-center gap-2 sm:gap-4">
+                    <span className="text-xs sm:text-sm font-medium text-slate-400 bg-slate-900 px-2 sm:px-3 py-0.5 sm:py-1 rounded-lg">
+                      <span className="sm:hidden">{seasons[season].length}</span>
+                      <span className="hidden sm:inline">{seasons[season].length} Episodes</span>
                     </span>
-                    {isCollapsed ? <ChevronRight className="w-6 h-6 text-slate-400" /> : <ChevronDown className="w-6 h-6 text-slate-400" />}
+                    {isCollapsed ? <ChevronRight className="w-4 h-4 sm:w-6 sm:h-6 text-slate-400" /> : <ChevronDown className="w-4 h-4 sm:w-6 sm:h-6 text-slate-400" />}
                   </div>
                 </div>
                 
                 {!isCollapsed && (
-                  <div className="p-0">
-                    <table className="w-full text-left border-collapse">
+                  <>
+                    {/* Desktop table */}
+                    <table className="hidden md:table w-full text-left border-collapse">
                       <thead>
                         <tr className="bg-slate-900/50 text-slate-400 text-sm uppercase tracking-wider border-b border-white/5">
                           <th className="px-6 py-4 font-medium w-16">#</th>
@@ -687,7 +712,148 @@ export default function ShowDetails() {
                         })()}
                       </tbody>
                     </table>
-                  </div>
+
+                    {/* Mobile episode cards */}
+                    <div className="md:hidden">
+                      {(() => {
+                        const seasonHasDownloads = seasons[season].some(e => e.file_path || e.status === 'downloaded');
+                        return seasons[season].map(ep => (
+                          <div
+                            key={ep.id}
+                            className="flex items-start gap-3 px-4 py-3.5 border-b border-white/5 last:border-b-0 hover:bg-slate-800/30 transition-colors cursor-pointer"
+                            onClick={() => setDetailsModalEpisode(ep)}
+                          >
+                            <span className="font-mono text-xs text-slate-500 shrink-0 mt-1 w-5 text-right">{ep.episode_number}</span>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-2">
+                                <p className="text-sm font-bold text-slate-200 truncate">{ep.title}</p>
+                                <button
+                                  onClick={async (e) => {
+                                    e.stopPropagation(); e.preventDefault();
+                                    if (ep.status === 'downloading') {
+                                      if (await customConfirm("Reset status to monitored?")) {
+                                        try {
+                                          await api.post(`/library/episodes/${ep.id}/reset`);
+                                          fetchShowData();
+                                          customAlert('Status reset to monitored');
+                                        } catch (e) {
+                                          customAlert('Failed to reset status', 'error');
+                                        }
+                                      }
+                                    } else {
+                                      try {
+                                        await api.post(`/library/episodes/${ep.id}/toggle-monitor`);
+                                        fetchShowData();
+                                      } catch (e) {
+                                        customAlert('Failed to toggle monitor status', 'error');
+                                      }
+                                    }
+                                  }}
+                                  className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded-full shrink-0 transition-colors whitespace-nowrap ${
+                                    ep.status === 'downloading' ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30' :
+                                    ep.status === 'downloaded' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' :
+                                    !ep.monitored ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30' :
+                                    (!ep.file_path && !ep.air_date && !seasonHasDownloads) || (ep.air_date && new Date(ep.air_date) > new Date()) ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30' :
+                                    'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                                  }`}
+                                >
+                                  {ep.status === 'downloading' ? 'DL' : ep.status === 'downloaded' ? 'Ready' : !ep.monitored ? 'Off' : 'On'}
+                                </button>
+                              </div>
+                              <div className="flex items-center gap-2 mt-1.5">
+                                <div className="flex items-center gap-1 flex-wrap min-w-0 flex-1">
+                                  {!ep.file_path ? (
+                                    <span className="text-[10px] text-slate-600">—</span>
+                                  ) : (
+                                    (() => {
+                                      const existingCodes = ep.subtitles?.map(s => s.lang) || [];
+                                      const hasExistingSub = ep.subtitles?.length > 0;
+                                      const subKey = `m-${ep.id}`;
+                                      return providerLangs.map(code => (
+                                        <SubtitleLanguageBadge
+                                          key={code}
+                                          code={code}
+                                          exists={existingCodes.includes(code)}
+                                          hasExistingSub={hasExistingSub}
+                                          isOpen={openLangMenu === `${subKey}-${code}`}
+                                          downloading={downloadingSubs[`${subKey}-${code}`]}
+                                          onOpenMenu={() => setOpenLangMenu(openLangMenu === `${subKey}-${code}` ? null : `${subKey}-${code}`)}
+                                          onAutoSearch={async () => {
+                                            setOpenLangMenu(null);
+                                            setDownloadingSubs(prev => ({ ...prev, [`${subKey}-${code}`]: true }));
+                                            try {
+                                              const res = await api.post(`/library/episodes/${ep.id}/download-subs`, { langCode: code });
+                                              customAlert(res.data.message);
+                                              fetchShowData();
+                                            } catch (err) {
+                                              customAlert(err.response?.data?.message || 'Auto search failed', 'error');
+                                            } finally {
+                                              setDownloadingSubs(prev => ({ ...prev, [`${subKey}-${code}`]: false }));
+                                            }
+                                          }}
+                                          onManualSearch={() => {
+                                            setOpenLangMenu(null);
+                                            setSubSearchModal({ open: true, code, label: LANG_NAME[code] || code, episodeId: ep.id });
+                                            setSubSearchResults([]);
+                                            setSubSearched(false);
+                                          }}
+                                          onAutoTranslate={async () => {
+                                            setOpenLangMenu(null);
+                                            customAlert(`Translating to ${LANG_NAME[code]}...`, 'info');
+                                            try {
+                                              const res = await api.post(`/library/episodes/${ep.id}/translate-subs`, { targetLang: LANG_NAME[code] });
+                                              if (res.data.status === 'success') {
+                                                customAlert(res.data.message);
+                                                fetchShowData();
+                                              }
+                                            } catch (err) {
+                                              customAlert(err.response?.data?.message || 'Translation failed', 'error');
+                                            }
+                                          }}
+                                        />
+                                      ));
+                                    })()
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-1 shrink-0">
+                                  <button
+                                    onClick={async (e) => {
+                                      e.stopPropagation(); e.preventDefault();
+                                      customAlert(`Starting auto-search for S${ep.season_number}E${ep.episode_number}...`);
+                                      try {
+                                        const res = await api.post(`/library/episodes/${ep.id}/auto-search`);
+                                        if (res.data.status === 'success') {
+                                          customAlert(`Found & downloading: ${res.data.data.title}`);
+                                          fetchShowData();
+                                        }
+                                      } catch (err) {
+                                        customAlert('Auto-search failed', 'error');
+                                      }
+                                    }}
+                                    className="bg-emerald-500/15 hover:bg-emerald-500/30 text-emerald-400 border border-emerald-500/25 p-1.5 rounded-lg transition-colors"
+                                    title="Auto Search"
+                                  >
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/></svg>
+                                  </button>
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation(); e.preventDefault();
+                                      setSelectedEpisode(ep);
+                                      setSearchModalOpen(true);
+                                    }}
+                                    className="bg-purple-500/15 hover:bg-purple-500/30 text-purple-400 border border-purple-500/25 p-1.5 rounded-lg transition-colors"
+                                    title="Manual Search"
+                                  >
+                                    <Search className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        ));
+                      })()}
+                    </div>
+                  </>
                 )}
               </div>
             );
@@ -698,9 +864,13 @@ export default function ShowDetails() {
 
       {/* Cast & Crew Section */}
       {tmdbDetails?.credits?.cast?.length > 0 && (
-        <div className="mt-8">
-          <h2 className="text-xl font-bold text-white mb-4">Cast</h2>
-          <div className="flex gap-4 overflow-x-auto pb-4 snap-x">
+        <div className="mt-8 bg-slate-900/60 p-5 rounded-xl border border-white/5">
+          <h2 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+            <svg className="w-5 h-5 text-purple-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            Cast
+            <span className="text-xs font-medium text-slate-500 bg-slate-800 px-2 py-0.5 rounded-full">{tmdbDetails.credits.cast.slice(0, 15).length}</span>
+          </h2>
+          <div className="flex gap-4 overflow-x-auto pb-4 snap-x hide-scrollbar">
             {tmdbDetails.credits.cast.slice(0, 15).map(person => (
               <Link key={person.credit_id} to={`/person/${person.id}`} className="shrink-0 w-32 group snap-start">
                 <div className="aspect-[2/3] rounded-xl overflow-hidden bg-slate-800 mb-2 border border-white/5 group-hover:border-white/20 transition-colors">
@@ -802,16 +972,6 @@ export default function ShowDetails() {
                   <Search className="w-5 h-5 text-cyan-400" />
                   Search Subtitles — {subSearchModal.label}
                 </h3>
-                {(() => {
-                  const ep = episodes.find(e => e.id === subSearchModal.episodeId);
-                  if (!ep?.file_path) return null;
-                  const parts = ep.file_path.split('/');
-                  const sceneName = parts[parts.length - 1].replace(/\.[^.]+$/, '');
-                  return <>
-                    <p className="text-xs text-slate-500 mt-2 font-mono truncate max-w-[550px]" title={ep.file_path}>{ep.file_path}</p>
-                    <p className="text-[10px] text-slate-600 mt-1 font-mono truncate max-w-[550px]">{sceneName}</p>
-                  </>;
-                })()}
               </div>
               <button onClick={() => setSubSearchModal({ open: false, code: '', label: '', episodeId: null })} className="text-slate-400 hover:text-white p-1 rounded-lg transition-colors">
                 <X className="w-5 h-5" />
@@ -849,7 +1009,67 @@ export default function ShowDetails() {
                             key={ii}
                             className="w-full bg-slate-800/30 hover:bg-slate-700/50 rounded-lg border border-white/5 hover:border-cyan-500/30 transition-all group"
                           >
-                            <div className="flex items-center gap-3 px-3 py-2.5">
+                            {/* Mobile card layout */}
+                            <div className="md:hidden p-3 space-y-2">
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="flex items-center gap-2 min-w-0 flex-1">
+                                  <span className={`shrink-0 text-[11px] font-bold px-1.5 py-0.5 rounded ${
+                                    item.rating >= 100 ? 'bg-emerald-500/20 text-emerald-400' :
+                                    item.rating >= 80 ? 'bg-emerald-500/20 text-emerald-400' :
+                                    item.rating >= 60 ? 'bg-yellow-500/20 text-yellow-400' :
+                                    item.rating > 0 ? 'bg-slate-700 text-slate-400' : 'bg-slate-800 text-slate-600'
+                                  }`}>
+                                    {item.rating > 0 ? `${Math.round(item.rating)}%` : '—'}
+                                  </span>
+                                  <span className="shrink-0 text-[10px] uppercase font-bold bg-slate-800 text-slate-300 px-1.5 py-0.5 rounded relative">
+                                    {item.language || subSearchModal.label}
+                                    {item.hearingImpaired && <span className="absolute -top-1 -right-1 w-2 h-2 bg-yellow-400 rounded-full" />}
+                                  </span>
+                                  <a href={item.url || '#'} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} className="text-[10px] text-slate-500 font-medium truncate hover:underline">
+                                    <ProviderLabel provider={provider.provider} />
+                                  </a>
+                                </div>
+                                <button
+                                  onClick={async () => {
+                                    const subKey = `${subSearchModal.episodeId}`;
+                                    setDownloadingSubs(prev => ({ ...prev, [`${subKey}-${subSearchModal.code}`]: true }));
+                                    try {
+                                      const res = await api.post(`/library/episodes/${subSearchModal.episodeId}/download-subs`, {
+                                        langCode: subSearchModal.code,
+                                        url: provider.provider === 'SubDL' ? (item.url || null) : null,
+                                        fileId: item.fileId || null,
+                                        provider: provider.provider
+                                      });
+                                      customAlert(res.data.message);
+                                      setSubSearchModal({ open: false, code: '', label: '', episodeId: null });
+                                      fetchShowData();
+                                    } catch (err) {
+                                      customAlert(err.response?.data?.message || 'Download failed', 'error');
+                                    } finally {
+                                      setDownloadingSubs(prev => ({ ...prev, [`${subKey}-${subSearchModal.code}`]: false }));
+                                    }
+                                  }}
+                                  className="shrink-0 bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-400 border border-cyan-500/30 px-3 py-2 rounded-lg text-xs font-bold transition-colors"
+                                >
+                                  <Download className="w-4 h-4" />
+                                </button>
+                              </div>
+                              <p className="text-xs text-slate-300 leading-snug line-clamp-2" title={item.release || item.name}>
+                                {item.release || item.name}
+                              </p>
+                              <div className="flex items-center flex-wrap gap-x-2 gap-y-0.5">
+                                {item.uploader && (
+                                  <span className="text-[10px] text-slate-500 truncate max-w-[100px]" title={item.uploader}>{item.uploader}</span>
+                                )}
+                                {item.fromTrusted && <span className="text-[10px] text-emerald-400/80 font-medium">✓ Trusted</span>}
+                                {item.aiTranslated && <span className="text-[10px] text-amber-400/80">AI</span>}
+                                {item.downloads > 0 && <span className="text-[10px] text-slate-500">{item.downloads} DL</span>}
+                                {item.format && <span className="text-[10px] text-slate-600 uppercase">{item.format}</span>}
+                                {item.uploadDate && <span className="text-[10px] text-slate-500 ml-auto">{item.uploadDate}</span>}
+                              </div>
+                            </div>
+                            {/* Desktop row layout */}
+                            <div className="hidden md:flex items-center gap-3 px-3 py-2.5">
                               {/* Score */}
                               <span className={`w-14 text-center text-xs font-bold shrink-0 ${
                                 item.rating >= 100 ? 'text-emerald-400' :
@@ -876,15 +1096,7 @@ export default function ShowDetails() {
                                 onClick={(e) => e.stopPropagation()}
                                 className="w-20 text-[10px] truncate shrink-0 font-medium hover:underline"
                               >
-                                {provider.provider === 'OpenSubtitles' ? (
-                                  <span className="text-cyan-400">OpenSubtitles</span>
-                                ) : provider.provider === 'SubDL' ? (
-                                  <span className="text-amber-400">SubDL</span>
-                                ) : provider.provider === 'SubSource' ? (
-                                  <span className="text-purple-400">SubSource</span>
-                                ) : (
-                                  provider.provider
-                                )}
+                                <ProviderLabel provider={provider.provider} />
                               </a>
                               {/* Release & Uploader */}
                               <span className="flex-1 min-w-0">
@@ -965,6 +1177,7 @@ export default function ShowDetails() {
           </div>
         </div>
       )}
+    </div>
     </div>
   );
 }

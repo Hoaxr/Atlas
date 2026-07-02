@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
-import { Folder, FolderOpen, ChevronRight, Home, X, Loader2, Check } from 'lucide-react';
+import { Folder, FolderOpen, ChevronRight, Home, Loader2, Check } from 'lucide-react';
 import api from '../lib/api';
+import ModalShell from './shared/ModalShell';
+import InlineError from './shared/InlineError';
 
 export default function FolderBrowserModal({ open, onClose, onSelect, itemId, itemType = 'movies' }) {
   const [currentPath, setCurrentPath] = useState(null);
@@ -79,13 +81,7 @@ export default function FolderBrowserModal({ open, onClose, onSelect, itemId, it
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="folder-browser-title"
-        className="relative bg-slate-900 border border-white/10 rounded-2xl shadow-2xl w-full max-w-lg max-h-[80vh] flex flex-col overflow-hidden">
+    <ModalShell open={open} onClose={onClose} size="lg" noHeader noFloatingClose className="max-h-[80vh]">
         {/* Header */}
         <div className="flex items-center justify-between p-5 border-b border-white/10">
           <div className="flex items-center gap-3">
@@ -130,7 +126,7 @@ export default function FolderBrowserModal({ open, onClose, onSelect, itemId, it
               Loading...
             </div>
           ) : error ? (
-            <div className="text-center py-16 text-rose-400 text-sm">{error}</div>
+            <div className="px-5 py-4"><InlineError message={error} compact /></div>
           ) : entries.length === 0 ? (
             <div className="text-center py-16 text-slate-500 text-sm">
               {currentPath ? 'No subdirectories found.' : 'No library paths configured.'}
@@ -187,7 +183,6 @@ export default function FolderBrowserModal({ open, onClose, onSelect, itemId, it
             )}
           </button>
         </div>
-      </div>
-    </div>
+    </ModalShell>
   );
 }

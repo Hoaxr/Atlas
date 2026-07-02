@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Network, Server, BellRing, Save, CheckSquare, Square, Link, Loader2, Key } from 'lucide-react';
+import { Network, Server, BellRing, Save, CheckSquare, Square, Link, Loader2, Key, Eye, EyeOff } from 'lucide-react';
 import api from '../../lib/api';
 import { customAlert, customConfirm } from '../../utils/alerts';
 
@@ -26,6 +26,8 @@ export default function ConnectionsTab({
   const [saving, setSaving] = useState(false);
   const [testStatuses, setTestStatuses] = useState({ plex: null, jellyfin: null, emby: null });
   const [testingMedia, setTestingMedia] = useState({ plex: false, jellyfin: false, emby: false });
+  const [showTraktSecret, setShowTraktSecret] = useState(false);
+  const [showTraktId, setShowTraktId] = useState(false);
 
   // Plex OAuth state
   const [plexOAuth, setPlexOAuth] = useState({
@@ -128,6 +130,17 @@ export default function ConnectionsTab({
   const pollPlexPin = async (pinId) => {
     try {
       const res = await api.get(`/settings/plex/pin/${pinId}`);
+      if (res.data.data?.expired) {
+        setPlexOAuth({ loading: false, pinId: null, code: null, authUrl: null, polling: false });
+        customAlert('Plex authentication expired. Please try again.');
+        return;
+      }
+
+      if (res.data.data?.retryAfter) {
+        setTimeout(() => pollPlexPin(pinId), res.data.data.retryAfter * 1000);
+        return;
+      }
+
       if (res.data.status === 'success' && res.data.data.authorized) {
         const { authToken, plexUrl } = res.data.data;
         const updatedSettings = {
@@ -319,7 +332,7 @@ export default function ConnectionsTab({
               </div>
               <div>
                 <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Client Secret</label>
-                <input type="password" placeholder="Enter your Trakt Client Secret" className="w-full bg-slate-800/50 border border-slate-700 rounded-xl px-4 py-2.5 text-slate-200 focus:outline-none focus:ring-2 focus:ring-green-500/50 focus:border-green-500/50 transition-all" value={parentSettings?.traktClientSecret || ''} onChange={(e) => setParentSettings({ ...parentSettings, traktClientSecret: e.target.value })} />
+                <input type="text" placeholder="Enter your Trakt Client Secret" className="w-full bg-slate-800/50 border border-slate-700 rounded-xl px-4 py-2.5 text-slate-200 focus:outline-none focus:ring-2 focus:ring-green-500/50 focus:border-green-500/50 transition-all" value={parentSettings?.traktClientSecret || ''} onChange={(e) => setParentSettings({ ...parentSettings, traktClientSecret: e.target.value })} />
               </div>
             </div>
 
@@ -648,7 +661,7 @@ export default function ConnectionsTab({
         <button
           onClick={handleSave}
           disabled={saving}
-          className="px-6 py-2.5 bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-400 hover:to-blue-400 text-white font-bold rounded-xl shadow-lg shadow-cyan-500/20 flex items-center gap-2 transition-all disabled:opacity-50"
+          className="px-6 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-white font-bold rounded-xl shadow-lg shadow-emerald-500/20 flex items-center gap-2 transition-all disabled:opacity-50"
         >
           {saving ? (
             <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />

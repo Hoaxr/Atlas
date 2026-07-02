@@ -312,9 +312,14 @@ const doScan = async () => {
                 }
 
                 const showYear = matchedShow.first_air_date ? parseInt(matchedShow.first_air_date.split('-')[0]) : null;
+
+                // Default quality profile for shows (same as movies)
+                const defaultProfile = db.prepare('SELECT id FROM quality_profiles ORDER BY id ASC LIMIT 1').get();
+                const defaultProfileId = defaultProfile?.id || null;
+
                 const insertRes = db.prepare(`
-                  INSERT INTO shows (tmdb_id, title, year, poster_path, overview, status, folder_path, rating, folder_size)
-                  VALUES (?, ?, ?, ?, ?, 'downloaded', ?, ?, ?)
+                  INSERT INTO shows (tmdb_id, title, year, poster_path, overview, status, folder_path, rating, folder_size, quality_profile_id)
+                  VALUES (?, ?, ?, ?, ?, 'downloaded', ?, ?, ?, ?)
                 `).run(
                   matchedShow.id,
                   matchedShow.name,
@@ -323,7 +328,8 @@ const doScan = async () => {
                   matchedShow.overview,
                   showFolderPath,
                   showRating,
-                  folderSize
+                  folderSize,
+                  defaultProfileId
                 );
                 showId = insertRes.lastInsertRowid;
                 
@@ -369,11 +375,24 @@ const doScan = async () => {
             // ignore
           }
 
+          // Detect resolution for the episode
+          let resName = null;
+          try {
+            const t = file.name.toLowerCase();
+            const hasRes = t.includes('2160p') || t.includes('4k') || t.includes('1080p') || t.includes('720p') || t.includes('480p') || t.includes('sd');
+            if (hasRes) {
+              resName = file.name;
+            } else {
+              const res = await getResolution(fullPath);
+              if (res) resName = `Unknown ${res}`;
+            }
+          } catch { /* ignore */ }
+
           db.prepare(`
             UPDATE episodes 
-            SET file_path = ?, status = 'downloaded', file_size = ?
+            SET file_path = ?, status = 'downloaded', file_size = ?, scene_name = ?
             WHERE show_id = ? AND season_number = ? AND episode_number = ?
-          `).run(fullPath, fileSize, showId, seasonNumber, episodeNumber);
+          `).run(fullPath, fileSize, resName, showId, seasonNumber, episodeNumber);
 
           // Scan for subtitle files in the episode's directory
           const epLangs = await scanSubtitleLangs(fullPath);
@@ -475,15 +494,16 @@ const doScan = async () => {
     // ════════════════════════════════════════════
     const existingMovies = db.prepare("SELECT id, title, file_path, scene_name FROM movies WHERE status = 'downloaded' AND file_path IS NOT NULL").all();
     const existingShows = db.prepare("SELECT id, title, folder_path FROM shows WHERE status = 'downloaded' AND folder_path IS NOT NULL").all();
+    const existingEpisodes = db.prepare("SELECT id, show_id, file_path, scene_name FROM episodes WHERE status = 'downloaded' AND file_path IS NOT NULL").all();
     const allMovies = db.prepare("SELECT id, title, tmdb_id FROM movies WHERE tmdb_id IS NOT NULL").all();
     const allShows = db.prepare("SELECT id, title, tmdb_id FROM shows WHERE tmdb_id IS NOT NULL").all();
 
-    // File/folder sizes
-    const sizeTotal = existingMovies.length + existingShows.length;
+    // File/folder sizes + episode resolution
+    const sizeTotal = existingMovies.length + existingShows.length + existingEpisodes.length;
     const ratingTotal = allMovies.length + allShows.length;
     const stage3Total = sizeTotal + ratingTotal;
 
-    setStage(3, 'Updating file sizes...');
+    setStage(3, 'Updating file sizes and resolutions...');
     scanProgress.totalFiles = stage3Total;
 
     for (const m of existingMovies) {
@@ -503,6 +523,25 @@ const doScan = async () => {
           db.prepare('UPDATE movies SET file_size = ?, scene_name = ? WHERE id = ?').run(stat.size, resName, m.id);
         } else {
           db.prepare('UPDATE movies SET file_size = ? WHERE id = ?').run(stat.size, m.id);
+        }
+      } catch { /* skip */ }
+      scanProgress.processedFiles++;
+    }
+
+    scanProgress.currentPhase = 'Updating episode resolutions...';
+    for (const ep of existingEpisodes) {
+      if (scanProgress.cancelled) throw new Error('Scan cancelled by user');
+      try {
+        let resName = null;
+        try {
+          if (!ep.scene_name || ep.scene_name === '' || ep.scene_name.startsWith('Unknown ')) {
+            const res = await getResolution(ep.file_path);
+            if (res) resName = `Unknown ${res}`;
+          }
+        } catch { /* ignore */ }
+
+        if (resName) {
+          db.prepare('UPDATE episodes SET scene_name = ? WHERE id = ?').run(resName, ep.id);
         }
       } catch { /* skip */ }
       scanProgress.processedFiles++;

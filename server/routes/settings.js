@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const bcrypt = require('bcrypt');
 const db = require('../config/database');
 const { getSetting, setSetting } = require('../utils/settings');
 const downloadClientService = require('../services/downloadClientService');
@@ -23,6 +24,7 @@ router.get('/', (req, res, next) => {
     let providerLangs = ['en'];
     try { providerLangs = JSON.parse(getSetting('providerLangs') || '["en"]'); } catch { /* ignore */ }
     const autoTranslate = getSetting('autoTranslate') === 'true';
+    const preferNativeBeforeTranslate = getSetting('preferNativeBeforeTranslate') === 'true';
     const traktWatchedSync = getSetting('traktWatchedSync') === 'true';
     const traktAccessToken = getSetting('traktAccessToken');
     const traktClientSecret = getSetting('traktClientSecret');
@@ -70,6 +72,7 @@ router.get('/', (req, res, next) => {
         targetLangs,
         providerLangs,
         autoTranslate,
+        preferNativeBeforeTranslate,
         traktWatchedSync,
         traktAccessToken: mask(traktAccessToken),
         traktClientSecret: mask(traktClientSecret),
@@ -110,9 +113,9 @@ router.get('/', (req, res, next) => {
   }
 });
 
-router.post('/', (req, res, next) => {
+router.post('/', async (req, res, next) => {
   try {
-    const { tmdbApiKey, traktClientId, osApiKey, subdlApiKey, subsourceApiKey, geminiApiKey, deepseekApiKey, claudeApiKey, prowlarrUrl, prowlarrApiKey, translationProvider, targetLang, targetLangs, providerLangs, autoTranslate, traktWatchedSync, traktAccessToken, traktClientSecret, renameMovies, replaceIllegalCharacters, colonReplacement, standardMovieFormat, renameEpisodes, standardEpisodeFormat, seasonFolderFormat, removeCompletedDownloads, deleteTorrentFiles, hideCompletedDownloads, downloadPathMapping, defaultQualityProfileId, authEnabled, authBypassLocalhost, authUsername, authPassword, plexUrl, plexToken, jellyfinUrl, jellyfinApiKey, embyUrl, embyApiKey, discordWebhookUrl, telegramBotToken, telegramChatId, notifyOnGrab, notifyOnDownload, notifyOnPlaybackStart } = req.body;
+    const { tmdbApiKey, traktClientId, osApiKey, subdlApiKey, subsourceApiKey, geminiApiKey, deepseekApiKey, claudeApiKey, prowlarrUrl, prowlarrApiKey, translationProvider, targetLang, targetLangs, providerLangs, autoTranslate, preferNativeBeforeTranslate, traktWatchedSync, traktAccessToken, traktClientSecret, renameMovies, replaceIllegalCharacters, colonReplacement, standardMovieFormat, renameEpisodes, standardEpisodeFormat, seasonFolderFormat, removeCompletedDownloads, deleteTorrentFiles, hideCompletedDownloads, downloadPathMapping, defaultQualityProfileId, authEnabled, authBypassLocalhost, authUsername, authPassword, plexUrl, plexToken, jellyfinUrl, jellyfinApiKey, embyUrl, embyApiKey, discordWebhookUrl, telegramBotToken, telegramChatId, notifyOnGrab, notifyOnDownload, notifyOnPlaybackStart } = req.body;
     
     const isMasked = (val) => val && /^\*+$/.test(val);
     
@@ -139,6 +142,7 @@ router.post('/', (req, res, next) => {
     if (targetLangs !== undefined) setSetting('targetLangs', JSON.stringify(targetLangs));
     if (providerLangs !== undefined) setSetting('providerLangs', JSON.stringify(providerLangs));
     if (autoTranslate !== undefined) setSetting('autoTranslate', autoTranslate ? 'true' : 'false');
+    if (preferNativeBeforeTranslate !== undefined) setSetting('preferNativeBeforeTranslate', preferNativeBeforeTranslate ? 'true' : 'false');
     if (traktWatchedSync !== undefined) setSetting('traktWatchedSync', traktWatchedSync ? 'true' : 'false');
     if (traktAccessToken !== undefined && !isMasked(traktAccessToken)) setSetting('traktAccessToken', traktAccessToken);
     if (traktClientSecret !== undefined && !isMasked(traktClientSecret)) setSetting('traktClientSecret', traktClientSecret);
@@ -159,7 +163,19 @@ router.post('/', (req, res, next) => {
     if (authEnabled !== undefined) setSetting('authEnabled', authEnabled);
     if (authBypassLocalhost !== undefined) setSetting('authBypassLocalhost', authBypassLocalhost);
     if (authUsername !== undefined) setSetting('authUsername', authUsername);
-    if (authPassword !== undefined) setSetting('authPassword', authPassword);
+    if (authPassword !== undefined) {
+      setSetting('authPassword', authPassword);
+      // Create or update the admin user with a hashed password
+      const existingUser = db.prepare("SELECT id FROM users WHERE role = 'admin' LIMIT 1").get();
+      const hashed = await bcrypt.hash(authPassword, 10);
+      if (existingUser) {
+        const username = authUsername !== undefined ? authUsername : getSetting('authUsername');
+        db.prepare('UPDATE users SET password = ?, username = ? WHERE id = ?').run(hashed, username, existingUser.id);
+      } else {
+        const username = authUsername !== undefined ? authUsername : 'admin';
+        db.prepare("INSERT INTO users (username, password, role) VALUES (?, ?, 'admin')").run(username, hashed);
+      }
+    }
     
     if (plexUrl !== undefined) setSetting('plexUrl', plexUrl);
     if (plexToken !== undefined && !isMasked(plexToken)) setSetting('plexToken', plexToken);
@@ -365,6 +381,21 @@ router.get('/plex/pin/:pinId', async (req, res, next) => {
       }
     });
   } catch (err) {
+    const status = err.response?.status;
+    if (status === 404) {
+      // PIN expired or invalid — gracefully return unauthorized
+      return res.json({
+        status: 'success',
+        data: { authorized: false, expired: true }
+      });
+    }
+    if (status === 429) {
+      // Rate limited — tell frontend to try again later
+      return res.json({
+        status: 'success',
+        data: { authorized: false, retryAfter: parseInt(err.response.headers['retry-after'] || '10', 10) }
+      });
+    }
     next(err);
   }
 });
@@ -394,6 +425,96 @@ router.get('/clients/test', async (req, res) => {
       }
     }
     res.json({ status: 'success', data: statuses });
+  } catch (err) {
+    res.status(500).json({ status: 'error', message: err.message });
+  }
+});
+
+router.get('/clients/detect-mapping', async (req, res) => {
+  try {
+    const fs = require('fs');
+    const axios = require('axios');
+    const clients = db.prepare('SELECT * FROM download_clients').all();
+    const probes = ['/data', '/media', '/mnt', '/downloads', '/volume1', '/volume2'];
+
+    const tryMapping = (remotePath) => {
+      if (!remotePath) return null;
+      const parts = remotePath.split('/').filter(Boolean);
+      if (!parts.length) return null;
+      const remoteRoot = '/' + parts[0];
+      const subPath = remotePath.slice(remoteRoot.length).replace(/\/+$/, '');
+      for (const localRoot of probes) {
+        if (fs.existsSync(localRoot + subPath)) {
+          return [remoteRoot, localRoot];
+        }
+      }
+      return null;
+    };
+
+    for (const c of clients) {
+      try {
+        let remotePath = '';
+
+        if (c.type === 'qbittorrent') {
+          const qb = require('../services/clients/qbittorrent');
+          const cookie = await qb.login(c);
+          if (cookie) {
+            const prefs = await axios.get(`${c.host}:${c.port}/api/v2/app/preferences`, {
+              headers: { 'Cookie': cookie }, timeout: 5000
+            });
+            remotePath = prefs.data?.save_path || '';
+            if (!remotePath) {
+              const info = await axios.get(`${c.host}:${c.port}/api/v2/torrents/info?limit=1&filter=completed`, {
+                headers: { 'Cookie': cookie }, timeout: 5000
+              });
+              remotePath = info.data?.[0]?.save_path || '';
+            }
+          }
+        } else if (c.type === 'transmission') {
+          const sess = await axios.post(`${c.host}:${c.port}/transmission/rpc`, {
+            method: 'session-get'
+          }, { timeout: 5000 });
+          const cookie = sess.headers['x-transmission-session-id'];
+          const res2 = await axios.post(`${c.host}:${c.port}/transmission/rpc`, {
+            method: 'session-get'
+          }, { headers: { 'X-Transmission-Session-Id': cookie }, timeout: 5000 });
+          remotePath = res2.data?.arguments?.['download-dir'] || '';
+        } else if (c.type === 'deluge') {
+          const res2 = await axios.post(`${c.host}:${c.port}/json`, {
+            method: 'core.get_config',
+            params: [c.password]
+          }, { timeout: 5000 });
+          remotePath = res2.data?.result?.download_location || '';
+        } else if (c.type === 'sabnzbd') {
+          const res2 = await axios.get(`${c.host}:${c.port}/api`, {
+            params: { mode: 'get_config', section: 'misc', apikey: c.password, output: 'json' },
+            timeout: 5000
+          });
+          remotePath = res2.data?.config?.misc?.complete_dir || '';
+        } else if (c.type === 'nzbget') {
+          const res2 = await axios.post(`${c.host}:${c.port}/jsonrpc`, {
+            method: 'config'
+          }, { timeout: 5000 });
+          const cfg = res2.data?.result || [];
+          const destDir = cfg.find(o => o.Name === 'DestDir');
+          remotePath = destDir?.Value || '';
+        }
+
+        // Try preference-based path first, then fall back to completed torrents
+        let mapping = tryMapping(remotePath);
+        if (!mapping) {
+          const adapter = require('../services/downloadClientService');
+          const torrents = await adapter.getTorrents(); // uses configured client
+          const completed = (torrents || []).find(t => t.progress === 1);
+          if (completed) mapping = tryMapping(completed.save_path || completed.content_path || '');
+        }
+
+        if (mapping) {
+          return res.json({ status: 'success', data: mapping });
+        }
+      } catch {}
+    }
+    res.json({ status: 'success', data: null, message: 'Could not detect path mapping automatically. Set it manually.' });
   } catch (err) {
     res.status(500).json({ status: 'error', message: err.message });
   }

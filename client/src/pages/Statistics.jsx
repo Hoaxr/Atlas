@@ -177,29 +177,29 @@ export default function Statistics() {
           </h3>
 
           {/* Summary bar */}
-          <div className="flex items-center gap-4 mb-6 p-3 bg-slate-800/40 rounded-xl border border-white/5">
-            <div className="flex items-center gap-2">
-              <Film className="w-4 h-4 text-cyan-400" />
-              <span className="text-sm font-bold text-slate-200">{stats.totalMovies}</span>
-              <span className="text-[10px] text-slate-500">movies</span>
+          <div className="flex items-center gap-x-2 sm:gap-4 mb-6 p-2.5 sm:p-3 bg-slate-800/40 rounded-xl border border-white/5 overflow-x-auto hide-scrollbar">
+            <div className="flex items-center gap-1.5 sm:gap-2">
+              <Film className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-cyan-400 shrink-0" />
+              <span className="text-xs sm:text-sm font-bold text-slate-200">{stats.totalMovies}</span>
+              <span className="text-[10px] text-slate-500 hidden sm:inline">movies</span>
             </div>
-            <div className="w-px h-6 bg-slate-700" />
-            <div className="flex items-center gap-2">
-              <Tv className="w-4 h-4 text-purple-400" />
-              <span className="text-sm font-bold text-slate-200">{stats.totalShows}</span>
-              <span className="text-[10px] text-slate-500">shows</span>
+            <div className="w-px h-4 sm:h-6 bg-slate-700 shrink-0" />
+            <div className="flex items-center gap-1.5 sm:gap-2">
+              <Tv className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-purple-400 shrink-0" />
+              <span className="text-xs sm:text-sm font-bold text-slate-200">{stats.totalShows}</span>
+              <span className="text-[10px] text-slate-500 hidden sm:inline">shows</span>
             </div>
-            <div className="w-px h-6 bg-slate-700" />
-            <div className="flex items-center gap-2">
-              <Hash className="w-4 h-4 text-indigo-400" />
-              <span className="text-sm font-bold text-slate-200">{stats.totalEpisodes?.toLocaleString() ?? 0}</span>
-              <span className="text-[10px] text-slate-500">episodes</span>
+            <div className="w-px h-4 sm:h-6 bg-slate-700 shrink-0" />
+            <div className="flex items-center gap-1.5 sm:gap-2">
+              <Hash className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-indigo-400 shrink-0" />
+              <span className="text-xs sm:text-sm font-bold text-slate-200">{stats.totalEpisodes?.toLocaleString() ?? 0}</span>
+              <span className="text-[10px] text-slate-500 hidden sm:inline">episodes</span>
             </div>
-            <div className="w-px h-6 bg-slate-700" />
-            <div className="flex items-center gap-2 ml-auto">
-              <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-              <span className="text-sm font-bold text-emerald-400">{stats.downloadPct}%</span>
-              <span className="text-[10px] text-slate-500">downloaded</span>
+            <div className="w-px h-4 sm:h-6 bg-slate-700 shrink-0" />
+            <div className="flex items-center gap-1.5 sm:gap-2">
+              <CheckCircle2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-400 shrink-0" />
+              <span className="text-xs sm:text-sm font-bold text-emerald-400">{stats.downloadPct}%</span>
+              <span className="text-[10px] text-slate-500 hidden sm:inline">downloaded</span>
             </div>
           </div>
 
@@ -215,7 +215,7 @@ export default function Statistics() {
                   <p className="text-sm font-bold text-slate-200">Movies</p>
                 </div>
               </div>
-              <div className="flex items-center gap-6">
+              <div className="flex flex-col md:flex-row items-center gap-4 md:gap-6">
                 <div className="relative shrink-0">
                   <DonutChart data={movieDonut} size={130} thickness={14} />
                   <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
@@ -223,7 +223,7 @@ export default function Statistics() {
                     <span className="text-[8px] text-slate-500 uppercase tracking-wide">total</span>
                   </div>
                 </div>
-                <div className="flex-1 space-y-2 min-w-0">
+                <div className="flex-1 space-y-2 min-w-0 w-full">
                   {Object.entries(stats.movieStatuses).sort((a, b) => b[1] - a[1]).map(([status, count]) => {
                     const cfg = STATUS_CONFIG[status] || { color: '#64748b', label: status };
                     const pct = stats.totalMovies > 0 ? ((count / stats.totalMovies) * 100).toFixed(0) : 0;
@@ -252,7 +252,7 @@ export default function Statistics() {
                   <p className="text-sm font-bold text-slate-200">TV Shows</p>
                 </div>
               </div>
-              <div className="flex items-center gap-6">
+              <div className="flex flex-col md:flex-row items-center gap-4 md:gap-6">
                 <div className="relative shrink-0">
                   <DonutChart data={showDonut} size={130} thickness={14} />
                   <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
@@ -260,7 +260,7 @@ export default function Statistics() {
                     <span className="text-[8px] text-slate-500 uppercase tracking-wide">total</span>
                   </div>
                 </div>
-                <div className="flex-1 space-y-2 min-w-0">
+                <div className="flex-1 space-y-2 min-w-0 w-full">
                   {Object.entries(stats.showStatuses).sort((a, b) => b[1] - a[1]).map(([status, count]) => {
                     const cfg = STATUS_CONFIG[status] || { color: '#64748b', label: status };
                     const pct = stats.totalShows > 0 ? ((count / stats.totalShows) * 100).toFixed(0) : 0;
@@ -554,10 +554,10 @@ export default function Statistics() {
 function PageHeader() {
   return (
     <div>
-      <h1 className="text-3xl font-black text-slate-100 flex items-center gap-3">
-        <BarChart3 className="w-8 h-8 text-purple-400" /> Statistics
+      <h1 className="text-xl sm:text-3xl font-black text-slate-100 flex items-center gap-2 sm:gap-3">
+        <BarChart3 className="w-6 h-6 sm:w-8 sm:h-8 text-purple-400 shrink-0" /> Statistics
       </h1>
-      <p className="text-slate-400 mt-1">Library analytics and insights.</p>
+      <p className="text-xs sm:text-base text-slate-400 mt-0.5 sm:mt-1 hidden sm:block">Library analytics and insights.</p>
     </div>
   );
 }

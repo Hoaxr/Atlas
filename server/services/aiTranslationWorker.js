@@ -40,33 +40,35 @@ const translateWithGoogleTranslate = async (text, targetLang) => {
     }
   }
   
-  // Batch translate: send groups of lines joined by newlines
+  // Batch translate with a unique separator that Google won't merge across.
+  // This preserves the 1:1 line mapping and keeps subtitle sync intact.
+  const SEP = ' [===] ';
   const BATCH_SIZE = 20;
   for (let b = 0; b < textContents.length; b += BATCH_SIZE) {
     const batch = textContents.slice(b, b + BATCH_SIZE);
-    const joined = batch.join('\n');
-    
     try {
       const res = await axios.get('https://translate.googleapis.com/translate_a/single', {
-        params: {
-          client: 'gtx',
-          sl: 'en',
-          tl: target,
-          dt: 't',
-          q: joined
-        },
+        params: { client: 'gtx', sl: 'en', tl: target, dt: 't', q: batch.join(SEP) },
         timeout: 10000
       });
-      
-      // Response: [[["translated","original",...]], ...] per input line
-      const results = res.data[0] || [];
-      for (let j = 0; j < batch.length; j++) {
-        const result = results[j];
-        const translated = result?.[0]?.[0] || batch[j];
-        translatedLines[textIndices[b + j]] = translated;
+      // Collect all translated text across response segments
+      const segments = res.data?.[0] || [];
+      let fullText = '';
+      for (const seg of segments) {
+        fullText += (seg?.[0] || '');
+      }
+      if (fullText.includes(SEP)) {
+        const parts = fullText.split(SEP);
+        for (let j = 0; j < batch.length && j < parts.length; j++) {
+          translatedLines[textIndices[b + j]] = parts[j].trim();
+        }
+      } else {
+        // Separator lost — use array response directly
+        for (let j = 0; j < batch.length; j++) {
+          translatedLines[textIndices[b + j]] = segments[j]?.[0] || batch[j];
+        }
       }
     } catch {
-      // Fallback to original lines on error
       for (let j = 0; j < batch.length; j++) {
         translatedLines[textIndices[b + j]] = batch[j];
       }

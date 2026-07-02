@@ -1,3 +1,5 @@
+import { useState, useRef, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { Search, Download, RefreshCw, Loader2 } from 'lucide-react';
 import { LANG_LABEL, LANG_NAME } from '../../lib/format';
 
@@ -16,9 +18,40 @@ export default function SubtitleLanguageBadge({
   onManualSearch,
   onAutoTranslate,
 }) {
+  const badgeRef = useRef(null);
+  const [menuStyle, setMenuStyle] = useState(null);
+
+  const updatePosition = useCallback(() => {
+    if (!isOpen || !badgeRef.current) return;
+    const rect = badgeRef.current.getBoundingClientRect();
+    setMenuStyle({
+      position: 'fixed',
+      left: `${rect.left}px`,
+      top: `${rect.bottom + 4}px`,
+      zIndex: 9999,
+    });
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      setMenuStyle(null);
+      return;
+    }
+    // Calculate position on next frame to ensure DOM is ready
+    const raf = requestAnimationFrame(() => updatePosition());
+    window.addEventListener('scroll', updatePosition, true);
+    window.addEventListener('resize', updatePosition);
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener('scroll', updatePosition, true);
+      window.removeEventListener('resize', updatePosition);
+    };
+  }, [isOpen, updatePosition]);
+
   return (
-    <span key={code} className="relative">
+    <span key={code} className="relative inline-flex">
       <span
+        ref={badgeRef}
         data-lang-badge
         role="button"
         tabIndex={0}
@@ -40,8 +73,12 @@ export default function SubtitleLanguageBadge({
       >
         {LANG_LABEL[code] || code}
       </span>
-      {isOpen && (
-        <div data-lang-menu className="absolute left-0 top-full mt-1 bg-slate-800 border border-white/10 rounded-xl py-1 shadow-2xl z-50 min-w-[150px]">
+      {isOpen && menuStyle && createPortal(
+        <div
+          data-lang-menu
+          style={menuStyle}
+          className="bg-slate-800 border border-white/10 rounded-xl py-1 shadow-2xl min-w-[150px]"
+        >
           {!exists && (
             <button
               onClick={(e) => { e.stopPropagation(); onAutoSearch(code); }}
@@ -68,7 +105,8 @@ export default function SubtitleLanguageBadge({
               Auto Translate
             </button>
           )}
-        </div>
+        </div>,
+        document.body
       )}
     </span>
   );

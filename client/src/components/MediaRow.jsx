@@ -29,7 +29,7 @@ export default function MediaRow({ title, items, badgeText, isTrending = false, 
             {title}
           </span>
           {badgeText && (
-            <span className="text-xs font-normal text-slate-500 bg-slate-900 px-2 py-1 rounded-md ml-4 border border-white/5">
+            <span className="hidden sm:inline text-xs font-normal text-slate-500 bg-slate-900 px-2 py-1 rounded-md ml-4 border border-white/5">
               {badgeText}
             </span>
           )}

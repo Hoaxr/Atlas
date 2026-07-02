@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
-import { Search, Download, Loader2, X, Magnet, Users, HardDrive, AlertCircle } from 'lucide-react';
+import { Search, Download, Loader2, X, Magnet, Users, HardDrive } from 'lucide-react';
 import api from '../lib/api';
 import { formatSize } from '../lib/format';
+import ModalShell from './shared/ModalShell';
+import InlineError from './shared/InlineError';
 
 const qualityColor = (q) => {
   if (!q) return 'text-slate-400';
@@ -59,15 +61,8 @@ export default function ManualSearchModal({ mediaId, mediaType, title, onClose, 
   };
 
   return (
-    <div className="fixed inset-0 z-[150] flex items-center justify-center p-4" onClick={onClose}>
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="manual-search-title"
-        className="relative z-10 bg-slate-900 border border-white/10 rounded-2xl shadow-2xl w-full max-w-3xl max-h-[85vh] flex flex-col"
-        onClick={e => e.stopPropagation()}
-      >
+    <ModalShell open onClose={onClose} size="2xl" noHeader noPadding noFloatingClose>
+      <div className="flex flex-col max-h-[85vh]">
         {/* Header */}
         <div className="flex items-center justify-between p-5 border-b border-white/10">
           <div className="flex items-center gap-3">
@@ -94,10 +89,7 @@ export default function ManualSearchModal({ mediaId, mediaType, title, onClose, 
           )}
 
           {!loading && error && (
-            <div className="flex items-center gap-3 p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400">
-              <AlertCircle className="w-5 h-5 shrink-0" />
-              <p className="text-sm">{error}</p>
-            </div>
+            <InlineError message={error} />
           )}
 
           {!loading && !error && results.length === 0 && (
@@ -167,6 +159,6 @@ export default function ManualSearchModal({ mediaId, mediaType, title, onClose, 
           )}
         </div>
       </div>
-    </div>
+    </ModalShell>
   );
 }

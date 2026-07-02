@@ -1,16 +1,15 @@
 import api from '../../lib/api';
 import { Save, Plus, Trash2, Settings2, CheckCircle2, Star } from 'lucide-react';
+import { customAlert } from '../../utils/alerts';
 import CustomSelect from '../../components/shared/CustomSelect';
 
-export default function ProfilesTab({ profiles, newProfile, setNewProfile, editingProfile, setEditingProfile, handleAddEntity, handleDeleteEntity, fetchSettings, setStatus, settings, setSettings, handleSave }) {
+export default function ProfilesTab({ profiles, newProfile, setNewProfile, editingProfile, setEditingProfile, handleAddEntity, handleDeleteEntity, fetchSettings, settings, setSettings, handleSave }) {
   return (
-    <div className="max-w-5xl mx-auto space-y-6">
-      <div className="flex items-center justify-between mb-2">
-        <h2 className="text-2xl font-bold text-amber-400 flex items-center gap-2">
-          <Settings2 className="w-7 h-7" /> Quality Profiles
-        </h2>
-      </div>
-      <div className="glass-panel p-8 rounded-2xl border border-white/10 space-y-6 mb-8 shadow-xl relative overflow-hidden">
+    <div className="max-w-5xl mx-auto space-y-8 animate-fade-in">
+      <h2 className="text-2xl font-bold text-amber-400 flex items-center gap-2">
+        <Settings2 className="w-7 h-7" /> Quality Profiles
+      </h2>
+      <div className="glass-panel p-6 rounded-2xl border border-white/10 space-y-6 mb-8 shadow-xl relative overflow-hidden">
         <div className="flex justify-between items-center">
           <h3 className="font-bold text-lg text-slate-200">{editingProfile ? 'Edit Profile' : 'Add New Profile'}</h3>
           {editingProfile && (
@@ -88,8 +87,7 @@ export default function ProfilesTab({ profiles, newProfile, setNewProfile, editi
                     await api.put(`/settings/profiles/${editingProfile.id}`, editingProfile);
                     setEditingProfile(null);
                     fetchSettings();
-                    setStatus({ type: 'success', message: 'Profile updated!' });
-                    setTimeout(() => setStatus({ type: '', message: '' }), 3000);
+                    customAlert('Profile updated!', 'success');
                   } catch { /* profile update failed silently */ }
                 } else {
                   handleAddEntity('profiles', newProfile);
@@ -131,10 +129,9 @@ export default function ProfilesTab({ profiles, newProfile, setNewProfile, editi
                     setSettings(prev => ({ ...prev, defaultQualityProfileId: newId }));
                     try {
                       await api.post('/settings', { ...settings, defaultQualityProfileId: newId });
-                      if (setStatus) setStatus({ type: 'success', message: 'Default profile updated!' });
-                      setTimeout(() => { if (setStatus) setStatus({ type: '', message: '' }) }, 3000);
+                      customAlert('Default profile updated!', 'success');
                     } catch (e) {
-                      if (setStatus) setStatus({ type: 'error', message: 'Failed to update default profile.' });
+                      customAlert('Failed to update default profile.', 'error');
                     }
                   }
                 }} 

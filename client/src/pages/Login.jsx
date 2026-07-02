@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Shield, Lock, User, ArrowRight } from 'lucide-react';
 import api from '../lib/api';
@@ -8,7 +8,28 @@ export default function Login() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [checking, setChecking] = useState(true);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    // If already logged in, redirect immediately
+    const token = (() => { try { return localStorage.getItem('atlas_token'); } catch { return null; } })();
+    if (token) {
+      navigate('/');
+      return;
+    }
+
+    api.get('/auth/status').then(res => {
+      if (res.data.status === 'success') {
+        const { authEnabled, isPrivate } = res.data.data;
+        if (!authEnabled || isPrivate) {
+          navigate('/');
+        }
+      }
+    }).catch(() => {}).finally(() => setChecking(false));
+  }, [navigate]);
+
+  if (checking) return null;
 
   const handleLogin = async (e) => {
     e.preventDefault();

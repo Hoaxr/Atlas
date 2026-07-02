@@ -139,9 +139,13 @@ const addShow = async (tmdbId, rootFolderPath = null) => {
   const year = showDetails.first_air_date ? parseInt(showDetails.first_air_date.split('-')[0]) : null;
   const genres = showDetails.genres ? showDetails.genres.map(g => g.name).join(', ') : '';
 
+  // Default to the first configured quality profile
+  const defaultProfile = db.prepare('SELECT id FROM quality_profiles ORDER BY id ASC LIMIT 1').get();
+  const defaultProfileId = defaultProfile?.id || null;
+
   const insert = db.prepare(`
-    INSERT INTO shows (tmdb_id, title, year, poster_path, overview, status, rating, genres, tmdb_status)
-    VALUES (?, ?, ?, ?, ?, 'monitored', ?, ?, ?)
+    INSERT INTO shows (tmdb_id, title, year, poster_path, overview, status, rating, genres, tmdb_status, quality_profile_id)
+    VALUES (?, ?, ?, ?, ?, 'monitored', ?, ?, ?, ?)
   `);
   
   const result = insert.run(
@@ -152,7 +156,8 @@ const addShow = async (tmdbId, rootFolderPath = null) => {
     showDetails.overview,
     showDetails.vote_average || 0,
     genres,
-    showDetails.status || ''
+    showDetails.status || '',
+    defaultProfileId
   );
   
   const internalShowId = result.lastInsertRowid;

@@ -46,20 +46,12 @@ export default function IndexersTab({ settings, setSettings, handleSave }) {
   };
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6">
-      <div className="flex items-center justify-between mb-6">
-        <h2 className="text-2xl font-bold text-purple-400 flex items-center gap-2">
-          <Search className="w-7 h-7" /> Indexer Settings
-        </h2>
-        <button 
-          onClick={handleLocalSave}
-          className="flex items-center gap-2 bg-purple-600 hover:bg-purple-500 text-white px-5 py-2 rounded-xl transition-colors shadow-lg shadow-purple-500/20 font-medium"
-        >
-          <Save className="w-5 h-5" /> Save Changes
-        </button>
-      </div>
+    <div className="max-w-5xl mx-auto space-y-8 animate-fade-in">
+      <h2 className="text-2xl font-bold text-purple-400 flex items-center gap-2">
+        <Search className="w-7 h-7" /> Indexer Settings
+      </h2>
 
-      <div className="glass-panel p-8 rounded-2xl border border-white/10 space-y-6 shadow-xl relative overflow-hidden">
+      <div className="glass-panel p-6 rounded-2xl border border-white/10 space-y-6 shadow-xl relative overflow-hidden">
         <div>
           <h3 className="font-bold text-lg text-slate-200 mb-2">Prowlarr Configuration</h3>
           <p className="text-xs text-slate-500">Atlas uses Prowlarr's aggregate search API to query all your configured indexers simultaneously.</p>
@@ -112,6 +104,12 @@ export default function IndexersTab({ settings, setSettings, handleSave }) {
             )}
           </div>
         </div>
+      </div>
+
+      <div className="flex justify-end">
+        <button onClick={handleLocalSave} className="px-6 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-white font-bold rounded-xl shadow-lg shadow-emerald-500/20 flex items-center gap-2 transition-all">
+          <Save className="w-5 h-5" /> Save Changes
+        </button>
       </div>
     </div>
   );

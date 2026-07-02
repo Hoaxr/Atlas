@@ -87,7 +87,7 @@ export default function MediaDetailsModal({ isOpen, onClose, mediaId, mediaType,
   const trailer = details?.videos?.results?.find(v => v.site === 'YouTube' && v.type === 'Trailer');
 
   return createPortal(
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm" onClick={onClose}>
+    <div className="fixed inset-0 z-40 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm" onClick={onClose}>
       <div className="bg-slate-900 border border-white/10 rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto relative shadow-2xl" onClick={(e) => e.stopPropagation()}>
         
         {/* Header */}
