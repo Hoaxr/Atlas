@@ -2,7 +2,7 @@
   <h1>Atlas 🎬</h1>
   <p><strong>An elegant, all-in-one media management dashboard — track, search, and download your favorite Movies and TV Shows.</strong></p>
   <p>
-    <img src="./assets/atlas.png" alt="Atlas Dashboard" width="800" />
+    <img src="./assets/atlas.png?v=2" alt="Atlas Dashboard" width="800" />
   </p>
   <br>
 </div>
