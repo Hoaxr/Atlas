@@ -86,6 +86,10 @@ router.post('/shows/:id/refresh', async (req, res, next) => {
                     }
                   }
                   const { getResolution } = require('../../utils/videoUtils');
+                  // Always detect resolution
+                  let resolution = null;
+                  try { resolution = await getResolution(fullPath); } catch { /* ignore */ }
+
                   // Preserve existing scene_name unless empty/missing/auto-generated
                   const existingEp = db.prepare(
                     'SELECT scene_name FROM episodes WHERE show_id = ? AND season_number = ? AND episode_number = ?'
@@ -96,8 +100,7 @@ router.post('/shows/:id/refresh', async (req, res, next) => {
                     const t = resName.toLowerCase();
                     const hasRes = t.includes('2160p') || t.includes('4k') || t.includes('1080p') || t.includes('720p') || t.includes('480p') || t.includes('sd');
                     if (!hasRes) {
-                      const res = await getResolution(fullPath);
-                      if (res) resName = `Unknown ${res}`;
+                      if (resolution) resName = `Unknown ${resolution}`;
                     }
                   }
                   
@@ -109,9 +112,9 @@ router.post('/shows/:id/refresh', async (req, res, next) => {
                     
                     db.prepare(`
                       UPDATE episodes 
-                      SET file_path = ?, file_size = ?, scene_name = ?, status = 'downloaded' 
+                      SET file_path = ?, file_size = ?, scene_name = ?, status = 'downloaded', resolution = ?
                       WHERE show_id = ? AND season_number = ? AND episode_number = ?
-                    `).run(fullPath, stats.size, resName, show.id, s, ep);
+                    `).run(fullPath, stats.size, resName, resolution, show.id, s, ep);
                   }
                 }
               }

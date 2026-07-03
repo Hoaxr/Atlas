@@ -257,8 +257,13 @@ router.post('/:id/refresh', async (req, res, next) => {
           if (res) resName = `Unknown ${res}`;
         }
       }
-      db.prepare('UPDATE movies SET file_path = ?, file_size = ?, scene_name = ?, status = ? WHERE id = ?')
-        .run(bestFile.path, bestFile.size, resName, 'downloaded', movie.id);
+      // Always detect and update resolution
+      let resolution = null;
+      try {
+        resolution = await getResolution(bestFile.path);
+      } catch { /* ignore */ }
+      db.prepare('UPDATE movies SET file_path = ?, file_size = ?, scene_name = ?, status = ?, resolution = ? WHERE id = ?')
+        .run(bestFile.path, bestFile.size, resName, 'downloaded', resolution, movie.id);
     } else if (scanPaths.size > 0) {
       // Paths were found but contained no video — genuinely missing
       db.prepare(`UPDATE movies SET status = CASE WHEN status = 'downloaded' THEN 'missing' ELSE status END, file_path = NULL, file_size = 0, scene_name = NULL WHERE id = ?`).run(movie.id);

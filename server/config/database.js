@@ -208,6 +208,34 @@ try { db.exec("ALTER TABLE movies ADD COLUMN genres TEXT DEFAULT '';"); } catch 
 try { db.exec("ALTER TABLE shows ADD COLUMN genres TEXT DEFAULT '';"); } catch (e) {}
 // Ensure monitored columns exist (separate from status which tracks download state)
 try { db.exec("ALTER TABLE movies ADD COLUMN monitored INTEGER DEFAULT 1;"); } catch (e) {}
+// Ensure resolution columns exist
+try { db.exec("ALTER TABLE movies ADD COLUMN resolution TEXT;"); } catch (e) {}
+try { db.exec("ALTER TABLE episodes ADD COLUMN resolution TEXT;"); } catch (e) {}
+// Populate resolution from existing scene_name data
+try {
+  db.exec(`
+    UPDATE movies SET resolution = CASE
+      WHEN scene_name LIKE '%2160p%' OR scene_name LIKE '%4K%' OR scene_name LIKE '%4k%' THEN '2160p'
+      WHEN scene_name LIKE '%1080p%' THEN '1080p'
+      WHEN scene_name LIKE '%720p%' THEN '720p'
+      WHEN scene_name LIKE '%480p%' THEN '480p'
+      WHEN scene_name LIKE '%SD%' OR scene_name LIKE '%sd%' THEN 'SD'
+      ELSE NULL
+    END
+    WHERE resolution IS NULL AND scene_name IS NOT NULL
+  `);
+  db.exec(`
+    UPDATE episodes SET resolution = CASE
+      WHEN scene_name LIKE '%2160p%' OR scene_name LIKE '%4K%' OR scene_name LIKE '%4k%' THEN '2160p'
+      WHEN scene_name LIKE '%1080p%' THEN '1080p'
+      WHEN scene_name LIKE '%720p%' THEN '720p'
+      WHEN scene_name LIKE '%480p%' THEN '480p'
+      WHEN scene_name LIKE '%SD%' OR scene_name LIKE '%sd%' THEN 'SD'
+      ELSE NULL
+    END
+    WHERE resolution IS NULL AND scene_name IS NOT NULL
+  `);
+} catch (e) {}
 try { db.exec("ALTER TABLE shows ADD COLUMN monitored INTEGER DEFAULT 1;"); } catch (e) {}
 try { db.exec("ALTER TABLE episodes ADD COLUMN monitored INTEGER DEFAULT 1;"); } catch (e) {}
 try { db.exec("ALTER TABLE episodes ADD COLUMN air_date TEXT;"); } catch (e) {}

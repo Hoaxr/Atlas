@@ -410,20 +410,20 @@ const doScan = async () => {
 
           // Detect resolution for the episode
           let resName = null;
+          let resolution = null;
           try {
             const t = file.name.toLowerCase();
             const hasRes = t.includes('2160p') || t.includes('4k') || t.includes('1080p') || t.includes('720p') || t.includes('480p') || t.includes('sd');
             if (hasRes) {
               resName = file.name;
             } else {
-              const res = await getResolution(fullPath);
-              if (res) resName = `Unknown ${res}`;
+              resolution = await getResolution(fullPath);
+              if (resolution) resName = `Unknown ${resolution}`;
             }
           } catch { /* ignore */ }
 
           const lastEp = episodeEnd || episodeNumber;
           for (let ep = episodeNumber; ep <= lastEp; ep++) {
-            // Ensure the episode row exists
             db.prepare(`
               INSERT OR IGNORE INTO episodes (show_id, season_number, episode_number, title, overview, status, air_date)
               VALUES (?, ?, ?, ?, ?, 'monitored', NULL)
@@ -431,9 +431,9 @@ const doScan = async () => {
 
             db.prepare(`
               UPDATE episodes 
-              SET file_path = ?, status = 'downloaded', file_size = ?, scene_name = ?
+              SET file_path = ?, status = 'downloaded', file_size = ?, scene_name = ?, resolution = ?
               WHERE show_id = ? AND season_number = ? AND episode_number = ?
-            `).run(fullPath, fileSize, resName, showId, seasonNumber, ep);
+            `).run(fullPath, fileSize, resName, resolution, showId, seasonNumber, ep);
           }
 
           // Scan for subtitle files in the episode's directory (only for first episode)
@@ -525,6 +525,15 @@ const doScan = async () => {
               scanProgress.addedMovies.push({ title: matchedMovie.title, year: movieYear });
             }
 
+            // Detect and store resolution
+            try {
+              const res = await getResolution(fullPath);
+              if (res) {
+                db.prepare('UPDATE movies SET resolution = ?, scene_name = COALESCE(NULLIF(scene_name, \'\'), ?) WHERE tmdb_id = ?')
+                  .run(res, 'Unknown ' + res, matchedMovie.id);
+              }
+            } catch { /* ignore */ }
+
             // Scan for subtitle files in the movie's directory
             const movieLangs = await scanSubtitleLangs(fullPath);
             if (movieLangs.length > 0) {
@@ -566,19 +575,24 @@ const doScan = async () => {
       scanProgress.currentFile = m.title;
       try {
         const stat = await fs.stat(m.file_path);
+        // Always re-detect resolution on scan
         let resName = null;
+        let resolution = null;
         try {
-          if (!m.scene_name || m.scene_name === '' || m.scene_name.startsWith('Unknown ')) {
-            const res = await getResolution(m.file_path);
-            if (res) resName = `Unknown ${res}`;
+          const t = m.scene_name ? m.scene_name.toLowerCase() : '';
+          const hasRes = t.includes('2160p') || t.includes('4k') || t.includes('1080p') || t.includes('720p') || t.includes('480p') || t.includes('sd');
+          if (!hasRes) {
+            resolution = await getResolution(m.file_path);
+            if (resolution) resName = 'Unknown ' + resolution;
           }
         } catch { /* ignore */ }
         
-        if (resName) {
-          db.prepare('UPDATE movies SET file_size = ?, scene_name = ? WHERE id = ?').run(stat.size, resName, m.id);
-        } else {
-          db.prepare('UPDATE movies SET file_size = ? WHERE id = ?').run(stat.size, m.id);
-        }
+        const updates = ['file_size = ?'];
+        const params = [stat.size];
+        if (resName) { updates.push('scene_name = ?'); params.push(resName); }
+        if (resolution) { updates.push('resolution = ?'); params.push(resolution); }
+        params.push(m.id);
+        db.prepare('UPDATE movies SET ' + updates.join(', ') + ' WHERE id = ?').run(...params);
       } catch { /* skip */ }
       scanProgress.processedFiles++;
     }
@@ -587,16 +601,15 @@ const doScan = async () => {
     for (const ep of existingEpisodes) {
       if (scanProgress.cancelled) throw new Error('Scan cancelled by user');
       try {
-        let resName = null;
-        try {
-          if (!ep.scene_name || ep.scene_name === '' || ep.scene_name.startsWith('Unknown ')) {
-            const res = await getResolution(ep.file_path);
-            if (res) resName = `Unknown ${res}`;
+        // Always re-detect resolution
+        const t = ep.scene_name ? ep.scene_name.toLowerCase() : '';
+        const hasRes = t.includes('2160p') || t.includes('4k') || t.includes('1080p') || t.includes('720p') || t.includes('480p') || t.includes('sd');
+        if (!hasRes) {
+          const resolution = await getResolution(ep.file_path);
+          if (resolution) {
+            db.prepare('UPDATE episodes SET scene_name = ?, resolution = ? WHERE id = ?')
+              .run('Unknown ' + resolution, resolution, ep.id);
           }
-        } catch { /* ignore */ }
-
-        if (resName) {
-          db.prepare('UPDATE episodes SET scene_name = ? WHERE id = ?').run(resName, ep.id);
         }
       } catch { /* skip */ }
       scanProgress.processedFiles++;
