@@ -1,10 +1,11 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import api from '../../lib/api';
+import useWebSocket from '../../lib/useWebSocket';
 import {
   Users, UserPlus, Trash2, Shield, User, Loader2, Edit, X,
   CheckSquare, Square, Search, Mail, Download,
-  UserCog, ShieldAlert, Clock
+  UserCog, ShieldAlert, Clock, LogIn
 } from 'lucide-react';
 import { customAlert, customConfirm } from '../../utils/alerts';
 import CustomSelect from '../../components/shared/CustomSelect';
@@ -91,6 +92,18 @@ export default function UsersTab() {
   useEffect(() => {
     fetchUsers();
   }, []);
+
+  // Listen for presence events via WebSocket
+  const { onEvent } = useWebSocket();
+  useEffect(() => {
+    return onEvent((data) => {
+      if (data.type === 'userOnline') {
+        setUsers(prev => prev.map(u => u.id === data.userId ? { ...u, online: true } : u));
+      } else if (data.type === 'userOffline') {
+        setUsers(prev => prev.map(u => u.id === data.userId ? { ...u, online: false } : u));
+      }
+    });
+  }, [onEvent]);
 
   const filteredUsers = useMemo(() => {
     if (!search.trim()) return users;
@@ -194,67 +207,67 @@ export default function UsersTab() {
     const originStyle = getOriginStyle(user.origin);
     const avatarColor = getAvatarColor(user.username);
     const createdDate = user.created_at ? formatDate(user.created_at) : null;
+    const lastLogin = user.last_login ? formatDate(user.last_login) : null;
 
     return (
-      <div className="group flex items-center gap-4 p-4 rounded-xl bg-slate-900/30 border border-white/5 hover:border-white/10 hover:bg-slate-900/50 transition-all duration-200">
+      <div className="group flex gap-3 sm:gap-4 p-4 rounded-xl bg-slate-900/30 border border-white/5 hover:border-white/10 hover:bg-slate-900/50 transition-all duration-200">
         {/* Avatar */}
         <div className={`relative shrink-0 w-10 h-10 rounded-full ${avatarColor} flex items-center justify-center shadow-lg shadow-black/20`}>
           <span className="text-sm font-bold text-white">{getInitials(user.username)}</span>
-          {/* Online dot placeholder */}
-          <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border-2 border-slate-900 bg-emerald-500" />
+          <span className={`absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border-2 border-slate-900 ${user.online ? 'bg-emerald-500' : 'bg-slate-600'}`} title={user.online ? 'Online' : 'Offline'} />
         </div>
 
-        {/* Info */}
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-0.5">
-            <span className="font-semibold text-slate-200 truncate">{user.username}</span>
+        {/* Content */}
+        <div className="flex-1 min-w-0 space-y-1.5">
+          {/* Top row: username + role + origin + actions */}
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-semibold text-white truncate">{user.username}</span>
             {isAdmin ? (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/15 text-rose-400 border border-rose-500/20 uppercase tracking-wider">
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/15 text-rose-400 border border-rose-500/20 uppercase tracking-wider shrink-0">
                 <Shield className="w-2.5 h-2.5" /> Admin
               </span>
             ) : (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-500/15 text-indigo-400 border border-indigo-500/20 uppercase tracking-wider">
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-500/15 text-indigo-400 border border-indigo-500/20 uppercase tracking-wider shrink-0">
                 <User className="w-2.5 h-2.5" /> User
               </span>
             )}
+            <div className={`shrink-0 text-[10px] font-bold px-2.5 py-1 rounded-md border ${originStyle.bg} ${originStyle.text} ${originStyle.border} uppercase tracking-wider`}>
+              {originStyle.label}
+            </div>
+            <div className="shrink-0 flex items-center gap-1.5 ml-auto opacity-60 group-hover:opacity-100 transition-opacity">
+              <button
+                onClick={() => setEditingUser({ ...user, password: '' })}
+                className="p-2 rounded-lg bg-cyan-500/10 text-cyan-400 hover:bg-cyan-500/20 hover:text-cyan-300 transition-all"
+                title="Edit user"
+              >
+                <Edit className="w-3.5 h-3.5" />
+              </button>
+              <button
+                onClick={() => handleDeleteUser(user.id, user.username)}
+                className="p-2 rounded-lg bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 hover:text-rose-300 transition-all"
+                title="Delete user"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            </div>
           </div>
-          <div className="flex items-center gap-3 text-xs text-slate-500">
+
+          {/* Bottom row: email + dates */}
+          <div className="flex flex-wrap items-center gap-3 text-xs text-slate-400">
             {user.email ? (
-              <span className="flex items-center gap-1 truncate">
+              <span className="flex items-center gap-1">
                 <Mail className="w-3 h-3 shrink-0" /> {user.email}
               </span>
             ) : (
-              <span className="italic text-slate-600">No email</span>
+              <span className="italic text-slate-500">No email</span>
             )}
-            {createdDate && (
-              <span className="flex items-center gap-1 shrink-0">
-                <Clock className="w-3 h-3" /> {createdDate}
-              </span>
-            )}
+            <span className="flex items-center gap-1 shrink-0" title="Last login">
+              <LogIn className="w-3 h-3" /> {lastLogin || 'N/A'}
+            </span>
+            <span className="flex items-center gap-1 shrink-0" title="Created">
+              <Clock className="w-3 h-3" /> {createdDate || 'N/A'}
+            </span>
           </div>
-        </div>
-
-        {/* Origin badge */}
-        <div className={`shrink-0 text-[10px] font-bold px-2.5 py-1 rounded-md border ${originStyle.bg} ${originStyle.text} ${originStyle.border} uppercase tracking-wider`}>
-          {originStyle.label}
-        </div>
-
-        {/* Actions */}
-        <div className="shrink-0 flex items-center gap-1.5 opacity-60 group-hover:opacity-100 transition-opacity">
-          <button
-            onClick={() => setEditingUser({ ...user, password: '' })}
-            className="p-2 rounded-lg bg-cyan-500/10 text-cyan-400 hover:bg-cyan-500/20 hover:text-cyan-300 transition-all"
-            title="Edit user"
-          >
-            <Edit className="w-3.5 h-3.5" />
-          </button>
-          <button
-            onClick={() => handleDeleteUser(user.id, user.username)}
-            className="p-2 rounded-lg bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 hover:text-rose-300 transition-all"
-            title="Delete user"
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-          </button>
         </div>
       </div>
     );

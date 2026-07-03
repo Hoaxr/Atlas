@@ -53,7 +53,7 @@ function App() {
             <Routes>
               <Route path="/login" element={<LazyPage><Login /></LazyPage>} />
               <Route path="/" element={<Layout />}>
-                <Route index element={<Navigate to="/movies" replace />} />
+                <Route index element={<Navigate to="/discover" replace />} />
                 <Route path="movies" element={<Dashboard key="movies-view" />} />
                 <Route path="shows" element={<Dashboard key="shows-view" />} />
                 <Route path="movies/:id" element={<MovieDetails />} />

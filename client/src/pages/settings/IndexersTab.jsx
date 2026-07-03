@@ -80,11 +80,11 @@ export default function IndexersTab({ settings, setSettings, handleSave }) {
             />
           </div>
 
-          <div className="pt-4 flex items-center gap-4">
+          <div className="pt-4 flex flex-col sm:flex-row sm:items-center gap-4">
             <button 
               onClick={() => testConnection(false)} 
               disabled={isTesting}
-              className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 text-slate-300 px-5 py-2.5 rounded-xl transition-colors disabled:opacity-50 font-medium border border-white/5"
+              className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 text-slate-300 px-5 py-2.5 rounded-xl transition-colors disabled:opacity-50 font-medium border border-white/5 self-start"
             >
               {isTesting ? <Loader2 className="w-5 h-5 animate-spin" /> : <PlayCircle className="w-5 h-5 text-purple-400" />}
               Connect

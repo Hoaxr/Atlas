@@ -1,6 +1,9 @@
 const express = require('express');
 const router = express.Router();
+const axios = require('axios');
 const watcherService = require('../services/watcherService');
+const db = require('../config/database');
+const { getSetting } = require('../utils/settings');
 
 router.get('/sessions', async (req, res, next) => {
   try {
@@ -13,8 +16,6 @@ router.get('/sessions', async (req, res, next) => {
     next(err);
   }
 });
-const axios = require('axios');
-const db = require('../config/database');
 
 router.get('/stats', (req, res, next) => {
   try {
@@ -76,20 +77,20 @@ router.get('/image', async (req, res, next) => {
     let headers = {};
 
     if (server === 'plex') {
-      const plexUrl = watcherService.getSetting('plexUrl')?.replace(/\/$/, '');
-      const plexToken = watcherService.getSetting('plexToken');
+      const plexUrl = getSetting('plexUrl')?.replace(/\/$/, '');
+      const plexToken = getSetting('plexToken');
       if (!plexUrl || !plexToken) return res.status(404).send('Not configured');
       url = `${plexUrl}${path}`;
       headers['X-Plex-Token'] = plexToken;
     } else if (server === 'jellyfin') {
-      const jfUrl = watcherService.getSetting('jellyfinUrl')?.replace(/\/$/, '');
-      const jfToken = watcherService.getSetting('jellyfinApiKey');
+      const jfUrl = getSetting('jellyfinUrl')?.replace(/\/$/, '');
+      const jfToken = getSetting('jellyfinApiKey');
       if (!jfUrl || !jfToken) return res.status(404).send('Not configured');
       url = `${jfUrl}/Items/${id}/Images/Primary`;
       headers['X-Emby-Token'] = jfToken;
     } else if (server === 'emby') {
-      const embyUrl = watcherService.getSetting('embyUrl')?.replace(/\/$/, '');
-      const embyToken = watcherService.getSetting('embyApiKey');
+      const embyUrl = getSetting('embyUrl')?.replace(/\/$/, '');
+      const embyToken = getSetting('embyApiKey');
       if (!embyUrl || !embyToken) return res.status(404).send('Not configured');
       url = `${embyUrl}/Items/${id}/Images/Primary`;
       headers['X-Emby-Token'] = embyToken;

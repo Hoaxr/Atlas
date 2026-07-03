@@ -5,7 +5,8 @@ const cron = require('node-cron');
 const db = require('../config/database');
 const taskRegistry = require('./taskRegistry');
 const eventBus = require('./eventBus');
-
+const { runWithConcurrency } = require('../utils/concurrency');
+const { registerJob } = require('../utils/cronRegistry');
 
 // ─── Shared subtitle helpers ─────────────────────────────────────────────
 
@@ -165,11 +166,18 @@ const downloadSubtitlesForMovies = async () => {
 
   const movies = db.prepare("SELECT * FROM movies WHERE status = 'downloaded' AND file_path IS NOT NULL").all();
 
-  for (const movie of movies) {
+  const processMovie = async (movie) => {
     try {
-      if (!fs.existsSync(movie.file_path)) continue;
+      if (!fs.existsSync(movie.file_path)) return;
 
       const parsedPath = path.parse(movie.file_path);
+
+      // Skip if all configured languages already have subtitles
+      const missingLangs = providerLangs.filter(langCode =>
+        !fs.existsSync(path.join(parsedPath.dir, `${parsedPath.name}.${langCode}.srt`))
+      );
+      if (missingLangs.length === 0) return;
+
       console.log(`[SubtitleService] Checking subtitles for: ${movie.title}`);
 
       // Try each configured language
@@ -261,7 +269,9 @@ const downloadSubtitlesForMovies = async () => {
     } catch (err) {
       console.error(`[SubtitleService] Failed for ${movie.title}:`, err.message);
     }
-  }
+  };
+
+  await runWithConcurrency(movies, 3, processMovie);
 };
 
 const autoTranslateExisting = async () => {
@@ -353,12 +363,13 @@ const autoTranslateExisting = async () => {
 
   // Movies
   const movies = db.prepare("SELECT * FROM movies WHERE status = 'downloaded' AND file_path IS NOT NULL").all();
-  for (const movie of movies) {
+  
+  const processMovieAutoTranslate = async (movie) => {
     try {
-      if (!fs.existsSync(movie.file_path)) continue;
+      if (!fs.existsSync(movie.file_path)) return;
       const parsedPath = path.parse(movie.file_path);
       const enSubPath = path.join(parsedPath.dir, `${parsedPath.name}.en.srt`);
-      if (!fs.existsSync(enSubPath)) continue;
+      if (!fs.existsSync(enSubPath)) return;
 
       const enSrtContent = fs.readFileSync(enSubPath, 'utf-8');
       for (const lang of targetLangs) {
@@ -367,7 +378,9 @@ const autoTranslateExisting = async () => {
     } catch (err) {
       console.error(`[SubtitleService] Auto-translate check failed for ${movie.title}:`, err.message);
     }
-  }
+  };
+
+  await runWithConcurrency(movies, 3, processMovieAutoTranslate);
 
   // Episodes
   const episodes = db.prepare(`
@@ -376,12 +389,13 @@ const autoTranslateExisting = async () => {
     JOIN shows s ON e.show_id = s.id
     WHERE e.status = 'downloaded' AND e.file_path IS NOT NULL
   `).all();
-  for (const ep of episodes) {
+
+  const processEpisodeAutoTranslate = async (ep) => {
     try {
-      if (!fs.existsSync(ep.file_path)) continue;
+      if (!fs.existsSync(ep.file_path)) return;
       const parsedPath = path.parse(ep.file_path);
       const enSubPath = path.join(parsedPath.dir, `${parsedPath.name}.en.srt`);
-      if (!fs.existsSync(enSubPath)) continue;
+      if (!fs.existsSync(enSubPath)) return;
 
       const enSrtContent = fs.readFileSync(enSubPath, 'utf-8');
       // Build a movie-like object for the helper
@@ -392,7 +406,9 @@ const autoTranslateExisting = async () => {
     } catch (err) {
       console.error(`[SubtitleService] Auto-translate check failed for episode:`, err.message);
     }
-  }
+  };
+
+  await runWithConcurrency(episodes, 3, processEpisodeAutoTranslate);
 };
 
 const upgradeTranslatedToNative = async () => {
@@ -428,9 +444,10 @@ const upgradeTranslatedToNative = async () => {
 
   // Movies
   const movies = db.prepare("SELECT * FROM movies WHERE status = 'downloaded' AND file_path IS NOT NULL").all();
-  for (const movie of movies) {
+  
+  const processMovieUpgrade = async (movie) => {
     try {
-      if (!fs.existsSync(movie.file_path)) continue;
+      if (!fs.existsSync(movie.file_path)) return;
       const parsedPath = path.parse(movie.file_path);
       for (const tCode of targetCodes) {
         const subPath = path.join(parsedPath.dir, `${parsedPath.name}.${tCode}.srt`);
@@ -446,7 +463,9 @@ const upgradeTranslatedToNative = async () => {
     } catch (err) {
       console.error(`[SubtitleService] Upgrade check failed for ${movie.title}:`, err.message);
     }
-  }
+  };
+
+  await runWithConcurrency(movies, 3, processMovieUpgrade);
 
   // Episodes
   const episodes = db.prepare(`
@@ -455,9 +474,10 @@ const upgradeTranslatedToNative = async () => {
     JOIN shows s ON e.show_id = s.id
     WHERE e.status = 'downloaded' AND e.file_path IS NOT NULL
   `).all();
-  for (const ep of episodes) {
+
+  const processEpisodeUpgrade = async (ep) => {
     try {
-      if (!fs.existsSync(ep.file_path)) continue;
+      if (!fs.existsSync(ep.file_path)) return;
       const parsedPath = path.parse(ep.file_path);
       const label = `${ep.show_title} S${String(ep.season_number).padStart(2, '0')}E${String(ep.episode_number).padStart(2, '0')}`;
       for (const tCode of targetCodes) {
@@ -475,7 +495,9 @@ const upgradeTranslatedToNative = async () => {
     } catch (err) {
       console.error(`[SubtitleService] Upgrade check failed for ${label}:`, err.message);
     }
-  }
+  };
+
+  await runWithConcurrency(episodes, 3, processEpisodeUpgrade);
 };
 
 const init = () => {
@@ -496,7 +518,8 @@ const init = () => {
     runAll
   );
 
-  cron.schedule(cronExp, () => taskRegistry.executeTask('subtitle_downloader'));
+  const job = cron.schedule(cronExp, () => taskRegistry.executeTask('subtitle_downloader'));
+  registerJob(job);
   console.log('[SubtitleService] Scheduler initialized.');
 };
 
@@ -521,12 +544,19 @@ const downloadSubtitlesForEpisodes = async () => {
     WHERE e.status = 'downloaded' AND e.file_path IS NOT NULL
   `).all();
 
-  for (const ep of episodes) {
+  const processEpisode = async (ep) => {
     try {
-      if (!fs.existsSync(ep.file_path)) continue;
+      if (!fs.existsSync(ep.file_path)) return;
 
       const parsedPath = path.parse(ep.file_path);
       const label = `${ep.show_title} S${String(ep.season_number).padStart(2, '0')}E${String(ep.episode_number).padStart(2, '0')}`;
+
+      // Skip if all configured languages already have subtitles
+      const missingLangs = providerLangs.filter(langCode =>
+        !fs.existsSync(path.join(parsedPath.dir, `${parsedPath.name}.${langCode}.srt`))
+      );
+      if (missingLangs.length === 0) return;
+
       console.log(`[SubtitleService] Checking subtitles for: ${label}`);
 
       for (const langCode of providerLangs) {
@@ -581,7 +611,9 @@ const downloadSubtitlesForEpisodes = async () => {
     } catch (err) {
       console.error(`[SubtitleService] Failed for episode ${ep.show_title} S${ep.season_number}E${ep.episode_number}:`, err.message);
     }
-  }
+  };
+
+  await runWithConcurrency(episodes, 3, processEpisode);
 };
 
 const downloadSubtitlesForMovie = async (movie, langCode) => {

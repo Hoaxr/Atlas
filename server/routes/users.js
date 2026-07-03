@@ -3,6 +3,7 @@ const router = express.Router();
 const bcrypt = require('bcrypt');
 const db = require('../config/database');
 const userProvisioningService = require('../services/userProvisioningService');
+const presenceTracker = require('../services/presenceTracker');
 
 const hashPassword = (password) => bcrypt.hash(password, 12);
 
@@ -17,8 +18,14 @@ const requireAdmin = (req, res, next) => {
 // GET /api/users
 router.get('/', requireAdmin, (req, res) => {
   try {
-    const users = db.prepare('SELECT id, username, email, role, origin, created_at FROM users').all();
-    res.json({ status: 'success', data: users });
+    const users = db.prepare('SELECT id, username, email, role, origin, created_at, last_login FROM users').all();
+    const data = users.map(u => ({
+      ...u,
+      created_at: u.created_at ? new Date(u.created_at + 'Z').toISOString() : null,
+      last_login: u.last_login ? new Date(u.last_login + 'Z').toISOString() : null,
+      online: presenceTracker.isOnline(u.id)
+    }));
+    res.json({ status: 'success', data });
   } catch (err) {
     res.status(500).json({ status: 'error', message: err.message });
   }

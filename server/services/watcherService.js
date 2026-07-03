@@ -103,6 +103,14 @@ class WatcherService {
         const etaTime = remaining > 0 ? new Date(Date.now() + remaining) : null;
         const etaStr = etaTime ? etaTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : null;
 
+        // Build poster URL: try DB lookup first (English titles), fall back to Plex thumb
+        const dbPoster = resolvePoster(s.type === 'episode' ? s.grandparentTitle : s.title, s.type);
+        const plexThumb = s.type === 'episode' 
+          ? (s.grandparentThumb || s.thumb) 
+          : s.thumb;
+        const posterUrl = dbPoster 
+          || (plexThumb ? `/api/watcher/image?server=plex&path=${encodeURIComponent(plexThumb)}` : null);
+
         return {
           id: `plex_${s.sessionKey}`,
           user: s.User?.title || 'Unknown',
@@ -117,7 +125,7 @@ class WatcherService {
           timeTotal: s.duration || 0,
           state: s.Player?.state || 'playing',
           server: 'Plex',
-          poster: resolvePoster(s.type === 'episode' ? s.grandparentTitle : s.title, s.type),
+          poster: posterUrl,
           // Stream details
           quality,
           videoDecision: decisionLabel(videoStream.decision),

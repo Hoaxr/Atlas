@@ -23,7 +23,7 @@ const parseQuality = (title) => {
   return '—';
 };
 
-export default function ManualSearchModal({ mediaId, mediaType, title, onClose, onGrabbed }) {
+export default function ManualSearchModal({ mediaId, mediaType, season, title, onClose, onGrabbed }) {
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError]   = useState(null);
@@ -31,10 +31,14 @@ export default function ManualSearchModal({ mediaId, mediaType, title, onClose, 
 
   const endpoint = mediaType === 'episode'
     ? `/library/episodes/${mediaId}/search`
+    : mediaType === 'season'
+    ? `/library/shows/${mediaId}/seasons/${season}/search`
     : `/library/movies/${mediaId}/search`;
 
   const grabEndpoint = mediaType === 'episode'
     ? `/library/episodes/${mediaId}/grab`
+    : mediaType === 'season'
+    ? `/library/shows/${mediaId}/seasons/${season}/download`
     : `/library/movies/${mediaId}/grab`;
 
   useEffect(() => {
@@ -143,7 +147,7 @@ export default function ManualSearchModal({ mediaId, mediaType, title, onClose, 
                     <button
                       onClick={() => handleGrab(r, idx)}
                       disabled={grabbing !== null}
-                      className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 hover:bg-cyan-500/20 hover:border-cyan-500/40 transition-all text-xs font-semibold disabled:opacity-50"
+                      className="shrink-0 flex items-center gap-1.5 px-4 py-2 rounded-lg bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 transition-all text-xs font-bold disabled:opacity-50"
                     >
                       {grabbing === idx ? (
                         <Loader2 className="w-3.5 h-3.5 animate-spin" />

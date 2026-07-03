@@ -89,13 +89,13 @@ const EpisodeDetailsModal = ({ episode, show, onClose, onAutoSearch, onManualSea
             <div className="flex flex-row gap-2 sm:flex-1">
               <button
                 onClick={() => onAutoSearch && onAutoSearch(episode)}
-                className="flex-1 bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-sm font-bold px-5 py-3 sm:py-2.5 rounded-xl flex items-center justify-center gap-2 transition-colors"
+                className="flex-1 bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 text-sm font-bold px-5 py-3 rounded-xl flex items-center justify-center gap-2 transition-all"
               >
-                <Zap className="w-4 h-4 fill-current" /> Auto Search
+                <Zap className="w-4 h-4" /> Auto Search
               </button>
               <button
                 onClick={() => onManualSearch && onManualSearch(episode)}
-                className="flex-1 bg-purple-500 hover:bg-purple-400 text-white text-sm font-bold px-5 py-3 sm:py-2.5 rounded-xl flex items-center justify-center gap-2 transition-colors"
+                className="flex-1 bg-purple-500/10 hover:bg-purple-500/20 text-purple-400 border border-purple-500/30 text-sm font-bold px-5 py-3 rounded-xl flex items-center justify-center gap-2 transition-all"
               >
                 <Search className="w-4 h-4" /> Manual Search
               </button>
@@ -103,9 +103,10 @@ const EpisodeDetailsModal = ({ episode, show, onClose, onAutoSearch, onManualSea
             {episode.file_path && onDeleteFile && (
               <button
                 onClick={() => onDeleteFile(episode)}
-                className="sm:mr-auto sm:order-first bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 text-sm font-bold px-4 py-3 sm:py-2.5 rounded-xl flex items-center justify-center gap-2 transition-colors"
+                className="sm:mr-auto sm:order-first bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 p-3 rounded-xl flex items-center justify-center transition-colors"
+                title="Delete file from disk"
               >
-                <Trash2 className="w-4 h-4" /> Delete File
+                <Trash2 className="w-4 h-4" />
               </button>
             )}
           </div>

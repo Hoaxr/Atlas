@@ -4,10 +4,13 @@ import api from '../lib/api';
 import { formatSize } from '../lib/format';
 import {
   BarChart3, Film, Tv, HardDrive, Star, TrendingUp, Eye, Clock,
-  CheckCircle2, Hash, Calendar, Zap, PlayCircle, BookmarkCheck, Activity, Languages, X, Loader2
+  CheckCircle2, Hash, Zap, PlayCircle, Activity, Languages, X, Loader2, Trash2, FolderOpen
 } from 'lucide-react';
 import { StatsSkeleton } from '../components/shared/Skeleton';
 import EmptyState from '../components/shared/EmptyState';
+import StickyBar from '../components/shared/StickyBar';
+import MediaDetailsModal from '../components/MediaDetailsModal';
+import { useStickyBar } from '../lib/useStickyBar';
 
 const formatDuration = (totalMinutes) => {
   if (!totalMinutes || totalMinutes === 0) return '0h';
@@ -59,12 +62,16 @@ const RATING_CONFIG = [
 
 export default function Statistics() {
   const navigate = useNavigate();
+  const { headerRef, stickyVisible } = useStickyBar();
   const [stats, setStats] = useState(null);
   const [traktStats, setTraktStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [missingSubsModal, setMissingSubsModal] = useState(false);
   const [missingSubsData, setMissingSubsData] = useState(null);
   const [missingSubsLoading, setMissingSubsLoading] = useState(false);
+  const [deletableData, setDeletableData] = useState(null);
+  const [deletableLoading, setDeletableLoading] = useState(false);
+  const [detailsModal, setDetailsModal] = useState({ open: false, mediaId: null, mediaType: 'movie', libraryId: null });
 
   const openMissingSubs = async () => {
     setMissingSubsModal(true);
@@ -81,7 +88,24 @@ export default function Statistics() {
     }
   };
 
-  useEffect(() => { fetchStats(); }, []);
+  const fetchDeletable = async (withTmdb = false) => {
+    setDeletableLoading(true);
+    try {
+      const url = withTmdb ? '/library/deletable?tmdb=true' : '/library/deletable';
+      const res = await api.get(url);
+      if (res.data.status === 'success') setDeletableData(res.data.data);
+    } catch (e) {
+      console.error('Failed to fetch deletable movies', e);
+    } finally {
+      setDeletableLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchStats();
+    // Load fast results first, then auto-enrich with TMDB
+    fetchDeletable().then(() => fetchDeletable(true));
+  }, []);
 
   const fetchStats = async () => {
     try {
@@ -104,15 +128,15 @@ export default function Statistics() {
   };
 
   if (loading) return (
-    <div className="space-y-6">
-      <PageHeader />
+    <div className="space-y-3">
+      <PageHeader headerRef={headerRef} stickyVisible={stickyVisible} />
       <StatsSkeleton />
     </div>
   );
 
   if (!stats || (stats.totalMovies === 0 && stats.totalShows === 0)) return (
-    <div className="space-y-6">
-      <PageHeader />
+    <div className="space-y-3">
+      <PageHeader headerRef={headerRef} stickyVisible={stickyVisible} />
       <EmptyState icon="stats" title="No data yet" description="Add movies and shows to your library to see statistics." />
     </div>
   );
@@ -129,8 +153,8 @@ export default function Statistics() {
   }));
 
   return (
-    <div className="space-y-8">
-      <PageHeader />
+    <div className="space-y-3">
+      <PageHeader headerRef={headerRef} stickyVisible={stickyVisible} />
 
       {/* ── Hero stat cards ── */}
       <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
@@ -446,6 +470,109 @@ export default function Statistics() {
         </div>
       )}
 
+      {/* ── Deletable Movies ── */}
+      {deletableData && (
+        <div className="glass-panel rounded-2xl p-6">
+          <h3 className="text-base font-bold text-slate-200 mb-2 flex items-center gap-2">
+            <Trash2 className="w-4 h-4 text-rose-400" /> Cleanup Candidates
+          </h3>
+          <p className="text-xs text-slate-500 mb-3">
+            Movies scored by how safe they are to delete. Higher score = better candidate.<br />
+            Factors: franchise status, watch status, age, file size. TMDB enrichment adds ratings & auto-excludes highly rated (6.5+).
+          </p>
+          <button
+            onClick={() => fetchDeletable(true)}
+            disabled={deletableLoading}
+            className="text-xs font-bold px-4 py-2 rounded-xl bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 hover:bg-cyan-500/20 transition-colors disabled:opacity-50 flex items-center gap-2 mb-6"
+          >
+            {deletableLoading && <Loader2 className="w-3 h-3 animate-spin" />}
+            {deletableLoading ? 'Checking...' : 'Check'}
+          </button>
+
+          {deletableLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="w-5 h-5 animate-spin text-cyan-400" />
+            </div>
+          ) : (deletableData.highPriority?.length > 0 || deletableData.mediumPriority?.length > 0 || deletableData.lowPriority?.length > 0) ? (
+            <div className="space-y-4">
+              {/* High priority */}
+              {deletableData.highPriority?.length > 0 && (
+              <div>
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="w-2 h-2 rounded-full bg-rose-500" />
+                  <h4 className="text-sm font-bold text-rose-400">High Priority</h4>
+                  <span className="text-[10px] text-slate-500">({deletableData.highPriority.length})</span>
+                </div>
+                <div className="space-y-1.5">
+                  {deletableData.highPriority.map(m => (
+                    <DeletableCard key={m.id} movie={m} onDetails={() => setDetailsModal({ open: true, mediaId: m.tmdb_id, mediaType: 'movie', libraryId: m.id })} onDeleted={() => fetchDeletable(!!deletableData?.all?.[0]?.tmdb_rating)} />
+                  ))}
+                </div>
+              </div>
+              )}
+
+              {/* Medium priority */}
+              {deletableData.mediumPriority?.length > 0 && (
+                <div>
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="w-2 h-2 rounded-full bg-amber-500" />
+                    <h4 className="text-sm font-bold text-amber-400">Medium Priority</h4>
+                    <span className="text-[10px] text-slate-500">({deletableData.mediumPriority.length})</span>
+                  </div>
+                  <div className="space-y-1.5">
+                    {deletableData.mediumPriority.map(m => (
+                      <DeletableCard key={m.id} movie={m} onDetails={() => setDetailsModal({ open: true, mediaId: m.tmdb_id, mediaType: 'movie', libraryId: m.id })} onDeleted={() => fetchDeletable(!!deletableData?.all?.[0]?.tmdb_rating)} />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Low priority */}
+              {deletableData.lowPriority?.length > 0 && (
+                <div>
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="w-2 h-2 rounded-full bg-slate-500" />
+                    <h4 className="text-sm font-bold text-slate-400">Low Priority</h4>
+                    <span className="text-[10px] text-slate-500">({deletableData.lowPriority.length})</span>
+                  </div>
+                  <div className="space-y-1.5">
+                    {deletableData.lowPriority.map(m => (
+                      <DeletableCard key={m.id} movie={m} onDetails={() => setDetailsModal({ open: true, mediaId: m.tmdb_id, mediaType: 'movie', libraryId: m.id })} onDeleted={() => fetchDeletable(!!deletableData?.all?.[0]?.tmdb_rating)} />
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : deletableData.total > 0 ? (
+            <div className="text-center py-8">
+              <FolderOpen className="w-10 h-10 text-emerald-400 mx-auto mb-3" />
+              <p className="text-slate-300 font-medium">Nothing worth deleting!</p>
+              <p className="text-xs text-slate-500 mt-1">All movies are in collections or highly rated.</p>
+              <p className="text-slate-300 font-medium">Nothing worth deleting!</p>
+              <p className="text-xs text-slate-500 mt-1">All movies are in collections or highly rated.</p>
+            </div>
+          ) : (
+            <div className="text-center py-8">
+              <FolderOpen className="w-10 h-10 text-slate-600 mx-auto mb-3" />
+              <p className="text-slate-500">No downloaded movies found.</p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Movie Details Modal ── */}
+      <MediaDetailsModal
+        isOpen={detailsModal.open}
+        onClose={() => setDetailsModal({ open: false, mediaId: null, mediaType: 'movie', libraryId: null })}
+        mediaId={detailsModal.mediaId}
+        mediaType={detailsModal.mediaType}
+        mode="info"
+        onDelete={async (deleteFiles) => {
+          await api.delete(`/library/movies/${detailsModal.libraryId}${deleteFiles ? '?deleteFiles=true' : ''}`);
+          fetchDeletable(!!deletableData?.all?.[0]?.tmdb_rating);
+        }}
+      />
+
       {/* ── Missing Subtitles Modal ── */}
       {missingSubsModal && (
         <div
@@ -551,14 +678,17 @@ export default function Statistics() {
 // Sub-components
 // ─────────────────────────────────────────────────
 
-function PageHeader() {
+function PageHeader({ headerRef, stickyVisible }) {
   return (
-    <div>
-      <h1 className="text-xl sm:text-3xl font-black text-slate-100 flex items-center gap-2 sm:gap-3">
-        <BarChart3 className="w-6 h-6 sm:w-8 sm:h-8 text-purple-400 shrink-0" /> Statistics
-      </h1>
-      <p className="text-xs sm:text-base text-slate-400 mt-0.5 sm:mt-1 hidden sm:block">Library analytics and insights.</p>
-    </div>
+    <>
+      <div ref={headerRef}>
+        <h1 className="text-xl sm:text-3xl font-black text-slate-800 dark:text-slate-100 flex items-center gap-2 sm:gap-3 !mb-0">
+          <BarChart3 className="w-6 h-6 sm:w-8 sm:h-8 text-purple-400 shrink-0" /> <span className="truncate">Statistics</span>
+        </h1>
+        <p className="text-xs sm:text-base text-slate-400 mt-0.5 sm:mt-1 hidden sm:block">Library analytics and insights.</p>
+      </div>
+      <StickyBar visible={stickyVisible} />
+    </>
   );
 }
 
@@ -619,6 +749,107 @@ function RecentCard({ item, onClick }) {
         <p className="text-[10px] text-slate-600 mt-1">
           Added {new Date(item.added_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
         </p>
+      </div>
+    </div>
+  );
+}
+
+function DeletableCard({ movie, onDetails, onDeleted }) {
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const scoreColor = movie.score >= 35 ? 'text-rose-400 bg-rose-500/10 border-rose-500/20'
+    : movie.score >= 15 ? 'text-amber-400 bg-amber-500/10 border-amber-500/20'
+    : 'text-slate-400 bg-slate-500/10 border-slate-500/20';
+
+  const handleDelete = async (deleteFiles) => {
+    setDeleting(true);
+    try {
+      await api.delete(`/library/movies/${movie.id}${deleteFiles ? '?deleteFiles=true' : ''}`);
+      onDeleted?.();
+    } catch (e) {
+      console.error('Failed to delete movie', e);
+    } finally {
+      setDeleting(false);
+      setDeleteOpen(false);
+    }
+  };
+
+  if (deleting) {
+    return (
+      <div className="flex items-center gap-3 p-3 rounded-lg bg-slate-800/30 border border-white/5 opacity-50">
+        <Loader2 className="w-4 h-4 animate-spin text-slate-400" />
+        <span className="text-xs text-slate-400">Deleting...</span>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      onClick={onDetails}
+      className="flex items-start gap-3 p-3 rounded-lg bg-slate-800/30 border border-white/5 hover:bg-slate-800/50 hover:border-slate-600/30 transition-all cursor-pointer group"
+    >
+      {/* Score badge */}
+      <div className={`shrink-0 flex flex-col items-center justify-center w-10 h-10 rounded-lg border ${scoreColor}`}>
+        <span className="text-sm font-black leading-none">{movie.score}</span>
+        <span className="text-[8px] uppercase tracking-wider opacity-70">pts</span>
+      </div>
+
+      {/* Info */}
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-semibold text-slate-200 truncate group-hover:text-white transition-colors">
+          {movie.title} {movie.year && <span className="text-slate-500 font-normal">({movie.year})</span>}
+        </p>
+        <div className="flex flex-wrap items-center gap-1.5 mt-1">
+          {movie.tmdb_rating !== null && (
+            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+              movie.tmdb_rating < 5 ? 'bg-rose-500/15 text-rose-400' :
+              movie.tmdb_rating < 7 ? 'bg-amber-500/15 text-amber-400' :
+              'bg-emerald-500/15 text-emerald-400'
+            }`}>
+              ★ {movie.tmdb_rating}
+            </span>
+          )}
+          {!movie.watched && (
+            <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-700/50 text-slate-400">Unwatched</span>
+          )}
+          <span className="text-[10px] text-slate-500">{formatSize(movie.file_size)}</span>
+        </div>
+        {movie.reasons?.length > 0 && (
+          <div className="flex flex-wrap gap-1 mt-1.5">
+            {movie.reasons.map((r, i) => (
+              <span key={i} className="text-[9px] text-slate-600 bg-slate-800/50 px-1.5 py-0.5 rounded">{r}</span>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Actions */}
+      <div className="shrink-0 flex items-center gap-1.5" onClick={e => e.stopPropagation()}>
+        <div className="relative">
+          <button
+            onClick={() => setDeleteOpen(!deleteOpen)}
+            className="p-2 rounded-lg bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 transition-colors"
+            title="Delete"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
+          {deleteOpen && (
+            <div className="absolute right-0 top-full mt-1 w-44 bg-slate-800 border border-slate-700 rounded-lg shadow-xl z-10 py-1">
+              <button
+                onClick={() => handleDelete(false)}
+                className="w-full text-left px-3 py-2 text-xs text-slate-300 hover:bg-slate-700 hover:text-white transition-colors"
+              >
+                Delete from library
+              </button>
+              <button
+                onClick={() => handleDelete(true)}
+                className="w-full text-left px-3 py-2 text-xs text-rose-400 hover:bg-slate-700 hover:text-rose-300 transition-colors"
+              >
+                Delete with files
+              </button>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

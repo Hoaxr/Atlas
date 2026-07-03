@@ -5,6 +5,8 @@ const { GoogleGenerativeAI } = require('@google/generative-ai');
 const db = require('../config/database');
 const taskRegistry = require('./taskRegistry');
 const eventBus = require('./eventBus');
+const { runWithConcurrency } = require('../utils/concurrency');
+const { registerJob } = require('../utils/cronRegistry');
 
 const translateWithGemini = async (text, targetLang, apiKey) => {
   const genAI = new GoogleGenerativeAI(apiKey);
@@ -188,7 +190,8 @@ const translateSubtitles = async () => {
   // Process movies
   const movies = db.prepare("SELECT * FROM movies WHERE status = 'downloaded' AND file_path IS NOT NULL").all();
   let translatedCount = 0;
-  for (const movie of movies) {
+  
+  const processMovie = async (movie) => {
     try {
       const result = await translateFile(movie.file_path, movie.title);
       if (result) {
@@ -199,11 +202,14 @@ const translateSubtitles = async () => {
       console.error(`[AITranslator] Failed to translate ${movie.title}:`, err.message);
       eventBus.error(`Subtitle translation failed: ${movie.title}`, { title: movie.title, type: 'movie', error: err.message });
     }
-  }
+  };
+
+  await runWithConcurrency(movies, 2, processMovie);
 
   // Process TV show episodes
   const episodes = db.prepare("SELECT e.*, s.title as show_title FROM episodes e JOIN shows s ON e.show_id = s.id WHERE e.status = 'downloaded' AND e.file_path IS NOT NULL").all();
-  for (const ep of episodes) {
+  
+  const processEpisode = async (ep) => {
     try {
       const label = `${ep.show_title} S${String(ep.season_number).padStart(2, '0')}E${String(ep.episode_number).padStart(2, '0')}`;
       const result = await translateFile(ep.file_path, label, ep.season_number, ep.episode_number);
@@ -215,7 +221,9 @@ const translateSubtitles = async () => {
       console.error(`[AITranslator] Failed to translate ${ep.show_title} S${ep.season_number}E${ep.episode_number}:`, err.message);
       eventBus.error(`Subtitle translation failed: ${ep.show_title} S${ep.season_number}E${ep.episode_number}`, { title: `${ep.show_title} S${ep.season_number}E${ep.episode_number}`, type: 'episode', error: err.message });
     }
-  }
+  };
+
+  await runWithConcurrency(episodes, 2, processEpisode);
 
   if (translatedCount > 0) {
     console.log(`[AITranslator] Translated ${translatedCount} subtitle(s) into ${targetLang}`);
@@ -233,7 +241,8 @@ const init = () => {
     translateSubtitles
   );
 
-  cron.schedule(cronExp, () => taskRegistry.executeTask('ai_translator'));
+  const job = cron.schedule(cronExp, () => taskRegistry.executeTask('ai_translator'));
+  registerJob(job);
   console.log('[AITranslator] Scheduler initialized.');
 };
 

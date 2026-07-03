@@ -23,7 +23,8 @@ db.exec(`
     password TEXT,
     email TEXT,
     role TEXT DEFAULT 'user',
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    last_login DATETIME
   );
 
   CREATE TABLE IF NOT EXISTS requests (
@@ -249,5 +250,13 @@ if (!existingAdmin) {
   }
 }
 
+// Migration: add last_login column for existing databases
+try {
+  const cols = db.prepare("PRAGMA table_info(users)").all().map(c => c.name);
+  if (!cols.includes('last_login')) {
+    db.exec('ALTER TABLE users ADD COLUMN last_login DATETIME');
+    console.log('[DB] Added last_login column to users table');
+  }
+} catch {}
 
 module.exports = db;

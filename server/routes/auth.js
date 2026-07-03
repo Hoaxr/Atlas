@@ -38,6 +38,7 @@ router.post('/login', loginLimiter, async (req, res) => {
   
   if (user && await bcrypt.compare(password, user.password)) {
     const token = jwt.sign({ id: user.id, username: user.username, role: user.role }, JWT_SECRET, { expiresIn: '7d' });
+    db.prepare('UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = ?').run(user.id);
     res.json({ status: 'success', data: { token, user: { id: user.id, username: user.username, role: user.role } } });
   } else {
     res.status(401).json({ status: 'error', message: 'Invalid credentials' });

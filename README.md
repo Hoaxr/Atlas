@@ -2,6 +2,10 @@
   <h1>Atlas 🎬</h1>
   <p><strong>An elegant, all-in-one media management dashboard — track, search, and download your favorite Movies and TV Shows.</strong></p>
   <p>
+    <strong>Replaces Radarr • Sonarr • Bazarr • Tautulli • Overseerr/Jellyseerr</strong><br>
+    <em>One app to manage your entire media stack.</em>
+  </p>
+  <p>
     <img src="./assets/atlas.png?v=2" alt="Atlas Dashboard" width="800" />
   </p>
   <br>
@@ -9,14 +13,17 @@
 
 ## Features ✨
 
+Atlas combines the functionality of multiple *arr apps into a single, cohesive experience. Here's everything it can do:
+
 ### Dashboard & Discovery
 - **Modern Dashboard** — A beautifully designed, highly responsive UI built with React and Tailwind CSS, featuring a sleek dark mode with class-based theming.
 - **Media Tracking** — Easily monitor upcoming and existing Movies and TV Shows with dynamic status indicators (monitored, downloaded, downloading, missing).
 - **Smart Discovery** — Search for new content from TMDB and instantly add it to your library with a single click.
 - **Calendar View** — Keep track of upcoming movie releases and TV show air dates with an intuitive interactive calendar.
 - **Library Statistics** — View beautiful visual insights and detailed statistics about your entire media collection, with charts and graphs.
+- **Cleanup Candidates** — Smart scoring system identifies movies safe to delete based on franchise detection, TMDB ratings, watch status, age, and file size. Includes one-click delete from library or with files.
 - **Customizable Views** — Switch seamlessly between grid and list layouts with advanced sorting and filtering (by status, rating, release year, and more).
-- **Responsive Layout** — Fully functional on desktop and tablet screens.
+- **Responsive Layout** — Fully functional on desktop, tablet, and mobile screens. Every page is optimized for all device sizes.
 
 ### Media Details
 - **Detailed Media Views** — Dive deep into Movie and TV Show details, including full cast & crew, seasons, episodes, release dates, ratings, and trailers.
@@ -65,6 +72,9 @@
 - **User Portal** — Dedicated portal for users to track their requests and activity.
 - **Request System** — Allow users to request movies and TV shows, with approval workflows.
 - **Change Password** — In-app password management for all users.
+- **Online Presence** — Real-time online/offline indicators for all users via WebSocket presence tracking.
+- **Last Login Tracking** — See when each user last logged into their account.
+- **User Import** — Automatically discover and import users from connected media servers (Plex, Jellyfin, Emby).
 
 ### External Integrations
 - **TMDB (The Movie Database)** — Core data provider for metadata, posters, cast, crew, and more.
@@ -213,7 +223,7 @@ Upon first launch, the **System Status** page will show issues:
 |---|---|
 | `/api/auth` | Authentication (login, register, status) |
 | `/api/settings` | Application settings (TMDB, clients, indexers, etc.) |
-| `/api/library` | Library management (movies, shows, paths, scanning) |
+| `/api/library` | Library management (movies, shows, paths, scanning, deletable analysis) |
 | `/api/tmdb` | TMDB data proxy (search, details, trending) |
 | `/api/trakt` | Trakt.tv sync and authentication |
 | `/api/tasks` | Background task management |

@@ -28,6 +28,15 @@ export default function Layout() {
   const navigate = useNavigate();
   const location = useLocation();
   const isDetailPage = /^\/(movies|shows)\/\d+$/.test(location.pathname);
+  const isLibraryPage = /^\/(movies|shows)$/.test(location.pathname);
+  const isDiscoverPage = location.pathname === '/discover';
+  const isCalendarPage = location.pathname === '/calendar';
+  const isDownloadsPage = location.pathname === '/downloads';
+  const isStatsPage = location.pathname === '/stats';
+  const isRequestsPage = location.pathname === '/requests';
+  const isTasksPage = location.pathname === '/tasks';
+  const isWatcherPage = location.pathname === '/watcher';
+  const isSettingsPage = location.pathname === '/settings';
   const [libStats, setLibStats] = useState({ movies: 0, shows: 0 });
   const [clientStats, setClientStats] = useState({ dl_info_speed: 0, up_info_speed: 0 });
   const [downloads, setDownloads] = useState([]);
@@ -44,6 +53,8 @@ export default function Layout() {
     localStorage.removeItem('atlas_user');
     navigate('/login');
   };
+
+  const hasToken = !!localStorage.getItem('atlas_token');
 
   // Prefetch library data into shared cache so Dashboard loads instantly
   const prefetchLibrary = async () => {
@@ -165,6 +176,13 @@ export default function Layout() {
     'escape': () => setShortcutsOpen(false),
   });
 
+  // Listen for sidebar toggle from child components (e.g., sticky search bar)
+  useEffect(() => {
+    const handler = () => setSidebarOpen(true);
+    window.addEventListener('atlas-toggle-sidebar', handler);
+    return () => window.removeEventListener('atlas-toggle-sidebar', handler);
+  }, []);
+
   const formatSpeed = (bytes) => {
     if (!bytes || bytes === 0) return '0 B/s';
     const k = 1024;
@@ -201,6 +219,7 @@ export default function Layout() {
               </span>
             </span>
           </div>
+          {hasToken && (
           <button
             onClick={handleLogout}
             className="p-2 rounded-xl bg-slate-100 dark:bg-slate-900/50 border border-slate-200/60 dark:border-white/5 hover:bg-rose-500/10 dark:hover:bg-rose-500/10 hover:border-rose-500/30 transition-colors text-slate-500 dark:text-slate-400 hover:text-rose-500 dark:hover:text-rose-400"
@@ -209,6 +228,7 @@ export default function Layout() {
           >
             <LogOut className="w-5 h-5" />
           </button>
+          )}
         </div>
 
 
@@ -294,7 +314,7 @@ export default function Layout() {
       {/* Main Content */}
       <main className="flex-1 overflow-y-auto relative z-10">
         {/* Mobile header */}
-        <div className={`lg:hidden flex items-center justify-between p-4 glass-panel ${isDetailPage ? 'hidden' : ''}`}>
+        <div className={`lg:hidden flex items-center justify-between p-4 glass-panel ${isDetailPage || isLibraryPage || isDiscoverPage || isCalendarPage || isDownloadsPage || isStatsPage || isRequestsPage || isTasksPage || isWatcherPage || isSettingsPage ? 'hidden' : ''}`}>
           <button
             onClick={() => setSidebarOpen(true)}
             className="p-2 rounded-xl hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors"
@@ -308,7 +328,7 @@ export default function Layout() {
         </div>
 
         {/* Download speed indicator - mobile */}
-        <div className={`lg:hidden px-4 py-2 flex items-center gap-4 text-xs text-slate-500 ${isDetailPage ? 'hidden' : ''}`}>
+        <div className={`lg:hidden px-4 py-2 flex items-center gap-4 text-xs text-slate-500 ${isDetailPage || isLibraryPage || isDiscoverPage || isCalendarPage || isDownloadsPage || isStatsPage || isRequestsPage || isTasksPage || isWatcherPage || isSettingsPage ? 'hidden' : ''}`}>
           {downloads.length > 0 && (
             <>
               <span className="flex items-center gap-1"><ArrowDown className="w-3 h-3 text-emerald-400" /> {formatSpeed(clientStats.dl_info_speed)}</span>

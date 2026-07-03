@@ -46,7 +46,8 @@ const getTorrents = async (client) => {
   const cookie = await login(client);
   if (!cookie) return [];
   const response = await axios.get(`${client.host}:${client.port}/api/v2/torrents/info`, {
-    headers: { 'Cookie': cookie }
+    headers: { 'Cookie': cookie },
+    params: { filter: 'all' }
   });
   return response.data;
 };

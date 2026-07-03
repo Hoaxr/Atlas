@@ -13,7 +13,7 @@ export default function LibraryTab({
 
   return (
     <div className="max-w-5xl mx-auto space-y-8 animate-fade-in">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <h2 className="text-2xl font-bold text-blue-400 flex items-center gap-2">
           <FolderTree className="w-7 h-7" /> Library & Root Folders
         </h2>
@@ -214,8 +214,9 @@ export default function LibraryTab({
       )}
       
       <div className="space-y-4">
-        <div className="flex gap-3">
+        <div className="flex flex-col sm:flex-row gap-3">
           <input type="text" className="glass-input flex-1" placeholder="e.g. /mnt/nas/movies" value={newPath} onChange={(e) => setNewPath(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleAddPath()} />
+          <div className="flex gap-3">
           <CustomSelect
             value={newPathType}
             onChange={(e) => setNewPathType(e.target.value)}
@@ -226,13 +227,14 @@ export default function LibraryTab({
             ]}
             className="w-36 shrink-0"
           />
-          <button onClick={handleAddPath} className="bg-slate-800 hover:bg-slate-700 text-white px-6 py-2.5 rounded-xl font-bold flex items-center gap-2"><Plus className="w-4 h-4"/> Add Path</button>
+          <button onClick={handleAddPath} className="bg-slate-800 hover:bg-slate-700 text-white px-6 py-2.5 rounded-xl font-bold flex items-center gap-2 shrink-0"><Plus className="w-4 h-4"/> Add Path</button>
+          </div>
         </div>
         
         <div className="space-y-3 pt-4">
           {paths.length === 0 ? <p className="text-slate-500 italic">No root folders configured yet.</p> : paths.map((p) => (
-            <div key={p.id} className="flex items-center justify-between bg-slate-950/50 p-4 rounded-xl border border-white/5">
-              <div className="flex items-center gap-3">
+            <div key={p.id} className="bg-slate-950/50 p-4 rounded-xl border border-white/5 space-y-2">
+              <div className="flex items-center justify-between">
                 <span className={`text-xs font-bold px-2 py-0.5 rounded ${
                   p.type === 'movies' ? 'bg-cyan-500/20 text-cyan-400' :
                   p.type === 'tv' ? 'bg-purple-500/20 text-purple-400' :
@@ -240,9 +242,9 @@ export default function LibraryTab({
                 }`}>
                   {p.type === 'movies' ? 'Movies' : p.type === 'tv' ? 'TV' : 'Downloads'}
                 </span>
-                <span className="text-slate-200 font-mono text-sm">{p.path}</span>
+                <button onClick={() => api.delete(`/library/paths/${p.id}`).then(fetchPaths)} className="text-red-400 hover:text-red-300 p-2"><Trash2 className="w-5 h-5" /></button>
               </div>
-              <button onClick={() => api.delete(`/library/paths/${p.id}`).then(fetchPaths)} className="text-red-400 hover:text-red-300 p-2"><Trash2 className="w-5 h-5" /></button>
+              <span className="text-slate-200 font-mono text-sm break-all">{p.path}</span>
             </div>
           ))}
         </div>

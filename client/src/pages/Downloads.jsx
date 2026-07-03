@@ -2,8 +2,11 @@ import { useState, useEffect } from 'react';
 import api from '../lib/api';
 import { DownloadCloud, ArrowDown, ArrowUp, Activity } from 'lucide-react';
 import { customAlert, customConfirm } from '../utils/alerts';
+import StickyBar from '../components/shared/StickyBar';
+import { useStickyBar } from '../lib/useStickyBar';
 
 export default function Downloads() {
+  const { headerRef, stickyVisible } = useStickyBar();
   const [downloads, setDownloads] = useState([]);
   const [stats, setStats] = useState({ dl_info_speed: 0, up_info_speed: 0 });
 
@@ -49,17 +52,25 @@ export default function Downloads() {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl sm:text-3xl font-black text-slate-800 dark:text-slate-100 flex items-center gap-2 sm:gap-3">
-            <DownloadCloud className="w-6 h-6 sm:w-8 sm:h-8 text-emerald-400" /> Downloads
+    <div className="space-y-3">
+      <div ref={headerRef} className="flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <h1 className="text-xl sm:text-3xl font-black text-slate-800 dark:text-slate-100 flex items-center gap-2 sm:gap-3 !mb-0">
+            <DownloadCloud className="w-6 h-6 sm:w-8 sm:h-8 text-emerald-400" /> <span className="truncate">Downloads</span>
           </h1>
           <p className="text-xs sm:text-base text-slate-400 mt-0.5 sm:mt-1 hidden sm:block">Manage your active download client tasks.</p>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <StickyBar visible={stickyVisible}>
+        <div className="flex items-center gap-3 ml-auto sm:hidden text-xs">
+          <span className="font-bold text-slate-300">{downloads.length} active</span>
+          <span className="flex items-center gap-1 text-emerald-400"><ArrowDown className="w-3 h-3" />{formatSpeed(stats.dl_info_speed)}</span>
+          <span className="flex items-center gap-1 text-slate-400"><ArrowUp className="w-3 h-3" />{formatSpeed(stats.up_info_speed)}</span>
+        </div>
+      </StickyBar>
+
+      <div className="hidden sm:grid grid-cols-1 md:grid-cols-2 gap-6">
         <div className="glass-panel p-6 rounded-2xl flex items-center space-x-4 border-l-4 border-l-emerald-500">
           <div className="p-3 bg-emerald-500/10 rounded-xl text-emerald-400">
             <DownloadCloud className="w-6 h-6" />

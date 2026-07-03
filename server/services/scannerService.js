@@ -52,18 +52,28 @@ const scanSubtitleLangs = async (filePath) => {
 const parseMediaTitle = (filename, folderPath) => {
   const cleanName = filename.replace(/\.(mp4|mkv|avi|mov|wmv)$/i, '');
   
-  const tvShowMatch = cleanName.match(/(S\d{1,2}E\d{1,2}|Season \d+)/i);
+  const tvShowMatch = cleanName.match(/(S\d{1,2}E\d{1,2}(?:[-]E?\d{1,2})*|Season \d+)/i);
   if (tvShowMatch) {
     let title = cleanName.substring(0, tvShowMatch.index).replace(/[._()[\]-]/g, ' ').trim();
     let seasonNumber = 1;
     let episodeNumber = 1;
+    let episodeEnd = null; // For multi-episode files like S04E01-02
     
     const sMatch = tvShowMatch[0].match(/S(\d{1,2})/i);
-    const eMatch = tvShowMatch[0].match(/E(\d{1,2})/i);
     if (sMatch) seasonNumber = parseInt(sMatch[1], 10);
-    if (eMatch) episodeNumber = parseInt(eMatch[1], 10);
+
+    // Extract all episode numbers from the match
+    // Handles: S01E01, S01E01-02, S01E01E02, S01E01-E02, S01E01-02-03
+    const epBlock = tvShowMatch[0].replace(/^S\d{1,2}/i, ''); // Remove season prefix
+    const epNumbers = [...epBlock.matchAll(/(\d{1,3})/g)].map(m => parseInt(m[1], 10));
+    if (epNumbers.length > 0) {
+      episodeNumber = epNumbers[0];
+      if (epNumbers.length > 1) {
+        episodeEnd = epNumbers[epNumbers.length - 1];
+      }
+    }
     
-    if (!sMatch && !eMatch) {
+    if (!sMatch && epNumbers.length === 0) {
       const seasonWordMatch = tvShowMatch[0].match(/Season\s+(\d+)/i);
       if (seasonWordMatch) seasonNumber = parseInt(seasonWordMatch[1], 10);
       const epWordMatch = cleanName.match(/Episode\s+(\d+)/i);
@@ -83,7 +93,7 @@ const parseMediaTitle = (filename, folderPath) => {
     // Strip trailing year (e.g., "Invasion 2021" -> "Invasion")
     title = title.replace(/\s*(19\d{2}|20\d{2})\s*$/, '').trim();
     
-    return { title, seasonNumber, episodeNumber, isShow: true };
+    return { title, seasonNumber, episodeNumber, episodeEnd, isShow: true };
   }
 
   // Otherwise, treat as Movie
@@ -97,6 +107,8 @@ const parseMediaTitle = (filename, folderPath) => {
 
   let title = titlePart.replace(/[._()[\]-]/g, ' ').trim();
   title = title.replace(/\b(1080p|720p|4k|2160p|bluray|webdl|web-dl|x264|x265)\b.*/i, '').trim();
+  
+  return { title, year, isShow: false, episodeEnd: null };
 
   return { title, year, isShow: false };
 };
@@ -224,7 +236,7 @@ const doScan = async () => {
       
       const fileDir = file.parentPath || file.path;
       const fullPath = path.join(fileDir, file.name);
-      const { title, year, isShow, seasonNumber, episodeNumber } = parseMediaTitle(file.name, fileDir);
+      const { title, year, isShow, seasonNumber, episodeNumber, episodeEnd } = parseMediaTitle(file.name, fileDir);
       if (!title) {
         scanProgress.skippedCount++;
         scanProgress.skippedFiles.push({ name: file.name, reason: 'Could not parse title from filename', path: file.path });
@@ -247,6 +259,19 @@ const doScan = async () => {
           showId = existingShow.id;
           tmdbId = existingShow.tmdb_id;
           
+          // Update tmdb_status if missing
+          if (tmdbId) {
+            try {
+              const currentStatus = db.prepare('SELECT tmdb_status FROM shows WHERE id = ?').get(showId);
+              if (!currentStatus?.tmdb_status) {
+                const fullShow = await tmdbService.getShowById(tmdbId);
+                if (fullShow?.status) {
+                  db.prepare('UPDATE shows SET tmdb_status = ? WHERE id = ?').run(fullShow.status, showId);
+                }
+              }
+            } catch { /* non-critical */ }
+          }
+
           // Ensure we fetch episodes if they were missed in a previous scan
           const epCount = db.prepare('SELECT COUNT(*) as count FROM episodes WHERE show_id = ?').get(showId).count;
           if (epCount === 0 && tmdbId) {
@@ -286,8 +311,15 @@ const doScan = async () => {
               const showRating = matchedShow.vote_average || 0;
               let showId = existingMonitored ? existingMonitored.id : null;
 
+              // Fetch full TMDB details for status and accurate data
+              let fullShow = null;
+              try {
+                fullShow = await tmdbService.getShowById(tmdbId);
+              } catch { /* keep matchedShow data */ }
+              const tmdbStatus = fullShow?.status || '';
+
               if (existingMonitored) {
-                db.prepare('UPDATE shows SET folder_path = ?, status = ?, rating = ? WHERE tmdb_id = ?').run(showFolderPath, 'downloaded', showRating, tmdbId);
+                db.prepare('UPDATE shows SET folder_path = ?, status = ?, rating = ?, tmdb_status = ? WHERE tmdb_id = ?').run(showFolderPath, 'downloaded', showRating, tmdbStatus, tmdbId);
               } else {
                 // Only calculate folder size for truly new shows (one-time cost per show)
                 let folderSize = 0;
@@ -318,8 +350,8 @@ const doScan = async () => {
                 const defaultProfileId = defaultProfile?.id || null;
 
                 const insertRes = db.prepare(`
-                  INSERT INTO shows (tmdb_id, title, year, poster_path, overview, status, folder_path, rating, folder_size, quality_profile_id)
-                  VALUES (?, ?, ?, ?, ?, 'downloaded', ?, ?, ?, ?)
+                  INSERT INTO shows (tmdb_id, title, year, poster_path, overview, status, folder_path, rating, folder_size, quality_profile_id, tmdb_status)
+                  VALUES (?, ?, ?, ?, ?, 'downloaded', ?, ?, ?, ?, ?)
                 `).run(
                   matchedShow.id,
                   matchedShow.name,
@@ -329,7 +361,8 @@ const doScan = async () => {
                   showFolderPath,
                   showRating,
                   folderSize,
-                  defaultProfileId
+                  defaultProfileId,
+                  tmdbStatus
                 );
                 showId = insertRes.lastInsertRowid;
                 
@@ -365,7 +398,7 @@ const doScan = async () => {
           }
         }
         
-        // Link the specific episode to the file
+        // Link the episode(s) to the file
         if (showId && seasonNumber !== undefined && episodeNumber !== undefined) {
           let fileSize = 0;
           try {
@@ -388,17 +421,28 @@ const doScan = async () => {
             }
           } catch { /* ignore */ }
 
-          db.prepare(`
-            UPDATE episodes 
-            SET file_path = ?, status = 'downloaded', file_size = ?, scene_name = ?
-            WHERE show_id = ? AND season_number = ? AND episode_number = ?
-          `).run(fullPath, fileSize, resName, showId, seasonNumber, episodeNumber);
+          const lastEp = episodeEnd || episodeNumber;
+          for (let ep = episodeNumber; ep <= lastEp; ep++) {
+            // Ensure the episode row exists
+            db.prepare(`
+              INSERT OR IGNORE INTO episodes (show_id, season_number, episode_number, title, overview, status, air_date)
+              VALUES (?, ?, ?, ?, ?, 'monitored', NULL)
+            `).run(showId, seasonNumber, ep, file.name, '');
 
-          // Scan for subtitle files in the episode's directory
+            db.prepare(`
+              UPDATE episodes 
+              SET file_path = ?, status = 'downloaded', file_size = ?, scene_name = ?
+              WHERE show_id = ? AND season_number = ? AND episode_number = ?
+            `).run(fullPath, fileSize, resName, showId, seasonNumber, ep);
+          }
+
+          // Scan for subtitle files in the episode's directory (only for first episode)
           const epLangs = await scanSubtitleLangs(fullPath);
           if (epLangs.length > 0) {
-            db.prepare('UPDATE episodes SET subtitles = ? WHERE show_id = ? AND season_number = ? AND episode_number = ?')
-              .run(JSON.stringify(epLangs), showId, seasonNumber, episodeNumber);
+            for (let ep = episodeNumber; ep <= lastEp; ep++) {
+              db.prepare('UPDATE episodes SET subtitles = ? WHERE show_id = ? AND season_number = ? AND episode_number = ?')
+                .run(JSON.stringify(epLangs), showId, seasonNumber, ep);
+            }
           }
         }
 
@@ -412,13 +456,24 @@ const doScan = async () => {
         }
 
         try {
-          const results = await tmdbService.searchMovies(title);
+          // Include year in search to help TMDB disambiguate
+          const searchQuery = year ? `${title} ${year}` : title;
+          const results = await tmdbService.searchMovies(searchQuery);
           let matchedMovie = null;
           if (results.length > 0) {
             if (year) {
+              // Try exact year match first, then ±1 year tolerance
               matchedMovie = results.find(r => r.release_date && r.release_date.startsWith(year.toString()));
+              if (!matchedMovie) {
+                matchedMovie = results.find(r => {
+                  if (!r.release_date) return false;
+                  const rYear = parseInt(r.release_date.split('-')[0]);
+                  return Math.abs(rYear - year) <= 1;
+                });
+              }
             }
-            if (!matchedMovie) matchedMovie = results[0];
+            // Only fall back to first result if no year was available
+            if (!matchedMovie && !year) matchedMovie = results[0];
           }
 
           if (!matchedMovie) {

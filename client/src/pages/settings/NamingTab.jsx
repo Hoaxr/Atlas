@@ -103,11 +103,11 @@ export default function NamingTab({ settings, setSettings, handleSave }) {
         <p className="text-xs text-slate-500">Configure how Atlas renames your movie files using custom format tags.</p>
         
         <div className="space-y-6">
-          <div className="flex items-start gap-4">
-            <div className="w-1/3">
+          <div className="flex flex-col sm:flex-row sm:items-start gap-2 sm:gap-4">
+            <div className="sm:w-1/3">
               <label className="text-sm font-medium text-slate-300">Rename Movies</label>
             </div>
-            <div className="w-2/3">
+            <div className="sm:w-2/3">
               <div 
                 className="flex items-center gap-3 cursor-pointer select-none"
                 onClick={() => setSettings({...settings, renameMovies: !settings.renameMovies})}
@@ -120,11 +120,11 @@ export default function NamingTab({ settings, setSettings, handleSave }) {
             </div>
           </div>
 
-          <div className="flex items-start gap-4">
-            <div className="w-1/3">
+          <div className="flex flex-col sm:flex-row sm:items-start gap-2 sm:gap-4">
+            <div className="sm:w-1/3">
               <label className="text-sm font-medium text-slate-300">Replace Illegal Characters</label>
             </div>
-            <div className="w-2/3">
+            <div className="sm:w-2/3">
               <div 
                 className="flex items-center gap-3 cursor-pointer select-none"
                 onClick={() => setSettings({...settings, replaceIllegalCharacters: !settings.replaceIllegalCharacters})}
@@ -137,11 +137,11 @@ export default function NamingTab({ settings, setSettings, handleSave }) {
             </div>
           </div>
 
-          <div className="flex items-start gap-4">
-            <div className="w-1/3">
+          <div className="flex flex-col sm:flex-row sm:items-start gap-2 sm:gap-4">
+            <div className="sm:w-1/3">
               <label className="text-sm font-medium text-slate-300">Colon Replacement</label>
             </div>
-            <div className="w-2/3">
+            <div className="sm:w-2/3">
               <CustomSelect 
                 value={settings.colonReplacement}
                 onChange={e => setSettings({...settings, colonReplacement: e.target.value})}
@@ -155,11 +155,11 @@ export default function NamingTab({ settings, setSettings, handleSave }) {
             </div>
           </div>
 
-          <div className="flex items-start gap-4">
-            <div className="w-1/3">
+          <div className="flex flex-col sm:flex-row sm:items-start gap-2 sm:gap-4">
+            <div className="sm:w-1/3">
               <label className="text-sm font-medium text-slate-300">Standard Movie Format</label>
             </div>
-            <div className="w-2/3">
+            <div className="sm:w-2/3">
               <div className="flex">
                 <input 
                   type="text"
@@ -190,11 +190,11 @@ export default function NamingTab({ settings, setSettings, handleSave }) {
         <p className="text-xs text-slate-500">Configure how Atlas renames your TV episode files using custom format tags.</p>
         
         <div className="space-y-6">
-          <div className="flex items-start gap-4">
-            <div className="w-1/3">
+          <div className="flex flex-col sm:flex-row sm:items-start gap-2 sm:gap-4">
+            <div className="sm:w-1/3">
               <label className="text-sm font-medium text-slate-300">Rename Episodes</label>
             </div>
-            <div className="w-2/3">
+            <div className="sm:w-2/3">
               <div 
                 className="flex items-center gap-3 cursor-pointer select-none"
                 onClick={() => setSettings({...settings, renameEpisodes: !settings.renameEpisodes})}
@@ -207,11 +207,11 @@ export default function NamingTab({ settings, setSettings, handleSave }) {
             </div>
           </div>
 
-          <div className="flex items-start gap-4">
-            <div className="w-1/3">
+          <div className="flex flex-col sm:flex-row sm:items-start gap-2 sm:gap-4">
+            <div className="sm:w-1/3">
               <label className="text-sm font-medium text-slate-300">Standard Episode Format</label>
             </div>
-            <div className="w-2/3">
+            <div className="sm:w-2/3">
               <div className="flex">
                 <input 
                   type="text"
@@ -232,8 +232,8 @@ export default function NamingTab({ settings, setSettings, handleSave }) {
             </div>
           </div>
 
-          <div className="flex items-start gap-4">
-            <div className="w-1/3">
+          <div className="flex flex-col sm:flex-row sm:items-start gap-2 sm:gap-4">
+            <div className="sm:w-1/3">
               <label className="text-sm font-medium text-slate-300">Season Folder Format</label>
             </div>
             <div className="w-2/3">

@@ -4,6 +4,7 @@ const cron = require('node-cron');
 const db = require('../config/database');
 const downloadClientService = require('./downloadClientService');
 const taskRegistry = require('./taskRegistry');
+const { registerJob } = require('../utils/cronRegistry');
 const eventBus = require('./eventBus');
 const tmdbService = require('./tmdbService');
 const axios = require('axios');
@@ -87,9 +88,51 @@ const findLargestVideoFile = async (dirPath) => {
   return largestFile;
 };
 
+// Find ALL video files in a directory tree — used for season pack imports
+const findAllVideoFiles = async (dirPath) => {
+  const results = [];
+  try {
+    const stats = await fs.promises.stat(dirPath);
+    if (stats.isFile()) {
+      if (isVideoFile(dirPath)) results.push(dirPath);
+      return results;
+    }
+    const files = await fs.promises.readdir(dirPath);
+    for (const file of files) {
+      const fullPath = path.join(dirPath, file);
+      try {
+        const fileStats = await fs.promises.stat(fullPath);
+        if (fileStats.isDirectory()) {
+          const nested = await findAllVideoFiles(fullPath);
+          results.push(...nested);
+        } else if (fileStats.isFile() && isVideoFile(fullPath)) {
+          results.push(fullPath);
+        }
+      } catch { /* skip unreadable */ }
+    }
+  } catch { /* skip */ }
+  return results;
+};
+
+// Parse season/episode numbers from a filename like "Show.Name.S01E02.mkv"
+const parseEpisodeFromFilename = (filePath) => {
+  const name = path.basename(filePath).toLowerCase();
+  // Try S01E02 pattern
+  let match = name.match(/s(\d{1,2})e(\d{1,2})/i);
+  if (match) return { season: parseInt(match[1], 10), episode: parseInt(match[2], 10) };
+  // Try 01x02 pattern
+  match = name.match(/(\d{1,2})x(\d{1,2})/i);
+  if (match) return { season: parseInt(match[1], 10), episode: parseInt(match[2], 10) };
+  return null;
+};
+
 const runMediaManagement = async () => {
   const pendingMoviesCount = db.prepare("SELECT COUNT(*) as count FROM movies WHERE status = 'downloading'").get().count;
-  const pendingEpisodesCount = db.prepare("SELECT COUNT(*) as count FROM episodes WHERE status = 'downloading'").get().count;
+  const pendingEpisodesCount = db.prepare(`
+    SELECT COUNT(*) as count FROM episodes 
+    WHERE (status = 'downloading') 
+       OR (status = 'monitored' AND (file_path IS NULL OR file_path = ''))
+  `).get().count;
 
   if (pendingMoviesCount === 0 && pendingEpisodesCount === 0) {
     return 'skipped';
@@ -122,7 +165,7 @@ const runMediaManagement = async () => {
         }
       }
 
-      // Match episodes
+      // Match episodes (individual)
       for (const ep of pendingEpisodes) {
         const showTitle = ep.show_title.toLowerCase().replace(/[^a-z0-9]/g, ' ').replace(/\s+/g, ' ').trim();
         const s = ep.season_number.toString().padStart(2, '0');
@@ -132,6 +175,23 @@ const runMediaManagement = async () => {
 
         if (torrentName.includes(showTitle) && (torrentName.includes(epString1) || torrentName.includes(epString2))) {
           await importEpisode(torrent, ep);
+        }
+      }
+
+      // Match season packs — torrent contains show title + Sxx pattern but NO episode IDs (SxxExx or xxXxx)
+      const hasEpisodeIds = /\bs\d{2}e\d{2}\b/i.test(torrentName) || /\b\d{1,2}x\d{1,2}\b/i.test(torrentName);
+      if (!hasEpisodeIds) {
+        const seasonPackMatch = torrentName.match(/\bs(\d{2})\b/i);
+        if (seasonPackMatch) {
+          const seasonNum = parseInt(seasonPackMatch[1], 10);
+          // Find shows whose title is in the torrent name
+          for (const ep of pendingEpisodes) {
+            const showTitle = ep.show_title.toLowerCase().replace(/[^a-z0-9]/g, ' ').replace(/\s+/g, ' ').trim();
+            if (torrentName.includes(showTitle) && ep.season_number === seasonNum) {
+              await importSeasonPack(torrent, { showId: ep.show_id, showTitle: ep.show_title, seasonNumber: seasonNum });
+              break; // One import per torrent
+            }
+          }
         }
       }
     }
@@ -163,11 +223,16 @@ const runMediaManagement = async () => {
       const s = ep.season_number.toString().padStart(2, '0');
       const e = ep.episode_number.toString().padStart(2, '0');
       const epString1 = `s${s}e${e}`;
-      const epString2 = `${s}x${e}`; 
+      const epString2 = `${s}x${e}`;
+      const seasonStr = `s${s}`; 
 
       const isStillInQueue = torrentList.some(t => {
         const tName = t.name.toLowerCase().replace(/[^a-z0-9]/g, ' ').replace(/\s+/g, ' ').trim();
-        return tName.includes(showTitle) && (tName.includes(epString1) || tName.includes(epString2));
+        // Match individual episode (S01E01) or season pack (S01 without episode IDs)
+        const hasShow = tName.includes(showTitle);
+        const hasEpisode = tName.includes(epString1) || tName.includes(epString2);
+        const hasSeasonPack = tName.includes(seasonStr) && !/\bs\d{2}e\d{2}\b/i.test(tName) && !/\b\d{1,2}x\d{1,2}\b/i.test(tName);
+        return hasShow && (hasEpisode || hasSeasonPack);
       });
 
       if (!isStillInQueue) {
@@ -256,15 +321,22 @@ const importMovie = async (torrent, movie) => {
 
     let contentPath = torrent.content_path || path.join(torrent.save_path, torrent.name);
     
-    // Apply download path mapping from settings (e.g. ["/downloads", "/mnt/oblivion/downloads"])
     const pathMapping = db.prepare("SELECT value FROM settings WHERE key = 'downloadPathMapping'").get();
-    if (pathMapping?.value) {
+    const applyMapping = (p) => {
+      if (!pathMapping?.value) return p;
       try {
         const [from, to] = JSON.parse(pathMapping.value);
-        if (contentPath.startsWith(from)) {
-          contentPath = contentPath.replace(from, to);
-        }
-      } catch {}
+        return p.startsWith(from) ? p.replace(from, to) : p;
+      } catch { return p; }
+    };
+    contentPath = applyMapping(contentPath);
+
+    if (!fs.existsSync(contentPath) && torrent.save_path) {
+      const altPath = applyMapping(path.join(torrent.save_path, torrent.name));
+      if (fs.existsSync(altPath)) {
+        console.log(`[MediaManagement] content_path ${contentPath} not found, using ${altPath} instead`);
+        contentPath = altPath;
+      }
     }
     
     const videoFile = await findLargestVideoFile(contentPath);
@@ -415,13 +487,22 @@ const importEpisode = async (torrent, episode) => {
     
     // Apply download path mapping from settings
     const pathMapping = db.prepare("SELECT value FROM settings WHERE key = 'downloadPathMapping'").get();
-    if (pathMapping?.value) {
+    const applyMapping = (p) => {
+      if (!pathMapping?.value) return p;
       try {
         const [from, to] = JSON.parse(pathMapping.value);
-        if (contentPath.startsWith(from)) {
-          contentPath = contentPath.replace(from, to);
-        }
-      } catch {}
+        return p.startsWith(from) ? p.replace(from, to) : p;
+      } catch { return p; }
+    };
+    contentPath = applyMapping(contentPath);
+
+    // Fallback: if content_path doesn't exist, try save_path + name with mapping
+    if (!fs.existsSync(contentPath) && torrent.save_path) {
+      const altPath = applyMapping(path.join(torrent.save_path, torrent.name));
+      if (fs.existsSync(altPath)) {
+        console.log(`[MediaManagement] content_path ${contentPath} not found, using ${altPath} instead`);
+        contentPath = altPath;
+      }
     }
     
     const videoFile = await findLargestVideoFile(contentPath);
@@ -495,10 +576,10 @@ const importEpisode = async (torrent, episode) => {
       }
     }
 
-    // Remove torrent from client first (if enabled), so failed removal keeps status as 'downloading' for retry
+    // Remove torrent from client first (if enabled and has a hash — skip for season pack sub-imports)
     const removeSettingEp = db.prepare('SELECT value FROM settings WHERE key = ?').get('removeCompletedDownloads');
     const deleteFilesSettingEp = db.prepare('SELECT value FROM settings WHERE key = ?').get('deleteTorrentFiles');
-    if (removeSettingEp && removeSettingEp.value === 'true') {
+    if (torrent.hash && removeSettingEp && removeSettingEp.value === 'true') {
       const deleteFiles = deleteFilesSettingEp && deleteFilesSettingEp.value === 'true';
       console.log(`[MediaManagement] Removing torrent ${torrent.name} from client (deleteFiles: ${deleteFiles})`);
       try {
@@ -582,6 +663,88 @@ const importEpisode = async (torrent, episode) => {
   }
 };
 
+// Import a full season pack — scans all video files in the download directory,
+// parses SxxExx from filenames, and imports each matching episode
+const importSeasonPack = async (torrent, { showId, showTitle, seasonNumber }) => {
+  console.log(`[MediaManagement] Importing season pack: ${showTitle} S${seasonNumber.toString().padStart(2, '0')}`);
+
+  try {
+    let contentPath = torrent.content_path || path.join(torrent.save_path, torrent.name);
+
+    // Apply download path mapping
+    const pathMapping = db.prepare("SELECT value FROM settings WHERE key = 'downloadPathMapping'").get();
+    if (pathMapping?.value) {
+      try {
+        const [from, to] = JSON.parse(pathMapping.value);
+        if (contentPath.startsWith(from)) {
+          contentPath = contentPath.replace(from, to);
+        }
+      } catch {}
+    }
+
+    const videoFiles = await findAllVideoFiles(contentPath);
+    if (videoFiles.length === 0) {
+      console.warn(`[MediaManagement] No video files found in season pack: ${contentPath}`);
+      return;
+    }
+    console.log(`[MediaManagement] Found ${videoFiles.length} video files in season pack`);
+
+    // Get pending episodes for this show/season
+    const pendingEpisodes = db.prepare(`
+      SELECT e.*, s.title as show_title 
+      FROM episodes e 
+      JOIN shows s ON e.show_id = s.id 
+      WHERE e.show_id = ? AND e.season_number = ? AND e.status IN ('downloading', 'monitored')
+    `).all(showId, seasonNumber);
+
+    let importedCount = 0;
+
+    for (const videoFile of videoFiles) {
+      const parsed = parseEpisodeFromFilename(videoFile);
+      if (!parsed || parsed.season !== seasonNumber) continue;
+
+      const episode = pendingEpisodes.find(ep => ep.episode_number === parsed.episode);
+      if (!episode) {
+        console.log(`[MediaManagement] No pending episode match for S${seasonNumber.toString().padStart(2, '0')}E${parsed.episode.toString().padStart(2, '0')} — skipping`);
+        continue;
+      }
+
+      // Build a synthetic torrent-like object for importEpisode (no hash — prevents per-episode torrent removal)
+      const fakeTorrent = {
+        name: path.basename(videoFile),
+        content_path: videoFile,
+        save_path: path.dirname(videoFile),
+      };
+
+      try {
+        await importEpisode(fakeTorrent, episode);
+        importedCount++;
+      } catch (epErr) {
+        console.error(`[MediaManagement] Failed to import episode S${seasonNumber}E${parsed.episode}:`, epErr.message);
+      }
+    }
+
+    console.log(`[MediaManagement] Season pack import complete: ${importedCount}/${videoFiles.length} episodes imported`);
+
+    // Remove torrent after all episodes are imported (if enabled)
+    if (importedCount > 0) {
+      const removeSetting = db.prepare('SELECT value FROM settings WHERE key = ?').get('removeCompletedDownloads');
+      const deleteFilesSetting = db.prepare('SELECT value FROM settings WHERE key = ?').get('deleteTorrentFiles');
+      if (removeSetting && removeSetting.value === 'true') {
+        const deleteFiles = deleteFilesSetting && deleteFilesSetting.value === 'true';
+        try {
+          await downloadClientService.deleteTorrent(torrent.hash, deleteFiles);
+          console.log(`[MediaManagement] Season pack torrent removed.`);
+        } catch (delErr) {
+          console.error(`[MediaManagement] Failed to remove season pack torrent:`, delErr.message);
+        }
+      }
+    }
+  } catch (err) {
+    console.error(`[MediaManagement] Failed to import season pack for ${showTitle}:`, err);
+  }
+};
+
 const init = () => {
   // Check every 5 minutes
   const cronExp = '*/5 * * * *';
@@ -594,7 +757,8 @@ const init = () => {
     runMediaManagement
   );
 
-  cron.schedule(cronExp, () => taskRegistry.executeTask('media_mover'));
+  const job = cron.schedule(cronExp, () => taskRegistry.executeTask('media_mover'));
+  registerJob(job);
   console.log('[MediaManagement] Post-processing scheduler initialized.');
 };
 

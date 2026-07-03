@@ -38,7 +38,7 @@ export default function DuplicateSection() {
 
   return (
     <div className="glass-panel rounded-2xl p-6 space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <h3 className="text-lg font-bold text-slate-200">Duplicate Detection</h3>
           <p className="text-sm text-slate-400">Find and remove duplicate movies and shows in your library.</p>
@@ -46,7 +46,7 @@ export default function DuplicateSection() {
         <button
           onClick={checkDuplicates}
           disabled={checking}
-          className="px-4 py-2 rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/20 hover:bg-amber-500/20 font-bold text-sm transition-colors disabled:opacity-50 flex items-center gap-2"
+          className="px-4 py-2 rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/20 hover:bg-amber-500/20 font-bold text-sm transition-colors disabled:opacity-50 flex items-center gap-2 self-start"
         >
           {checking ? (
             <RefreshCw className="w-4 h-4 animate-spin" />

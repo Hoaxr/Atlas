@@ -20,9 +20,11 @@ const usersRoutes = require('./routes/users');
 const requestsRoutes = require('./routes/requests');
 const watcherRoutes = require('./routes/watcher');
 const watcherService = require('./services/watcherService');
+const { stopAll: stopAllCronJobs } = require('./utils/cronRegistry');
 
 const errorHandler = require('./middleware/errorHandler');
 const eventBus = require('./services/eventBus');
+const presenceTracker = require('./services/presenceTracker');
 
 // Services
 const automationService = require('./services/automationService');
@@ -41,6 +43,7 @@ const wss = new WebSocketServer({ server, path: '/ws' });
 
 wss.on('connection', (ws) => {
   console.log('[WS] Client connected');
+  let authenticated = false;
 
   const onEvent = (data) => {
     try {
@@ -50,13 +53,33 @@ wss.on('connection', (ws) => {
     } catch {}
   };
 
+  // Handle incoming messages (for auth)
+  ws.on('message', (raw) => {
+    try {
+      const msg = JSON.parse(raw);
+      if (msg.type === 'auth' && !authenticated) {
+        authenticated = presenceTracker.handleAuthMessage(ws, msg);
+        if (authenticated) {
+          console.log(`[WS] User ${ws._username} authenticated`);
+        }
+      }
+    } catch {}
+  });
+
   eventBus.on('event', onEvent);
 
   ws.on('close', () => {
+    if (ws._userId) {
+      presenceTracker.removeConnection(ws._userId, ws);
+      console.log(`[WS] User ${ws._username || ws._userId} disconnected`);
+    }
     eventBus.off('event', onEvent);
   });
 
   ws.on('error', () => {
+    if (ws._userId) {
+      presenceTracker.removeConnection(ws._userId, ws);
+    }
     eventBus.off('event', onEvent);
   });
 });
@@ -144,9 +167,32 @@ app.use(errorHandler);
 // Graceful shutdown
 const shutdown = (signal) => {
   console.log(`[Backend] ${signal} received — shutting down...`);
+  
+  // Stop all cron jobs to prevent new task executions
+  stopAllCronJobs();
+  
+  // Stop the watcher polling
   watcherService.stopPolling();
-  server.close(() => { console.log('[Backend] Closed.'); process.exit(0); });
-  setTimeout(() => process.exit(1), 10000);
+  
+  // Close HTTP server (stops accepting new connections)
+  server.close(() => {
+    console.log('[Backend] HTTP server closed.');
+    
+    // Close database connection
+    try {
+      const db = require('./config/database');
+      db.close();
+      console.log('[Backend] Database closed.');
+    } catch {}
+    
+    process.exit(0);
+  });
+  
+  // Force exit after 10s if graceful shutdown hangs
+  setTimeout(() => {
+    console.error('[Backend] Forced shutdown after timeout.');
+    process.exit(1);
+  }, 10000);
 };
 process.on('SIGTERM', () => shutdown('SIGTERM'));
 process.on('SIGINT', () => shutdown('SIGINT'));

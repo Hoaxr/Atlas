@@ -4,7 +4,7 @@ import api from '../lib/api';
 import { formatSize, parseResolution, LANG_LABEL, LANG_NAME } from '../lib/format';
 import { useSettings } from '../lib/useSettings';
 import { useTMDBDetails } from '../lib/useTMDBDetails';
-import { ArrowLeft, Search, Download, HardDrive, Film, PlayCircle, Bookmark, BookmarkMinus, Star, X, RefreshCw, Loader2, Heart, Trash2, ChevronDown, ChevronRight, Folder, Zap } from 'lucide-react';
+import { ArrowLeft, Search, Download, HardDrive, Film, PlayCircle, Bookmark, BookmarkMinus, Star, X, RefreshCw, Loader2, ChevronDown, ChevronRight, ChevronLeft, Folder, Zap, Trash2 } from 'lucide-react';
 import { customAlert, customConfirm } from '../utils/alerts';
 import { useOutsideClick } from '../lib/useOutsideClick';
 import TrailerModal from '../components/TrailerModal';
@@ -21,7 +21,6 @@ export default function MovieDetails() {
   const navigate = useNavigate();
   
   const [movie, setMovie] = useState(null);
-  const [loading, setLoading] = useState(true);
   const [isTrailerOpen, setIsTrailerOpen] = useState(false);
   const { providerLangs, profiles } = useSettings();
 
@@ -55,9 +54,21 @@ export default function MovieDetails() {
 
   // Folder browser modal
   const [folderBrowserOpen, setFolderBrowserOpen] = useState(false);
-
   const [deleteMenuOpen, setDeleteMenuOpen] = useState(false);
   const deleteMenuRef = useOutsideClick(() => setDeleteMenuOpen(false), deleteMenuOpen);
+
+  // Prev/next navigation
+  const [siblingIds, setSiblingIds] = useState([]);
+
+  useEffect(() => {
+    api.get('/library/movies?badges=true').then(res => {
+      if (res.data?.data) setSiblingIds(res.data.data.map(m => m.id));
+    }).catch(() => {});
+  }, []);
+
+  const currentIndex = siblingIds.indexOf(Number(id));
+  const prevId = currentIndex > 0 ? siblingIds[currentIndex - 1] : null;
+  const nextId = currentIndex >= 0 && currentIndex < siblingIds.length - 1 ? siblingIds[currentIndex + 1] : null;
 
   // Close lang menu on outside click
   useEffect(() => {
@@ -71,7 +82,6 @@ export default function MovieDetails() {
   }, [openLangMenu]);
 
   const fetchMovieData = useCallback(async (silent = true) => {
-    if (!silent) setLoading(true);
     try {
       const res = await api.get(`/library/movies/${id}`);
       if (res.data.status === 'success') {
@@ -82,8 +92,6 @@ export default function MovieDetails() {
     } catch (e) {
       console.error(e);
       if (!silent) customAlert('Failed to load movie details', 'error');
-    } finally {
-      if (!silent) setLoading(false);
     }
   }, [id]);
 
@@ -186,23 +194,7 @@ export default function MovieDetails() {
     }
   };
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-96">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-cyan-500"></div>
-      </div>
-    );
-  }
-
-  if (!movie) {
-    return (
-      <div className="text-center py-20 text-slate-400">
-        <Film className="w-16 h-16 mx-auto mb-4 opacity-50" />
-        <h2 className="text-2xl font-bold text-white mb-2">Movie Not Found</h2>
-        <button onClick={() => navigate('/movies')} className="text-cyan-400 hover:text-cyan-300">Return to Movies</button>
-      </div>
-    );
-  }
+  if (!movie) return null;
 
   return (
     <div className="relative min-h-screen">
@@ -219,12 +211,32 @@ export default function MovieDetails() {
       )}
 
       <div className="relative z-10 space-y-6 max-w-6xl mx-auto">
+      <div className="flex items-center justify-between">
       <button 
         onClick={() => navigate('/movies')} 
-        className="w-full md:w-auto flex items-center justify-center gap-2 py-3 md:py-0 bg-slate-800/50 md:bg-transparent rounded-xl md:rounded-none border border-white/5 md:border-none text-slate-300 md:text-slate-400 hover:text-white transition-colors"
+        className="inline-flex items-center gap-2 px-4 py-2 bg-slate-800/70 hover:bg-slate-700/70 text-slate-300 hover:text-white rounded-xl border border-white/10 hover:border-white/20 transition-all duration-200 text-sm font-medium backdrop-blur-sm"
       >
-        <ArrowLeft className="w-5 h-5 md:w-4 md:h-4" /> Back to Movies
+        <ArrowLeft className="w-4 h-4" /> Back
       </button>
+      <div className="flex items-center gap-1">
+        <button
+          onClick={() => prevId && navigate(`/movies/${prevId}`)}
+          disabled={!prevId}
+          className="p-2 bg-slate-800/70 hover:bg-slate-700/70 text-slate-300 hover:text-white rounded-full border border-white/10 hover:border-white/20 transition-all duration-200 disabled:opacity-30 disabled:cursor-not-allowed"
+          title="Previous movie"
+        >
+          <ChevronLeft className="w-4 h-4" />
+        </button>
+        <button
+          onClick={() => nextId && navigate(`/movies/${nextId}`)}
+          disabled={!nextId}
+          className="p-2 bg-slate-800/70 hover:bg-slate-700/70 text-slate-300 hover:text-white rounded-full border border-white/10 hover:border-white/20 transition-all duration-200 disabled:opacity-30 disabled:cursor-not-allowed"
+          title="Next movie"
+        >
+          <ChevronRight className="w-4 h-4" />
+        </button>
+      </div>
+      </div>
 
       {/* Hero / Banner Section */}
       <div className="glass-panel rounded-3xl flex flex-col md:flex-row relative z-10">
@@ -274,20 +286,75 @@ export default function MovieDetails() {
             <button
               onClick={refreshAll}
               disabled={isRefreshing}
-              className="shrink-0 mr-2 p-2 bg-slate-800/50 hover:bg-slate-700 rounded-lg transition-colors text-slate-400 hover:text-purple-400 disabled:opacity-50"
+              className="shrink-0 p-2 bg-slate-800/50 hover:bg-slate-700 rounded-lg transition-colors text-slate-400 hover:text-purple-400 disabled:opacity-50"
               title="Refresh movie information from TMDB"
               aria-label="Refresh movie information from TMDB"
             >
               <RefreshCw className={`w-5 h-5 ${isRefreshing ? 'animate-spin' : ''}`} />
             </button>
+            <div ref={deleteMenuRef} className="relative shrink-0 inline-flex">
+              <button
+                onClick={() => setDeleteMenuOpen(!deleteMenuOpen)}
+                className="p-2 bg-red-500/10 hover:bg-red-500/20 rounded-lg transition-colors text-red-400"
+                title="Delete movie"
+                aria-label="Delete movie"
+              >
+                <Trash2 className="w-5 h-5" />
+              </button>
+              {deleteMenuOpen && (
+                <div className="absolute right-0 top-full mt-2 w-56 bg-slate-800 border border-white/10 rounded-xl shadow-xl z-50 overflow-hidden">
+                  <div className="px-4 py-2.5 border-b border-white/5">
+                    <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Remove from Library</p>
+                  </div>
+                  <button
+                    onClick={async () => {
+                      setDeleteMenuOpen(false);
+                      try {
+                        await api.delete(`/library/movies/${movie.id}?deleteFiles=true`);
+                        customAlert('Movie and files removed.', 'success');
+                        navigate('/movies');
+                      } catch (err) {
+                        customAlert(err.response?.data?.message || 'Failed to remove movie.', 'error');
+                      }
+                    }}
+                    className="w-full flex items-center gap-3 px-4 py-3 text-sm text-red-400 hover:bg-red-500/10 transition-colors text-left"
+                  >
+                    <Trash2 className="w-4 h-4 shrink-0" />
+                    <div>
+                      <p className="font-semibold">Delete + Files</p>
+                      <p className="text-xs text-slate-500">Remove from library and delete files from disk</p>
+                    </div>
+                  </button>
+                  <div className="border-t border-white/5" />
+                  <button
+                    onClick={async () => {
+                      setDeleteMenuOpen(false);
+                      try {
+                        await api.delete(`/library/movies/${movie.id}?deleteFiles=false`);
+                        customAlert('Movie removed from library.', 'success');
+                        navigate('/movies');
+                      } catch (err) {
+                        customAlert(err.response?.data?.message || 'Failed to remove movie.', 'error');
+                      }
+                    }}
+                    className="w-full flex items-center gap-3 px-4 py-3 text-sm text-slate-300 hover:bg-white/5 transition-colors text-left"
+                  >
+                    <X className="w-4 h-4 shrink-0" />
+                    <div>
+                      <p className="font-semibold">Remove Only</p>
+                      <p className="text-xs text-slate-500">Remove from library, keep files on disk</p>
+                    </div>
+                  </button>
+                </div>
+              )}
+            </div>
           </h1>
           
-          <div className="flex flex-wrap items-center gap-3 mb-6 mt-2">
-            <div className="flex items-center gap-1.5 sm:gap-3 flex-nowrap min-w-0">
+          <div className="flex items-center gap-1.5 sm:gap-3 mb-6 mt-2 flex-nowrap overflow-x-auto">
               {movie.rating > 0 && (
-                <div className="flex items-center gap-1 bg-slate-950/50 px-2 sm:px-2.5 py-1 rounded-lg border border-white/5 shadow-inner shrink-0">
+                <div className="flex items-center gap-1 bg-slate-950/50 px-1.5 sm:px-2.5 py-0.5 sm:py-1 rounded-lg border border-white/5 shadow-inner shrink-0">
                   <Star className="w-3 h-3 sm:w-4 sm:h-4 text-yellow-400 fill-yellow-400 drop-shadow-sm" />
-                  <span className="text-[11px] sm:text-sm font-bold text-slate-700 dark:text-slate-200">{Number(movie.rating).toFixed(1)}</span>
+                  <span className="text-xs sm:text-sm font-bold text-slate-200">{Number(movie.rating).toFixed(1)}</span>
                 </div>
               )}
               {(() => {
@@ -300,17 +367,16 @@ export default function MovieDetails() {
                   : movie.status === 'monitored' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
                   : 'bg-rose-500/20 text-rose-400 border border-rose-500/30';
                 return (
-                  <span className={`px-2 sm:px-3 py-1 rounded-full text-[10px] sm:text-xs font-bold uppercase tracking-wider ${statusColor} shrink-0`}>
+                  <span className={`px-1.5 sm:px-3 py-0.5 sm:py-1 rounded-full text-xs sm:text-xs font-bold capitalize tracking-wider ${statusColor} shrink-0`}>
                     {statusLabel}
                   </span>
                 );
               })()}
               {movie.file_path && (
-                <span className="bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 px-2 sm:px-3 py-1 rounded-full text-[10px] sm:text-xs font-bold flex items-center gap-1 shrink-0 whitespace-nowrap">
-                  <HardDrive className="w-3 h-3" /> Available locally
+                <span className="bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 px-1.5 sm:px-3 py-0.5 sm:py-1 rounded-full text-xs sm:text-xs font-bold shrink-0 whitespace-nowrap">
+                  Available locally
                 </span>
               )}
-            </div>
           </div>
           
           <p className="text-slate-300 text-lg leading-relaxed max-w-3xl mb-6">
@@ -514,10 +580,10 @@ export default function MovieDetails() {
               </div>
               <button
                 onClick={() => {
-                  remap.setRemapModalOpen(true);
-                  remap.setRemapQuery('');
-                  remap.setRemapResults([]);
-                  remap.setRemapHasSearched(false);
+                  setRemapModalOpen(true);
+                  setRemapQuery('');
+                  setRemapResults([]);
+                  setRemapHasSearched(false);
                 }}
                 className="flex items-center gap-2 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors"
               >
@@ -528,7 +594,7 @@ export default function MovieDetails() {
 
           {/* Action Buttons */}
           <div className="bg-slate-900/30 rounded-xl border border-white/5 p-4 mt-6">
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-center gap-2 sm:gap-3">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3">
               <button 
                 onClick={async () => {
                   if (await customConfirm(`Start auto-search for ${movie.title}?`)) {
@@ -541,74 +607,16 @@ export default function MovieDetails() {
                     }
                   }
                 }}
-                className="bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold px-5 py-3 sm:py-2.5 rounded-xl flex items-center justify-center gap-2 text-sm transition-all hover:scale-[1.02] sm:hover:scale-105 hover:shadow-lg hover:shadow-cyan-500/20"
+                className="flex-1 bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 font-bold px-5 py-3 rounded-xl flex items-center justify-center gap-2 text-sm transition-all"
               >
                 <Zap className="w-4 h-4" /> Auto Search
               </button>
               <button 
                 onClick={() => setSearchModalOpen(true)}
-                className="bg-purple-500 hover:bg-purple-400 text-white font-bold px-5 py-3 sm:py-2.5 rounded-xl flex items-center justify-center gap-2 text-sm transition-all hover:scale-[1.02] sm:hover:scale-105 hover:shadow-lg hover:shadow-purple-500/20"
+                className="flex-1 bg-purple-500/10 hover:bg-purple-500/20 text-purple-400 border border-purple-500/30 font-bold px-5 py-3 rounded-xl flex items-center justify-center gap-2 text-sm transition-all"
               >
                 <Search className="w-4 h-4" /> Manual Search
               </button>
-              <div className="hidden sm:block w-px h-8 bg-white/10" />
-              <div className="block sm:hidden border-t border-white/10 my-1" />
-              <div ref={deleteMenuRef} className="relative w-full sm:w-auto">
-                <button
-                  onClick={() => setDeleteMenuOpen(!deleteMenuOpen)}
-                  className="w-full sm:w-auto bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 font-bold px-4 py-3 sm:py-2.5 rounded-xl flex items-center justify-center gap-2 text-sm transition-colors"
-                >
-                  <Trash2 className="w-4 h-4" /> Delete
-                  <ChevronDown className={`w-3.5 h-3.5 transition-transform ${deleteMenuOpen ? 'rotate-180' : ''}`} />
-                </button>
-
-                {deleteMenuOpen && (
-                  <div className="sm:absolute sm:right-0 sm:top-full sm:mt-2 fixed inset-x-4 bottom-4 sm:inset-auto w-auto sm:w-64 bg-slate-800 border border-white/10 rounded-xl shadow-xl z-50 overflow-hidden">
-                    <div className="px-4 py-2.5 border-b border-white/5">
-                      <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Remove from Library</p>
-                    </div>
-                    <button
-                      onClick={async () => {
-                        setDeleteMenuOpen(false);
-                        try {
-                          await api.delete(`/library/movies/${movie.id}?deleteFiles=true`);
-                          customAlert('Movie and files removed from library.', 'success');
-                          navigate('/movies');
-                        } catch (err) {
-                          customAlert(err.response?.data?.message || 'Failed to remove movie.', 'error');
-                        }
-                      }}
-                      className="w-full flex items-center gap-3 px-4 py-3 text-sm text-red-400 hover:bg-red-500/10 transition-colors text-left"
-                    >
-                      <Trash2 className="w-4 h-4 shrink-0" />
-                      <div>
-                        <p className="font-semibold">Delete + Files</p>
-                        <p className="text-xs text-slate-500">Remove from library and delete files from disk</p>
-                      </div>
-                    </button>
-                    <div className="border-t border-white/5" />
-                    <button
-                      onClick={async () => {
-                        setDeleteMenuOpen(false);
-                        try {
-                          await api.delete(`/library/movies/${movie.id}?deleteFiles=false`);
-                          customAlert('Movie removed from library.', 'success');
-                          navigate('/movies');
-                        } catch (err) {
-                          customAlert(err.response?.data?.message || 'Failed to remove movie.', 'error');
-                        }
-                      }}
-                      className="w-full flex items-center gap-3 px-4 py-3 text-sm text-slate-300 hover:bg-white/5 transition-colors text-left"
-                    >
-                      <X className="w-4 h-4 shrink-0" />
-                      <div>
-                        <p className="font-semibold">Remove Only</p>
-                        <p className="text-xs text-slate-500">Remove from library, keep files on disk</p>
-                      </div>
-                    </button>
-                  </div>
-                )}
-              </div>
             </div>
           </div>
         </div>

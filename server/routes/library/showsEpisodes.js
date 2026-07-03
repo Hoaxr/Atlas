@@ -73,12 +73,23 @@ router.post('/shows/:id/refresh', async (req, res, next) => {
                 const match = item.name.match(/[sS](\d+)[eE](\d+)/) || item.name.match(/(?:^|[ \.\-])(\d{1,2})x(\d{2})(?:[ \.\-]|$)/);
                 if (match) {
                   const s = parseInt(match[1], 10);
-                  const e = parseInt(match[2], 10);
+                  const firstE = parseInt(match[2], 10);
+                  // Extract all numbers after the season prefix for multi-episode support
+                  // Only match the contiguous episode block (stops at whitespace)
+                  const epMatch = item.name.match(/[sS]\d+[eE](\d+(?:[-][eE]?\d+)*)/i);
+                  let lastE = firstE;
+                  if (epMatch) {
+                    const epBlock = epMatch[0].replace(/^[sS]\d+[eE]/i, '');
+                    const allEps = [...epBlock.matchAll(/(\d+)/g)].map(m => parseInt(m[1], 10));
+                    if (allEps.length > 1) {
+                      lastE = allEps[allEps.length - 1];
+                    }
+                  }
                   const { getResolution } = require('../../utils/videoUtils');
                   // Preserve existing scene_name unless empty/missing/auto-generated
                   const existingEp = db.prepare(
                     'SELECT scene_name FROM episodes WHERE show_id = ? AND season_number = ? AND episode_number = ?'
-                  ).get(show.id, s, e);
+                  ).get(show.id, s, firstE);
                   let resName = existingEp?.scene_name;
                   if (!resName || resName === '' || resName.startsWith('Unknown ')) {
                     resName = item.name;
@@ -90,11 +101,18 @@ router.post('/shows/:id/refresh', async (req, res, next) => {
                     }
                   }
                   
-                  db.prepare(`
-                    UPDATE episodes 
-                    SET file_path = ?, file_size = ?, scene_name = ?, status = 'downloaded' 
-                    WHERE show_id = ? AND season_number = ? AND episode_number = ?
-                  `).run(fullPath, stats.size, resName, show.id, s, e);
+                  for (let ep = firstE; ep <= lastE; ep++) {
+                    db.prepare(`
+                      INSERT OR IGNORE INTO episodes (show_id, season_number, episode_number, title, overview, status, air_date)
+                      VALUES (?, ?, ?, ?, ?, 'monitored', NULL)
+                    `).run(show.id, s, ep, item.name, '');
+                    
+                    db.prepare(`
+                      UPDATE episodes 
+                      SET file_path = ?, file_size = ?, scene_name = ?, status = 'downloaded' 
+                      WHERE show_id = ? AND season_number = ? AND episode_number = ?
+                    `).run(fullPath, stats.size, resName, show.id, s, ep);
+                  }
                 }
               }
             }
@@ -104,10 +122,12 @@ router.post('/shows/:id/refresh', async (req, res, next) => {
         }
       };
 
-      // Reset all downloaded episodes to missing and clear their paths before scanning
+      // Reset all downloaded/downloading episodes to missing/monitored and clear their paths before scanning
       db.prepare(`
         UPDATE episodes 
-        SET status = CASE WHEN status = 'downloaded' THEN 'missing' ELSE status END,
+        SET status = CASE WHEN status = 'downloaded' THEN 'missing'
+                          WHEN status = 'downloading' THEN 'monitored'
+                          ELSE status END,
             file_path = NULL,
             file_size = 0,
             scene_name = NULL
@@ -171,58 +191,56 @@ router.post('/shows/:id/refresh', async (req, res, next) => {
       }
     }
 
-    try {
-      const tmdbService = require('../../services/tmdbService');
-      const data = await tmdbService.getShowById(show.tmdb_id);
-      if (data) {
-        db.prepare('UPDATE shows SET rating = ?, poster_path = ?, overview = ?, tmdb_status = ? WHERE id = ?')
-          .run(data.vote_average || 0, data.poster_path, data.overview, data.status || '', show.id);
+    // Fire TMDB re-sync in background to avoid blocking the response
+    (async () => {
+      try {
+        const tmdbService = require('../../services/tmdbService');
+        const data = await tmdbService.getShowById(show.tmdb_id);
+        if (data) {
+          db.prepare('UPDATE shows SET rating = ?, poster_path = ?, overview = ?, tmdb_status = ? WHERE id = ?')
+            .run(data.vote_average || 0, data.poster_path, data.overview, data.status || '', show.id);
 
-        // Re-sync seasons and episodes from TMDB
-        const seasons = await tmdbService.getShowSeasons(show.tmdb_id);
-        const insertEp = db.prepare(`
-          INSERT INTO episodes (show_id, season_number, episode_number, title, overview, status, air_date)
-          VALUES (?, ?, ?, ?, ?, 'monitored', ?)
-          ON CONFLICT(show_id, season_number, episode_number) DO UPDATE SET
-            title = excluded.title,
-            overview = excluded.overview,
-            air_date = excluded.air_date
-        `);
+          const seasons = await tmdbService.getShowSeasons(show.tmdb_id);
+          const insertEp = db.prepare(`
+            INSERT INTO episodes (show_id, season_number, episode_number, title, overview, status, air_date)
+            VALUES (?, ?, ?, ?, ?, 'monitored', ?)
+            ON CONFLICT(show_id, season_number, episode_number) DO UPDATE SET
+              title = excluded.title,
+              overview = excluded.overview,
+              air_date = excluded.air_date
+          `);
 
-        const tmdbEpisodeKeys = new Set();
+          const tmdbEpisodeKeys = new Set();
+          for (const s of seasons) {
+            if (s.season_number === 0) continue;
+            const episodes = await tmdbService.getSeasonEpisodes(show.tmdb_id, s.season_number);
+            for (const ep of episodes) {
+              const key = `${ep.season_number}|${ep.episode_number}`;
+              tmdbEpisodeKeys.add(key);
+              insertEp.run(show.id, ep.season_number, ep.episode_number, ep.name, ep.overview, ep.air_date);
+            }
+          }
 
-        for (const s of seasons) {
-          if (s.season_number === 0) continue;
-          const episodes = await tmdbService.getSeasonEpisodes(show.tmdb_id, s.season_number);
-          for (const ep of episodes) {
+          const allDbEpisodes = db.prepare(
+            'SELECT id, season_number, episode_number, status FROM episodes WHERE show_id = ?'
+          ).all(show.id);
+          const deleteStale = db.prepare('DELETE FROM episodes WHERE id = ?');
+          let removedCount = 0;
+          for (const ep of allDbEpisodes) {
             const key = `${ep.season_number}|${ep.episode_number}`;
-            tmdbEpisodeKeys.add(key);
-            insertEp.run(show.id, ep.season_number, ep.episode_number, ep.name, ep.overview, ep.air_date);
+            if (!tmdbEpisodeKeys.has(key) && ep.status !== 'downloaded') {
+              deleteStale.run(ep.id);
+              removedCount++;
+            }
+          }
+          if (removedCount > 0) {
+            console.log(`[ShowRefresh] Removed ${removedCount} stale episode(s) from "${show.title}"`);
           }
         }
-
-        // Remove stale episodes not present in the current TMDB listing
-        // (only those that haven't been downloaded — we never delete downloaded files)
-        const allDbEpisodes = db.prepare(
-          'SELECT id, season_number, episode_number, status FROM episodes WHERE show_id = ?'
-        ).all(show.id);
-
-        const deleteStale = db.prepare('DELETE FROM episodes WHERE id = ?');
-        let removedCount = 0;
-        for (const ep of allDbEpisodes) {
-          const key = `${ep.season_number}|${ep.episode_number}`;
-          if (!tmdbEpisodeKeys.has(key) && ep.status !== 'downloaded') {
-            deleteStale.run(ep.id);
-            removedCount++;
-          }
-        }
-        if (removedCount > 0) {
-          console.log(`[ShowRefresh] Removed ${removedCount} stale episode(s) from "${show.title}"`);
-        }
+      } catch (e) {
+        console.error('TMDB refresh failed for show:', e.message);
       }
-    } catch (e) {
-      console.error('TMDB refresh failed for show:', e.message);
-    }
+    })();
 
     res.json({ status: 'success', message: 'Show refreshed', folder_size: totalSize });
   } catch (e) {
@@ -457,6 +475,39 @@ router.post('/shows/:id/download', async (req, res, next) => {
     db.prepare("UPDATE episodes SET status = 'downloading' WHERE show_id = ? AND status = 'monitored'").run(req.params.id);
     
     res.json({ status: 'success', message: 'Season pack sent to download client' });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ─── Season Pack Search & Download ───────────────────────────────────────────
+
+router.get('/shows/:id/seasons/:season/search', async (req, res, next) => {
+  try {
+    const show = db.prepare('SELECT * FROM shows WHERE id = ?').get(req.params.id);
+    if (!show) return res.status(404).json({ status: 'error', message: 'Show not found' });
+
+    const seasonNumber = parseInt(req.params.season, 10);
+    if (isNaN(seasonNumber)) return res.status(400).json({ status: 'error', message: 'Invalid season number' });
+
+    const results = await indexerService.searchSeasonPack(show.title, seasonNumber, null, null, true, show.tmdb_id);
+    res.json({ status: 'success', data: results });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/shows/:id/seasons/:season/download', async (req, res, next) => {
+  try {
+    const torrentUrl = req.body.link || req.body.torrentUrl;
+    if (!torrentUrl) return res.status(400).json({ status: 'error', message: 'torrentUrl is required' });
+
+    const seasonNumber = parseInt(req.params.season, 10);
+    
+    await downloadClientService.addTorrent(torrentUrl, 'tv');
+    db.prepare("UPDATE episodes SET status = 'downloading' WHERE show_id = ? AND season_number = ? AND status = 'monitored'").run(req.params.id, seasonNumber);
+    
+    res.json({ status: 'success', message: `Season ${seasonNumber} pack sent to download client` });
   } catch (err) {
     next(err);
   }

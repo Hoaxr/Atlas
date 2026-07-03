@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import api from '../lib/api';
-import { Play, Clock, CheckCircle2, AlertCircle, Activity, Loader2, Timer, Download, Film, Tv, RefreshCw, ChevronRight } from 'lucide-react';
+import { Play, Clock, CheckCircle2, AlertCircle, Activity, Loader2, Timer } from 'lucide-react';
+import StickyBar from '../components/shared/StickyBar';
+import { useStickyBar } from '../lib/useStickyBar';
 
 const LEVEL_ICONS = {
   success: CheckCircle2,
@@ -22,6 +24,7 @@ const TIME_FORMAT = new Intl.DateTimeFormat('en-US', {
 });
 
 export default function SystemTasks() {
+  const { headerRef, stickyVisible } = useStickyBar();
   const [tasks, setTasks] = useState([]);
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -119,13 +122,15 @@ export default function SystemTasks() {
   }
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-xl sm:text-3xl font-black text-slate-800 dark:text-slate-100 flex items-center gap-2 sm:gap-3">
-          <Activity className="w-6 h-6 sm:w-8 sm:h-8 text-cyan-400 shrink-0" /> System Tasks
+    <div className="space-y-3">
+      <div ref={headerRef}>
+        <h1 className="text-xl sm:text-3xl font-black text-slate-800 dark:text-slate-100 flex items-center gap-2 sm:gap-3 !mb-0">
+          <Activity className="w-6 h-6 sm:w-8 sm:h-8 text-cyan-400 shrink-0" /> <span className="truncate">System Tasks</span>
         </h1>
         <p className="text-xs sm:text-base text-slate-400 mt-0.5 sm:mt-1 hidden sm:block">Monitor and manually trigger background automation tasks.</p>
       </div>
+
+      <StickyBar visible={stickyVisible} />
 
       <div className="glass-panel rounded-2xl overflow-hidden border border-white/10">
         <div className="px-5 py-3 border-b border-white/5 bg-slate-800/20 flex items-center justify-between">

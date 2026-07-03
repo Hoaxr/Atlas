@@ -387,13 +387,13 @@ export default function ConnectionsTab({
         <div className="space-y-6">
           {/* Plex */}
           <div className="p-4 bg-slate-800/30 rounded-xl border border-slate-700/50 space-y-4">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex items-center gap-3">
                 <h3 className="text-sm font-bold text-amber-400">Plex</h3>
                 {testStatuses.plex === 'connected' && <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-green-500/20 text-green-400 border border-green-500/30">Connected</span>}
                 {testStatuses.plex === 'error' && <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-red-500/20 text-red-400 border border-red-500/30">Disconnected</span>}
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-col gap-2">
                 {plexOAuth.polling ? (
                   <button
                     onClick={handlePlexOAuthCancel}
@@ -458,7 +458,7 @@ export default function ConnectionsTab({
 
           {/* Jellyfin */}
           <div className="p-4 bg-slate-800/30 rounded-xl border border-slate-700/50 space-y-4">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex items-center gap-3">
                 <h3 className="text-sm font-bold text-purple-400">Jellyfin</h3>
                 {testStatuses.jellyfin === 'connected' && <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-green-500/20 text-green-400 border border-green-500/30">Connected</span>}
@@ -500,7 +500,7 @@ export default function ConnectionsTab({
 
           {/* Emby */}
           <div className="p-4 bg-slate-800/30 rounded-xl border border-slate-700/50 space-y-4">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
               <div className="flex items-center gap-3">
                 <h3 className="text-sm font-bold text-emerald-400">Emby</h3>
                 {testStatuses.emby === 'connected' && <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-green-500/20 text-green-400 border border-green-500/30">Connected</span>}
@@ -509,7 +509,7 @@ export default function ConnectionsTab({
               <button
                 onClick={() => handleTestMediaServerBtn('emby')}
                 disabled={testingMedia.emby}
-                className="px-3 py-1.5 text-xs font-bold text-slate-300 bg-slate-700 hover:bg-slate-600 rounded-lg transition-all disabled:opacity-50"
+                className="px-3 py-1.5 text-xs font-bold text-slate-300 bg-slate-700 hover:bg-slate-600 rounded-lg transition-all disabled:opacity-50 self-start"
               >
                 {testingMedia.emby ? 'Testing...' : 'Test Connection'}
               </button>

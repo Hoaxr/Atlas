@@ -6,6 +6,8 @@ const taskRegistry = require('./taskRegistry');
 const tmdbService = require('./tmdbService');
 const traktService = require('./traktService');
 const eventBus = require('./eventBus');
+const { runWithConcurrency } = require('../utils/concurrency');
+const { registerJob } = require('../utils/cronRegistry');
 
 const DEFAULT_SCHEDULES = {
   search_cycle:       '0 * * * *',
@@ -126,7 +128,8 @@ const runRefreshAllRatings = async () => {
   console.log('[Automation] Refreshing movie ratings...');
   const movies = db.prepare("SELECT id, tmdb_id FROM movies WHERE rating IS NULL OR rating = 0").all();
   let updated = 0;
-  for (const movie of movies) {
+
+  await runWithConcurrency(movies, 3, async (movie) => {
     try {
       const tmdbData = await tmdbService.getMovieById(movie.tmdb_id);
       if (tmdbData && tmdbData.vote_average !== undefined) {
@@ -136,11 +139,12 @@ const runRefreshAllRatings = async () => {
     } catch (err) {
       console.error(`[Automation] Failed to refresh movie ${movie.tmdb_id}: ${err.message}`);
     }
-  }
+  });
 
   console.log('[Automation] Refreshing show ratings...');
   const shows = db.prepare("SELECT id, tmdb_id FROM shows WHERE rating IS NULL OR rating = 0").all();
-  for (const show of shows) {
+
+  await runWithConcurrency(shows, 3, async (show) => {
     try {
       const tmdbData = await tmdbService.getShowById(show.tmdb_id);
       if (tmdbData && tmdbData.vote_average !== undefined) {
@@ -150,7 +154,7 @@ const runRefreshAllRatings = async () => {
     } catch (err) {
       console.error(`[Automation] Failed to refresh show ${show.tmdb_id}: ${err.message}`);
     }
-  }
+  });
 
   if (updated > 0) console.log(`[Automation] Refreshed ${updated} rating(s)`);
 };
@@ -199,6 +203,7 @@ const scheduleTask = (taskId, cronExp) => {
     activeJobs[taskId].stop();
   }
   activeJobs[taskId] = cron.schedule(cronExp, () => taskRegistry.executeTask(taskId));
+  registerJob(activeJobs[taskId]);
 };
 
 const init = () => {

@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
 import api from '../lib/api';
-import { AlertCircle, CheckCircle2, Key, Search, Download, Settings2, FolderTree, Languages, ShieldAlert, Network, Users } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Search, Download, Settings2, FolderTree, Languages, ShieldAlert, Network, Users } from 'lucide-react';
 import { customAlert } from '../utils/alerts';
+import StickyBar from '../components/shared/StickyBar';
+import { useStickyBar } from '../lib/useStickyBar';
 
 import IndexersTab from './settings/IndexersTab';
 import ClientsTab from './settings/ClientsTab';
@@ -16,6 +18,7 @@ import SecurityTab from './settings/SecurityTab';
 import UsersTab from './settings/UsersTab';
 
 export default function Settings() {
+  const { headerRef, stickyVisible } = useStickyBar();
   const [activeTab, setActiveTab] = useState('connections');
   const [settings, setSettings] = useState({
     tmdbApiKey: '',
@@ -42,6 +45,7 @@ export default function Settings() {
     renameEpisodes: true,
     standardEpisodeFormat: '{Show Title} - S{Season}E{Episode} - {Episode Title}',
     seasonFolderFormat: 'Season {Season Number}',
+    separatorStyle: 'space',
     removeCompletedDownloads: false,
     deleteTorrentFiles: false,
     hideCompletedDownloads: true,
@@ -315,7 +319,8 @@ export default function Settings() {
         standardMovieFormat: settings.standardMovieFormat,
         renameEpisodes: settings.renameEpisodes,
         standardEpisodeFormat: settings.standardEpisodeFormat,
-        seasonFolderFormat: settings.seasonFolderFormat
+        seasonFolderFormat: settings.seasonFolderFormat,
+        separatorStyle: settings.separatorStyle
       });
       customAlert('Naming settings saved!', 'success');
     } catch {
@@ -509,15 +514,17 @@ export default function Settings() {
   ];
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl sm:text-3xl font-black text-slate-800 dark:text-slate-100 flex items-center gap-2 sm:gap-3">
-            <Settings2 className="w-6 h-6 sm:w-8 sm:h-8 text-cyan-400" /> Settings
+    <div className="space-y-3">
+      <div ref={headerRef} className="flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <h1 className="text-xl sm:text-3xl font-black text-slate-800 dark:text-slate-100 flex items-center gap-2 sm:gap-3 !mb-0">
+            <Settings2 className="w-6 h-6 sm:w-8 sm:h-8 text-cyan-400" /> <span className="truncate">Settings</span>
           </h1>
           <p className="text-xs sm:text-base text-slate-400 mt-0.5 sm:mt-1 hidden sm:block">Manage your integrations, indexers, and application preferences.</p>
         </div>
       </div>
+
+      <StickyBar visible={stickyVisible} />
 
       <div className="flex flex-col lg:flex-row gap-8">
         {/* Sidebar Menu */}

@@ -433,19 +433,28 @@ router.get('/clients/test', async (req, res) => {
 router.get('/clients/detect-mapping', async (req, res) => {
   try {
     const fs = require('fs');
+    const path = require('path');
     const axios = require('axios');
     const clients = db.prepare('SELECT * FROM download_clients').all();
-    const probes = ['/data', '/media', '/mnt', '/downloads', '/volume1', '/volume2'];
+    
+    // Build probes: specific paths first, generic fallbacks last
+    const libraryPaths = db.prepare('SELECT path FROM library_paths').all().map(p => p.path);
+    const parentPaths = libraryPaths.map(p => path.dirname(p)).filter(p => p !== '/');
+    const probes = [...parentPaths, ...libraryPaths, '/data', '/media', '/mnt', '/downloads', '/volume1', '/volume2'];
 
     const tryMapping = (remotePath) => {
       if (!remotePath) return null;
-      const parts = remotePath.split('/').filter(Boolean);
+      // Strip trailing slash
+      const cleanRemote = remotePath.replace(/\/+$/, '');
+      // Extract the last path component as the subdirectory to match
+      const parts = cleanRemote.split('/').filter(Boolean);
       if (!parts.length) return null;
       const remoteRoot = '/' + parts[0];
-      const subPath = remotePath.slice(remoteRoot.length).replace(/\/+$/, '');
+      const subPath = cleanRemote.slice(remoteRoot.length);
       for (const localRoot of probes) {
-        if (fs.existsSync(localRoot + subPath)) {
-          return [remoteRoot, localRoot];
+        const fullLocalPath = localRoot + subPath;
+        if (fs.existsSync(fullLocalPath)) {
+          return [cleanRemote, fullLocalPath];
         }
       }
       return null;
@@ -500,13 +509,27 @@ router.get('/clients/detect-mapping', async (req, res) => {
           remotePath = destDir?.Value || '';
         }
 
-        // Try preference-based path first, then fall back to completed torrents
+        // Preference-based mapping
         let mapping = tryMapping(remotePath);
+        
+        // Fallback: check completed torrent
         if (!mapping) {
           const adapter = require('../services/downloadClientService');
-          const torrents = await adapter.getTorrents(); // uses configured client
+          const torrents = await adapter.getTorrents();
           const completed = (torrents || []).find(t => t.progress === 1);
           if (completed) mapping = tryMapping(completed.save_path || completed.content_path || '');
+        }
+        
+        // DB fallback always takes priority if it exists and is more specific
+        const downloadsLibPath = db.prepare("SELECT path FROM library_paths WHERE type = 'downloads' LIMIT 1").get();
+        if (downloadsLibPath) {
+          let remote = (remotePath || '/data').replace(/\/+$/, '');
+          // If qBittorrent only reported a root (e.g., /data), append /downloads
+          const parts = remote.split('/').filter(Boolean);
+          if (parts.length === 1 && parts[0] !== 'downloads') {
+            remote += '/downloads';
+          }
+          mapping = [remote, downloadsLibPath.path];
         }
 
         if (mapping) {
@@ -649,6 +672,9 @@ router.get('/issues', async (req, res) => {
             });
             continue;
           }
+
+          // Downloads path is expected to be empty — skip empty check
+          if (lp.type === 'downloads') continue;
 
           const hasVideoFiles = await hasVideoFilesRecursive(lp.path);
 

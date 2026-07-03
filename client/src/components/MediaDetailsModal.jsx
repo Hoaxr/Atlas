@@ -1,13 +1,13 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import api from '../lib/api';
-import { X, Star, Calendar, Clock, Plus, ExternalLink, PlayCircle, CheckCircle2, ArrowRight, CheckSquare, Square, XCircle } from 'lucide-react';
+import { X, Star, Calendar, Clock, Plus, ExternalLink, PlayCircle, CheckCircle2, ArrowRight, CheckSquare, Square, XCircle, Trash2, Loader2, ChevronDown } from 'lucide-react';
 import { customAlert } from '../utils/alerts';
 import TrailerModal from './TrailerModal';
 import Spinner from './shared/Spinner';
 
-export default function MediaDetailsModal({ isOpen, onClose, mediaId, mediaType, isInLibrary, libraryId, onAdded, onRequest, mode = 'add', requestStatus }) {
+export default function MediaDetailsModal({ isOpen, onClose, mediaId, mediaType, isInLibrary, libraryId, onAdded, onRequest, mode = 'add', requestStatus, onDelete }) {
   const navigate = useNavigate();
   const [details, setDetails] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -19,6 +19,10 @@ export default function MediaDetailsModal({ isOpen, onClose, mediaId, mediaType,
   const [autoSearch, setAutoSearch] = useState(true);
   const [trailerKey, setTrailerKey] = useState(null);
   const [isTrailerOpen, setIsTrailerOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const deleteBtnRef = useRef(null);
+  const [dropdownPos, setDropdownPos] = useState({ top: 0, left: 0 });
 
   const fetchSettings = async () => {
     try {
@@ -73,6 +77,8 @@ export default function MediaDetailsModal({ isOpen, onClose, mediaId, mediaType,
 
   useEffect(() => {
     if (isOpen && mediaId) {
+      setDeleting(false);
+      setDeleteOpen(false);
       fetchDetails();
       fetchSettings();
     } else {
@@ -88,10 +94,10 @@ export default function MediaDetailsModal({ isOpen, onClose, mediaId, mediaType,
 
   return createPortal(
     <div className="fixed inset-0 z-40 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm" onClick={onClose}>
-      <div className="bg-slate-900 border border-white/10 rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto relative shadow-2xl" onClick={(e) => e.stopPropagation()}>
+      <div className="bg-slate-900 border border-white/10 rounded-2xl w-full max-w-4xl max-h-[90vh] flex flex-col relative shadow-2xl" onClick={(e) => e.stopPropagation()}>
         
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 bg-slate-800/50">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 bg-slate-800/50 shrink-0 rounded-t-2xl">
           <h2 className="text-xl md:text-2xl font-bold text-slate-200">
             {details ? `${details.title || details.name} ${details.release_date || details.first_air_date ? `(${(details.release_date || details.first_air_date).split('-')[0]})` : ''}` : 'Loading...'}
           </h2>
@@ -103,6 +109,7 @@ export default function MediaDetailsModal({ isOpen, onClose, mediaId, mediaType,
           </button>
         </div>
 
+        <div className="overflow-y-auto flex-1">
         {loading && (
           <div className="flex items-center justify-center h-64 text-slate-400">
             <Spinner className="mr-3" />
@@ -171,9 +178,60 @@ export default function MediaDetailsModal({ isOpen, onClose, mediaId, mediaType,
                   ) : null}
                 </div>
 
-                <p className="text-slate-300 leading-relaxed mb-8">
+                <p className="text-slate-300 leading-relaxed mb-6">
                   {details.overview || 'No overview available.'}
                 </p>
+
+                {onDelete && (
+                  <div className="mb-6">
+                    <button
+                      ref={deleteBtnRef}
+                      onClick={() => {
+                        const rect = deleteBtnRef.current?.getBoundingClientRect();
+                        if (rect) setDropdownPos({ top: rect.bottom + 4, left: rect.left });
+                        setDeleteOpen(!deleteOpen);
+                      }}
+                      disabled={deleting}
+                      className="px-4 py-2 rounded-xl bg-rose-500/10 text-rose-400 border border-rose-500/20 hover:bg-rose-500/20 font-bold text-sm transition-colors disabled:opacity-50 flex items-center gap-2"
+                    >
+                      {deleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                      {deleting ? 'Deleting...' : 'Delete Movie'}
+                      <ChevronDown className="w-3.5 h-3.5 opacity-60" />
+                    </button>
+                    {deleteOpen && createPortal(
+                      <div
+                        className="fixed w-44 bg-slate-800 border border-slate-700 rounded-lg shadow-xl z-50 py-1"
+                        style={{ top: dropdownPos.top, left: dropdownPos.left }}
+                      >
+                        <button
+                          onClick={async () => {
+                            setDeleting(true);
+                            setDeleteOpen(false);
+                            try { await onDelete(false); } catch { setDeleting(false); return; }
+                            setDeleting(false);
+                            onClose();
+                          }}
+                          className="w-full text-left px-3 py-2 text-xs text-slate-300 hover:bg-slate-700 hover:text-white transition-colors"
+                        >
+                          Delete from library
+                        </button>
+                        <button
+                          onClick={async () => {
+                            setDeleting(true);
+                            setDeleteOpen(false);
+                            try { await onDelete(true); } catch { setDeleting(false); return; }
+                            setDeleting(false);
+                            onClose();
+                          }}
+                          className="w-full text-left px-3 py-2 text-xs text-rose-400 hover:bg-slate-700 hover:text-rose-300 transition-colors"
+                        >
+                          Delete with files
+                        </button>
+                      </div>,
+                      document.body
+                    )}
+                  </div>
+                )}
 
                 {details.seasons && details.seasons.length > 0 && (
                   <div className="mb-8">
@@ -336,6 +394,7 @@ export default function MediaDetailsModal({ isOpen, onClose, mediaId, mediaType,
             )}
           </div>
         )}
+        </div>
       </div>
 
       {isTrailerOpen && trailerKey && (

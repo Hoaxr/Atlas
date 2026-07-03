@@ -1,37 +1,34 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../lib/api';
-import { Activity, Film, Tv, Search, CheckCircle2, AlertCircle, Bookmark, BookmarkMinus, LayoutGrid, List, Star, Info, X, RotateCcw, Filter as FilterIcon, CheckSquare, Square, Columns } from 'lucide-react';
+import { Activity, Film, Tv, Search, CheckCircle2, AlertCircle, Bookmark, BookmarkMinus, LayoutGrid, List, Star, Info, X, RotateCcw, Filter as FilterIcon, CheckSquare, Square, Columns, Plus } from 'lucide-react';
 import { customAlert, customConfirm } from '../utils/alerts';
 import { cachedMovies, cachedShows, setCachedMovies, setCachedShows } from '../lib/libraryCache';
 import { formatSize, parseResolution } from '../lib/format';
 import { useSettings } from '../lib/useSettings';
 import useWebSocket from '../lib/useWebSocket';
 import { useOutsideClick } from '../lib/useOutsideClick';
-import Spinner from '../components/shared/Spinner';
 import { SortIcon, FilterSelect } from '../components/shared/FilterSelect';
 import BulkActions from '../components/dashboard/BulkActions';
+import ManualSearchModal from '../components/ManualSearchModal';
+import StickyBar from '../components/shared/StickyBar';
+import { useStickyBar } from '../lib/useStickyBar';
 
 export default function Dashboard() {
   const location = useLocation();
   const navigate = useNavigate();
   const [movies, setMovies] = useState(cachedMovies || []);
   const [shows, setShows] = useState(cachedShows || []);
-  const [downloads, setDownloads] = useState([]);
-  const [stats, setStats] = useState({ dl_info_speed: 0, up_info_speed: 0 });
   const [loading, setLoading] = useState(!cachedMovies && !cachedShows);
   const [loadingMore, setLoadingMore] = useState(false);
   
   const [searchModalOpen, setSearchModalOpen] = useState(false);
-  const [searchMovieId, setSearchMovieId] = useState(null);
-  
-  const [searchResults, setSearchResults] = useState([]);
-  const [isSearching, setIsSearching] = useState(false);
-  const [hasSearched, setHasSearched] = useState(false);
+  const [searchMediaId, setSearchMediaId] = useState(null);
+  const [searchMediaType, setSearchMediaType] = useState(null);
+  const [searchMediaTitle, setSearchMediaTitle] = useState('');
   
   // Bulk selection
   const [selectedIds, setSelectedIds] = useState(new Set());
-  const [bulkMenuOpen, setBulkMenuOpen] = useState(false);
   const [bulkLoading, setBulkLoading] = useState(false);
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   
@@ -88,6 +85,7 @@ export default function Dashboard() {
   const [searchQuery, setSearchQuery] = useState('');
   
   const searchInputRef = useRef(null);
+  const { headerRef, stickyVisible: stickySearchVisible } = useStickyBar();
 
   // Focus search input when switching between movies and shows
   useEffect(() => {
@@ -283,55 +281,8 @@ export default function Dashboard() {
   if (initialViewModeRef.current === null) initialViewModeRef.current = viewMode;
 
   useEffect(() => {
-    let isMounted = true;
-
-    const safeFetchClientData = async () => {
-      try {
-        const [statsResult, torrentsResult] = await Promise.allSettled([
-          api.get('/clients/stats'),
-          api.get('/clients/torrents')
-        ]);
-        if (!isMounted) return;
-
-        if (statsResult.status === 'fulfilled' && statsResult.value.data.status === 'success' && statsResult.value.data.data) {
-          setStats(statsResult.value.data.data);
-        } else {
-          setStats({ dl_info_speed: 0, up_info_speed: 0 });
-        }
-
-        if (torrentsResult.status === 'fulfilled' && torrentsResult.value.data.status === 'success' && torrentsResult.value.data.data) {
-          setDownloads(torrentsResult.value.data.data);
-        } else {
-          setDownloads([]);
-        }
-      } catch {
-        if (isMounted) setDownloads([]);
-      }
-    };
-
-    safeFetchClientData();
-
-    const startPolling = () => setInterval(safeFetchClientData, 3000);
-    let interval = startPolling();
-
     const otherMode = initialViewModeRef.current === 'movies' ? 'shows' : 'movies';
     fetchViewData(otherMode, true);
-
-    const onVisibility = () => {
-      if (document.hidden) {
-        clearInterval(interval);
-      } else {
-        safeFetchClientData();
-        interval = startPolling();
-      }
-    };
-    document.addEventListener('visibilitychange', onVisibility);
-
-    return () => {
-      isMounted = false;
-      clearInterval(interval);
-      document.removeEventListener('visibilitychange', onVisibility);
-    };
   }, []);
 
   // Listen for scan completion to refresh library
@@ -648,22 +599,21 @@ export default function Dashboard() {
   }, [paginatedItems.length, displayItems.length]);
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-start sm:items-center justify-between gap-3">
+    <div className="space-y-3">
+      <div ref={headerRef} className="flex items-start sm:items-center justify-between gap-3">
         <div className="min-w-0">
-          <h1 className="text-xl sm:text-3xl font-black text-slate-800 dark:text-slate-100 flex items-center gap-2 sm:gap-3">
+          <h1 className="text-xl sm:text-3xl font-black text-slate-800 dark:text-slate-100 flex items-center gap-2 sm:gap-3 !mb-0">
             {viewMode === 'movies' ? <Film className="w-6 h-6 sm:w-8 sm:h-8 text-cyan-400 shrink-0" /> : <Tv className="w-6 h-6 sm:w-8 sm:h-8 text-purple-400 shrink-0" />} <span className="truncate">{viewMode === 'movies' ? 'Movies' : 'TV Shows'}</span>
           </h1>
-          <p className="text-xs sm:text-base text-slate-400 mt-0.5 sm:mt-1 hidden sm:block">Your tracked and imported media collection.</p>
+          <p className="text-xs sm:text-base text-slate-400 mt-0.5 sm:mt-1 hidden sm:block !mb-0">Your tracked and imported media collection.</p>
         </div>
         
-        {/* Search Bar + View Toggle */}
+        {/* View Toggle + Add */}
         <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-          <div className="relative w-full max-w-md hidden sm:block">
+          <div className="relative w-full max-w-xs hidden sm:block">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none" />
             <input
               ref={searchInputRef}
-              autoFocus
               type="text"
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
@@ -735,8 +685,34 @@ export default function Dashboard() {
               </div>
             )}
           </div>
+          {viewMode === 'movies' && (
+            <button
+              onClick={() => navigate('/discover?mode=movies')}
+              className="flex items-center gap-1.5 px-3 py-2 bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 rounded-xl text-xs sm:text-sm font-bold transition-all shrink-0"
+              title="Add Movie"
+            >
+              <Plus className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> <span className="hidden sm:inline">Add Movie</span>
+            </button>
+          )}
+          {viewMode === 'shows' && (
+            <button
+              onClick={() => navigate('/discover?mode=shows')}
+              className="flex items-center gap-1.5 px-3 py-2 bg-purple-500/10 hover:bg-purple-500/20 text-purple-400 border border-purple-500/30 rounded-xl text-xs sm:text-sm font-bold transition-all shrink-0"
+              title="Add TV Show"
+            >
+              <Plus className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> <span className="hidden sm:inline">Add TV Show</span>
+            </button>
+          )}
         </div>
       </div>
+
+      <StickyBar
+        visible={stickySearchVisible}
+        searchQuery={searchQuery}
+        onSearchChange={setSearchQuery}
+        searchPlaceholder={`Search ${viewMode === 'movies' ? 'movies' : 'shows'}...`}
+        showSearch
+      />
 
       {/* Main Content Area */}
       
@@ -744,26 +720,6 @@ export default function Dashboard() {
         {/* Filter Bar Header */}
         <div className={`border-b ${viewMode === 'movies' ? 'border-cyan-500/30' : 'border-purple-500/30'} bg-slate-900/50 rounded-t-2xl`}>
           
-          {/* Mobile search */}
-          <div className="w-full px-3 sm:px-4 pt-2 sm:hidden">
-            <div className="relative">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none" />
-              <input
-                autoFocus
-                type="text"
-                value={searchQuery}
-                onChange={e => setSearchQuery(e.target.value)}
-                placeholder={`Search ${viewMode === 'movies' ? 'movies' : 'shows'}...`}
-                className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-slate-700 dark:text-slate-200 text-sm rounded-lg pl-9 pr-8 py-2 sm:py-2 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-400 dark:focus:border-cyan-500/50 placeholder-slate-400 dark:placeholder-slate-500 transition-all"
-              />
-              {searchQuery && (
-                <button onClick={() => setSearchQuery('')} className="absolute right-4 sm:right-5 top-1/2 -translate-y-1/2 p-0.5 text-slate-500 hover:text-slate-300 transition-colors" aria-label="Clear search">
-                  <X className="w-4 h-4" />
-                </button>
-              )}
-            </div>
-          </div>
-
           {/* Main Controls Row */}
           <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 p-3 sm:p-4 pb-2 sm:pb-3 justify-between">
             <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
@@ -952,7 +908,7 @@ export default function Dashboard() {
 
         {displayItems.length > 0 ? (
           viewStyle === 'grid' ? (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 sm:gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 gap-3 sm:gap-4">
               {paginatedItems.map(item => (
                 <div 
                   key={item.id}
@@ -1071,23 +1027,12 @@ export default function Dashboard() {
                               <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/></svg>
                             </button>
                             <button 
-                              onClick={async (e) => { 
+                              onClick={(e) => { 
                                 e.stopPropagation(); e.preventDefault(); 
-                                setSearchMovieId(item.id); 
+                                setSearchMediaId(item.id);
+                                setSearchMediaType(viewMode === 'movies' ? 'movie' : 'show');
+                                setSearchMediaTitle(item.title);
                                 setSearchModalOpen(true);
-                                setIsSearching(true);
-                                setHasSearched(false);
-                                setSearchResults([]);
-                                try {
-                                  const endpoint = viewMode === 'movies' ? `/library/movies/${item.id}/search` : `/library/shows/${item.id}/search`;
-                                  const res = await api.get(endpoint);
-                                  setSearchResults(res.data.data);
-                                  setHasSearched(true);
-                                } catch (e) {
-                                  customAlert('Search failed', 'error');
-                                  setHasSearched(true);
-                                }
-                                setIsSearching(false);
                               }}
                               className="bg-purple-500 hover:bg-purple-400 text-slate-950 w-12 h-12 rounded-full font-bold flex items-center justify-center transition-transform hover:scale-110 shadow-lg"
                               title="Manual Search"
@@ -1110,15 +1055,15 @@ export default function Dashboard() {
                     </div>
                   </div>
 
-                  <div className="p-4 relative z-20 bg-slate-900/90 border-t border-white/5">
-                    <h3 className="font-bold text-slate-800 dark:text-slate-200 truncate leading-tight" title={item.title}>{item.title}</h3>
-                    <div className="flex justify-between items-center mt-1">
-                      <p className="text-sm text-slate-400 font-medium">{item.year}</p>
+                  <div className="p-4 relative z-20 bg-gradient-to-b from-slate-800/95 to-slate-900/95 border-t border-white/10">
+                    <h3 className="font-semibold text-sm text-slate-100 truncate tracking-wide" title={item.title}>{item.title}</h3>
+                    <div className="flex justify-between items-center mt-2">
+                      <span className="text-xs text-slate-500 font-medium tracking-wider uppercase">{item.year}</span>
                       <div className="flex items-center gap-2">
                         {item.rating > 0 && (
-                          <div className="flex items-center gap-1.5 bg-slate-950/50 px-2.5 py-0.5 rounded-lg border border-white/5 shadow-inner">
-                            <Star className="w-3.5 h-3.5 text-yellow-400 fill-yellow-400 drop-shadow-sm" />
-                            <span className="text-sm font-bold text-slate-700 dark:text-slate-200">{Number(item.rating).toFixed(1)}</span>
+                          <div className="flex items-center gap-1 bg-amber-500/10 px-2 py-0.5 rounded-md border border-amber-500/20">
+                            <Star className="w-3 h-3 text-amber-400 fill-amber-400" />
+                            <span className="text-xs font-bold text-amber-300">{Number(item.rating).toFixed(1)}</span>
                           </div>
                         )}
                       </div>
@@ -1259,23 +1204,12 @@ export default function Dashboard() {
                               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/></svg>
                             </button>
                             <button 
-                              onClick={async (e) => { 
+                              onClick={(e) => { 
                                 e.stopPropagation(); e.preventDefault(); 
-                                setSearchMovieId(item.id); 
-                                setSearchModalOpen(true); 
-                                setIsSearching(true);
-                                setHasSearched(false);
-                                setSearchResults([]);
-                                try {
-                                  const endpoint = viewMode === 'movies' ? `/library/movies/${item.id}/search` : `/library/shows/${item.id}/search`;
-                                  const res = await api.get(endpoint);
-                                  setSearchResults(res.data.data);
-                                  setHasSearched(true);
-                                } catch (e) {
-                                  customAlert('Search failed', 'error');
-                                  setHasSearched(true);
-                                }
-                                setIsSearching(false);
+                                setSearchMediaId(item.id);
+                                setSearchMediaType(viewMode === 'movies' ? 'movie' : 'show');
+                                setSearchMediaTitle(item.title);
+                                setSearchModalOpen(true);
                               }}
                               className="text-slate-400 hover:text-purple-400 transition-colors p-1"
                               title="Manual Search"
@@ -1317,60 +1251,14 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {searchModalOpen && (
-        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
-          <div className="bg-slate-900 p-6 rounded-2xl w-full max-w-3xl border border-white/10 max-h-[80vh] flex flex-col">
-            <div className="flex justify-between items-center mb-4 shrink-0">
-              <h2 className="text-2xl font-bold text-white">Interactive Search</h2>
-              <button onClick={() => { setSearchModalOpen(false); setSearchResults([]); }} className="text-slate-400 hover:text-white p-1 rounded-lg transition-colors">
-                <X className="w-6 h-6" />
-              </button>
-            </div>
-            <div className="flex-1 overflow-y-auto min-h-[200px]">
-            {isSearching ? (
-              <div className="flex flex-col items-center justify-center py-10 text-purple-400">
-                <Spinner color="border-purple-500" className="mb-4" />
-                <p className="font-bold">Searching Indexers...</p>
-              </div>
-            ) : !searchResults.length && hasSearched ? (
-              <div className="flex flex-col items-center justify-center py-10 text-slate-400">
-                <p>No results found. Please check if your indexer URLs and API keys are correct in Settings.</p>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {searchResults.map((res) => (
-                  <div key={res.guid || res.link || res.title} className="bg-slate-800 p-3 rounded-lg flex justify-between items-center border border-white/5">
-                    <div className="overflow-hidden mr-4">
-                      <p className="text-sm font-bold text-slate-700 dark:text-slate-200 truncate" title={res.title}>{res.title}</p>
-                      <div className="flex space-x-3 text-xs text-slate-400 mt-1">
-                        <span className="text-cyan-400">{res.indexer}</span>
-                        <span>{res.seeders} Seeders</span>
-                        <span>{(res.size / 1024 / 1024 / 1024).toFixed(2)} GB</span>
-                      </div>
-                    </div>
-                    <button 
-                      onClick={async () => {
-                        try {
-                          const endpoint = viewMode === 'movies' ? `/library/movies/${searchMovieId}/download` : `/library/shows/${searchMovieId}/download`;
-                          await api.post(endpoint, { torrentUrl: res.link });
-                          customAlert('Sent to download client!');
-                          setSearchModalOpen(false);
-                          refreshLibrary();
-                        } catch (e) {
-                          customAlert('Failed to send to client', 'error');
-                        }
-                      }}
-                      className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold px-3 py-1 rounded-lg shrink-0"
-                    >
-                      Download
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-            </div>
-          </div>
-        </div>
+      {searchModalOpen && searchMediaId && (
+        <ManualSearchModal
+          mediaId={searchMediaId}
+          mediaType={searchMediaType}
+          title={searchMediaTitle}
+          onClose={() => { setSearchModalOpen(false); setSearchMediaId(null); }}
+          onGrabbed={refreshLibrary}
+        />
       )}
     </div>
   );

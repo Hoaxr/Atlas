@@ -2,6 +2,46 @@ const axios = require('axios');
 const db = require('../config/database');
 const { getSetting } = require('../utils/settings');
 
+// ─── Circuit breaker for Prowlarr ─────────────────────────────────────
+
+const CIRCUIT_BREAKER = {
+  failures: 0,
+  maxFailures: 3,
+  cooldownMs: 5 * 60 * 1000, // 5 minutes
+  openUntil: null,
+};
+
+const isCircuitOpen = () => {
+  if (CIRCUIT_BREAKER.openUntil && Date.now() < CIRCUIT_BREAKER.openUntil) {
+    const remaining = Math.ceil((CIRCUIT_BREAKER.openUntil - Date.now()) / 1000);
+    console.warn(`[IndexerService] Circuit breaker open — skipping search (${remaining}s remaining in cooldown)`);
+    return true;
+  }
+  return false;
+};
+
+const recordFailure = () => {
+  CIRCUIT_BREAKER.failures++;
+  if (CIRCUIT_BREAKER.failures >= CIRCUIT_BREAKER.maxFailures) {
+    CIRCUIT_BREAKER.openUntil = Date.now() + CIRCUIT_BREAKER.cooldownMs;
+    console.error(`[IndexerService] Circuit breaker OPEN — ${CIRCUIT_BREAKER.maxFailures} consecutive failures. Pausing searches for ${CIRCUIT_BREAKER.cooldownMs / 1000}s.`);
+  }
+};
+
+const recordSuccess = () => {
+  if (CIRCUIT_BREAKER.failures > 0 || CIRCUIT_BREAKER.openUntil) {
+    console.log('[IndexerService] Circuit breaker reset — Prowlarr is reachable again.');
+  }
+  CIRCUIT_BREAKER.failures = 0;
+  CIRCUIT_BREAKER.openUntil = null;
+};
+
+const getCircuitStatus = () => ({
+  failures: CIRCUIT_BREAKER.failures,
+  open: isCircuitOpen(),
+  cooldownRemaining: CIRCUIT_BREAKER.openUntil ? Math.max(0, Math.ceil((CIRCUIT_BREAKER.openUntil - Date.now()) / 1000)) : 0,
+});
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 const cleanTitle = (title) =>
@@ -27,6 +67,10 @@ const extractReleaseYear = (title) => {
 // ─── Prowlarr JSON Search ─────────────────────────────────────────────
 
 const searchProwlarr = async (query, type = 'search') => {
+  if (isCircuitOpen()) {
+    throw new Error('Prowlarr is temporarily unavailable (circuit breaker open).');
+  }
+
   const prowlarrUrl = getSetting('prowlarrUrl');
   const prowlarrApiKey = getSetting('prowlarrApiKey');
 
@@ -50,6 +94,8 @@ const searchProwlarr = async (query, type = 'search') => {
         'User-Agent': 'Atlas/1.0' 
       },
     });
+
+    recordSuccess();
 
     if (!Array.isArray(res.data)) return [];
 
@@ -75,6 +121,7 @@ const searchProwlarr = async (query, type = 'search') => {
       };
     });
   } catch (err) {
+    recordFailure();
     console.error(`[IndexerService] Prowlarr search failed:`, err.message);
     throw new Error(`Prowlarr search failed: ${err.message}`);
   }
@@ -247,6 +294,13 @@ const searchShowPack = async (showTitle, profile = null, currentQuality = null, 
   return filterAndSortResults(results, profile, 'shows', currentQuality, isManualSearch, showTitle);
 };
 
+const searchSeasonPack = async (showTitle, seasonNumber, profile = null, currentQuality = null, isManualSearch = false) => {
+  const s = seasonNumber.toString().padStart(2, '0');
+  const searchTerm = `${cleanTitle(showTitle)} S${s}`;
+  const results = await searchProwlarr(searchTerm, 'tvsearch');
+  return filterAndSortResults(results, profile, 'shows', currentQuality, isManualSearch, showTitle);
+};
+
 const searchGeneric = async (query) => {
   const searchTerm = cleanTitle(query || '');
   const results = await searchProwlarr(searchTerm, 'search');
@@ -257,6 +311,8 @@ module.exports = {
   searchMovie,
   searchEpisode,
   searchShowPack,
+  searchSeasonPack,
   searchGeneric,
   parseQuality,
+  getCircuitStatus,
 };

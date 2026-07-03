@@ -1,11 +1,14 @@
 import { useState, useEffect } from 'react';
 import api from '../lib/api';
-import { Play, Pause, Tv, Film, User, Activity, Trophy, Monitor, Zap, Wifi, Clock, Subtitles, HardDrive, Volume2, Video, TrendingUp, Hash, Eye, MonitorPlay, RotateCcw, History, BarChart3 } from 'lucide-react';
+import { Play, Pause, Tv, Film, User, Activity, Trophy, Monitor, Zap, Wifi, Clock, Subtitles, HardDrive, Volume2, Video, TrendingUp, Hash, Eye, MonitorPlay, RotateCcw, History } from 'lucide-react';
 import { customAlert } from '../utils/alerts';
 import { formatRelativeTime } from '../lib/format';
 import Spinner from '../components/shared/Spinner';
+import StickyBar from '../components/shared/StickyBar';
+import { useStickyBar } from '../lib/useStickyBar';
 
 export default function Watcher() {
+  const { headerRef, stickyVisible } = useStickyBar();
   const [sessions, setSessions] = useState([]);
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -85,14 +88,20 @@ export default function Watcher() {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center gap-2 sm:gap-3">
-        <Activity className="w-6 h-6 sm:w-8 sm:h-8 text-cyan-400 shrink-0" />
-        <div>
-          <h1 className="text-xl sm:text-3xl font-black tracking-wider text-slate-100">Watchers</h1>
-          <p className="text-xs sm:text-base text-slate-400 mt-0.5 sm:mt-1 hidden sm:block">Monitor active streams across your media servers.</p>
+    <div className="space-y-3">
+      <div ref={headerRef} className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+          <Eye className="w-6 h-6 sm:w-8 sm:h-8 text-cyan-400 shrink-0" />
+          <div className="min-w-0">
+            <h1 className="text-xl sm:text-3xl font-black text-slate-800 dark:text-slate-100 !mb-0">
+              <span className="truncate">Watchers</span>
+            </h1>
+            <p className="text-xs sm:text-base text-slate-400 mt-0.5 sm:mt-1 hidden sm:block">Monitor active streams across your media servers.</p>
+          </div>
         </div>
       </div>
+
+      <StickyBar visible={stickyVisible} />
 
       {sessions.length === 0 ? (
         <div className="text-center py-20 bg-slate-900/50 rounded-2xl border border-white/5">

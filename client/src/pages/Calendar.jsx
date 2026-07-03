@@ -1,9 +1,11 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../lib/api';
-import { Calendar as CalendarIcon, Tv, ChevronLeft, ChevronRight, RefreshCw } from 'lucide-react';
+import { Calendar as CalendarIcon, Tv, ChevronLeft, ChevronRight } from 'lucide-react';
 import { ListSkeleton } from '../components/shared/Skeleton';
 import EmptyState from '../components/shared/EmptyState';
+import StickyBar from '../components/shared/StickyBar';
+import { useStickyBar } from '../lib/useStickyBar';
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -12,7 +14,8 @@ export default function Calendar() {
   const navigate = useNavigate();
   const [episodes, setEpisodes] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
+  const { headerRef, stickyVisible: stickyBarVisible } = useStickyBar();
+
   const [viewMode, setViewMode] = useState(() => localStorage.getItem('calendarViewMode') || 'month');
   const [currentDate, setCurrentDate] = useState(new Date());
 
@@ -24,12 +27,10 @@ export default function Calendar() {
     fetchUpcoming();
   }, []);
 
-  const fetchUpcoming = async (forceRefresh = false) => {
-    if (forceRefresh) setRefreshing(true); else setLoading(true);
+  const fetchUpcoming = async () => {
+    setLoading(true);
     try {
-      const res = await api.get('/library/calendar', {
-        params: forceRefresh ? { _t: Date.now() } : {}
-      });
+      const res = await api.get('/library/calendar');
       if (res.data.status === 'success') {
         setEpisodes(res.data.data);
       }
@@ -37,7 +38,6 @@ export default function Calendar() {
       console.error('Failed to fetch calendar', err);
     } finally {
       setLoading(false);
-      setRefreshing(false);
     }
   };
 
@@ -146,7 +146,7 @@ export default function Calendar() {
   }, [viewMode, currentDate, groupedByDate, today]);
 
   if (loading) return (
-    <div className="space-y-6">
+    <div>
       <div>
         <h1 className="text-3xl font-black text-slate-100 dark:text-slate-100 text-slate-800 flex items-center gap-3">
           <CalendarIcon className="w-8 h-8 text-cyan-400" /> Calendar
@@ -158,56 +158,74 @@ export default function Calendar() {
   );
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
-        <div>
-          <h1 className="text-xl sm:text-3xl font-black text-slate-100 dark:text-slate-100 text-slate-800 flex items-center gap-2 sm:gap-3">
-            <CalendarIcon className="w-6 h-6 sm:w-8 sm:h-8 text-cyan-400" /> Calendar
-          </h1>
-          <p className="text-xs sm:text-base text-slate-400 mt-0.5 sm:mt-1 hidden sm:block">Upcoming episodes from your shows.</p>
-        </div>
-        <div className="flex flex-wrap items-center justify-center sm:justify-end gap-1.5 sm:gap-2">
-          {/* View toggle */}
-          <div className="flex bg-slate-800/50 rounded-lg border border-white/5 p-0.5">
+    <div className="space-y-3">
+      <div ref={headerRef} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div className="flex items-center justify-between gap-3 w-full sm:w-auto">
+          <div className="min-w-0">
+            <h1 className="text-xl sm:text-3xl font-black text-slate-800 dark:text-slate-100 flex items-center gap-2 sm:gap-3 !mb-0">
+              <CalendarIcon className="w-6 h-6 sm:w-8 sm:h-8 text-cyan-400" /> <span className="truncate">Calendar</span>
+            </h1>
+            <p className="text-xs sm:text-base text-slate-400 mt-0.5 sm:mt-1 hidden sm:block">Upcoming episodes from your shows.</p>
+          </div>
+          {/* View mode — visible on mobile only (moved to right on desktop) */}
+          <div className="flex bg-slate-900 rounded-lg p-1 border border-white/10 shrink-0 sm:hidden">
             {['month', 'week', 'day'].map(mode => (
               <button
                 key={mode}
                 onClick={() => setViewMode(mode)}
-                className={`px-2 sm:px-3 py-1.5 text-[11px] sm:text-xs font-bold rounded-md transition-colors capitalize ${
-                  viewMode === mode ? 'bg-cyan-500/20 text-cyan-400' : 'text-slate-400 hover:text-slate-300'
+                className={`px-2 py-1.5 text-[11px] font-bold rounded-md transition-colors capitalize ${
+                  viewMode === mode ? 'bg-cyan-500/20 text-cyan-400' : 'text-slate-400 hover:text-white'
                 }`}
               >
                 {mode}
               </button>
             ))}
           </div>
-          <div className="flex items-center gap-1 sm:gap-2">
-            <button
-              onClick={() => fetchUpcoming(true)}
-              disabled={refreshing}
-              className="p-1.5 sm:p-2 rounded-xl hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors disabled:opacity-50"
-              title="Refresh calendar"
-            >
-              <RefreshCw className={`w-4 h-4 text-slate-400 ${refreshing ? 'animate-spin' : ''}`} />
-            </button>
-            <button onClick={prev} className="p-1.5 sm:p-2 rounded-xl hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors">
-              <ChevronLeft className="w-4 h-4 sm:w-5 sm:h-5 text-slate-400" />
-            </button>
-            <span className="text-sm sm:text-lg font-bold text-slate-200 min-w-[120px] sm:min-w-[160px] text-center whitespace-nowrap">
-              {displayLabel}
-            </span>
-            <button onClick={next} className="p-1.5 sm:p-2 rounded-xl hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors">
-              <ChevronRight className="w-4 h-4 sm:w-5 sm:h-5 text-slate-400" />
-            </button>
-            <button
-              onClick={goToToday}
-              className="px-2 sm:px-3 py-1 text-xs font-bold rounded-lg bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 hover:bg-cyan-500/20 transition-colors"
-            >
-              Today
-            </button>
+        </div>
+        <div className="hidden sm:flex items-center gap-1.5 sm:gap-2 shrink-0">
+          {/* View mode — desktop only */}
+          <div className="flex bg-slate-900 rounded-lg p-1 border border-white/10 shrink-0">
+            {['month', 'week', 'day'].map(mode => (
+              <button
+                key={mode}
+                onClick={() => setViewMode(mode)}
+                className={`px-2 sm:px-3 py-1.5 text-[11px] sm:text-xs font-bold rounded-md transition-colors capitalize ${
+                  viewMode === mode ? 'bg-cyan-500/20 text-cyan-400' : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                {mode}
+              </button>
+            ))}
           </div>
+          <button onClick={prev} className="p-1.5 sm:p-2 rounded-lg bg-slate-800/50 hover:bg-slate-700 transition-colors text-slate-400 hover:text-white">
+            <ChevronLeft className="w-4 h-4 sm:w-5 sm:h-5" />
+          </button>
+          <span className="text-xs sm:text-sm font-bold text-slate-200 min-w-[100px] sm:min-w-[140px] text-center whitespace-nowrap">
+            {displayLabel}
+          </span>
+          <button onClick={next} className="p-1.5 sm:p-2 rounded-lg bg-slate-800/50 hover:bg-slate-700 transition-colors text-slate-400 hover:text-white">
+            <ChevronRight className="w-4 h-4 sm:w-5 sm:h-5" />
+          </button>
+          <button
+            onClick={goToToday}
+            className="px-2 sm:px-3 py-1.5 text-[11px] sm:text-xs font-bold rounded-lg bg-cyan-500/10 text-cyan-400 border border-cyan-500/30 hover:bg-cyan-500/20 transition-colors"
+          >
+            Today
+          </button>
         </div>
       </div>
+
+      <StickyBar visible={stickyBarVisible}>
+        <div className="flex items-center gap-1 ml-auto sm:hidden">
+          <button onClick={prev} className="p-1 text-slate-400 hover:text-white transition-colors">
+            <ChevronLeft className="w-3.5 h-3.5" />
+          </button>
+          <span className="text-[11px] font-bold text-slate-300">{displayLabel}</span>
+          <button onClick={next} className="p-1 text-slate-400 hover:text-white transition-colors">
+            <ChevronRight className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      </StickyBar>
 
       {viewMode === 'month' && calendarGrid ? (<>
         <div className="glass-panel rounded-2xl overflow-hidden border border-white/10">

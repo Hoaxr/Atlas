@@ -17,7 +17,9 @@ tmdbApi.interceptors.request.use((config) => {
   }
   config.params = config.params || {};
   config.params.api_key = apiKey;
-  config.params.language = 'en-US'; // Or support multiple languages later
+  if (config.params.language === undefined) {
+    config.params.language = 'en-US';
+  }
   return config;
 });
 

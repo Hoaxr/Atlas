@@ -1,17 +1,20 @@
 import { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../lib/api';
-import { Search as SearchIcon, Plus, Info, Tv, Film, Star, CheckCircle2, ChevronRight, ChevronLeft, CheckSquare, Square, ListFilter, X } from 'lucide-react';
+import { Search as SearchIcon, Plus, Tv, Film, Star, CheckCircle2, CheckSquare, Square, ListFilter, X } from 'lucide-react';
 import MediaDetailsModal from '../components/MediaDetailsModal';
 import MediaRow from '../components/MediaRow';
 import InlineError from '../components/shared/InlineError';
-import { customAlert } from '../utils/alerts';
 import { useOutsideClick } from '../lib/useOutsideClick';
+import StickyBar from '../components/shared/StickyBar';
+import { useStickyBar } from '../lib/useStickyBar';
 
 
 
 export default function Discover() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const initialMode = searchParams.get('mode') === 'shows' ? 'shows' : 'movies';
   const [query, setQuery] = useState('');
   const [results, setResults] = useState([]);
   const [trendingResults, setTrendingResults] = useState([]);
@@ -36,7 +39,7 @@ export default function Discover() {
     localStorage.setItem('discoverVisibleRows', JSON.stringify(visibleRows));
   }, [visibleRows]);
   const [error, setError] = useState('');
-  const [mode, setMode] = useState('movies'); // 'movies' or 'shows'
+  const [mode, setMode] = useState(initialMode); // 'movies' or 'shows'
   const [libraryItems, setLibraryItems] = useState(new Map()); // tmdb_id → library DB id
   const [watchedMap, setWatchedMap] = useState(new Map());
   
@@ -48,6 +51,7 @@ export default function Discover() {
   // Cache data per mode so switching is instant
   const cacheRef = useRef({ movies: null, shows: null });
   const searchInputRef = useRef(null);
+  const { headerRef, stickyVisible: stickySearchVisible } = useStickyBar();
 
   useEffect(() => {
     if (searchInputRef.current) {
@@ -284,14 +288,14 @@ export default function Discover() {
             )}
           </div>
         </div>
-        <div className="p-4 relative z-20 bg-slate-900/90 border-t border-white/5">
-          <h3 className="font-bold text-slate-200 truncate" title={title}>{title}</h3>
-          <div className="flex justify-between items-center mt-1">
-            <p className="text-sm text-slate-400 font-medium">{releaseYear}</p>
+        <div className="p-4 relative z-20 bg-gradient-to-b from-slate-800/95 to-slate-900/95 border-t border-white/10">
+          <h3 className="font-semibold text-sm text-slate-100 truncate tracking-wide" title={title}>{title}</h3>
+          <div className="flex justify-between items-center mt-2">
+            <span className="text-xs text-slate-500 font-medium tracking-wider uppercase">{releaseYear}</span>
             {rating !== '?' && (
-              <div className="flex items-center gap-1.5 bg-slate-950/50 px-2.5 py-0.5 rounded-lg border border-white/5 shadow-inner">
-                <Star className="w-3.5 h-3.5 text-yellow-400 fill-yellow-400 drop-shadow-sm" />
-                <span className="text-sm font-bold text-slate-200">{rating}</span>
+              <div className="flex items-center gap-1 bg-amber-500/10 px-2 py-0.5 rounded-md border border-amber-500/20">
+                <Star className="w-3 h-3 text-amber-400 fill-amber-400" />
+                <span className="text-xs font-bold text-amber-300">{rating}</span>
               </div>
             )}
           </div>
@@ -303,29 +307,29 @@ export default function Discover() {
   const isDiscovering = !query;
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-black text-slate-800 dark:text-slate-100 flex items-center gap-3">
-            <SearchIcon className="w-7 h-7 sm:w-8 sm:h-8 text-emerald-400" /> Discover
+    <div className="space-y-3">
+      <div ref={headerRef} className="flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <h1 className="text-xl sm:text-3xl font-black text-slate-800 dark:text-slate-100 flex items-center gap-2 sm:gap-3 !mb-0">
+            <SearchIcon className="w-5 h-5 sm:w-8 sm:h-8 text-emerald-400" /> <span className="truncate">Discover</span>
           </h1>
-          <p className="text-slate-400 mt-1 text-sm sm:text-base">Search and add new media to your library.</p>
+          <p className="text-slate-400 mt-1 text-sm sm:text-base hidden sm:block">Search and add new media to your library.</p>
         </div>
         
         {/* Mode Toggle */}
-        <div className="flex items-center justify-center sm:justify-start gap-2 self-center sm:self-auto">
+        <div className="flex items-center gap-2 shrink-0">
           <div className="flex bg-slate-900/50 p-0.5 sm:p-1 rounded-xl border border-white/5 shadow-inner">
             <button 
               onClick={() => setMode('movies')}
-              className={`flex items-center space-x-1.5 sm:space-x-2 px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-all ${mode === 'movies' ? 'bg-cyan-500/20 text-cyan-400 shadow-sm' : 'text-slate-400 hover:text-slate-200'}`}
+              className={`flex items-center space-x-1.5 sm:space-x-2 px-2 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-all ${mode === 'movies' ? 'bg-cyan-500/20 text-cyan-400 shadow-sm' : 'text-slate-400 hover:text-slate-200'}`}
             >
-              <Film className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> <span>Movies</span>
+              <Film className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> <span className="hidden sm:inline">Movies</span>
             </button>
             <button 
               onClick={() => setMode('shows')}
-              className={`flex items-center space-x-1.5 sm:space-x-2 px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-all ${mode === 'shows' ? 'bg-purple-500/20 text-purple-400 shadow-sm' : 'text-slate-400 hover:text-slate-200'}`}
+              className={`flex items-center space-x-1.5 sm:space-x-2 px-2 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-all ${mode === 'shows' ? 'bg-purple-500/20 text-purple-400 shadow-sm' : 'text-slate-400 hover:text-slate-200'}`}
             >
-              <Tv className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> <span>TV Shows</span>
+              <Tv className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> <span className="hidden sm:inline">TV Shows</span>
             </button>
           </div>
           
@@ -361,38 +365,45 @@ export default function Discover() {
         </div>
       </div>
 
-      <div className="glass-panel rounded-2xl p-4 sm:p-6 shadow-2xl">
-        <form onSubmit={searchMovies} className="flex gap-4">
-          <div className="relative flex-1 flex items-center">
-            <SearchIcon className="absolute left-3 sm:left-4 w-4 h-4 sm:w-5 sm:h-5 text-slate-400" />
-            <input
-              ref={searchInputRef}
-              type="text"
-              placeholder="Search by title, IMDb ID, or TMDB ID..."
-              className="glass-input w-full !pl-10 sm:!pl-12 !pr-12 sm:!pr-14 h-10 sm:h-12 text-sm sm:text-lg shadow-inner"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-            />
-            {query && (
-              <button
-                type="button"
-                onClick={() => setQuery('')}
-                className="absolute right-2 sm:right-3 p-1 sm:p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"
-                title="Clear search"
-              >
-                <X className="w-4 h-4 sm:w-5 sm:h-5" />
-              </button>
-            )}
-          </div>
-        </form>
+      {/* Desktop Search */}
+      <div className="glass-panel rounded-2xl p-4 sm:p-6 shadow-2xl hidden sm:block">
+        <div className="relative flex items-center">
+          <SearchIcon className="absolute left-3 sm:left-4 w-4 h-4 sm:w-5 sm:h-5 text-slate-400" />
+          <input
+            ref={searchInputRef}
+            type="text"
+            placeholder="Search by title, IMDb ID, or TMDB ID..."
+            className="glass-input w-full !pl-10 sm:!pl-12 !pr-12 sm:!pr-14 h-10 sm:h-12 text-sm sm:text-lg shadow-inner"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+          {query && (
+            <button
+              type="button"
+              onClick={() => setQuery('')}
+              className="absolute right-2 sm:right-3 p-1 sm:p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"
+              title="Clear search"
+            >
+              <X className="w-4 h-4 sm:w-5 sm:h-5" />
+            </button>
+          )}
+        </div>
       </div>
+
+      <StickyBar
+        visible={stickySearchVisible}
+        searchQuery={query}
+        onSearchChange={setQuery}
+        searchPlaceholder="Search by title, IMDb ID, or TMDB ID..."
+        showSearch
+      />
 
       {error && (
         <InlineError message={error} />
       )}
 
       {isDiscovering && !error && (
-        <div className="mt-8">
+        <div className="mt-2">
           {loading ? (
             <div className="flex flex-col items-center justify-center py-24 text-slate-400 gap-4">
               <div className="w-8 h-8 border-2 border-cyan-500/50 border-t-cyan-400 rounded-full animate-spin" />
@@ -416,7 +427,7 @@ export default function Discover() {
                Search Results
              </span>
            </h2>
-           <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-6">
+           <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-7 gap-3 sm:gap-6">
              {results.map((item) => renderMediaCard(item, false, true))}
            </div>
         </div>

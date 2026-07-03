@@ -1,10 +1,13 @@
 import { useState, useEffect } from 'react';
-import { Clock, CheckCircle2, XCircle, Loader2, Trash2 } from 'lucide-react';
+import { Clock, CheckCircle2, XCircle, Loader2, Trash2, Heart } from 'lucide-react';
 import api from '../lib/api';
 import { customAlert, customConfirm } from '../utils/alerts';
 import MediaDetailsModal from '../components/MediaDetailsModal';
+import StickyBar from '../components/shared/StickyBar';
+import { useStickyBar } from '../lib/useStickyBar';
 
 export default function Requests() {
+  const { headerRef, stickyVisible } = useStickyBar();
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
   
@@ -86,11 +89,20 @@ export default function Requests() {
   }
 
   return (
-    <div className="space-y-8 animate-fade-in">
-      <div>
-        <h1 className="text-xl sm:text-3xl font-black text-white tracking-tight">Requests</h1>
-        <p className="text-xs sm:text-base text-slate-400 mt-1 sm:mt-2 hidden sm:block">Manage user requests for movies and TV shows.</p>
+    <div className="space-y-3">
+      <div ref={headerRef}>
+        <h1 className="text-xl sm:text-3xl font-black text-slate-800 dark:text-slate-100 flex items-center gap-2 sm:gap-3 !mb-0">
+          <Heart className="w-6 h-6 sm:w-8 sm:h-8 text-rose-400" /> <span className="truncate">Requests</span>
+        </h1>
+        <p className="text-xs sm:text-base text-slate-400 mt-0.5 sm:mt-1 hidden sm:block">Manage user requests for movies and TV shows.</p>
       </div>
+
+      <StickyBar visible={stickyVisible}>
+        <div className="flex items-center gap-2 ml-auto sm:hidden text-xs">
+          <span className="text-slate-300">{requests.filter(r => r.status === 'pending').length} open</span>
+          <span className="text-emerald-400">{requests.filter(r => r.status === 'approved').length} approved</span>
+        </div>
+      </StickyBar>
 
       <div className="glass-panel rounded-2xl border border-white/10 overflow-hidden">
         {/* Desktop table */}
