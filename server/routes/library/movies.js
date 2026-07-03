@@ -259,9 +259,16 @@ router.post('/:id/refresh', async (req, res, next) => {
       }
       // Always detect and update resolution
       let resolution = null;
-      try {
-        resolution = await getResolution(bestFile.path);
-      } catch { /* ignore */ }
+      // First try to extract from filename
+      const nameLower = bestFile.name.toLowerCase();
+      if (nameLower.includes('2160p') || nameLower.includes('4k')) resolution = '2160p';
+      else if (nameLower.includes('1080p')) resolution = '1080p';
+      else if (nameLower.includes('720p')) resolution = '720p';
+      else if (nameLower.includes('480p')) resolution = '480p';
+      // Fall back to ffprobe if not found in filename
+      if (!resolution) {
+        try { resolution = await getResolution(bestFile.path); } catch { /* ignore */ }
+      }
       db.prepare('UPDATE movies SET file_path = ?, file_size = ?, scene_name = ?, status = ?, resolution = ? WHERE id = ?')
         .run(bestFile.path, bestFile.size, resName, 'downloaded', resolution, movie.id);
     } else if (scanPaths.size > 0) {

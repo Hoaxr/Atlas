@@ -16,8 +16,8 @@ RUN npm run build
 # ============================================================
 FROM node:22-alpine AS server
 
-# bcrypt needs build tools on Alpine
-RUN apk add --no-cache python3 make g++
+# bcrypt needs build tools on Alpine; ffmpeg for video resolution detection
+RUN apk add --no-cache python3 make g++ ffmpeg
 
 WORKDIR /app
 

@@ -86,9 +86,16 @@ router.post('/shows/:id/refresh', async (req, res, next) => {
                     }
                   }
                   const { getResolution } = require('../../utils/videoUtils');
-                  // Always detect resolution
+                  // Always detect resolution — file name first, ffprobe as fallback
                   let resolution = null;
-                  try { resolution = await getResolution(fullPath); } catch { /* ignore */ }
+                  const nameLower = item.name.toLowerCase();
+                  if (nameLower.includes('2160p') || nameLower.includes('4k')) resolution = '2160p';
+                  else if (nameLower.includes('1080p')) resolution = '1080p';
+                  else if (nameLower.includes('720p')) resolution = '720p';
+                  else if (nameLower.includes('480p')) resolution = '480p';
+                  if (!resolution) {
+                    try { resolution = await getResolution(fullPath); } catch { /* ignore */ }
+                  }
 
                   // Preserve existing scene_name unless empty/missing/auto-generated
                   const existingEp = db.prepare(

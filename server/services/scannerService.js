@@ -413,12 +413,16 @@ const doScan = async () => {
           let resolution = null;
           try {
             const t = file.name.toLowerCase();
-            const hasRes = t.includes('2160p') || t.includes('4k') || t.includes('1080p') || t.includes('720p') || t.includes('480p') || t.includes('sd');
-            if (hasRes) {
+            if (t.includes('2160p') || t.includes('4k')) resolution = '2160p';
+            else if (t.includes('1080p')) resolution = '1080p';
+            else if (t.includes('720p')) resolution = '720p';
+            else if (t.includes('480p')) resolution = '480p';
+            
+            if (resolution) {
               resName = file.name;
             } else {
               resolution = await getResolution(fullPath);
-              if (resolution) resName = `Unknown ${resolution}`;
+              if (resolution) resName = 'Unknown ' + resolution;
             }
           } catch { /* ignore */ }
 
@@ -525,12 +529,20 @@ const doScan = async () => {
               scanProgress.addedMovies.push({ title: matchedMovie.title, year: movieYear });
             }
 
-            // Detect and store resolution
+            // Detect and store resolution — file name first, ffprobe as fallback
             try {
-              const res = await getResolution(fullPath);
-              if (res) {
+              const nameLower = file.name.toLowerCase();
+              let resolution = null;
+              if (nameLower.includes('2160p') || nameLower.includes('4k')) resolution = '2160p';
+              else if (nameLower.includes('1080p')) resolution = '1080p';
+              else if (nameLower.includes('720p')) resolution = '720p';
+              else if (nameLower.includes('480p')) resolution = '480p';
+              if (!resolution) {
+                resolution = await getResolution(fullPath);
+              }
+              if (resolution) {
                 db.prepare('UPDATE movies SET resolution = ?, scene_name = COALESCE(NULLIF(scene_name, \'\'), ?) WHERE tmdb_id = ?')
-                  .run(res, 'Unknown ' + res, matchedMovie.id);
+                  .run(resolution, 'Unknown ' + resolution, matchedMovie.id);
               }
             } catch { /* ignore */ }
 
@@ -575,16 +587,23 @@ const doScan = async () => {
       scanProgress.currentFile = m.title;
       try {
         const stat = await fs.stat(m.file_path);
-        // Always re-detect resolution on scan
+        // Always re-detect resolution on scan — file name first, ffprobe as fallback
         let resName = null;
         let resolution = null;
         try {
           const t = m.scene_name ? m.scene_name.toLowerCase() : '';
+          const fileLower = m.file_path ? m.file_path.toLowerCase() : '';
           const hasRes = t.includes('2160p') || t.includes('4k') || t.includes('1080p') || t.includes('720p') || t.includes('480p') || t.includes('sd');
-          if (!hasRes) {
+          // Try filename-based detection first
+          if (fileLower.includes('2160p') || fileLower.includes('4k')) resolution = '2160p';
+          else if (fileLower.includes('1080p')) resolution = '1080p';
+          else if (fileLower.includes('720p')) resolution = '720p';
+          else if (fileLower.includes('480p')) resolution = '480p';
+          
+          if (!resolution && !hasRes) {
             resolution = await getResolution(m.file_path);
-            if (resolution) resName = 'Unknown ' + resolution;
           }
+          if (resolution && !hasRes) resName = 'Unknown ' + resolution;
         } catch { /* ignore */ }
         
         const updates = ['file_size = ?'];
@@ -601,15 +620,24 @@ const doScan = async () => {
     for (const ep of existingEpisodes) {
       if (scanProgress.cancelled) throw new Error('Scan cancelled by user');
       try {
-        // Always re-detect resolution
+        // Always re-detect resolution — file name first, ffprobe as fallback
         const t = ep.scene_name ? ep.scene_name.toLowerCase() : '';
+        const fileLower = ep.file_path ? ep.file_path.toLowerCase() : '';
         const hasRes = t.includes('2160p') || t.includes('4k') || t.includes('1080p') || t.includes('720p') || t.includes('480p') || t.includes('sd');
-        if (!hasRes) {
-          const resolution = await getResolution(ep.file_path);
-          if (resolution) {
-            db.prepare('UPDATE episodes SET scene_name = ?, resolution = ? WHERE id = ?')
-              .run('Unknown ' + resolution, resolution, ep.id);
-          }
+        let resolution = null;
+        if (fileLower.includes('2160p') || fileLower.includes('4k')) resolution = '2160p';
+        else if (fileLower.includes('1080p')) resolution = '1080p';
+        else if (fileLower.includes('720p')) resolution = '720p';
+        else if (fileLower.includes('480p')) resolution = '480p';
+        
+        if (!resolution && !hasRes) {
+          resolution = await getResolution(ep.file_path);
+        }
+        if (resolution && !hasRes) {
+          db.prepare('UPDATE episodes SET scene_name = ?, resolution = ? WHERE id = ?')
+            .run('Unknown ' + resolution, resolution, ep.id);
+        } else if (resolution) {
+          db.prepare('UPDATE episodes SET resolution = ? WHERE id = ?').run(resolution, ep.id);
         }
       } catch { /* skip */ }
       scanProgress.processedFiles++;
