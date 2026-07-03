@@ -291,4 +291,5 @@ This project is licensed under the MIT License. See the [LICENSE](LICENSE) file 
 
 ---
 
-<p align="center">Made with ❤️ by <a href="https://github.com/Hoaxr">Hoaxr</a></p>
+<p align="center">Made with ❤️ by <a href="https://github.com/Hoaxr">Hoaxr</a> • <a href="https://bdekker.nl">BDekker.nl</a><br>
+<a href="https://github.com/Hoaxr/Atlas/issues">🐛 Report a bug</a></p>
