@@ -573,7 +573,6 @@ export default function Statistics() {
         </div>
       )}
 
-      {/* ── Movie Details Modal ── */}
       <MediaDetailsModal
         isOpen={detailsModal.open}
         onClose={() => setDetailsModal({ open: false, mediaId: null, mediaType: 'movie', libraryId: null })}
@@ -582,7 +581,7 @@ export default function Statistics() {
         mode="info"
         onDelete={async (deleteFiles) => {
           await api.delete(`/library/movies/${detailsModal.libraryId}${deleteFiles ? '?deleteFiles=true' : ''}`);
-          fetchDeletable(!!deletableData?.all?.[0]?.tmdb_rating);
+          handleItemDeleted(detailsModal.libraryId);
         }}
       />
 
