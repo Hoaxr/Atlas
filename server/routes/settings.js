@@ -535,7 +535,7 @@ router.get('/clients/detect-mapping', async (req, res) => {
         if (mapping) {
           return res.json({ status: 'success', data: mapping });
         }
-      } catch {}
+      } catch { /* ignore */ }
     }
     res.json({ status: 'success', data: null, message: 'Could not detect path mapping automatically. Set it manually.' });
   } catch (err) {

@@ -123,7 +123,7 @@ const searchProwlarr = async (query, type = 'search') => {
   } catch (err) {
     recordFailure();
     console.error(`[IndexerService] Prowlarr search failed:`, err.message);
-    throw new Error(`Prowlarr search failed: ${err.message}`);
+    throw new Error(`Prowlarr search failed: ${err.message}`, { cause: err });
   }
 };
 
@@ -243,7 +243,7 @@ const filterAndSortResults = (results, profile, type, currentQuality = null, isM
 const searchMovie = async (title, year, profile = null, currentQuality = null, isManualSearch = false) => {
   const cleanedTitle = cleanTitle(title);
   
-  let allResults = [];
+  let allResults;
   
   if (year) {
     // Try the given year first

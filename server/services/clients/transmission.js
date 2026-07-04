@@ -39,7 +39,7 @@ const rpc = async (client, method, args = {}) => {
 };
 
 const addTorrent = async (client, torrentUrl) => {
-  let args = {};
+  const args = {};
   if (torrentUrl.startsWith('http')) {
     args.filename = torrentUrl;
   }

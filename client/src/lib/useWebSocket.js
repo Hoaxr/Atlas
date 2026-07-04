@@ -27,7 +27,7 @@ const connect = () => {
         if (token) {
           ws.send(JSON.stringify({ type: 'auth', token }));
         }
-      } catch {}
+      } catch { /* ignore */ }
     };
 
     ws.onmessage = (event) => {

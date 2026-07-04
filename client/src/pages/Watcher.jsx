@@ -72,7 +72,7 @@ export default function Watcher() {
 
 
   const handleResetStats = async () => {
-    if (!confirm('Are you sure you want to reset all watcher statistics? This cannot be undone.')) return;
+    if (!window.confirm('Are you sure you want to reset all watcher statistics? This cannot be undone.')) return;
     setResetting(true);
     try {
       await api.delete('/watcher/stats');

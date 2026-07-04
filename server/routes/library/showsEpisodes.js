@@ -70,7 +70,7 @@ router.post('/shows/:id/refresh', async (req, res, next) => {
                 const stats = await fsp.stat(fullPath);
                 totalSize += stats.size;
                 
-                const match = item.name.match(/[sS](\d+)[eE](\d+)/) || item.name.match(/(?:^|[ \.\-])(\d{1,2})x(\d{2})(?:[ \.\-]|$)/);
+                const match = item.name.match(/[sS](\d+)[eE](\d+)/) || item.name.match(/(?:^|[ .-])(\d{1,2})x(\d{2})(?:[ .-]|$)/);
                 if (match) {
                   const s = parseInt(match[1], 10);
                   const firstE = parseInt(match[2], 10);
@@ -682,7 +682,7 @@ router.delete('/shows/:id', async (req, res, next) => {
           const entries = await fsp.readdir(folderPath, { withFileTypes: true });
           await Promise.all(entries.map(entry => {
             const full = path.join(folderPath, entry.name);
-            return entry.isDirectory() ? deleteFolderRecursive(full) : fs.unlink(full).catch(() => {});
+            return entry.isDirectory() ? deleteFolderRecursive(full) : fsp.unlink(full).catch(() => {});
           }));
           await fsp.rmdir(folderPath).catch(() => {});
         };

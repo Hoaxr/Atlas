@@ -26,9 +26,7 @@ export default function ConnectionsTab({
   const [saving, setSaving] = useState(false);
   const [testStatuses, setTestStatuses] = useState({ plex: null, jellyfin: null, emby: null });
   const [testingMedia, setTestingMedia] = useState({ plex: false, jellyfin: false, emby: false });
-  const [showTraktSecret, setShowTraktSecret] = useState(false);
-  const [showTraktId, setShowTraktId] = useState(false);
-
+    
   // Plex OAuth state
   const [plexOAuth, setPlexOAuth] = useState({
     loading: false,
@@ -144,7 +142,7 @@ export default function ConnectionsTab({
       if (res.data.status === 'success' && res.data.data.authorized) {
         const { authToken, plexUrl } = res.data.data;
         const updatedSettings = {
-          ...settings,
+          ...localSettings,
           plexToken: authToken,
           ...(plexUrl ? { plexUrl } : {})
         };

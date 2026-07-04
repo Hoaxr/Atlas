@@ -93,7 +93,7 @@ const trySubdl = async (apiKey, movie, year, langCode, type = 'movie', season = 
   if (!match) return null;
 
   // Fallback: use the first unpack file URL or the main ZIP URL
-  let url = match.unpack_files?.[0]?.url || match.url;
+  const url = match.unpack_files?.[0]?.url || match.url;
   if (!url) return null;
   const downloadUrl = `https://dl.subdl.com${url.startsWith('/') ? url : '/' + url}`;
   const srtRes = await axios.get(downloadUrl, { responseType: 'text' });
@@ -136,7 +136,7 @@ const downloadSubtitlesForMovies = async () => {
       const parsed = JSON.parse(row.value);
       providerLangs = Array.isArray(parsed) ? parsed : ['en'];
     }
-  } catch {}
+  } catch { /* ignore */ }
 
   const autoTranslate = db.prepare("SELECT value FROM settings WHERE key = 'autoTranslate'").get();
   const isAutoTranslate = autoTranslate && autoTranslate.value === 'true';
@@ -146,7 +146,7 @@ const downloadSubtitlesForMovies = async () => {
   try {
     const row = db.prepare("SELECT value FROM settings WHERE key = 'targetLangs'").get();
     if (row) targetLangs = JSON.parse(row.value);
-  } catch {}
+  } catch { /* ignore */ }
 
   const LANG_TO_CODE = { 'Dutch': 'nl', 'French': 'fr', 'German': 'de', 'Spanish': 'es', 'Italian': 'it', 'Portuguese': 'pt' };
 
@@ -288,13 +288,13 @@ const autoTranslateExisting = async () => {
   const tryDownloadNative = async (movie, langCode) => {
     let srtContent = null;
     if (!srtContent && osApiKeyRow?.value) {
-      try { srtContent = await tryOpenSubtitles(osApiKeyRow.value, movie, langCode); } catch (e) {}
+      try { srtContent = await tryOpenSubtitles(osApiKeyRow.value, movie, langCode); } catch { /* ignore */ }
     }
     if (!srtContent && subdlApiKeyRow?.value) {
-      try { srtContent = await trySubdl(subdlApiKeyRow.value, movie, movie.year || (new Date()).getFullYear(), langCode); } catch (e) {}
+      try { srtContent = await trySubdl(subdlApiKeyRow.value, movie, movie.year || (new Date()).getFullYear(), langCode); } catch { /* ignore */ }
     }
     if (!srtContent && subsourceApiKeyRow?.value) {
-      try { srtContent = await trySubsource(subsourceApiKeyRow.value, movie, langCode); } catch (e) {}
+      try { srtContent = await trySubsource(subsourceApiKeyRow.value, movie, langCode); } catch { /* ignore */ }
     }
     return srtContent;
   };
@@ -303,7 +303,7 @@ const autoTranslateExisting = async () => {
   try {
     const row = db.prepare("SELECT value FROM settings WHERE key = 'targetLangs'").get();
     if (row) targetLangs = JSON.parse(row.value);
-  } catch {}
+  } catch { /* ignore */ }
   if (targetLangs.length === 0) return;
 
   let providerLangs = ['en'];
@@ -313,7 +313,7 @@ const autoTranslateExisting = async () => {
       const parsed = JSON.parse(row.value);
       providerLangs = Array.isArray(parsed) ? parsed : ['en'];
     }
-  } catch {}
+  } catch { /* ignore */ }
 
   const LANG_TO_CODE = { 'Dutch': 'nl', 'French': 'fr', 'German': 'de', 'Spanish': 'es', 'Italian': 'it', 'Portuguese': 'pt' };
 
@@ -424,20 +424,20 @@ const upgradeTranslatedToNative = async () => {
   try {
     const row = db.prepare("SELECT value FROM settings WHERE key = 'targetLangs'").get();
     if (row) targetLangs = JSON.parse(row.value);
-  } catch {}
+  } catch { /* ignore */ }
   const LANG_TO_CODE = { 'Dutch': 'nl', 'French': 'fr', 'German': 'de', 'Spanish': 'es', 'Italian': 'it', 'Portuguese': 'pt' };
   const targetCodes = targetLangs.map(l => LANG_TO_CODE[l]).filter(Boolean);
 
   const tryDownloadNative = async (item, langCode) => {
     let srtContent = null;
     if (!srtContent && osApiKeyRow?.value) {
-      try { srtContent = await tryOpenSubtitles(osApiKeyRow.value, item, langCode); } catch (e) {}
+      try { srtContent = await tryOpenSubtitles(osApiKeyRow.value, item, langCode); } catch { /* ignore */ }
     }
     if (!srtContent && subdlApiKeyRow?.value) {
-      try { srtContent = await trySubdl(subdlApiKeyRow.value, item, item.year || (new Date()).getFullYear(), langCode); } catch (e) {}
+      try { srtContent = await trySubdl(subdlApiKeyRow.value, item, item.year || (new Date()).getFullYear(), langCode); } catch { /* ignore */ }
     }
     if (!srtContent && subsourceApiKeyRow?.value) {
-      try { srtContent = await trySubsource(subsourceApiKeyRow.value, item, langCode); } catch (e) {}
+      try { srtContent = await trySubsource(subsourceApiKeyRow.value, item, langCode); } catch { /* ignore */ }
     }
     return srtContent;
   };
@@ -476,10 +476,11 @@ const upgradeTranslatedToNative = async () => {
   `).all();
 
   const processEpisodeUpgrade = async (ep) => {
+    let label = 'Unknown';
     try {
       if (!fs.existsSync(ep.file_path)) return;
       const parsedPath = path.parse(ep.file_path);
-      const label = `${ep.show_title} S${String(ep.season_number).padStart(2, '0')}E${String(ep.episode_number).padStart(2, '0')}`;
+      label = `${ep.show_title} S${String(ep.season_number).padStart(2, '0')}E${String(ep.episode_number).padStart(2, '0')}`;
       for (const tCode of targetCodes) {
         const subPath = path.join(parsedPath.dir, `${parsedPath.name}.${tCode}.srt`);
         if (!fs.existsSync(subPath)) continue;
@@ -535,7 +536,7 @@ const downloadSubtitlesForEpisodes = async () => {
       const parsed = JSON.parse(row.value);
       providerLangs = Array.isArray(parsed) ? parsed : ['en'];
     }
-  } catch {}
+  } catch { /* ignore */ }
 
   const episodes = db.prepare(`
     SELECT e.*, s.title as show_title, s.tmdb_id, s.year

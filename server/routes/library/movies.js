@@ -195,7 +195,7 @@ router.post('/:id/refresh', async (req, res, next) => {
               best = { path: fullPath, name: item, size: stats.size, dir: dirPath };
             }
           }
-        } catch (e) {}
+        } catch { /* ignore */ }
       }
       return best;
     };
@@ -203,7 +203,7 @@ router.post('/:id/refresh', async (req, res, next) => {
     // Collect candidate directories to scan
     const scanPaths = new Set();
     if (movie.file_path) {
-      try { scanPaths.add(path.dirname(movie.file_path)); } catch (e) {}
+      try { scanPaths.add(path.dirname(movie.file_path)); } catch { /* ignore */ }
     }
 
     // Fallback: when DB has no path info, search all configured library paths
@@ -231,7 +231,7 @@ router.post('/:id/refresh', async (req, res, next) => {
         await scanLevel(lp.path);
         // Also one level deeper
         let topLevel = [];
-        try { topLevel = await fsp.readdir(lp.path, { withFileTypes: true }); } catch (e) {}
+        try { topLevel = await fsp.readdir(lp.path, { withFileTypes: true }); } catch { /* ignore */ }
         for (const sub of topLevel) {
           if (sub.isDirectory()) await scanLevel(path.join(lp.path, sub.name));
         }
@@ -542,7 +542,7 @@ router.delete('/:id', async (req, res, next) => {
             const entries = await fsp.readdir(folderPath, { withFileTypes: true });
             await Promise.all(entries.map(entry => {
               const full = path.join(folderPath, entry.name);
-              return entry.isDirectory() ? deleteFolderRecursive(full) : fs.unlink(full).catch(() => {});
+              return entry.isDirectory() ? deleteFolderRecursive(full) : fsp.unlink(full).catch(() => {});
             }));
             await fsp.rmdir(folderPath).catch(() => {});
           };
@@ -710,7 +710,7 @@ router.post('/:id/set-path', async (req, res, next) => {
               best = { path: fullPath, name: item, size: stats.size, dir: dirPath };
             }
           }
-        } catch {}
+        } catch { /* ignore */ }
       }
       return best;
     };

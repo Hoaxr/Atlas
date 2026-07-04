@@ -162,55 +162,55 @@ db.exec(`
 
 try {
   db.exec("ALTER TABLE movies ADD COLUMN file_path TEXT;");
-} catch (e) {}
+} catch { /* ignore */ }
 
 try {
   db.exec("ALTER TABLE play_history ADD COLUMN player TEXT;");
-} catch (e) {}
+} catch { /* ignore */ }
 
 try {
   db.exec("ALTER TABLE movies ADD COLUMN quality_profile_id INTEGER;");
-} catch (e) {}
+} catch { /* ignore */ }
 
 try {
   db.exec("ALTER TABLE movies ADD COLUMN scene_name TEXT;");
-} catch (e) {}
+} catch { /* ignore */ }
 
 try {
   db.exec("ALTER TABLE episodes ADD COLUMN scene_name TEXT;");
-} catch (e) {}
+} catch { /* ignore */ }
 
 try {
   db.exec("ALTER TABLE shows ADD COLUMN quality_profile_id INTEGER;");
-} catch (e) {}
+} catch { /* ignore */ }
 
-try { db.exec("ALTER TABLE quality_profiles ADD COLUMN qualities TEXT;"); } catch (e) {}
-try { db.exec("ALTER TABLE quality_profiles ADD COLUMN cutoff TEXT;"); } catch (e) {}
-try { db.exec("ALTER TABLE quality_profiles ADD COLUMN upgrade_allowed INTEGER DEFAULT 1;"); } catch (e) {}
-try { db.exec("ALTER TABLE release_profiles ADD COLUMN apply_to TEXT DEFAULT 'all';"); } catch (e) {}
-try { db.exec("ALTER TABLE users ADD COLUMN origin TEXT DEFAULT 'atlas';"); } catch (e) {}
+try { db.exec("ALTER TABLE quality_profiles ADD COLUMN qualities TEXT;"); } catch { /* ignore */ }
+try { db.exec("ALTER TABLE quality_profiles ADD COLUMN cutoff TEXT;"); } catch { /* ignore */ }
+try { db.exec("ALTER TABLE quality_profiles ADD COLUMN upgrade_allowed INTEGER DEFAULT 1;"); } catch { /* ignore */ }
+try { db.exec("ALTER TABLE release_profiles ADD COLUMN apply_to TEXT DEFAULT 'all';"); } catch { /* ignore */ }
+try { db.exec("ALTER TABLE users ADD COLUMN origin TEXT DEFAULT 'atlas';"); } catch { /* ignore */ }
 
 // Ensure rating columns exist
-try { db.exec("ALTER TABLE movies ADD COLUMN rating REAL DEFAULT 0;"); } catch (e) {}
-try { db.exec("ALTER TABLE shows ADD COLUMN rating REAL DEFAULT 0;"); } catch (e) {}
+try { db.exec("ALTER TABLE movies ADD COLUMN rating REAL DEFAULT 0;"); } catch { /* ignore */ }
+try { db.exec("ALTER TABLE shows ADD COLUMN rating REAL DEFAULT 0;"); } catch { /* ignore */ }
 // Ensure size columns exist
-try { db.exec("ALTER TABLE movies ADD COLUMN file_size INTEGER DEFAULT 0;"); } catch (e) {}
-try { db.exec("ALTER TABLE shows ADD COLUMN folder_size INTEGER DEFAULT 0;"); } catch (e) {}
-try { db.exec("ALTER TABLE episodes ADD COLUMN file_size INTEGER DEFAULT 0;"); } catch (e) {}
+try { db.exec("ALTER TABLE movies ADD COLUMN file_size INTEGER DEFAULT 0;"); } catch { /* ignore */ }
+try { db.exec("ALTER TABLE shows ADD COLUMN folder_size INTEGER DEFAULT 0;"); } catch { /* ignore */ }
+try { db.exec("ALTER TABLE episodes ADD COLUMN file_size INTEGER DEFAULT 0;"); } catch { /* ignore */ }
 // Ensure watched columns exist
-try { db.exec("ALTER TABLE movies ADD COLUMN watched INTEGER DEFAULT 0;"); } catch (e) {}
-try { db.exec("ALTER TABLE shows ADD COLUMN watched INTEGER DEFAULT 0;"); } catch (e) {}// Ensure subtitle columns exist
-try { db.exec("ALTER TABLE movies ADD COLUMN subtitles TEXT DEFAULT '[]';"); } catch (e) {}
-try { db.exec("ALTER TABLE episodes ADD COLUMN subtitles TEXT DEFAULT '[]';"); } catch (e) {}
+try { db.exec("ALTER TABLE movies ADD COLUMN watched INTEGER DEFAULT 0;"); } catch { /* ignore */ }
+try { db.exec("ALTER TABLE shows ADD COLUMN watched INTEGER DEFAULT 0;"); } catch { /* ignore */ }// Ensure subtitle columns exist
+try { db.exec("ALTER TABLE movies ADD COLUMN subtitles TEXT DEFAULT '[]';"); } catch { /* ignore */ }
+try { db.exec("ALTER TABLE episodes ADD COLUMN subtitles TEXT DEFAULT '[]';"); } catch { /* ignore */ }
 // Ensure library_paths type column exists
-try { db.exec("ALTER TABLE library_paths ADD COLUMN type TEXT DEFAULT 'movies';"); } catch (e) {}// Ensure genres columns exist
-try { db.exec("ALTER TABLE movies ADD COLUMN genres TEXT DEFAULT '';"); } catch (e) {}
-try { db.exec("ALTER TABLE shows ADD COLUMN genres TEXT DEFAULT '';"); } catch (e) {}
+try { db.exec("ALTER TABLE library_paths ADD COLUMN type TEXT DEFAULT 'movies';"); } catch { /* ignore */ }// Ensure genres columns exist
+try { db.exec("ALTER TABLE movies ADD COLUMN genres TEXT DEFAULT '';"); } catch { /* ignore */ }
+try { db.exec("ALTER TABLE shows ADD COLUMN genres TEXT DEFAULT '';"); } catch { /* ignore */ }
 // Ensure monitored columns exist (separate from status which tracks download state)
-try { db.exec("ALTER TABLE movies ADD COLUMN monitored INTEGER DEFAULT 1;"); } catch (e) {}
+try { db.exec("ALTER TABLE movies ADD COLUMN monitored INTEGER DEFAULT 1;"); } catch { /* ignore */ }
 // Ensure resolution columns exist
-try { db.exec("ALTER TABLE movies ADD COLUMN resolution TEXT;"); } catch (e) {}
-try { db.exec("ALTER TABLE episodes ADD COLUMN resolution TEXT;"); } catch (e) {}
+try { db.exec("ALTER TABLE movies ADD COLUMN resolution TEXT;"); } catch { /* ignore */ }
+try { db.exec("ALTER TABLE episodes ADD COLUMN resolution TEXT;"); } catch { /* ignore */ }
 // Populate resolution from existing scene_name data
 try {
   db.exec(`
@@ -235,18 +235,18 @@ try {
     END
     WHERE resolution IS NULL AND scene_name IS NOT NULL
   `);
-} catch (e) {}
-try { db.exec("ALTER TABLE shows ADD COLUMN monitored INTEGER DEFAULT 1;"); } catch (e) {}
-try { db.exec("ALTER TABLE episodes ADD COLUMN monitored INTEGER DEFAULT 1;"); } catch (e) {}
-try { db.exec("ALTER TABLE episodes ADD COLUMN air_date TEXT;"); } catch (e) {}
-try { db.exec("ALTER TABLE movies ADD COLUMN release_date TEXT;"); } catch (e) {}
-try { db.exec("ALTER TABLE shows ADD COLUMN tmdb_status TEXT DEFAULT '';"); } catch (e) {}
+} catch { /* ignore */ }
+try { db.exec("ALTER TABLE shows ADD COLUMN monitored INTEGER DEFAULT 1;"); } catch { /* ignore */ }
+try { db.exec("ALTER TABLE episodes ADD COLUMN monitored INTEGER DEFAULT 1;"); } catch { /* ignore */ }
+try { db.exec("ALTER TABLE episodes ADD COLUMN air_date TEXT;"); } catch { /* ignore */ }
+try { db.exec("ALTER TABLE movies ADD COLUMN release_date TEXT;"); } catch { /* ignore */ }
+try { db.exec("ALTER TABLE shows ADD COLUMN tmdb_status TEXT DEFAULT '';"); } catch { /* ignore */ }
 // Fix existing items: if they have a file on disk, restore 'downloaded' status
-try { db.exec("UPDATE movies SET status = 'downloaded' WHERE file_path IS NOT NULL AND file_path != '' AND status != 'downloading'"); } catch (e) {}
-try { db.exec("UPDATE shows SET status = 'downloaded' WHERE folder_path IS NOT NULL AND folder_path != '' AND status != 'downloading'"); } catch (e) {}
-try { db.exec("UPDATE episodes SET status = 'downloaded' WHERE file_path IS NOT NULL AND file_path != '' AND status != 'downloading'"); } catch (e) {}
+try { db.exec("UPDATE movies SET status = 'downloaded' WHERE file_path IS NOT NULL AND file_path != '' AND status != 'downloading'"); } catch { /* ignore */ }
+try { db.exec("UPDATE shows SET status = 'downloaded' WHERE folder_path IS NOT NULL AND folder_path != '' AND status != 'downloading'"); } catch { /* ignore */ }
+try { db.exec("UPDATE episodes SET status = 'downloaded' WHERE file_path IS NOT NULL AND file_path != '' AND status != 'downloading'"); } catch { /* ignore */ }
 // Track watched TMDB IDs even after library removal
-try { db.exec("CREATE TABLE IF NOT EXISTS watched_tmdb (tmdb_id INTEGER PRIMARY KEY, type TEXT NOT NULL);"); } catch (e) {}
+try { db.exec("CREATE TABLE IF NOT EXISTS watched_tmdb (tmdb_id INTEGER PRIMARY KEY, type TEXT NOT NULL);"); } catch { /* ignore */ }
 
 // Seed default quality profile if none exists
 const existingProfile = db.prepare('SELECT id FROM quality_profiles LIMIT 1').get();
@@ -285,6 +285,6 @@ try {
     db.exec('ALTER TABLE users ADD COLUMN last_login DATETIME');
     console.log('[DB] Added last_login column to users table');
   }
-} catch {}
+} catch { /* ignore */ }
 
 module.exports = db;

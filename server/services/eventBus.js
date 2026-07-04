@@ -6,7 +6,7 @@ class AppEventBus extends EventEmitter {
     try {
       const payload = JSON.stringify({ level, message, ...metadata });
       db.prepare('INSERT INTO logs (message) VALUES (?)').run(payload);
-    } catch {}
+    } catch { /* ignore */ }
 
     // Emit to WebSocket clients
     this.emit('log', { level, message, metadata, timestamp: new Date().toISOString() });

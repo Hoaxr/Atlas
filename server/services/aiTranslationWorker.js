@@ -157,7 +157,7 @@ const translateSubtitles = async () => {
           return fLower.endsWith('.en.srt') && (fLower.includes(matchStr1) || fLower.includes(matchStr2));
         });
         if (found) enSub = path.join(dir, found);
-      } catch {}
+      } catch { /* ignore */ }
     }
 
     if (!enSub) return null;

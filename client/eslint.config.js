@@ -70,11 +70,6 @@ export default [
 
       // React Compiler experimental rules — downgraded to avoid false positives
       // on valid async-in-useEffect patterns that are idiomatic in this codebase
-      'react-hooks/set-state-in-effect': 'off',
-      'react-hooks/immutability': 'off',
-      'react-hooks/preserve-manual-memoization': 'warn',
-      'react-hooks/static-components': 'warn',
-      'react-hooks/purity': 'warn',
 
       // General quality
       'no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],

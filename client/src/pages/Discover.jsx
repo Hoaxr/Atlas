@@ -31,7 +31,7 @@ export default function Discover() {
     try {
       const stored = localStorage.getItem('discoverVisibleRows');
       if (stored) return JSON.parse(stored);
-    } catch {}
+    } catch { /* ignore */ }
     return { trending: true, recent: true, upcoming: true, recommended: true };
   });
 

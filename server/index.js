@@ -32,7 +32,7 @@ const mediaManagementService = require('./services/mediaManagementService');
 const subtitleService = require('./services/subtitleService');
 const aiTranslationWorker = require('./services/aiTranslationWorker');
 const notificationService = require('./services/notificationService');
-const mediaServerService = require('./services/mediaServerService');
+
 
 const app = express();
 const server = http.createServer(app);
@@ -50,7 +50,7 @@ wss.on('connection', (ws) => {
       if (ws.readyState === 1) {
         ws.send(JSON.stringify(data));
       }
-    } catch {}
+    } catch { /* ignore */ }
   };
 
   // Handle incoming messages (for auth)
@@ -63,7 +63,7 @@ wss.on('connection', (ws) => {
           console.log(`[WS] User ${ws._username} authenticated`);
         }
       }
-    } catch {}
+    } catch { /* ignore */ }
   });
 
   eventBus.on('event', onEvent);
@@ -183,7 +183,7 @@ const shutdown = (signal) => {
       const db = require('./config/database');
       db.close();
       console.log('[Backend] Database closed.');
-    } catch {}
+    } catch { /* ignore */ }
     
     process.exit(0);
   });

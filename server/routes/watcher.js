@@ -74,7 +74,7 @@ router.get('/image', async (req, res, next) => {
   try {
     const { server, path, id } = req.query;
     let url = '';
-    let headers = {};
+    const headers = {};
 
     if (server === 'plex') {
       const plexUrl = getSetting('plexUrl')?.replace(/\/$/, '');

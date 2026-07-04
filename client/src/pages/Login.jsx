@@ -39,8 +39,8 @@ export default function Login() {
       const res = await api.post('/auth/login', { username, password });
       if (res.data.status === 'success') {
         if (res.data.data?.token) {
-          try { localStorage.setItem('atlas_token', res.data.data.token); } catch {}
-          try { localStorage.setItem('atlas_user', JSON.stringify(res.data.data.user)); } catch {}
+          try { localStorage.setItem('atlas_token', res.data.data.token); } catch { /* ignore */ }
+          try { localStorage.setItem('atlas_user', JSON.stringify(res.data.data.user)); } catch { /* ignore */ }
         }
         customAlert('Login successful');
         

@@ -127,12 +127,14 @@ const parseEpisodeFromFilename = (filePath) => {
 };
 
 const runMediaManagement = async () => {
-  const pendingMoviesCount = db.prepare("SELECT COUNT(*) as count FROM movies WHERE status = 'downloading'").get().count;
+  const pendingMoviesCount = db.prepare("SELECT COUNT(*) as count FROM movies WHERE status IN ('downloading', 'monitored')").get().count;
   const pendingEpisodesCount = db.prepare(`
     SELECT COUNT(*) as count FROM episodes 
     WHERE (status = 'downloading') 
        OR (status = 'monitored' AND (file_path IS NULL OR file_path = ''))
   `).get().count;
+
+  console.log(`[MediaManagement] Checking: ${pendingMoviesCount} pending movies, ${pendingEpisodesCount} pending episodes`);
 
   if (pendingMoviesCount === 0 && pendingEpisodesCount === 0) {
     return 'skipped';
@@ -370,6 +372,20 @@ const importMovie = async (torrent, movie) => {
     
     await fs.promises.mkdir(destFolder, { recursive: true });
     const destFile = path.join(destFolder, `${fileName}${ext}`);
+
+    // Clean up any existing video files in the destination folder (from previous imports)
+    if (fs.existsSync(destFolder)) {
+      try {
+        const existingFiles = await fs.promises.readdir(destFolder);
+        for (const existing of existingFiles) {
+          if (isVideoFile(existing)) {
+            const oldPath = path.join(destFolder, existing);
+            console.log(`[MediaManagement] Removing old video file: ${oldPath}`);
+            await fs.promises.unlink(oldPath).catch(() => {});
+          }
+        }
+      } catch { /* ignore cleanup errors */ }
+    }
     
     if (movie.file_path && movie.file_path !== destFile && fs.existsSync(movie.file_path)) {
       console.log(`[MediaManagement] Deleting old file at ${movie.file_path}.`);
@@ -421,14 +437,21 @@ const importMovie = async (torrent, movie) => {
     try {
       const { getResolution } = require('../utils/videoUtils');
       let sceneName = torrent.name;
+      let resolution = null;
       const t = sceneName.toLowerCase();
-      const hasRes = t.includes('2160p') || t.includes('4k') || t.includes('1080p') || t.includes('720p') || t.includes('480p') || t.includes('sd');
-      if (!hasRes) {
-        const res = await getResolution(destFile);
-        if (res) sceneName = `${torrent.name} ${res}`;
+      if (t.includes('2160p') || t.includes('4k')) resolution = '2160p';
+      else if (t.includes('1080p')) resolution = '1080p';
+      else if (t.includes('720p')) resolution = '720p';
+      else if (t.includes('480p')) resolution = '480p';
+      
+      if (!resolution) {
+        resolution = await getResolution(destFile);
       }
-      db.prepare('UPDATE movies SET scene_name = ?, file_size = ? WHERE id = ?')
-        .run(sceneName, fs.statSync(destFile).size, movie.id);
+      if (resolution && !t.includes('2160p') && !t.includes('4k') && !t.includes('1080p') && !t.includes('720p') && !t.includes('480p') && !t.includes('sd')) {
+        sceneName = `${torrent.name} ${resolution}`;
+      }
+      db.prepare('UPDATE movies SET scene_name = ?, file_size = ?, resolution = ? WHERE id = ?')
+        .run(sceneName, fs.statSync(destFile).size, resolution, movie.id);
     } catch (resErr) {
       console.error(`[MediaManagement] Failed to detect resolution for ${movie.title}:`, resErr.message);
     }
@@ -679,7 +702,7 @@ const importSeasonPack = async (torrent, { showId, showTitle, seasonNumber }) =>
         if (contentPath.startsWith(from)) {
           contentPath = contentPath.replace(from, to);
         }
-      } catch {}
+      } catch { /* ignore */ }
     }
 
     const videoFiles = await findAllVideoFiles(contentPath);

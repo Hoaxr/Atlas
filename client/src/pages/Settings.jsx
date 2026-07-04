@@ -199,7 +199,7 @@ export default function Settings() {
       if (res.data.status === 'success') {
         setKeyStatuses(res.data.data.services || {});
       }
-    } catch(e) {
+    } catch (e) {
       console.error('Failed to check API keys', e);
     } finally {
       setCheckingKeys(false);

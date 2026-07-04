@@ -2,8 +2,6 @@ const fs = require('fs/promises');
 const path = require('path');
 const db = require('../config/database');
 const tmdbService = require('./tmdbService');
-const { exec } = require('child_process');
-const util = require('util');
 
 const isVideoFile = (filename) => {
   const ext = path.extname(filename).toLowerCase();
@@ -109,8 +107,6 @@ const parseMediaTitle = (filename, folderPath) => {
   title = title.replace(/\b(1080p|720p|4k|2160p|bluray|webdl|web-dl|x264|x265)\b.*/i, '').trim();
   
   return { title, year, isShow: false, episodeEnd: null };
-
-  return { title, year, isShow: false };
 };
 
 let scanProgress = {

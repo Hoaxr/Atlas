@@ -6,6 +6,7 @@ const taskRegistry = require('./taskRegistry');
 const tmdbService = require('./tmdbService');
 const traktService = require('./traktService');
 const eventBus = require('./eventBus');
+const fs = require('fs');
 const { runWithConcurrency } = require('../utils/concurrency');
 const { registerJob } = require('../utils/cronRegistry');
 
@@ -14,6 +15,7 @@ const DEFAULT_SCHEDULES = {
   refresh_ratings:    '0 3 * * 0',  // Weekly on Sunday at 3 AM
   update_air_dates:   '0 2 * * 0',  // Weekly on Sunday at 2 AM
   trakt_watched_sync: '0 */6 * * *',
+  missing_files_check:'0 * * * *',  // Hourly fast check for deleted files
 };
 
 const getSchedule = (taskId) => {
@@ -195,6 +197,65 @@ const runTraktWatchedSync = async () => {
   await traktService.syncWatched();
 };
 
+const runMissingFilesCheck = async () => {
+  console.log('[Automation] Running missing files check...');
+  
+  // Get all configured library paths
+  const pathsResult = db.prepare('SELECT path FROM library_paths').all();
+  const validRootPaths = [];
+  
+  // Disconnected drive protection: only proceed for roots that exist
+  for (const row of pathsResult) {
+    if (fs.existsSync(row.path)) {
+      validRootPaths.push(row.path);
+    } else {
+      console.warn(`[Automation] Skipping missing files check for ${row.path} (path not accessible).`);
+    }
+  }
+
+  if (validRootPaths.length === 0) {
+    console.log('[Automation] No valid library paths accessible. Aborting check.');
+    return;
+  }
+
+  // Check Movies
+  const movies = db.prepare("SELECT id, title, folder_path FROM movies WHERE status != 'unmonitored'").all();
+  let moviesRemoved = 0;
+  for (const movie of movies) {
+    if (!movie.folder_path) continue;
+    
+    // Ensure movie belongs to an accessible root
+    const isOnAccessibleRoot = validRootPaths.some(root => movie.folder_path.startsWith(root));
+    if (!isOnAccessibleRoot) continue;
+
+    if (!fs.existsSync(movie.folder_path)) {
+      console.log(`[Automation] Movie folder missing, removing from DB: ${movie.title}`);
+      db.prepare('DELETE FROM movies WHERE id = ?').run(movie.id);
+      moviesRemoved++;
+    }
+  }
+
+  // Check Shows
+  const shows = db.prepare("SELECT id, title, folder_path FROM shows WHERE status != 'unmonitored'").all();
+  let showsRemoved = 0;
+  for (const show of shows) {
+    if (!show.folder_path) continue;
+    
+    // Ensure show belongs to an accessible root
+    const isOnAccessibleRoot = validRootPaths.some(root => show.folder_path.startsWith(root));
+    if (!isOnAccessibleRoot) continue;
+
+    if (!fs.existsSync(show.folder_path)) {
+      console.log(`[Automation] Show folder missing, removing from DB: ${show.title}`);
+      db.prepare('DELETE FROM episodes WHERE show_id = ?').run(show.id);
+      db.prepare('DELETE FROM shows WHERE id = ?').run(show.id);
+      showsRemoved++;
+    }
+  }
+
+  console.log(`[Automation] Missing files check complete. Removed ${moviesRemoved} movies and ${showsRemoved} shows.`);
+};
+
 // Holds references to active node-cron jobs so we can stop/restart them
 const activeJobs = {};
 
@@ -212,6 +273,7 @@ const init = () => {
     { id: 'refresh_ratings',    name: 'Refresh All Ratings',       desc: 'Refreshes all ratings from TMDB to pick up rating changes (weekly).',                      fn: runRefreshAllRatings },
     { id: 'trakt_watched_sync', name: 'Trakt Watched Sync',        desc: 'Syncs watched status from your Trakt account to your local library.',                     fn: runTraktWatchedSync },
     { id: 'update_air_dates',   name: 'Update Air Dates',          desc: 'Fetches missing and upcoming episode air dates from TMDB (weekly).',                      fn: runUpdateAirDates },
+    { id: 'missing_files_check',name: 'Missing Files Check',       desc: 'Quickly checks library folders and removes items that have been deleted from disk.',       fn: runMissingFilesCheck },
   ];
 
   for (const task of tasks) {
@@ -236,5 +298,6 @@ const rescheduleAll = (newSchedules) => {
 module.exports = {
   init,
   runSearchCycle,
+  runMissingFilesCheck,
   rescheduleAll,
 };

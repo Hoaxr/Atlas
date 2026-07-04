@@ -23,7 +23,7 @@ const resolvePoster = (title, type) => {
 class WatcherService {
   constructor() {
     // Ensure player column exists (self-healing migration)
-    try { db.exec("ALTER TABLE play_history ADD COLUMN player TEXT;"); } catch (e) {}
+    try { db.exec("ALTER TABLE play_history ADD COLUMN player TEXT;"); } catch { /* ignore */ }
     
     this.activeSessions = new Set();
     this.pollInterval = null;

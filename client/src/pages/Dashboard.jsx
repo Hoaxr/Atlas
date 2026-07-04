@@ -42,7 +42,7 @@ export default function Dashboard() {
     try {
       const stored = localStorage.getItem(scopeKey('TableColumns'));
       if (stored) return { ...DEFAULT_TABLE_COLUMNS, ...JSON.parse(stored) };
-    } catch (e) {}
+    } catch { /* ignore */ }
     return { ...DEFAULT_TABLE_COLUMNS };
   });
   const [columnOrder, setColumnOrder] = useState(() => {
@@ -57,7 +57,7 @@ export default function Dashboard() {
         }
         return merged;
       }
-    } catch (e) {}
+    } catch { /* ignore */ }
     return [...DEFAULT_COLUMN_ORDER];
   });
   const [dragColumn, setDragColumn] = useState(null);
