@@ -215,7 +215,7 @@ const syncWatchedShows = async () => {
   }
 };
 
-let watchedCache = {
+const watchedCache = {
   movie: { ids: null, timestamp: 0 },
   show: { ids: null, timestamp: 0 }
 };

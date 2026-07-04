@@ -1,6 +1,8 @@
 const express = require('express');
 const router = express.Router();
+const axios = require('axios');
 const tmdbService = require('../services/tmdbService');
+const traktService = require('../services/traktService');
 const db = require('../config/database');
 
 router.get('/movies/now-playing', async (req, res, next) => {
@@ -103,7 +105,6 @@ router.get('/recommended/:type', async (req, res, next) => {
     const traktSync = db.prepare("SELECT value FROM settings WHERE key = 'traktWatchedSync'").get();
     if (traktSync && traktSync.value === 'true') {
       try {
-        const traktService = require('../services/traktService');
         const traktType = type === 'shows' ? 'show' : 'movie';
         const watchedIds = await traktService.getWatchedTmdbIds(traktType);
         const watchedSet = new Set(watchedIds.map(Number));
@@ -122,8 +123,7 @@ router.get('/recommended/:type', async (req, res, next) => {
 // Test TMDB API key
 router.get('/test', async (req, res) => {
   try {
-    const axios = require('axios');
-    const apiKey = require('../config/database').prepare("SELECT value FROM settings WHERE key = 'tmdbApiKey'").get()?.value;
+    const apiKey = db.prepare("SELECT value FROM settings WHERE key = 'tmdbApiKey'").get()?.value;
     if (!apiKey) {
       return res.status(400).json({ status: 'error', message: 'TMDB API key not configured' });
     }

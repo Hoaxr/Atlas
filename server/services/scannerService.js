@@ -2,11 +2,7 @@ const fs = require('fs/promises');
 const path = require('path');
 const db = require('../config/database');
 const tmdbService = require('./tmdbService');
-
-const isVideoFile = (filename) => {
-  const ext = path.extname(filename).toLowerCase();
-  return ['.mp4', '.mkv', '.avi', '.mov', '.wmv'].includes(ext);
-};
+const { isVideoFile, SUBTITLE_EXTENSIONS } = require('../utils/fileUtils');
 
 const RECYCLE_DIRS = new Set([
   '$Recycle.Bin',     // Windows
@@ -26,7 +22,7 @@ const shouldSkipDir = (dirName) => {
   return false;
 };
 
-const SUBTITLE_EXTS = ['.srt', '.sub', '.vtt', '.ass', '.ssa', '.smi', '.idx'];
+const SUBTITLE_EXTS = [...SUBTITLE_EXTENSIONS];
 
 const scanSubtitleLangs = async (filePath) => {
   const dir = path.dirname(filePath);

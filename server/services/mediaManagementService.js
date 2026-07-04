@@ -9,6 +9,7 @@ const eventBus = require('./eventBus');
 const tmdbService = require('./tmdbService');
 const axios = require('axios');
 const { getSetting } = require('../utils/settings');
+const { isVideoFile } = require('../utils/fileUtils');
 
 const getNamingConfig = () => {
   return {
@@ -44,10 +45,6 @@ const sanitizeTitle = (title, config) => {
   return sanitized.trim().replace(/\s+/g, ' ');
 };
 
-const isVideoFile = (filename) => {
-  const ext = path.extname(filename).toLowerCase();
-  return ['.mkv', '.mp4', '.avi', '.ts', '.m2ts'].includes(ext);
-};
 
 const findLargestVideoFile = async (dirPath) => {
   let largestFile = null;

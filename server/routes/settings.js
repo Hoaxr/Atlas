@@ -1,9 +1,16 @@
 const express = require('express');
 const router = express.Router();
 const bcrypt = require('bcrypt');
+const crypto = require('crypto');
+const fs = require('fs');
+const fsp = require('fs/promises');
+const path = require('path');
+const axios = require('axios');
+const { GoogleGenerativeAI } = require('@google/generative-ai');
 const db = require('../config/database');
 const { getSetting, setSetting } = require('../utils/settings');
 const downloadClientService = require('../services/downloadClientService');
+const { isVideoFile } = require('../utils/fileUtils');
 
 router.get('/', (req, res, next) => {
   try {
@@ -208,7 +215,6 @@ router.post('/prowlarr/test', async (req, res) => {
       finalApiKey = getSetting('prowlarrApiKey') || apiKey;
     }
 
-    const axios = require('axios');
     const base = url.replace(/\/$/, '');
     const result = await axios.get(`${base}/api/v1/system/status`, {
       headers: { 'X-Api-Key': finalApiKey },
@@ -238,7 +244,6 @@ router.post('/media-server/test', async (req, res) => {
       else if (type === 'emby') finalApiKey = getSetting('embyApiKey') || apiKey;
     }
 
-    const axios = require('axios');
     const base = url.replace(/\/$/, '');
     
     if (type === 'plex') {
@@ -266,7 +271,6 @@ router.post('/media-server/test', async (req, res) => {
 });
 
 // Plex OAuth PIN flow
-const crypto = require('crypto');
 
 function getPlexClientId() {
   let clientId = getSetting('plexClientId');
@@ -279,7 +283,6 @@ function getPlexClientId() {
 
 router.post('/plex/pin', async (req, res, next) => {
   try {
-    const axios = require('axios');
     const clientId = getPlexClientId();
 
     const response = await axios.post('https://plex.tv/api/v2/pins', null, {
@@ -313,7 +316,6 @@ router.post('/plex/pin', async (req, res, next) => {
 
 router.get('/plex/pin/:pinId', async (req, res, next) => {
   try {
-    const axios = require('axios');
     const clientId = getPlexClientId();
     const { pinId } = req.params;
 
@@ -432,9 +434,6 @@ router.get('/clients/test', async (req, res) => {
 
 router.get('/clients/detect-mapping', async (req, res) => {
   try {
-    const fs = require('fs');
-    const path = require('path');
-    const axios = require('axios');
     const clients = db.prepare('SELECT * FROM download_clients').all();
     
     // Build probes: specific paths first, generic fallbacks last
@@ -633,19 +632,15 @@ router.get('/issues', async (req, res) => {
     }
 
     // Check Library Paths
-    const fs = require('fs/promises');
-    const path = require('path');
     const libraryPaths = db.prepare('SELECT * FROM library_paths').all();
     
     if (libraryPaths.length > 0) {
-      const videoExts = ['.mp4', '.mkv', '.avi', '.mov', '.wmv'];
-      const isVideoFile = (name) => videoExts.includes(path.extname(name).toLowerCase());
 
       // Recursive check for video files up to 3 levels deep (handles Show/Season 1/ files)
       const hasVideoFilesRecursive = async (dirPath, depth = 0) => {
         if (depth > 3) return false;
         try {
-          const entries = await fs.readdir(dirPath, { withFileTypes: true });
+          const entries = await fsp.readdir(dirPath, { withFileTypes: true });
           for (const entry of entries) {
             if (entry.isFile() && isVideoFile(entry.name)) return true;
             if (entry.isDirectory()) {
@@ -661,7 +656,7 @@ router.get('/issues', async (req, res) => {
 
       for (const lp of libraryPaths) {
         try {
-          const stat = await fs.stat(lp.path);
+          const stat = await fsp.stat(lp.path);
           if (!stat.isDirectory()) {
             issues.push({
               id: `mount_not_dir_${lp.id}`,
@@ -707,7 +702,6 @@ router.get('/issues', async (req, res) => {
 
 // Combined system status — API keys, client connections, and service health
 router.get('/status', async (req, res) => {
-  const axios = require('axios');
   const services = {};
   const errors = [];
 
@@ -796,7 +790,6 @@ router.get('/status', async (req, res) => {
   const geminiKey = getSetting('geminiApiKey');
   if (geminiKey) {
     await test('gemini', 'Gemini', async () => {
-      const { GoogleGenerativeAI } = require('@google/generative-ai');
       const genAI = new GoogleGenerativeAI(geminiKey);
       const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
       await model.generateContent('Reply with just the word OK');
@@ -868,19 +861,15 @@ router.get('/status', async (req, res) => {
   services.library = { movies: movieCount, shows: showCount };
 
   // ---- System Issues ----
-  const fs = require('fs/promises');
-  const path = require('path');
   const libraryPaths = db.prepare('SELECT * FROM library_paths').all();
   const mountEntries = [];
   const mountIssues = [];
 
   if (libraryPaths.length > 0) {
-    const videoExts = ['.mp4', '.mkv', '.avi', '.mov', '.wmv'];
-    const isVideoFile = (name) => videoExts.includes(path.extname(name).toLowerCase());
     const hasVideoFilesRecursive = async (dirPath, depth = 0) => {
       if (depth > 3) return false;
       try {
-        const entries = await fs.readdir(dirPath, { withFileTypes: true });
+        const entries = await fsp.readdir(dirPath, { withFileTypes: true });
         for (const entry of entries) {
           if (entry.isFile() && isVideoFile(entry.name)) return true;
           if (entry.isDirectory()) {
@@ -898,7 +887,7 @@ router.get('/status', async (req, res) => {
       let status = 'healthy';
       let issue = null;
       try {
-        const stat = await fs.stat(lp.path);
+        const stat = await fsp.stat(lp.path);
         if (!stat.isDirectory()) {
           status = 'error';
           issue = 'Not a directory';
@@ -927,8 +916,6 @@ router.get('/status', async (req, res) => {
 // Database Backup - download the SQLite database file
 router.get('/backup', (req, res, next) => {
   try {
-    const fs = require('fs');
-    const path = require('path');
     const dbPath = path.join(__dirname, '../data/database.sqlite');
     
     if (!fs.existsSync(dbPath)) {
@@ -949,10 +936,6 @@ router.get('/backup', (req, res, next) => {
 // Database Restore - upload a SQLite file
 router.post('/restore', (req, res, next) => {
   try {
-    const fs = require('fs');
-    const path = require('path');
-    
-    // Express file upload handling - check for raw body or multer
     // Simple approach: accept base64 encoded file in JSON body
     const { data } = req.body;
     if (!data) {
@@ -1010,7 +993,6 @@ router.post('/schedules', (req, res, next) => {
         stmt.run(`schedule_${taskId}`, cron);
       }
     }
-    // Hot-reload schedules in automation service
     try {
       const automationService = require('../services/automationService');
       if (typeof automationService.rescheduleAll === 'function') {
