@@ -107,6 +107,7 @@ app.use(helmet({
       baseUri: ["'self'"],
       formAction: ["'self'"],
       frameAncestors: ["'self'"],
+      frameSrc: ["'self'", "https://www.youtube.com", "https://youtube.com"],
       objectSrc: ["'none'"],
     },
   },

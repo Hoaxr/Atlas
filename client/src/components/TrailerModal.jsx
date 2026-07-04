@@ -27,7 +27,7 @@ export default function TrailerModal({ trailerKey, onClose }) {
         </div>
         <div className="aspect-video bg-black rounded-2xl overflow-hidden shadow-[0_0_50px_rgba(0,0,0,0.5)] border border-white/10">
           <iframe
-            src={`https://www.youtube.com/embed/${trailerKey}?autoplay=1`}
+            src={`https://www.youtube.com/embed/${trailerKey}?autoplay=1&origin=${window.location.origin}`}
             title="YouTube video player"
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
             allowFullScreen
