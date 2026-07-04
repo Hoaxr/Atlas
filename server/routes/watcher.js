@@ -20,12 +20,12 @@ router.get('/sessions', async (req, res, next) => {
 router.get('/stats', (req, res, next) => {
   try {
     const topMovies = db.prepare(`SELECT title, COUNT(*) as plays FROM play_history WHERE type = 'movie' GROUP BY title ORDER BY plays DESC LIMIT 10`).all();
-    const topShows = db.prepare(`SELECT title, COUNT(*) as plays FROM play_history WHERE type IN ('episode', 'live') GROUP BY title ORDER BY plays DESC LIMIT 10`).all();
+    const topShows = db.prepare(`SELECT CASE WHEN INSTR(title, ' - S') > 0 THEN SUBSTR(title, 1, INSTR(title, ' - S') - 1) ELSE title END as title, COUNT(*) as plays FROM play_history WHERE type IN ('episode', 'live') GROUP BY 1 ORDER BY plays DESC LIMIT 10`).all();
     const topUsers = db.prepare(`SELECT user, COUNT(*) as plays FROM play_history GROUP BY user ORDER BY plays DESC LIMIT 10`).all();
     
     // Most popular (by unique users)
     const popularMovies = db.prepare(`SELECT title, COUNT(DISTINCT user) as users FROM play_history WHERE type = 'movie' GROUP BY title ORDER BY users DESC LIMIT 10`).all();
-    const popularShows = db.prepare(`SELECT title, COUNT(DISTINCT user) as users FROM play_history WHERE type IN ('episode', 'live') GROUP BY title ORDER BY users DESC LIMIT 10`).all();
+    const popularShows = db.prepare(`SELECT CASE WHEN INSTR(title, ' - S') > 0 THEN SUBSTR(title, 1, INSTR(title, ' - S') - 1) ELSE title END as title, COUNT(DISTINCT user) as users FROM play_history WHERE type IN ('episode', 'live') GROUP BY 1 ORDER BY users DESC LIMIT 10`).all();
 
     // Recently watched (last 10 entries)
     const recent = db.prepare(`SELECT user, title, type, server, player, created_at FROM play_history ORDER BY created_at DESC LIMIT 10`).all();

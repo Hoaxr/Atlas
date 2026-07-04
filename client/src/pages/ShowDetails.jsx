@@ -585,16 +585,18 @@ export default function ShowDetails() {
                     <h3 className="text-xl font-bold text-purple-400">Season {season}</h3>
                   </div>
                   <div className="flex items-center gap-2 sm:gap-4">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation(); e.preventDefault();
-                        setSeasonSearchModal({ open: true, season: Number(season) });
-                      }}
-                      className="p-1.5 sm:p-2 hover:bg-purple-500/20 rounded-lg transition-colors text-slate-400 hover:text-purple-400"
-                      title={`Search for Season ${season} pack`}
-                    >
-                      <Download className="w-4 h-4 sm:w-5 sm:h-5" />
-                    </button>
+                    {seasons[season].every(ep => ep.air_date && new Date(ep.air_date) <= new Date()) && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation(); e.preventDefault();
+                          setSeasonSearchModal({ open: true, season: Number(season) });
+                        }}
+                        className="p-1.5 sm:p-2 hover:bg-purple-500/20 rounded-lg transition-colors text-slate-400 hover:text-purple-400"
+                        title={`Search for Season ${season} pack`}
+                      >
+                        <Download className="w-4 h-4 sm:w-5 sm:h-5" />
+                      </button>
+                    )}
                     <span className="text-xs sm:text-sm font-medium text-slate-400 bg-slate-900 px-2 sm:px-3 py-0.5 sm:py-1 rounded-lg">
                       <span className="sm:hidden">{seasons[season].length}</span>
                       <span className="hidden sm:inline">{seasons[season].length} Episodes</span>

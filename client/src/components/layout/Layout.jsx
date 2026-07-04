@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom';
-import { Search, Settings as SettingsIcon, Film, Activity, Tv as TvIcon, DownloadCloud, ArrowDown, ArrowUp, Heart, Menu, Calendar as CalendarIcon, BarChart3, Keyboard, Key, LogOut, Eye } from 'lucide-react';
+import { Search, Settings as SettingsIcon, Film, Activity, Tv as TvIcon, DownloadCloud, ArrowDown, ArrowUp, Heart, Menu, Calendar as CalendarIcon, BarChart3, Keyboard, Key, LogOut, Eye, X } from 'lucide-react';
 import Logo from './Logo';
 import clsx from 'clsx';
 import api from '../../lib/api';
@@ -219,16 +219,26 @@ export default function Layout() {
               </span>
             </span>
           </div>
-          {hasToken && (
-          <button
-            onClick={handleLogout}
-            className="p-2 rounded-xl bg-slate-100 dark:bg-slate-900/50 border border-slate-200/60 dark:border-white/5 hover:bg-rose-500/10 dark:hover:bg-rose-500/10 hover:border-rose-500/30 transition-colors text-slate-500 dark:text-slate-400 hover:text-rose-500 dark:hover:text-rose-400"
-            title="Logout"
-            aria-label="Logout"
-          >
-            <LogOut className="w-5 h-5" />
-          </button>
-          )}
+          <div className="flex items-center gap-2">
+            {hasToken && (
+            <button
+              onClick={handleLogout}
+              className="p-2 rounded-xl bg-slate-100 dark:bg-slate-900/50 border border-slate-200/60 dark:border-white/5 hover:bg-rose-500/10 dark:hover:bg-rose-500/10 hover:border-rose-500/30 transition-colors text-slate-500 dark:text-slate-400 hover:text-rose-500 dark:hover:text-rose-400"
+              title="Logout"
+              aria-label="Logout"
+            >
+              <LogOut className="w-5 h-5" />
+            </button>
+            )}
+            <button
+              onClick={() => setSidebarOpen(false)}
+              className="lg:hidden p-2 rounded-xl bg-slate-100 dark:bg-slate-900/50 border border-slate-200/60 dark:border-white/5 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300"
+              title="Close menu"
+              aria-label="Close menu"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
 

@@ -215,16 +215,37 @@ const syncWatchedShows = async () => {
   }
 };
 
+let watchedCache = {
+  movie: { ids: null, timestamp: 0 },
+  show: { ids: null, timestamp: 0 }
+};
+const CACHE_TTL = 1000 * 60 * 15; // 15 minutes
+
 const getWatchedTmdbIds = async (type) => {
+  if (watchedCache[type].ids && Date.now() - watchedCache[type].timestamp < CACHE_TTL) {
+    return watchedCache[type].ids;
+  }
+
   try {
     const endpoint = type === 'movie' ? '/sync/watched/movies' : '/sync/watched/shows';
-    const response = await traktApi.get(endpoint);
-    const items = response.data;
+    let allItems = [];
+    let page = 1;
+    
+    while (true) {
+      const response = await traktApi.get(endpoint, { params: { page, limit: 1000 } });
+      allItems = allItems.concat(response.data);
+      const pageCount = parseInt(response.headers['x-pagination-page-count'], 10) || 1;
+      if (page >= pageCount) break;
+      page++;
+    }
+    
     const ids = [];
-    for (const item of items) {
+    for (const item of allItems) {
       const tmdbId = type === 'movie' ? item.movie?.ids?.tmdb : item.show?.ids?.tmdb;
       if (tmdbId) ids.push(tmdbId);
     }
+    
+    watchedCache[type] = { ids, timestamp: Date.now() };
     return ids;
   } catch (error) {
     if (error.response?.status === 401) {

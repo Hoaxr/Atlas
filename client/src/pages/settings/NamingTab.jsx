@@ -259,7 +259,7 @@ export default function NamingTab({ settings, setSettings, handleSave }) {
       </div>
 
       <div className="flex justify-end">
-        <button onClick={handleSave} className="px-6 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-white font-bold rounded-xl shadow-lg shadow-emerald-500/20 flex items-center gap-2 transition-all">
+        <button onClick={handleSave} className="px-8 py-3 font-bold text-cyan-400 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 rounded-xl transition-all flex items-center justify-center gap-2 w-full sm:w-auto mx-auto sm:mx-0 shadow-[0_0_15px_rgba(6,182,212,0.15)] disabled:opacity-50">
           <Save className="w-5 h-5" /> Save Changes
         </button>
       </div>

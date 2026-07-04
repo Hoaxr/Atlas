@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Network, Server, BellRing, Save, CheckSquare, Square, Link, Loader2, Key } from 'lucide-react';
+import { Network, Server, BellRing, Save, CheckSquare, Square, Link, Loader2, Key, Search } from 'lucide-react';
 import api from '../../lib/api';
 import { customAlert, customConfirm } from '../../utils/alerts';
 import PasswordInput from '../../components/shared/PasswordInput';
@@ -27,6 +27,9 @@ export default function ConnectionsTab({
   const [saving, setSaving] = useState(false);
   const [testStatuses, setTestStatuses] = useState({ plex: null, jellyfin: null, emby: null });
   const [testingMedia, setTestingMedia] = useState({ plex: false, jellyfin: false, emby: false });
+  const [isTestingProwlarr, setIsTestingProwlarr] = useState(false);
+  const [testResultProwlarr, setTestResultProwlarr] = useState(null);
+  const [initialTestDoneProwlarr, setInitialTestDoneProwlarr] = useState(false);
     
   // Plex OAuth state
   const [plexOAuth, setPlexOAuth] = useState({
@@ -96,6 +99,29 @@ export default function ConnectionsTab({
     } finally {
       setTestingMedia(prev => ({ ...prev, [type]: false }));
     }
+  };
+
+  const testProwlarrConnection = async (silentParam = false) => {
+    const silent = silentParam === true;
+    if (!parentSettings?.prowlarrUrl || !parentSettings?.prowlarrApiKey) {
+      if (!silent) customAlert('Prowlarr URL and API Key are required to test the connection.', 'error');
+      return;
+    }
+    
+    setIsTestingProwlarr(true);
+    setTestResultProwlarr(null);
+    try {
+      const res = await api.post('/settings/prowlarr/test', {
+        url: parentSettings.prowlarrUrl,
+        apiKey: parentSettings.prowlarrApiKey
+      });
+      setTestResultProwlarr({ ok: true, message: res.data.message });
+      if (!silent) customAlert('Connection successful!', 'success');
+    } catch (e) {
+      setTestResultProwlarr({ ok: false, message: e.response?.data?.message || 'Failed to connect to Prowlarr' });
+      if (!silent) customAlert('Connection failed', 'error');
+    }
+    setIsTestingProwlarr(false);
   };
 
   const handleTestMediaServerBtn = (type) => {
@@ -226,6 +252,8 @@ export default function ConnectionsTab({
         traktClientId: parentSettings?.traktClientId,
         traktClientSecret: parentSettings?.traktClientSecret,
         traktWatchedSync: parentSettings?.traktWatchedSync,
+        prowlarrUrl: parentSettings?.prowlarrUrl,
+        prowlarrApiKey: parentSettings?.prowlarrApiKey
       });
       customAlert('Connection settings saved');
     } catch (err) {
@@ -420,7 +448,7 @@ export default function ConnectionsTab({
                 <button
                   onClick={() => handleTestMediaServerBtn('plex')}
                   disabled={testingMedia.plex}
-                  className="px-3 py-1.5 text-xs font-bold text-slate-300 bg-slate-700/50 hover:bg-slate-700/70 border border-slate-600/50 rounded-lg transition-all disabled:opacity-50 flex items-center gap-1.5"
+                  className="px-3 py-1.5 text-xs font-bold text-cyan-400 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 rounded-lg transition-all disabled:opacity-50 flex items-center gap-1.5"
                 >
                   {testingMedia.plex && <Loader2 className="w-3 h-3 animate-spin" />}
                   {testingMedia.plex ? 'Testing...' : 'Test Connection'}
@@ -468,7 +496,7 @@ export default function ConnectionsTab({
               <button
                 onClick={() => handleTestMediaServerBtn('jellyfin')}
                 disabled={testingMedia.jellyfin}
-                className="px-3 py-1.5 text-xs font-bold text-slate-300 bg-slate-700/50 hover:bg-slate-700/70 border border-slate-600/50 rounded-lg transition-all disabled:opacity-50 flex items-center gap-1.5"
+                className="px-3 py-1.5 text-xs font-bold text-cyan-400 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 rounded-lg transition-all disabled:opacity-50 flex items-center gap-1.5"
               >
                 {testingMedia.jellyfin && <Loader2 className="w-3 h-3 animate-spin" />}
                 {testingMedia.jellyfin ? 'Testing...' : 'Test Connection'}
@@ -510,7 +538,7 @@ export default function ConnectionsTab({
               <button
                 onClick={() => handleTestMediaServerBtn('emby')}
                 disabled={testingMedia.emby}
-                className="px-3 py-1.5 text-xs font-bold text-slate-300 bg-slate-700/50 hover:bg-slate-700/70 border border-slate-600/50 rounded-lg transition-all disabled:opacity-50 self-start flex items-center gap-1.5"
+                className="px-3 py-1.5 text-xs font-bold text-cyan-400 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 rounded-lg transition-all disabled:opacity-50 self-start flex items-center gap-1.5"
               >
                 {testingMedia.emby && <Loader2 className="w-3 h-3 animate-spin" />}
                 {testingMedia.emby ? 'Testing...' : 'Test Connection'}
@@ -539,6 +567,61 @@ export default function ConnectionsTab({
                 />
               </div>
             </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Indexers */}
+      <div className="glass-panel p-6 rounded-2xl">
+        <div className="mb-6">
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+            <div className="flex items-center gap-3">
+              <h2 className="text-xl font-bold text-purple-400 flex items-center gap-2">
+                <Search className="w-5 h-5 text-purple-400" /> Indexers
+              </h2>
+              {testResultProwlarr && testResultProwlarr.ok && (
+                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-green-500/20 text-green-400 border border-green-500/30">Connected</span>
+              )}
+              {testResultProwlarr && !testResultProwlarr.ok && (
+                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-red-500/20 text-red-400 border border-red-500/30">Disconnected</span>
+              )}
+            </div>
+            
+            <button 
+              onClick={() => testProwlarrConnection(false)} 
+              disabled={isTestingProwlarr}
+              className="px-3 py-1.5 text-xs font-bold text-cyan-400 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 rounded-lg transition-all disabled:opacity-50 flex items-center gap-1.5"
+            >
+              {isTestingProwlarr && <Loader2 className="w-3 h-3 animate-spin" />}
+              {isTestingProwlarr ? 'Testing...' : 'Test Connection'}
+            </button>
+          </div>
+          <p className="text-xs text-slate-500">Atlas uses Prowlarr's aggregate search API to query all your configured indexers simultaneously.</p>
+          {testResultProwlarr && !testResultProwlarr.ok && testResultProwlarr.message && (
+            <p className="text-xs text-red-400/80 mt-1">Error: {testResultProwlarr.message}</p>
+          )}
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Prowlarr Base URL</label>
+            <input 
+              type="text" 
+              placeholder="http://192.168.1.100:9696" 
+              className="w-full bg-slate-800/50 border border-slate-700 rounded-xl px-4 py-2.5 text-slate-200 focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:border-purple-500/50 transition-all" 
+              value={parentSettings?.prowlarrUrl || ''} 
+              onChange={e => setParentSettings({...parentSettings, prowlarrUrl: e.target.value})} 
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Prowlarr API Key</label>
+            <PasswordInput 
+              placeholder="Your Prowlarr API Key" 
+              className="w-full bg-slate-800/50 border border-slate-700 rounded-xl px-4 py-2.5 text-slate-200 focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:border-purple-500/50 transition-all" 
+              value={parentSettings?.prowlarrApiKey || ''} 
+              onChange={e => setParentSettings({...parentSettings, prowlarrApiKey: e.target.value})} 
+            />
           </div>
         </div>
       </div>
@@ -657,11 +740,11 @@ export default function ConnectionsTab({
       </div>
 
       {/* Save Button */}
-      <div className="flex justify-end">
+      <div className="sticky bottom-0 pb-4 pt-4 bg-slate-900/95 backdrop-blur-md border-t border-white/10 flex justify-end z-40 mt-8 -mx-4 px-4 sm:-mx-8 sm:px-8 -mb-4 sm:-mb-8 shadow-[0_-10px_30px_-10px_rgba(0,0,0,0.5)]">
         <button
           onClick={handleSave}
           disabled={saving}
-          className="px-6 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-white font-bold rounded-xl shadow-lg shadow-emerald-500/20 flex items-center gap-2 transition-all disabled:opacity-50"
+          className="px-8 py-3 font-bold text-cyan-400 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 rounded-xl transition-all flex items-center justify-center gap-2 w-full sm:w-auto mx-auto sm:mx-0 shadow-[0_0_15px_rgba(6,182,212,0.15)] disabled:opacity-50 disabled:opacity-50"
         >
           {saving ? (
             <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../lib/api';
-import { Search as SearchIcon, Plus, Tv, Film, Star, CheckCircle2, CheckSquare, Square, ListFilter, X } from 'lucide-react';
+import { Search as SearchIcon, Plus, Tv, Film, Star, CheckCircle2, CheckSquare, Square, ListFilter, X, Loader2 } from 'lucide-react';
 import MediaDetailsModal from '../components/MediaDetailsModal';
 import MediaRow from '../components/MediaRow';
 import InlineError from '../components/shared/InlineError';
@@ -22,6 +22,7 @@ export default function Discover() {
   const [recommendedResults, setRecommendedResults] = useState([]);
   const [upcomingResults, setUpcomingResults] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [isTyping, setIsTyping] = useState(false);
   const [rowsMenuOpen, setRowsMenuOpen] = useState(false);
   const rowsMenuRef = useOutsideClick(() => setRowsMenuOpen(false), rowsMenuOpen);
 
@@ -66,6 +67,7 @@ export default function Discover() {
     let searchTimer;
     
     if (!query) {
+      setIsTyping(false);
       setResults([]);
 
       if (cacheRef.current[mode]) {
@@ -87,6 +89,7 @@ export default function Discover() {
         fetchAllData(true);
       }, 60000);
     } else {
+      setIsTyping(true);
       searchTimer = setTimeout(() => {
         executeSearch(query);
       }, 500);
@@ -185,6 +188,7 @@ export default function Discover() {
   const executeSearch = async (searchQuery) => {
     if (!searchQuery) return;
     
+    setIsTyping(false);
     setLoading(true);
     setError('');
     try {
@@ -377,16 +381,21 @@ export default function Discover() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
-          {query && (
-            <button
-              type="button"
-              onClick={() => setQuery('')}
-              className="absolute right-2 sm:right-3 p-1 sm:p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"
-              title="Clear search"
-            >
-              <X className="w-4 h-4 sm:w-5 sm:h-5" />
-            </button>
-          )}
+          <div className="absolute right-2 sm:right-3 flex items-center gap-2">
+            {(loading || isTyping) && (
+              <Loader2 className="w-4 h-4 sm:w-5 sm:h-5 text-slate-400 animate-spin" />
+            )}
+            {query && !(loading || isTyping) && (
+              <button
+                type="button"
+                onClick={() => setQuery('')}
+                className="p-1 sm:p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"
+                title="Clear search"
+              >
+                <X className="w-4 h-4 sm:w-5 sm:h-5" />
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
@@ -396,6 +405,7 @@ export default function Discover() {
         onSearchChange={setQuery}
         searchPlaceholder="Search by title, IMDb ID, or TMDB ID..."
         showSearch
+        isTyping={loading || isTyping}
       />
 
       {error && (
@@ -433,7 +443,15 @@ export default function Discover() {
         </div>
       )}
 
-      <MediaDetailsModal 
+      {!isDiscovering && results.length === 0 && !loading && !isTyping && !error && (
+        <div className="mt-16 flex flex-col items-center justify-center text-slate-500">
+           <SearchIcon className="w-16 h-16 mb-4 text-slate-600/50" />
+           <p className="text-xl font-medium text-slate-400">No results found for "{query}"</p>
+           <p className="text-sm mt-2 text-slate-500">Try adjusting your search terms</p>
+        </div>
+      )}
+
+      <MediaDetailsModal  
         isOpen={!!selectedMediaId}
         onClose={() => setSelectedMediaId(null)}
         mediaId={selectedMediaId}

@@ -1,6 +1,7 @@
 import { Save, Plus, Trash2, Key, Languages, CheckCircle2, CheckSquare, Square } from 'lucide-react';
 import CustomSelect from '../../components/shared/CustomSelect';
 import LanguageInput from './LanguageInput';
+import PasswordInput from '../../components/shared/PasswordInput';
 
 export default function SubtitlesTab({ settings, setSettings, keyStatuses, handleSave }) {
   return (
@@ -43,7 +44,7 @@ export default function SubtitlesTab({ settings, setSettings, keyStatuses, handl
                 )}
               </div>
               <p className="text-xs text-slate-500 mb-3">{provider.desc}</p>
-              <input type="password" placeholder={`${provider.name} API Key`} className="glass-input w-full" value={provider.key} onChange={(e) => provider.setter(e.target.value)} />
+              <PasswordInput placeholder={`${provider.name} API Key`} className="glass-input w-full" value={provider.key} onChange={(e) => provider.setter(e.target.value)} />
               <p className="text-xs text-slate-500 mt-2">Get key from: <a href={`https://${provider.id === 'opensubtitles' ? 'opensubtitles.com' : provider.id === 'subdl' ? 'subdl.com/panel/login' : 'subsource.net/dashboard/profile'}`} target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:underline">{provider.id === 'opensubtitles' ? 'opensubtitles.com' : provider.id === 'subdl' ? 'subdl.com' : 'subsource.net'}</a></p>
             </div>
           ))}
@@ -101,7 +102,7 @@ export default function SubtitlesTab({ settings, setSettings, keyStatuses, handl
                   </span>
                 )}
               </div>
-              <input type="password" placeholder={`${p.id.charAt(0).toUpperCase() + p.id.slice(1)} API Key`} className="glass-input w-full mt-2" value={p.key} onChange={(e) => p.setter(e.target.value)} />
+              <PasswordInput placeholder={`${p.id.charAt(0).toUpperCase() + p.id.slice(1)} API Key`} className="glass-input w-full mt-2" value={p.key} onChange={(e) => p.setter(e.target.value)} />
               <p className="text-xs text-slate-500 mt-2">Get key from: <a href={{
                 gemini: 'https://aistudio.google.com/apikey',
                 deepseek: 'https://platform.deepseek.com/api_keys',
@@ -172,7 +173,7 @@ export default function SubtitlesTab({ settings, setSettings, keyStatuses, handl
           )}
 
           <div className="flex justify-end pt-2">
-            <button onClick={handleSave} className="px-6 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-white font-bold rounded-xl shadow-lg shadow-emerald-500/20 flex items-center gap-2 transition-all">
+            <button onClick={handleSave} className="px-8 py-3 font-bold text-cyan-400 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 rounded-xl transition-all flex items-center justify-center gap-2 w-full sm:w-auto mx-auto sm:mx-0 shadow-[0_0_15px_rgba(6,182,212,0.15)] disabled:opacity-50">
               <Save className="w-5 h-5" /> Save Changes
             </button>
           </div>

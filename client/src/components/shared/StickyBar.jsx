@@ -1,11 +1,11 @@
-import { Menu, Search, X } from 'lucide-react';
+import { Menu, Search, X, Loader2 } from 'lucide-react';
 
 /**
  * Sticky top bar that appears when scrolling past the page header.
  * On mobile: always visible with hamburger menu.
  * On desktop: hidden until scroll, with optional search input.
  */
-export default function StickyBar({ visible, searchQuery, onSearchChange, searchPlaceholder, showSearch = false, children }) {
+export default function StickyBar({ visible, searchQuery, onSearchChange, searchPlaceholder, showSearch = false, isTyping = false, children }) {
   return (
     <div className={`sticky top-0 z-30 -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8 ${showSearch ? 'py-3' : 'py-2'} bg-slate-950/80 backdrop-blur-md border-b border-white/5 ${visible ? '' : 'sm:hidden'}`}>
       <div className={`flex items-center gap-2 ${showSearch ? 'relative max-w-2xl mx-auto' : ''}`}>
@@ -27,15 +27,20 @@ export default function StickyBar({ visible, searchQuery, onSearchChange, search
               placeholder={searchPlaceholder || 'Search...'}
               className="w-full bg-slate-900 border border-white/10 text-slate-200 text-sm rounded-lg pl-9 pr-8 py-2.5 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500/50 placeholder-slate-500 transition-all"
             />
-            {searchQuery && (
-              <button
-                onClick={() => onSearchChange('')}
-                className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 text-slate-500 hover:text-slate-300 transition-colors"
-                aria-label="Clear search"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            )}
+            <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+              {isTyping && (
+                <Loader2 className="w-4 h-4 text-slate-500 animate-spin" />
+              )}
+              {searchQuery && !isTyping && (
+                <button
+                  onClick={() => onSearchChange('')}
+                  className="p-0.5 text-slate-500 hover:text-slate-300 transition-colors"
+                  aria-label="Clear search"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
+            </div>
           </div>
         )}
       </div>

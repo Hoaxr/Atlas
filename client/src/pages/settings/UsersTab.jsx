@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { customAlert, customConfirm } from '../../utils/alerts';
 import CustomSelect from '../../components/shared/CustomSelect';
+import PasswordInput from '../../components/shared/PasswordInput';
 
 const roleOptions = [
   { label: 'User (Request Portal Only)', value: 'user' },
@@ -384,8 +385,7 @@ export default function UsersTab() {
               <label className="text-sm font-medium text-slate-400 flex items-center gap-1.5">
                 <ShieldAlert className="w-3.5 h-3.5 text-cyan-400" /> Password <span className="text-rose-400">*</span>
               </label>
-              <input
-                type="password"
+              <PasswordInput
                 required
                 value={newUser.password}
                 onChange={(e) => setNewUser({...newUser, password: e.target.value})}
@@ -569,8 +569,7 @@ export default function UsersTab() {
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-slate-400">Password</label>
-                  <input
-                    type="password"
+                  <PasswordInput
                     value={editingUser.password}
                     onChange={(e) => setEditingUser({...editingUser, password: e.target.value})}
                     className="w-full bg-slate-800/50 border border-slate-700/50 rounded-xl px-4 py-2.5 text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/20 transition-all"

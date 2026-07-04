@@ -1,6 +1,7 @@
 import api from '../../lib/api';
 import { Save, CheckSquare, Square, Key } from 'lucide-react';
 import { customAlert, customConfirm } from '../../utils/alerts';
+import PasswordInput from '../../components/shared/PasswordInput';
 
 export default function ApisTab({
   settings, setSettings, handleSave,
@@ -53,7 +54,7 @@ export default function ApisTab({
               <span>API Key</span>
               <a href="https://www.themoviedb.org/settings/api?language=en-US" target="_blank" rel="noopener noreferrer" className="text-xs text-cyan-400 hover:text-cyan-300 underline">Get an API key here</a>
             </label>
-            <input type="password" placeholder="Enter your TMDB API Key" className="glass-input w-full mt-2" value={settings.tmdbApiKey} onChange={(e) => setSettings({ ...settings, tmdbApiKey: e.target.value })} />
+            <PasswordInput placeholder="Enter your TMDB API Key" className="glass-input w-full mt-2" value={settings.tmdbApiKey} onChange={(e) => setSettings({ ...settings, tmdbApiKey: e.target.value })} />
           </div>
         </div>
 
@@ -98,13 +99,13 @@ export default function ApisTab({
               <span>Client ID</span>
               <a href="https://trakt.tv/oauth/applications" target="_blank" rel="noopener noreferrer" className="text-xs text-cyan-400 hover:text-cyan-300 underline">Get an API key here</a>
             </label>
-            <input type="text" placeholder="Enter your Trakt Client ID" className="glass-input w-full mt-2" value={settings.traktClientId} onChange={(e) => setSettings({ ...settings, traktClientId: e.target.value })} />
+            <PasswordInput placeholder="Enter your Trakt Client ID" className="glass-input w-full mt-2" value={settings.traktClientId} onChange={(e) => setSettings({ ...settings, traktClientId: e.target.value })} />
           </div>
           <div>
             <label className="flex justify-between items-center text-sm font-medium text-slate-300">
               <span>Client Secret</span>
             </label>
-            <input type="password" placeholder="Enter your Trakt Client Secret" className="glass-input w-full mt-2" value={settings.traktClientSecret} onChange={(e) => setSettings({ ...settings, traktClientSecret: e.target.value })} />
+            <PasswordInput placeholder="Enter your Trakt Client Secret" className="glass-input w-full mt-2" value={settings.traktClientSecret} onChange={(e) => setSettings({ ...settings, traktClientSecret: e.target.value })} />
           </div>
 
           {!settings.traktAccessToken && !traktDeviceCode && (
@@ -150,7 +151,7 @@ export default function ApisTab({
           </div>
 
           <div className="pt-4">
-            <button onClick={handleSave} className="bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold py-2.5 px-6 rounded-xl flex items-center gap-2">
+            <button onClick={handleSave} className="px-8 py-3 font-bold text-cyan-400 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 rounded-xl transition-all flex items-center justify-center gap-2 w-full sm:w-auto mx-auto sm:mx-0 shadow-[0_0_15px_rgba(6,182,212,0.15)] disabled:opacity-50">
               <Save className="w-4 h-4" /> Save APIs
             </button>
           </div>

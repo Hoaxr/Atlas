@@ -48,7 +48,7 @@ router.get('/', (req, res, next) => {
     
     const defaultQualityProfileId = getSetting('defaultQualityProfileId');
     
-    const mask = (val) => val ? '*'.repeat(val.length) : '';
+    const mask = (val) => val || '';
     
     const clients = db.prepare('SELECT id, name, host, port, type, username FROM download_clients').all();
     const profiles = db.prepare('SELECT * FROM quality_profiles').all();

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Shield, Lock, User, ArrowRight } from 'lucide-react';
 import api from '../lib/api';
 import { customAlert } from '../utils/alerts';
+import PasswordInput from '../components/shared/PasswordInput';
 
 export default function Login() {
   const [username, setUsername] = useState('');
@@ -108,8 +109,7 @@ export default function Login() {
                   <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                     <Lock className="w-5 h-5 text-slate-500" />
                   </div>
-                  <input
-                    type="password"
+                  <PasswordInput
                     required
                     value={password}
                     onChange={e => setPassword(e.target.value)}

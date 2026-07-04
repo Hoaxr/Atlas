@@ -2,6 +2,7 @@ import { Plus, Trash2, Download, Save, Info, CheckSquare, Square, Search } from 
 import api from '../../lib/api';
 import { customAlert } from '../../utils/alerts';
 import CustomSelect from '../../components/shared/CustomSelect';
+import PasswordInput from '../../components/shared/PasswordInput';
 
 export default function ClientsTab({ clients, newClient, setNewClient, clientStatuses, handleAddEntity, handleDeleteEntity, settings, setSettings, handleSave }) {
   return (
@@ -104,7 +105,7 @@ export default function ClientsTab({ clients, newClient, setNewClient, clientSta
           </div>
         </div>
         <div className="flex justify-end">
-          <button onClick={handleSave} className="px-6 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-white font-bold rounded-xl shadow-lg shadow-emerald-500/20 flex items-center gap-2 transition-all">
+          <button onClick={handleSave} className="px-8 py-3 font-bold text-cyan-400 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 rounded-xl transition-all flex items-center justify-center gap-2 w-full sm:w-auto mx-auto sm:mx-0 shadow-[0_0_15px_rgba(6,182,212,0.15)] disabled:opacity-50">
             <Save className="w-5 h-5" /> Save Changes
           </button>
         </div>      </div>
@@ -146,7 +147,7 @@ export default function ClientsTab({ clients, newClient, setNewClient, clientSta
           </div>
           <div>
             <label className="block text-sm font-medium text-slate-400 mb-2">Password</label>
-            <input type="password" placeholder="Password" className="glass-input w-full" value={newClient.password} onChange={e => setNewClient({...newClient, password: e.target.value})} />
+            <PasswordInput placeholder="Password" className="glass-input w-full" value={newClient.password} onChange={e => setNewClient({...newClient, password: e.target.value})} />
           </div>
           <div className="flex items-end">
             <button onClick={() => handleAddEntity('clients', newClient)} className="w-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold py-3 px-4 rounded-xl flex justify-center items-center gap-2 shadow-lg shadow-emerald-500/20 transition-all">

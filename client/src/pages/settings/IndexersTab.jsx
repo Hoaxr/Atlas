@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Search, Loader2, PlayCircle, Save } from 'lucide-react';
 import api from '../../lib/api';
 import { customAlert } from '../../utils/alerts';
+import PasswordInput from '../../components/shared/PasswordInput';
 
 export default function IndexersTab({ settings, setSettings, handleSave }) {
   const [isTesting, setIsTesting] = useState(false);
@@ -58,23 +59,22 @@ export default function IndexersTab({ settings, setSettings, handleSave }) {
         </div>
 
         <div className="space-y-5">
-          <div>
+          <div className="w-full md:w-2/3">
             <label className="block text-sm font-medium text-slate-300 mb-2">Prowlarr Base URL</label>
             <input 
               type="text" 
               placeholder="e.g. http://192.168.1.100:9696" 
-              className="glass-input w-full md:w-2/3" 
+              className="glass-input w-full" 
               value={settings.prowlarrUrl || ''} 
               onChange={e => setSettings({...settings, prowlarrUrl: e.target.value})} 
             />
           </div>
 
-          <div>
+          <div className="w-full md:w-2/3">
             <label className="block text-sm font-medium text-slate-300 mb-2">Prowlarr API Key</label>
-            <input 
-              type="password" 
+            <PasswordInput 
               placeholder="Your Prowlarr API Key" 
-              className="glass-input w-full md:w-2/3" 
+              className="glass-input w-full" 
               value={settings.prowlarrApiKey || ''} 
               onChange={e => setSettings({...settings, prowlarrApiKey: e.target.value})} 
             />
@@ -107,7 +107,7 @@ export default function IndexersTab({ settings, setSettings, handleSave }) {
       </div>
 
       <div className="flex justify-end">
-        <button onClick={handleLocalSave} className="px-6 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-white font-bold rounded-xl shadow-lg shadow-emerald-500/20 flex items-center gap-2 transition-all">
+        <button onClick={handleLocalSave} className="px-8 py-3 font-bold text-cyan-400 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 rounded-xl transition-all flex items-center justify-center gap-2 w-full sm:w-auto mx-auto sm:mx-0 shadow-[0_0_15px_rgba(6,182,212,0.15)] disabled:opacity-50">
           <Save className="w-5 h-5" /> Save Changes
         </button>
       </div>

@@ -3,6 +3,7 @@ import { Lock, KeyRound, Loader2 } from 'lucide-react';
 import api from '../lib/api';
 import { customAlert } from '../utils/alerts';
 import ModalShell from './shared/ModalShell';
+import PasswordInput from './shared/PasswordInput';
 
 export default function ChangePasswordModal({ isOpen, onClose }) {
   const [currentPassword, setCurrentPassword] = useState('');
@@ -43,8 +44,7 @@ export default function ChangePasswordModal({ isOpen, onClose }) {
           <label className="text-sm font-medium text-slate-300">Current Password</label>
           <div className="relative">
             <KeyRound className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-            <input
-              type="password"
+            <PasswordInput
               value={currentPassword}
               onChange={e => setCurrentPassword(e.target.value)}
               className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-10 pr-4 py-2.5 text-slate-200 focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/50 transition-all placeholder:text-slate-600"
@@ -58,8 +58,7 @@ export default function ChangePasswordModal({ isOpen, onClose }) {
           <label className="text-sm font-medium text-slate-300">New Password</label>
           <div className="relative">
             <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-            <input
-              type="password"
+            <PasswordInput
               value={newPassword}
               onChange={e => setNewPassword(e.target.value)}
               className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-10 pr-4 py-2.5 text-slate-200 focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/50 transition-all placeholder:text-slate-600"
@@ -73,8 +72,7 @@ export default function ChangePasswordModal({ isOpen, onClose }) {
           <label className="text-sm font-medium text-slate-300">Confirm New Password</label>
           <div className="relative">
             <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-            <input
-              type="password"
+            <PasswordInput
               value={confirmPassword}
               onChange={e => setConfirmPassword(e.target.value)}
               className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-10 pr-4 py-2.5 text-slate-200 focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/50 transition-all placeholder:text-slate-600"

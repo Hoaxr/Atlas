@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Shield, Key, Loader2, Save, Eye, EyeOff, CheckSquare, Square } from 'lucide-react';
 import api from '../../lib/api';
 import { customAlert } from '../../utils/alerts';
+import PasswordInput from '../../components/shared/PasswordInput';
 
 export default function SecurityTab() {
   const [settings, setSettings] = useState({
@@ -131,8 +132,7 @@ export default function SecurityTab() {
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Password</label>
-                  <input
-                    type="password"
+                  <PasswordInput
                     name="authPassword"
                     value={settings.authPassword}
                     onChange={handleChange}
@@ -151,7 +151,7 @@ export default function SecurityTab() {
         <button
           onClick={handleSave}
           disabled={saving}
-          className="px-6 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-white font-bold rounded-xl shadow-lg shadow-emerald-500/20 flex items-center gap-2 transition-all disabled:opacity-50"
+          className="px-8 py-3 font-bold text-cyan-400 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 rounded-xl transition-all flex items-center justify-center gap-2 w-full sm:w-auto mx-auto sm:mx-0 shadow-[0_0_15px_rgba(6,182,212,0.15)] disabled:opacity-50 disabled:opacity-50"
         >
           {saving ? (
             <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
