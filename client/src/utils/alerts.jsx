@@ -25,7 +25,7 @@ const colorMap = {
 export const customAlert = (message, type = 'success', duration = 4000) => {
   const colors = colorMap[type] || colorMap.info;
 
-  toast.custom((t) => (
+  const toastId = toast.custom((t) => (
     <div
       className={`${
         t.visible ? 'translate-y-0 opacity-100' : 'translate-y-2 opacity-0'
@@ -59,6 +59,12 @@ export const customAlert = (message, type = 'success', duration = 4000) => {
     duration,
     position: 'bottom-right',
   });
+
+  if (duration && duration !== Infinity) {
+    setTimeout(() => {
+      toast.dismiss(toastId);
+    }, duration);
+  }
 };
 
 export const customConfirm = (message, opts = {}) => {

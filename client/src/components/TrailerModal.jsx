@@ -30,6 +30,7 @@ export default function TrailerModal({ trailerKey, onClose }) {
             src={`https://www.youtube.com/embed/${trailerKey}?autoplay=1&origin=${window.location.origin}`}
             title="YouTube video player"
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+            referrerPolicy="strict-origin-when-cross-origin"
             allowFullScreen
             className="w-full h-full border-0"
           ></iframe>

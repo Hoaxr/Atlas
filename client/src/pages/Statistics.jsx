@@ -101,6 +101,19 @@ export default function Statistics() {
     }
   };
 
+  const handleItemDeleted = (id) => {
+    setDeletableData(prev => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        highPriority: prev.highPriority?.filter(m => m.id !== id),
+        mediumPriority: prev.mediumPriority?.filter(m => m.id !== id),
+        lowPriority: prev.lowPriority?.filter(m => m.id !== id),
+        all: prev.all?.filter(m => m.id !== id)
+      };
+    });
+  };
+
   useEffect(() => {
     fetchStats();
     // Load fast results first, then auto-enrich with TMDB
@@ -505,7 +518,7 @@ export default function Statistics() {
                 </div>
                 <div className="space-y-1.5">
                   {deletableData.highPriority.map(m => (
-                    <DeletableCard key={m.id} movie={m} onDetails={() => setDetailsModal({ open: true, mediaId: m.tmdb_id, mediaType: 'movie', libraryId: m.id })} onDeleted={() => fetchDeletable(!!deletableData?.all?.[0]?.tmdb_rating)} />
+                    <DeletableCard key={m.id} movie={m} onDetails={() => setDetailsModal({ open: true, mediaId: m.tmdb_id, mediaType: 'movie', libraryId: m.id })} onDeleted={() => handleItemDeleted(m.id)} />
                   ))}
                 </div>
               </div>
@@ -521,7 +534,7 @@ export default function Statistics() {
                   </div>
                   <div className="space-y-1.5">
                     {deletableData.mediumPriority.map(m => (
-                      <DeletableCard key={m.id} movie={m} onDetails={() => setDetailsModal({ open: true, mediaId: m.tmdb_id, mediaType: 'movie', libraryId: m.id })} onDeleted={() => fetchDeletable(!!deletableData?.all?.[0]?.tmdb_rating)} />
+                      <DeletableCard key={m.id} movie={m} onDetails={() => setDetailsModal({ open: true, mediaId: m.tmdb_id, mediaType: 'movie', libraryId: m.id })} onDeleted={() => handleItemDeleted(m.id)} />
                     ))}
                   </div>
                 </div>
@@ -537,7 +550,7 @@ export default function Statistics() {
                   </div>
                   <div className="space-y-1.5">
                     {deletableData.lowPriority.map(m => (
-                      <DeletableCard key={m.id} movie={m} onDetails={() => setDetailsModal({ open: true, mediaId: m.tmdb_id, mediaType: 'movie', libraryId: m.id })} onDeleted={() => fetchDeletable(!!deletableData?.all?.[0]?.tmdb_rating)} />
+                      <DeletableCard key={m.id} movie={m} onDetails={() => setDetailsModal({ open: true, mediaId: m.tmdb_id, mediaType: 'movie', libraryId: m.id })} onDeleted={() => handleItemDeleted(m.id)} />
                     ))}
                   </div>
                 </div>

@@ -253,6 +253,10 @@ const runMissingFilesCheck = async () => {
     }
   }
 
+  if (moviesRemoved > 0 || showsRemoved > 0) {
+    eventBus.success('Scan complete: Removed missing files from DB', { moviesRemoved, showsRemoved });
+  }
+
   console.log(`[Automation] Missing files check complete. Removed ${moviesRemoved} movies and ${showsRemoved} shows.`);
 };
 
