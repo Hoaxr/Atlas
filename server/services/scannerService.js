@@ -337,8 +337,8 @@ const doScan = async () => {
 
                 const showYear = matchedShow.first_air_date ? parseInt(matchedShow.first_air_date.split('-')[0]) : null;
 
-                // Default quality profile for shows (same as movies)
-                const defaultProfile = db.prepare('SELECT id FROM quality_profiles ORDER BY id ASC LIMIT 1').get();
+                // Default quality profile for shows (filter by media_type)
+                const defaultProfile = db.prepare("SELECT id FROM quality_profiles WHERE media_type IN ('shows', 'both') OR media_type IS NULL ORDER BY id ASC LIMIT 1").get();
                 const defaultProfileId = defaultProfile?.id || null;
 
                 const insertRes = db.prepare(`
@@ -491,8 +491,8 @@ const doScan = async () => {
               // File might not exist yet
             }
 
-            // Look up default quality profile (first in table)
-            const defaultProfile = db.prepare('SELECT id FROM quality_profiles ORDER BY id ASC LIMIT 1').get();
+            // Look up default quality profile (filter by media_type for movies)
+            const defaultProfile = db.prepare("SELECT id FROM quality_profiles WHERE media_type IN ('movies', 'both') OR media_type IS NULL ORDER BY id ASC LIMIT 1").get();
             const defaultProfileId = defaultProfile?.id || null;
 
             const existingMonitored = db.prepare('SELECT id FROM movies WHERE tmdb_id = ?').get(matchedMovie.id);

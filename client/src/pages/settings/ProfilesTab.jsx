@@ -1,5 +1,5 @@
 import api from '../../lib/api';
-import { Save, Plus, Trash2, Settings2, CheckCircle2, Star } from 'lucide-react';
+import { Save, Plus, Trash2, Settings2, CheckCircle2, Star, CheckSquare, Square } from 'lucide-react';
 import { customAlert } from '../../utils/alerts';
 import CustomSelect from '../../components/shared/CustomSelect';
 
@@ -13,7 +13,7 @@ export default function ProfilesTab({ profiles, newProfile, setNewProfile, editi
         <div className="flex justify-between items-center">
           <h3 className="font-bold text-lg text-slate-200">{editingProfile ? 'Edit Profile' : 'Add New Profile'}</h3>
           {editingProfile && (
-            <button onClick={() => { setEditingProfile(null); setNewProfile({ name: '', qualities: ['720p', '1080p', '2160p'], cutoff: '1080p', upgrade_allowed: true }); }} className="text-xs bg-slate-800 text-slate-300 px-3 py-1.5 rounded-lg hover:bg-slate-700">Cancel Edit</button>
+            <button onClick={() => { setEditingProfile(null); setNewProfile({ name: '', qualities: ['720p', '1080p', '2160p'], cutoff: '1080p', upgrade_allowed: true, media_type: 'both' }); }} className="text-xs bg-slate-800 text-slate-300 px-3 py-1.5 rounded-lg hover:bg-slate-700">Cancel Edit</button>
           )}
         </div>
         <p className="text-xs text-slate-500">Quality profiles restrict automated searches to specific resolutions. Higher list position means higher preference.</p>
@@ -79,6 +79,36 @@ export default function ProfilesTab({ profiles, newProfile, setNewProfile, editi
             </div>
           </div>
 
+          <div>
+            <label className="block text-sm font-medium text-slate-400 mb-2">Applies To</label>
+            <div className="flex gap-6">
+              <label className="flex items-center gap-2 cursor-pointer group" onClick={() => {
+                const currentType = editingProfile ? editingProfile.media_type : newProfile.media_type;
+                const isMovieChecked = currentType !== 'shows';
+                const newChecked = !isMovieChecked;
+                const otherChecked = currentType === 'shows' ? newChecked : (currentType !== 'movies');
+                const newType = newChecked && otherChecked ? 'both' : newChecked ? 'movies' : 'shows';
+                if (editingProfile) setEditingProfile({...editingProfile, media_type: newType});
+                else setNewProfile({...newProfile, media_type: newType});
+              }}>
+                {(editingProfile ? editingProfile.media_type : newProfile.media_type) !== 'shows' ? <CheckSquare className="w-5 h-5 text-cyan-400" /> : <Square className="w-5 h-5 text-slate-500 group-hover:text-cyan-400" />}
+                <span className="text-sm text-slate-300">Movies</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer group" onClick={() => {
+                const currentType = editingProfile ? editingProfile.media_type : newProfile.media_type;
+                const isShowChecked = currentType !== 'movies';
+                const newChecked = !isShowChecked;
+                const otherChecked = currentType === 'movies' ? newChecked : (currentType !== 'shows');
+                const newType = newChecked && otherChecked ? 'both' : newChecked ? 'shows' : 'movies';
+                if (editingProfile) setEditingProfile({...editingProfile, media_type: newType});
+                else setNewProfile({...newProfile, media_type: newType});
+              }}>
+                {(editingProfile ? editingProfile.media_type : newProfile.media_type) !== 'movies' ? <CheckSquare className="w-5 h-5 text-purple-400" /> : <Square className="w-5 h-5 text-slate-500 group-hover:text-purple-400" />}
+                <span className="text-sm text-slate-300">TV Shows</span>
+              </label>
+            </div>
+          </div>
+
           <div className="pt-2">
             <button 
               onClick={async () => {
@@ -113,6 +143,13 @@ export default function ProfilesTab({ profiles, newProfile, setNewProfile, editi
               <div className="flex items-center gap-3">
                 <p className="text-base font-bold text-slate-200">{p.name}</p>
                 {isDefault && <span className="text-[10px] uppercase tracking-wider font-bold bg-amber-500/20 text-amber-400 px-2 py-0.5 rounded flex items-center gap-1"><Star className="w-3 h-3 fill-amber-400" /> Default</span>}
+                <span className={`text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded ${
+                  p.media_type === 'movies' ? 'bg-cyan-500/20 text-cyan-400' :
+                  p.media_type === 'shows' ? 'bg-purple-500/20 text-purple-400' :
+                  'bg-slate-500/20 text-slate-400'
+                }`}>
+                  {p.media_type === 'movies' ? 'Movies' : p.media_type === 'shows' ? 'TV Shows' : 'Both'}
+                </span>
               </div>
               <div className="flex items-center gap-2 mt-2">
                 {p.qualities.map(q => <span key={q} className="text-xs bg-white/10 px-2 py-0.5 rounded text-amber-400">{q}</span>)}

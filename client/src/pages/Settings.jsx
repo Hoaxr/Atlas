@@ -60,7 +60,7 @@ export default function Settings() {
   const [newPath, setNewPath] = useState('');
   const [newPathType, setNewPathType] = useState('movies');
   const [newClient, setNewClient] = useState({ name: '', host: '', port: 8080, username: '', password: '', type: 'qbittorrent' });
-  const [newProfile, setNewProfile] = useState({ name: '', qualities: ['720p', '1080p', '2160p'], cutoff: '1080p', upgrade_allowed: true });
+  const [newProfile, setNewProfile] = useState({ name: '', qualities: ['720p', '1080p', '2160p'], cutoff: '1080p', upgrade_allowed: true, media_type: 'both' });
   const [editingProfile, setEditingProfile] = useState(null);
   const [newReleaseProfile, setNewReleaseProfile] = useState({ name: '', enabled: true, must_contain: [], must_not_contain: [], indexer_id: null, apply_to: 'all' });
   const [editingReleaseProfile, setEditingReleaseProfile] = useState(null);

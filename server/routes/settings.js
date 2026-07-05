@@ -544,19 +544,19 @@ router.get('/clients/detect-mapping', async (req, res) => {
 
 // Quality Profiles
 router.post('/profiles', (req, res) => {
-  const { name, preferred_resolution, qualities, cutoff, upgrade_allowed } = req.body;
+  const { name, preferred_resolution, qualities, cutoff, upgrade_allowed, media_type } = req.body;
   const qStr = qualities ? JSON.stringify(qualities) : JSON.stringify(['1080p']);
-  const result = db.prepare('INSERT INTO quality_profiles (name, preferred_resolution, qualities, cutoff, upgrade_allowed) VALUES (?, ?, ?, ?, ?)').run(
-    name, preferred_resolution || '1080p', qStr, cutoff || '1080p', upgrade_allowed === undefined ? 1 : upgrade_allowed ? 1 : 0
+  const result = db.prepare('INSERT INTO quality_profiles (name, preferred_resolution, qualities, cutoff, upgrade_allowed, media_type) VALUES (?, ?, ?, ?, ?, ?)').run(
+    name, preferred_resolution || '1080p', qStr, cutoff || '1080p', upgrade_allowed === undefined ? 1 : upgrade_allowed ? 1 : 0, media_type || 'both'
   );
   res.json({ status: 'success', data: { id: result.lastInsertRowid } });
 });
 
 router.put('/profiles/:id', (req, res) => {
-  const { name, preferred_resolution, qualities, cutoff, upgrade_allowed } = req.body;
+  const { name, preferred_resolution, qualities, cutoff, upgrade_allowed, media_type } = req.body;
   const qStr = qualities ? JSON.stringify(qualities) : JSON.stringify(['1080p']);
-  db.prepare('UPDATE quality_profiles SET name = ?, preferred_resolution = ?, qualities = ?, cutoff = ?, upgrade_allowed = ? WHERE id = ?').run(
-    name, preferred_resolution || '1080p', qStr, cutoff || '1080p', upgrade_allowed === undefined ? 1 : upgrade_allowed ? 1 : 0, req.params.id
+  db.prepare('UPDATE quality_profiles SET name = ?, preferred_resolution = ?, qualities = ?, cutoff = ?, upgrade_allowed = ?, media_type = ? WHERE id = ?').run(
+    name, preferred_resolution || '1080p', qStr, cutoff || '1080p', upgrade_allowed === undefined ? 1 : upgrade_allowed ? 1 : 0, media_type || 'both', req.params.id
   );
   res.json({ status: 'success' });
 });

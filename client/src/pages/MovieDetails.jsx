@@ -353,31 +353,8 @@ export default function MovieDetails() {
                 </button>
               </div>
 
-              {/* Action Buttons */}
-              <div className="px-4 pt-4 pb-2 space-y-2.5 bg-slate-900/60">
-                <button
-                  onClick={async () => {
-                    try {
-                      const res = await api.post(`/library/movies/${movie.id}/toggle-monitor`);
-                      if (res.data.status === 'success') fetchMovieData();
-                    } catch (err) {
-                      customAlert('Failed to toggle monitor status', 'error');
-                    }
-                  }}
-                  className="w-full flex items-center justify-center gap-2 bg-slate-800/70 hover:bg-slate-700/80 text-slate-200 border border-white/10 hover:border-white/20 font-semibold px-4 py-2.5 rounded-xl text-sm transition-all duration-200"
-                  title={movie.monitored ? 'Monitored' : 'Unmonitored'}
-                >
-                  {movie.monitored ? (
-                    <Bookmark className="w-4 h-4 text-cyan-400 fill-cyan-400" />
-                  ) : (
-                    <BookmarkMinus className="w-4 h-4 text-slate-400" />
-                  )}
-                  {movie.monitored ? 'Monitored' : 'Unmonitored'}
-                </button>
-              </div>
-
               {/* IMDb Rating + Status */}
-              <div className="grid grid-cols-2 gap-2 px-4 pb-3 bg-slate-900/60">
+              <div className="grid grid-cols-2 gap-2 px-4 pt-4 pb-3 bg-slate-900/60">
                 <div className="bg-slate-800/50 rounded-xl p-3 text-center border border-white/5">
                   <div className="flex items-center justify-center gap-1 mb-0.5">
                     <Star className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
@@ -427,7 +404,28 @@ export default function MovieDetails() {
               {/* Title Row */}
               <div className="flex items-start justify-between gap-4 mb-2">
                 <div className="flex-1 min-w-0">
-                  <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight leading-tight">
+                  <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight leading-tight flex items-center gap-3">
+                    <button 
+                      onClick={async () => {
+                        try {
+                          const res = await api.post(`/library/movies/${movie.id}/toggle-monitor`);
+                          if (res.data.status === 'success') {
+                            fetchMovieData();
+                            customAlert(res.data.data.monitored ? 'Movie is now monitored' : 'Movie is now unmonitored', 'success');
+                          }
+                        } catch (err) {
+                          customAlert('Failed to toggle monitor status', 'error');
+                        }
+                      }}
+                      className="shrink-0 hover:scale-110 transition-transform"
+                      title={movie.monitored ? "Monitored" : "Unmonitored"}
+                    >
+                      {movie.monitored ? (
+                        <Bookmark className="w-7 h-7 text-cyan-400 fill-cyan-400" />
+                      ) : (
+                        <BookmarkMinus className="w-7 h-7 text-slate-500" />
+                      )}
+                    </button>
                     {movie.title}
                   </h1>
                   {/* Meta Line */}
@@ -609,7 +607,7 @@ export default function MovieDetails() {
                         onChange={(e) => handleQualityChange(e.target.value ? parseInt(e.target.value) : null)}
                       >
                         <option value="">Unassigned</option>
-                        {profiles.map(p => (
+                        {profiles.filter(p => !p.media_type || p.media_type === 'both' || p.media_type === 'movies').map(p => (
                           <option key={p.id} value={p.id}>{p.name}</option>
                         ))}
                       </select>

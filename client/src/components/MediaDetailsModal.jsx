@@ -31,13 +31,14 @@ export default function MediaDetailsModal({ isOpen, onClose, mediaId, mediaType,
         const data = res.data.data;
         if (data.profiles) {
           setProfiles(data.profiles);
+          const filteredProfiles = data.profiles.filter(p => !p.media_type || p.media_type === 'both' || p.media_type === (mediaType === 'movie' ? 'movies' : 'shows'));
           const defaultProfileId = data.defaultQualityProfileId;
           const defaultIdStr = defaultProfileId ? String(defaultProfileId) : null;
-          const profileIdStrs = data.profiles.map(p => String(p.id));
-          if (defaultIdStr && profileIdStrs.includes(defaultIdStr)) {
+          const filteredIds = filteredProfiles.map(p => String(p.id));
+          if (defaultIdStr && filteredIds.includes(defaultIdStr)) {
             setSelectedProfile(defaultIdStr);
-          } else if (data.profiles.length > 0) {
-            setSelectedProfile(String(data.profiles[0].id));
+          } else if (filteredProfiles.length > 0) {
+            setSelectedProfile(String(filteredProfiles[0].id));
           }
         }
         if (data.libraryPaths) {
@@ -290,7 +291,7 @@ export default function MediaDetailsModal({ isOpen, onClose, mediaId, mediaType,
                       value={selectedProfile} 
                       onChange={e => setSelectedProfile(e.target.value)}
                     >
-                      {profiles.map(p => (
+                      {profiles.filter(p => !p.media_type || p.media_type === 'both' || p.media_type === (mediaType === 'movie' ? 'movies' : 'shows')).map(p => (
                         <option key={p.id} value={String(p.id)}>{p.name}</option>
                       ))}
                     </select>

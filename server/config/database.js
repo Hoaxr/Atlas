@@ -193,6 +193,7 @@ try {
 try { db.exec("ALTER TABLE quality_profiles ADD COLUMN qualities TEXT;"); } catch { /* ignore */ }
 try { db.exec("ALTER TABLE quality_profiles ADD COLUMN cutoff TEXT;"); } catch { /* ignore */ }
 try { db.exec("ALTER TABLE quality_profiles ADD COLUMN upgrade_allowed INTEGER DEFAULT 1;"); } catch { /* ignore */ }
+try { db.exec("ALTER TABLE quality_profiles ADD COLUMN media_type TEXT DEFAULT 'both';"); } catch { /* ignore */ }
 try { db.exec("ALTER TABLE release_profiles ADD COLUMN apply_to TEXT DEFAULT 'all';"); } catch { /* ignore */ }
 try { db.exec("ALTER TABLE users ADD COLUMN origin TEXT DEFAULT 'atlas';"); } catch { /* ignore */ }
 

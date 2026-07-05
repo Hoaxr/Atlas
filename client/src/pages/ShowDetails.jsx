@@ -329,31 +329,8 @@ export default function ShowDetails() {
                 </button>
               </div>
 
-              {/* Monitor Button */}
-              <div className="px-4 pt-4 pb-2 space-y-2.5 bg-slate-900/60">
-                <button
-                  onClick={async () => {
-                    try {
-                      const res = await api.post(`/library/shows/${show.id}/toggle-monitor`);
-                      if (res.data.status === 'success') fetchShowData();
-                    } catch (err) {
-                      customAlert('Failed to toggle monitor status', 'error');
-                    }
-                  }}
-                  className="w-full flex items-center justify-center gap-2 bg-slate-800/70 hover:bg-slate-700/80 text-slate-200 border border-white/10 hover:border-white/20 font-semibold px-4 py-2.5 rounded-xl text-sm transition-all duration-200"
-                  title={show.monitored ? 'Monitored' : 'Unmonitored'}
-                >
-                  {show.monitored ? (
-                    <Bookmark className="w-4 h-4 text-purple-400 fill-purple-400" />
-                  ) : (
-                    <BookmarkMinus className="w-4 h-4 text-slate-400" />
-                  )}
-                  {show.monitored ? 'Monitored' : 'Unmonitored'}
-                </button>
-              </div>
-
               {/* Rating + Status */}
-              <div className="grid grid-cols-2 gap-2 px-4 pb-4 bg-slate-900/60">
+              <div className="grid grid-cols-2 gap-2 px-4 pt-4 pb-4 bg-slate-900/60">
                 <div className="bg-slate-800/50 rounded-xl p-3 text-center border border-white/5">
                   <div className="flex items-center justify-center gap-1 mb-0.5">
                     <Star className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
@@ -384,7 +361,28 @@ export default function ShowDetails() {
               {/* Title Row */}
               <div className="flex items-start justify-between gap-4 mb-2">
                 <div className="flex-1 min-w-0">
-                  <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight leading-tight">
+                  <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight leading-tight flex items-center gap-3">
+                    <button 
+                      onClick={async () => {
+                        try {
+                          const res = await api.post(`/library/shows/${show.id}/toggle-monitor`);
+                          if (res.data.status === 'success') {
+                            fetchShowData();
+                            customAlert(res.data.data.monitored ? 'Show is now monitored' : 'Show is now unmonitored', 'success');
+                          }
+                        } catch (err) {
+                          customAlert('Failed to toggle monitor status', 'error');
+                        }
+                      }}
+                      className="shrink-0 hover:scale-110 transition-transform"
+                      title={show.monitored ? "Monitored" : "Unmonitored"}
+                    >
+                      {show.monitored ? (
+                        <Bookmark className="w-7 h-7 text-purple-400 fill-purple-400" />
+                      ) : (
+                        <BookmarkMinus className="w-7 h-7 text-slate-500" />
+                      )}
+                    </button>
                     {show.title}
                   </h1>
                   {/* Meta Line */}
@@ -400,6 +398,12 @@ export default function ShowDetails() {
                       <>
                         <span className="text-slate-600">•</span>
                         <span>{tmdbDetails.number_of_seasons} Season{tmdbDetails.number_of_seasons > 1 ? 's' : ''}</span>
+                      </>
+                    )}
+                    {tmdbDetails?.networks?.[0]?.name && (
+                      <>
+                        <span className="text-slate-600">•</span>
+                        <span>{tmdbDetails.networks[0].name}</span>
                       </>
                     )}
                     {show.tmdb_status && (
@@ -502,7 +506,7 @@ export default function ShowDetails() {
                 {/* RESOLUTION | SIZE | LANGUAGE | WATCHED */}
                 <div className="grid grid-cols-4 py-3 gap-4 bg-slate-800/30 rounded-xl px-4">
                   <div className="flex items-center gap-2">
-                    <Film className="w-4 h-4 text-cyan-400 shrink-0" />
+                    <Film className="w-4 h-4 text-purple-400 shrink-0" />
                     <div>
                       <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500 block">Resolution</span>
                       <span className="text-sm font-semibold text-slate-200">
@@ -522,21 +526,21 @@ export default function ShowDetails() {
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <HardDrive className="w-4 h-4 text-cyan-400 shrink-0" />
+                    <HardDrive className="w-4 h-4 text-purple-400 shrink-0" />
                     <div>
                       <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500 block">Size</span>
                       <span className="text-sm font-semibold text-slate-200">{formatSize(show.folder_size)}</span>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <Globe className="w-4 h-4 text-cyan-400 shrink-0" />
+                    <Globe className="w-4 h-4 text-purple-400 shrink-0" />
                     <div>
                       <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500 block">Language</span>
                       <span className="text-sm font-semibold text-slate-200">{(tmdbDetails?.original_language || 'EN').toUpperCase()}</span>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <Eye className="w-4 h-4 text-cyan-400 shrink-0" />
+                    <Eye className="w-4 h-4 text-purple-400 shrink-0" />
                     <div>
                       <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500 block">Watched</span>
                       <span className={`text-sm font-semibold ${show.watched ? 'text-emerald-400' : 'text-slate-500'}`}>
@@ -546,8 +550,8 @@ export default function ShowDetails() {
                   </div>
                 </div>
 
-                {/* QUALITY PROFILE | NETWORK */}
-                <div className="grid grid-cols-2 py-3 gap-4">
+                {/* QUALITY PROFILE */}
+                <div className="py-3">
                   <div>
                     <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500 block mb-1">Quality Profile</span>
                     {updatingQuality ? (
@@ -557,22 +561,16 @@ export default function ShowDetails() {
                       </div>
                     ) : (
                       <select
-                        className="bg-slate-800 border border-white/10 rounded-lg text-xs text-slate-300 px-3 py-1.5 focus:border-purple-500/50 focus:outline-none cursor-pointer w-full"
+                        className="bg-slate-800 border border-white/10 rounded-lg text-xs text-slate-300 px-3 py-1.5 focus:border-purple-500/50 focus:outline-none cursor-pointer w-full max-w-[200px]"
                         value={show.quality_profile_id || ''}
                         onChange={(e) => handleQualityChange(e.target.value ? parseInt(e.target.value) : null)}
                       >
                         <option value="">Unassigned</option>
-                        {profiles.map(p => (
+                        {profiles.filter(p => !p.media_type || p.media_type === 'both' || p.media_type === 'shows').map(p => (
                           <option key={p.id} value={p.id}>{p.name}</option>
                         ))}
                       </select>
                     )}
-                  </div>
-                  <div>
-                    <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500 block mb-1">Network</span>
-                    <p className="text-sm font-semibold text-slate-200 truncate">
-                      {tmdbDetails?.networks?.[0]?.name || <span className="text-slate-600 italic">Unknown</span>}
-                    </p>
                   </div>
                 </div>
 
