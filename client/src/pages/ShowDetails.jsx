@@ -273,7 +273,7 @@ export default function ShowDetails() {
         </div>
         
         <div className="p-8 md:w-2/3 lg:w-3/4 flex flex-col justify-center">
-          <h1 className="text-2xl md:text-5xl font-black text-white mb-2 tracking-tight flex items-center gap-2 md:gap-3 min-w-0">
+          <h1 className="text-xl md:text-5xl font-black text-white mb-2 tracking-tight flex items-center gap-2 md:gap-3 min-w-0">
             <button 
               onClick={async () => {
                 try {
@@ -296,7 +296,7 @@ export default function ShowDetails() {
               )}
             </button>
 
-            <span className="flex-1 min-w-0 truncate text-2xl md:text-5xl">
+            <span className="flex-1 min-w-0 truncate text-xl md:text-5xl">
               {show.title} <span className="text-slate-400 font-light whitespace-nowrap">({show.year})</span>
             </span>
             <button
@@ -389,7 +389,7 @@ export default function ShowDetails() {
             )}
           </div>
           
-          <p className="text-slate-300 text-lg leading-relaxed max-w-3xl mb-6">
+          <p className="text-slate-300 text-sm sm:text-base md:text-lg leading-relaxed max-w-3xl mb-6">
             {show.overview || 'No overview available for this show.'}
           </p>
           
@@ -671,7 +671,7 @@ export default function ShowDetails() {
                                   "Click to toggle monitor status"
                                 }
                               >
-                                {ep.status === 'downloading' ? 'Downloading' : ep.status === 'downloaded' ? 'Downloaded' : !ep.monitored ? 'Unmonitored' : (!ep.file_path && !ep.air_date && !seasonHasDownloads) || (ep.air_date && new Date(ep.air_date) > new Date()) ? 'Not Released' : 'Monitored'}
+                                {ep.status === 'downloading' ? 'Downloading' : ep.status === 'downloaded' ? 'Downloaded' : !ep.monitored ? 'Unmonitored' : (!ep.file_path && !ep.air_date && !seasonHasDownloads) || (ep.air_date && new Date(ep.air_date) > new Date()) ? 'Not released' : 'Monitored'}
                               </button>
                             </td>
                             <td className="px-6 py-4">
@@ -817,7 +817,7 @@ export default function ShowDetails() {
                                     'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
                                   }`}
                                 >
-                                  {ep.status === 'downloading' ? 'DL' : ep.status === 'downloaded' ? 'Ready' : !ep.monitored ? 'Off' : 'On'}
+                                  {ep.status === 'downloading' ? 'Downloading' : ep.status === 'downloaded' ? 'Downloaded' : !ep.monitored ? 'Unmonitored' : (!ep.file_path && !ep.air_date && !seasonHasDownloads) || (ep.air_date && new Date(ep.air_date) > new Date()) ? 'Not released' : 'Monitored'}
                                 </button>
                               </div>
                               <div className="flex items-center gap-2 mt-1.5">

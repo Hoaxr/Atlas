@@ -259,7 +259,7 @@ export default function MovieDetails() {
         </div>
         
         <div className="p-8 md:w-2/3 lg:w-3/4 flex flex-col justify-center">
-          <h1 className="text-4xl md:text-5xl font-black text-white mb-2 tracking-tight flex items-center gap-3 min-w-0">
+          <h1 className="text-xl md:text-5xl font-black text-white mb-2 tracking-tight flex items-center gap-3 min-w-0">
             <button 
               onClick={async () => {
                 try {
@@ -379,7 +379,7 @@ export default function MovieDetails() {
               )}
           </div>
           
-          <p className="text-slate-300 text-lg leading-relaxed max-w-3xl mb-6">
+          <p className="text-slate-300 text-sm sm:text-base md:text-lg leading-relaxed max-w-3xl mb-6">
             {movie.overview || 'No overview available for this movie.'}
           </p>
           
