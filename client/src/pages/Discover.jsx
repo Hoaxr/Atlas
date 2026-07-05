@@ -236,7 +236,7 @@ export default function Discover() {
 
     const cardClass = isGrid 
       ? "glass-panel rounded-xl overflow-hidden group hover:scale-[1.02] transition-transform duration-300 relative"
-      : "flex-none w-48 sm:w-56 glass-panel rounded-xl overflow-hidden group hover:scale-[1.02] transition-transform duration-300 relative snap-start";
+      : "flex-none w-40 sm:w-44 glass-panel rounded-xl overflow-hidden group hover:scale-[1.02] transition-transform duration-300 relative snap-start";
 
     return (
       <div key={keyId} className={cardClass}>
@@ -292,7 +292,7 @@ export default function Discover() {
             )}
           </div>
         </div>
-        <div className="p-4 relative z-20 bg-gradient-to-b from-slate-800/95 to-slate-900/95 border-t border-white/10">
+        <div className="p-3 relative z-20 bg-slate-800/95 border-t border-white/10">
           <h3 className="font-semibold text-sm text-slate-100 truncate tracking-wide" title={title}>{title}</h3>
           <div className="flex justify-between items-center mt-2">
             <span className="text-xs text-slate-500 font-medium tracking-wider uppercase">{releaseYear}</span>
@@ -437,7 +437,7 @@ export default function Discover() {
                Search Results
              </span>
            </h2>
-           <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-7 gap-3 sm:gap-6">
+           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 gap-3 sm:gap-4">
              {results.map((item) => renderMediaCard(item, false, true))}
            </div>
         </div>

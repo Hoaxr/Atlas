@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import api from '../lib/api';
 import { formatSize, parseResolution, LANG_LABEL, LANG_NAME } from '../lib/format';
 import { useSettings } from '../lib/useSettings';
 import { useTMDBDetails } from '../lib/useTMDBDetails';
-import { ArrowLeft, HardDrive, Tv, PlayCircle, ChevronDown, ChevronRight, ChevronLeft, Bookmark, BookmarkMinus, Search, Star, X, RefreshCw, Loader2, Download, CheckSquare, Film, Trash2 } from 'lucide-react';
+import { ArrowLeft, HardDrive, Tv, PlayCircle, ChevronDown, ChevronRight, ChevronLeft, Bookmark, BookmarkMinus, Search, Star, X, RefreshCw, Loader2, Download, CheckSquare, Film, Trash2, Globe, Eye } from 'lucide-react';
 import { customAlert, customConfirm } from '../utils/alerts';
 import { useOutsideClick } from '../lib/useOutsideClick';
 import TrailerModal from '../components/TrailerModal';
@@ -211,326 +212,417 @@ export default function ShowDetails() {
   if (!show) return null;
 
   return (
-    <div className="relative min-h-screen">
-      {/* Backdrop background */}
-      {tmdbDetails?.backdrop_path && (
-        <div className="fixed inset-0 z-0">
+    <div className="relative min-h-screen pb-12">
+      {/* Backdrop */}
+      {tmdbDetails?.backdrop_path ? (
+        <motion.div 
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 1.2 }}
+          className="fixed inset-0 z-0"
+        >
           <img
             src={`https://image.tmdb.org/t/p/original${tmdbDetails.backdrop_path}`}
             alt=""
             className="w-full h-full object-cover"
           />
-          <div className="absolute inset-0 bg-gradient-to-b from-slate-950/85 via-slate-950/60 to-slate-950" />
-        </div>
+          <div className="absolute inset-0 bg-gradient-to-b from-slate-950/90 via-slate-950/70 to-slate-950/95" />
+        </motion.div>
+      ) : (
+        <div className="fixed inset-0 z-0 bg-slate-950" />
       )}
 
-      <div className="relative z-10 space-y-6 max-w-6xl mx-auto">
-      <div className="flex items-center justify-between">
-      <button 
-        onClick={() => navigate('/shows')} 
-        className="inline-flex items-center gap-2 px-4 py-2 bg-slate-800/70 hover:bg-slate-700/70 text-slate-300 hover:text-white rounded-xl border border-white/10 hover:border-white/20 transition-all duration-200 text-sm font-medium backdrop-blur-sm"
+      <motion.div 
+        initial={{ opacity: 0, y: 20 }} 
+        animate={{ opacity: 1, y: 0 }} 
+        transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }} 
+        className="relative z-10 max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 space-y-4"
       >
-        <ArrowLeft className="w-4 h-4" /> Back
-      </button>
-      <div className="flex items-center gap-1">
-        <button
-          onClick={() => prevId && navigate(`/shows/${prevId}`)}
-          disabled={!prevId}
-          className="p-2 bg-slate-800/70 hover:bg-slate-700/70 text-slate-300 hover:text-white rounded-full border border-white/10 hover:border-white/20 transition-all duration-200 disabled:opacity-30 disabled:cursor-not-allowed"
-          title="Previous show"
-        >
-          <ChevronLeft className="w-4 h-4" />
-        </button>
-        <button
-          onClick={() => nextId && navigate(`/shows/${nextId}`)}
-          disabled={!nextId}
-          className="p-2 bg-slate-800/70 hover:bg-slate-700/70 text-slate-300 hover:text-white rounded-full border border-white/10 hover:border-white/20 transition-all duration-200 disabled:opacity-30 disabled:cursor-not-allowed"
-          title="Next show"
-        >
-          <ChevronRight className="w-4 h-4" />
-        </button>
-      </div>
-      </div>
-
-      {/* Hero / Banner Section */}
-      <div className="glass-panel rounded-3xl flex flex-col md:flex-row relative z-10">
-        <div className="md:w-1/3 lg:w-1/4 shrink-0 relative group overflow-hidden rounded-t-3xl md:rounded-l-3xl md:rounded-tr-none">
-          <img 
-            src={`https://image.tmdb.org/t/p/w500${show.poster_path}`} 
-            alt={show.title}
-            className="w-full h-full object-cover aspect-[2/3]"
-          />
-          <div className="absolute inset-0 bg-gradient-to-t from-slate-900 via-transparent to-transparent md:bg-gradient-to-r"></div>
-          {trailerKey && (
-            <button 
-              onClick={() => setIsTrailerOpen(true)}
-              className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity duration-300"
-              aria-label="Play trailer"
-            >
-              <PlayCircle className="w-16 h-16 text-white drop-shadow-xl hover:scale-110 transition-transform duration-300" />
-            </button>
-          )}
-        </div>
-        
-        <div className="p-8 md:w-2/3 lg:w-3/4 flex flex-col justify-center">
-          <h1 className="text-xl md:text-5xl font-black text-white mb-2 tracking-tight flex items-center gap-2 md:gap-3 min-w-0">
-            <button 
-              onClick={async () => {
-                try {
-                  const res = await api.post(`/library/shows/${show.id}/toggle-monitor`);
-                  if (res.data.status === 'success') {
-                    fetchShowData();
-                  }
-                } catch (err) {
-                  customAlert('Failed to toggle monitor status', 'error');
-                }
-              }}
-              className="shrink-0 hover:scale-110 transition-transform cursor-pointer focus:outline-none"
-              title={show.monitored ? "Monitored" : "Unmonitored"}
-              aria-label={show.monitored ? "Unmonitor show" : "Monitor show"}
-            >
-              {show.monitored ? (
-                <Bookmark className="w-7 h-7 md:w-10 md:h-10 text-purple-400 fill-purple-400" />
-              ) : (
-                <BookmarkMinus className="w-7 h-7 md:w-10 md:h-10 text-slate-500" />
-              )}
-            </button>
-
-            <span className="flex-1 min-w-0 truncate text-xl md:text-5xl">
-              {show.title} <span className="text-slate-400 font-light whitespace-nowrap">({show.year})</span>
-            </span>
+        {/* ── Top Navigation ── */}
+        <div className="flex items-center justify-between">
+          <button
+            onClick={() => navigate('/shows')}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-slate-800/70 hover:bg-slate-700/80 text-slate-300 hover:text-white rounded-xl border border-white/10 hover:border-white/20 transition-all duration-200 text-sm font-medium backdrop-blur-xl"
+          >
+            <ArrowLeft className="w-4 h-4" /> Back
+          </button>
+          <div className="flex items-center gap-1.5">
             <button
-              onClick={refreshAll}
-              disabled={isRefreshing}
-              className="shrink-0 p-1.5 md:p-2 bg-slate-800/50 hover:bg-slate-700 rounded-lg transition-colors text-slate-400 hover:text-purple-400 disabled:opacity-50"
-              title="Refresh show information from TMDB"
-              aria-label="Refresh show information from TMDB"
+              onClick={() => prevId && navigate(`/shows/${prevId}`)}
+              disabled={!prevId}
+              className="p-2.5 bg-slate-800/70 hover:bg-slate-700/80 text-slate-300 hover:text-white rounded-xl border border-white/10 hover:border-white/20 transition-all duration-200 disabled:opacity-25 disabled:cursor-not-allowed backdrop-blur-xl"
+              title="Previous show"
             >
-              <RefreshCw className={`w-4 h-4 md:w-5 md:h-5 ${isRefreshing ? 'animate-spin' : ''}`} />
+              <ChevronLeft className="w-4 h-4" />
             </button>
-            <div ref={deleteMenuRef} className="relative shrink-0 inline-flex">
-              <button
-                onClick={() => setDeleteMenuOpen(!deleteMenuOpen)}
-                className="p-1.5 md:p-2 bg-red-500/10 hover:bg-red-500/20 rounded-lg transition-colors text-red-400"
-                title="Delete show"
-                aria-label="Delete show"
-              >
-                <Trash2 className="w-4 h-4 md:w-5 md:h-5" />
-              </button>
-              {deleteMenuOpen && (
-                <div className="absolute right-0 top-full mt-2 w-56 bg-slate-800 border border-white/10 rounded-xl shadow-xl z-50 overflow-hidden">
-                  <div className="px-4 py-2.5 border-b border-white/5">
-                    <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Remove from Library</p>
-                  </div>
-                  <button
-                    onClick={async () => {
-                      setDeleteMenuOpen(false);
-                      try {
-                        await api.delete(`/library/shows/${show.id}?deleteFiles=true`);
-                        customAlert('Show and files removed.', 'success');
-                        navigate('/shows');
-                      } catch (err) {
-                        customAlert(err.response?.data?.message || 'Failed to remove show.', 'error');
-                      }
-                    }}
-                    className="w-full flex items-center gap-3 px-4 py-3 text-sm text-red-400 hover:bg-red-500/10 transition-colors text-left"
-                  >
-                    <Trash2 className="w-4 h-4 shrink-0" />
-                    <div>
-                      <p className="font-semibold">Delete + Files</p>
-                      <p className="text-xs text-slate-500">Remove from library and delete files from disk</p>
-                    </div>
-                  </button>
-                  <div className="border-t border-white/5" />
-                  <button
-                    onClick={async () => {
-                      setDeleteMenuOpen(false);
-                      try {
-                        await api.delete(`/library/shows/${show.id}?deleteFiles=false`);
-                        customAlert('Show removed from library.', 'success');
-                        navigate('/shows');
-                      } catch (err) {
-                        customAlert(err.response?.data?.message || 'Failed to remove show.', 'error');
-                      }
-                    }}
-                    className="w-full flex items-center gap-3 px-4 py-3 text-sm text-slate-300 hover:bg-white/5 transition-colors text-left"
-                  >
-                    <X className="w-4 h-4 shrink-0" />
-                    <div>
-                      <p className="font-semibold">Remove Only</p>
-                      <p className="text-xs text-slate-500">Remove from library, keep files on disk</p>
-                    </div>
-                  </button>
-                </div>
-              )}
-            </div>
-          </h1>
-          
-          <div className="flex items-center gap-1.5 sm:gap-3 mb-6 mt-2 flex-nowrap overflow-x-auto">
-            {show.rating > 0 && (
-              <div className="flex items-center gap-1 sm:gap-1.5 bg-slate-950/50 px-1.5 sm:px-2.5 py-0.5 sm:py-1 rounded-lg border border-white/5 shadow-inner shrink-0">
-                <Star className="w-3 h-3 sm:w-4 sm:h-4 text-yellow-400 fill-yellow-400 drop-shadow-sm" />
-                <span className="text-xs sm:text-sm font-bold text-slate-200">{Number(show.rating).toFixed(1)}</span>
-              </div>
-            )}
-            <span className={`px-1.5 sm:px-3 py-0.5 sm:py-1 rounded-full text-xs sm:text-xs font-bold capitalize tracking-wider ${
-              show.status === 'downloaded' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 
-              show.status === 'downloading' ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30' : 
-              show.status === 'wanted' ? 'bg-pink-500/20 text-pink-400 border border-pink-500/30' : 
-              show.status === 'monitored' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 
-              'bg-rose-500/20 text-rose-400 border border-rose-500/30'
-            } shrink-0`}>
-              {show.status === 'wanted' ? 'Watchlist' : show.status}
-            </span>
-            {show.folder_size > 0 && (
-              <span className="bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 px-1.5 sm:px-3 py-0.5 sm:py-1 rounded-full text-xs sm:text-xs font-bold shrink-0 whitespace-nowrap">
-                Available locally
-              </span>
-            )}
+            <button
+              onClick={() => nextId && navigate(`/shows/${nextId}`)}
+              disabled={!nextId}
+              className="p-2.5 bg-slate-800/70 hover:bg-slate-700/80 text-slate-300 hover:text-white rounded-xl border border-white/10 hover:border-white/20 transition-all duration-200 disabled:opacity-25 disabled:cursor-not-allowed backdrop-blur-xl"
+              title="Next show"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
           </div>
-          
-          <p className="text-slate-300 text-sm sm:text-base md:text-lg leading-relaxed max-w-3xl mb-6">
-            {show.overview || 'No overview available for this show.'}
-          </p>
-          
-          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-x-4 gap-y-5 w-full mt-4 text-sm bg-slate-900/50 p-5 rounded-xl border border-white/5">
-            <div className="col-span-full">
-              <div className="flex items-center gap-1.5 text-slate-500 text-[10px] uppercase tracking-widest font-bold mb-1">
-                <HardDrive className="w-3 h-3" /> Path
-              </div>
-              <p className="font-mono text-xs text-slate-300 truncate" title={show.folder_path}>{show.folder_path || <span className="text-slate-600 italic">Not downloaded</span>}</p>
-            </div>
-            <div>
-              <div className="flex items-center gap-1.5 text-slate-500 text-[10px] uppercase tracking-widest font-bold mb-1.5">
-                <Film className="w-3 h-3" /> Resolution
-              </div>
-              {(() => {
-                let res = 'Unknown';
-                if (episodes && episodes.length > 0) {
-                  for (const ep of episodes) {
-                    if (ep.status === 'downloaded') {
-                      const epRes = parseResolution(ep.scene_name || ep.file_path);
-                      if (epRes !== 'Unknown') {
-                        res = epRes;
-                        break;
-                      }
-                    }
-                  }
-                }
-                return res !== 'Unknown' ? (
-                  <span className="px-2 py-0.5 rounded text-xs font-medium bg-slate-800 text-slate-300 border border-slate-700">{res}</span>
-                ) : (
-                  <p className="font-medium text-slate-500">—</p>
-                );
-              })()}
-            </div>
-            <div className="lg:col-span-2">
-              <div className="flex items-center gap-1.5 text-slate-500 text-[10px] uppercase tracking-widest font-bold mb-1.5">
-                <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg> Quality Profile
-              </div>
-              {updatingQuality ? (
-                <div className="flex items-center gap-2">
-                  <Loader2 className="w-3 h-3 animate-spin text-cyan-400" />
-                  <span className="text-xs text-slate-400">Updating...</span>
-                </div>
-              ) : (
-                <select
-                  className="bg-slate-800 border border-white/10 rounded-lg text-xs text-slate-300 px-2 py-1.5 focus:border-cyan-500/50 focus:outline-none cursor-pointer max-w-[140px]"
-                  value={show.quality_profile_id || ''}
-                  onChange={(e) => handleQualityChange(e.target.value ? parseInt(e.target.value) : null)}
-                >
-                  <option value="">Unassigned</option>
-                  {profiles.map(p => (
-                    <option key={p.id} value={p.id}>{p.name}</option>
-                  ))}
-                </select>
-              )}
-            </div>
-            <div>
-              <div className="flex items-center gap-1.5 text-slate-500 text-[10px] uppercase tracking-widest font-bold mb-1.5">
-                <HardDrive className="w-3 h-3" /> Size
-              </div>
-              <p className="font-medium text-slate-300">{formatSize(show.folder_size)}</p>
-            </div>
-            <div>
-              <div className="flex items-center gap-1.5 text-slate-500 text-[10px] uppercase tracking-widest font-bold mb-1.5">
-                <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg> Watched
-              </div>
-              <p className={`font-bold ${show.watched ? 'text-emerald-400' : 'text-slate-500'}`}>{show.watched ? '✓ Yes' : 'No'}</p>
-            </div>
-            {tmdbDetails?.original_language && (
-              <div>
-                <div className="flex items-center gap-1.5 text-slate-500 text-[10px] uppercase tracking-widest font-bold mb-1.5">
-                  <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg> Language
-                </div>
-                <p className="font-medium text-slate-300 uppercase">{tmdbDetails.original_language}</p>
-              </div>
-            )}
-            {tmdbDetails?.networks?.length > 0 && (
-              <div className="col-span-2">
-                <div className="flex items-center gap-1.5 text-slate-500 text-[10px] uppercase tracking-widest font-bold mb-1.5">
-                  <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><path d="M8 21h8M12 17v4"/></svg> Network
-                </div>
-                <p className="font-medium text-slate-300 truncate" title={tmdbDetails.networks[0].name}>{tmdbDetails.networks[0].name}</p>
-              </div>
-            )}
-            {tmdbDetails?.genres?.length > 0 && (
-              <div className="col-span-full">
-                <div className="flex items-center gap-1.5 text-slate-500 text-[10px] uppercase tracking-widest font-bold mb-2">
-                  <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg> Genres
-                </div>
-                <div className="flex flex-wrap gap-1.5">
-                  {tmdbDetails.genres.map(g => (
-                    <span key={g.id} className="px-2.5 py-1 rounded-lg text-xs font-medium bg-purple-500/10 text-purple-400 border border-purple-500/20">{g.name}</span>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* TMDB Link / Remap */}
-            <div className="col-span-full border-t border-white/5 pt-4 mt-1 flex items-center justify-between">
-              <div className="flex items-center gap-6">
-                <div>
-                  <div className="flex items-center gap-1.5 text-slate-500 text-[10px] uppercase tracking-widest font-bold mb-1">
-                    <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg> TMDB ID
-                  </div>
-                  <a href={`https://www.themoviedb.org/tv/${show.tmdb_id}`} target="_blank" rel="noopener noreferrer" className="font-mono text-sm text-purple-400 hover:text-purple-300 underline">{show.tmdb_id}</a>
-                </div>
-                {show.tmdb_status && (
-                  <div>
-                    <p className="text-slate-500 text-[10px] uppercase tracking-widest font-bold mb-1">Status</p>
-                    <span className={`text-xs sm:text-xs font-bold capitalize tracking-wider px-1.5 sm:px-3 py-0.5 sm:py-1 rounded-full border ${
-                      show.tmdb_status === 'Ended' ? 'bg-rose-500/20 text-rose-400 border-rose-500/30' :
-                      show.tmdb_status === 'Returning Series' ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' :
-                      show.tmdb_status === 'Canceled' ? 'bg-rose-500/20 text-rose-400 border-rose-500/30' :
-                      show.tmdb_status === 'In Production' ? 'bg-blue-500/20 text-blue-400 border-blue-500/30' :
-                      'bg-slate-500/20 text-slate-400 border-slate-500/30'
-                    }`}>{show.tmdb_status}</span>
-                  </div>
-                )}
-              </div>
-              <button
-                onClick={() => {
-                  setRemapModalOpen(true);
-                  setRemapQuery('');
-                  setRemapResults([]);
-                  setRemapHasSearched(false);
-                }}
-                className="flex items-center gap-2 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors"
-              >
-                <RefreshCw className="w-3.5 h-3.5" /> Remap
-              </button>
-            </div>
-          </div>
-
         </div>
-      </div>
 
-      {/* Episodes Section */}
-      <div className="mt-8">
-        <h2 className="text-2xl font-bold text-white mb-6">Episodes</h2>
-        
-        <div className="space-y-6">
+        {/* ── Main Card ── */}
+        <div className="bg-slate-900/50 backdrop-blur-2xl rounded-3xl border border-white/10 shadow-2xl shadow-black/50 overflow-hidden">
+          <div className="flex flex-col md:flex-row">
+
+            {/* ─── Left: Poster Column ─── */}
+            <div className="md:w-[260px] lg:w-[300px] shrink-0 flex flex-col">
+              {/* Poster */}
+              <div className="relative group">
+                <img
+                  src={`https://image.tmdb.org/t/p/w500${show.poster_path}`}
+                  alt={show.title}
+                  className="w-full aspect-[2/3] object-cover"
+                />
+                <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-slate-900 to-transparent pointer-events-none" />
+                {trailerKey && (
+                  <button
+                    onClick={() => setIsTrailerOpen(true)}
+                    className="absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/50 transition-all duration-400"
+                    aria-label="Play trailer"
+                  >
+                    <PlayCircle className="w-14 h-14 text-white/0 group-hover:text-white drop-shadow-2xl group-hover:scale-110 transition-all duration-300" />
+                  </button>
+                )}
+                {/* TMDB badge – bottom right */}
+                {show.tmdb_id && (
+                  <a
+                    href={`https://www.themoviedb.org/tv/${show.tmdb_id}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="absolute bottom-3 right-3 flex items-center gap-1.5 bg-[#0d253f]/80 hover:bg-[#0d253f] backdrop-blur-sm border border-[#01b4e4]/30 hover:border-[#01b4e4]/60 px-2 py-1 rounded-lg transition-all duration-200 group/tmdb"
+                    title="View on TMDB"
+                    onClick={e => e.stopPropagation()}
+                  >
+                    <svg viewBox="0 0 185.04 133.4" className="h-3.5 w-auto" aria-label="TMDB">
+                      <defs>
+                        <linearGradient id="tmdb-grad-show" x1="0.5" x2="0.5" y2="1" gradientUnits="objectBoundingBox">
+                          <stop offset="0" stopColor="#90cea1"/>
+                          <stop offset="1" stopColor="#01b4e4"/>
+                        </linearGradient>
+                      </defs>
+                      <path d="M159.75 0H25.29A25.29 25.29 0 000 25.29v82.82a25.29 25.29 0 0025.29 25.29h134.46a25.29 25.29 0 0025.29-25.29V25.29A25.29 25.29 0 00159.75 0z" fill="url(#tmdb-grad-show)"/>
+                      <path d="M40.38 76.64V56.5h7.96l4.64 12.81 4.64-12.81h7.96v20.14h-5.06V63.19l-5.34 13.45h-4.4L45.44 63.19v13.45zm28.06 0V56.5h5.58v20.14zm8.58 0V56.5h5.58v15.43h9.67v4.71zm18.53 0V56.5h5.58v15.43h9.67v4.71zm26.64.34a10.26 10.26 0 01-7.47-2.97 10.56 10.56 0 010-14.9 10.26 10.26 0 017.47-2.97 10.26 10.26 0 017.47 2.97 10.56 10.56 0 010 14.9 10.26 10.26 0 01-7.47 2.97zm0-5a5.07 5.07 0 003.67-1.45 5.58 5.58 0 000-7.55 5.07 5.07 0 00-3.67-1.45 5.07 5.07 0 00-3.67 1.45 5.58 5.58 0 000 7.55 5.07 5.07 0 003.67 1.45z" fill="#fff"/>
+                    </svg>
+                    <span className="text-[10px] font-bold text-[#01b4e4] group-hover/tmdb:text-white transition-colors tracking-wide">TMDB</span>
+                  </a>
+                )}
+                {/* Remap button – bottom left */}
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setRemapModalOpen(true);
+                    setRemapQuery('');
+                    setRemapResults([]);
+                    setRemapHasSearched(false);
+                  }}
+                  className="absolute bottom-3 left-3 flex items-center gap-1.5 bg-amber-500/10 hover:bg-amber-500/20 backdrop-blur-sm border border-amber-500/20 hover:border-amber-500/40 px-2 py-1 rounded-lg transition-all duration-200"
+                  title="Remap show"
+                >
+                  <RefreshCw className="w-3.5 h-3.5 text-amber-400" />
+                  <span className="text-[10px] font-bold text-amber-400 tracking-wide">Remap</span>
+                </button>
+              </div>
+
+              {/* Monitor Button */}
+              <div className="px-4 pt-4 pb-2 space-y-2.5 bg-slate-900/60">
+                <button
+                  onClick={async () => {
+                    try {
+                      const res = await api.post(`/library/shows/${show.id}/toggle-monitor`);
+                      if (res.data.status === 'success') fetchShowData();
+                    } catch (err) {
+                      customAlert('Failed to toggle monitor status', 'error');
+                    }
+                  }}
+                  className="w-full flex items-center justify-center gap-2 bg-slate-800/70 hover:bg-slate-700/80 text-slate-200 border border-white/10 hover:border-white/20 font-semibold px-4 py-2.5 rounded-xl text-sm transition-all duration-200"
+                  title={show.monitored ? 'Monitored' : 'Unmonitored'}
+                >
+                  {show.monitored ? (
+                    <Bookmark className="w-4 h-4 text-purple-400 fill-purple-400" />
+                  ) : (
+                    <BookmarkMinus className="w-4 h-4 text-slate-400" />
+                  )}
+                  {show.monitored ? 'Monitored' : 'Unmonitored'}
+                </button>
+              </div>
+
+              {/* Rating + Status */}
+              <div className="grid grid-cols-2 gap-2 px-4 pb-4 bg-slate-900/60">
+                <div className="bg-slate-800/50 rounded-xl p-3 text-center border border-white/5">
+                  <div className="flex items-center justify-center gap-1 mb-0.5">
+                    <Star className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
+                    <span className="text-base font-bold text-white">{show.rating > 0 ? Number(show.rating).toFixed(1) : '—'}</span>
+                    <span className="text-xs text-slate-500">/10</span>
+                  </div>
+                  <p className="text-[10px] text-slate-500 uppercase tracking-wider">TMDB Rating</p>
+                </div>
+                <div className="bg-slate-800/50 rounded-xl p-3 text-center border border-white/5">
+                  <p className={`text-sm font-bold capitalize mb-0.5 ${
+                    show.status === 'downloaded' ? 'text-emerald-400' : 
+                    show.status === 'downloading' ? 'text-blue-400' : 
+                    show.status === 'wanted' ? 'text-pink-400' : 
+                    show.status === 'monitored' ? 'text-emerald-400' : 
+                    'text-rose-400'
+                  }`}>
+                    {show.status === 'wanted' ? 'Watchlist' : show.status}
+                  </p>
+                  <p className="text-[10px] text-slate-500 uppercase tracking-wider">Status</p>
+                </div>
+              </div>
+
+            </div>
+
+            {/* ─── Right: Content Column ─── */}
+            <div className="flex-1 min-w-0 p-6 sm:p-7 flex flex-col">
+
+              {/* Title Row */}
+              <div className="flex items-start justify-between gap-4 mb-2">
+                <div className="flex-1 min-w-0">
+                  <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight leading-tight">
+                    {show.title}
+                  </h1>
+                  {/* Meta Line */}
+                  <div className="flex flex-wrap items-center gap-1.5 mt-2 text-sm text-slate-400">
+                    <span>{show.year}</span>
+                    {tmdbDetails?.genres?.length > 0 && (
+                      <>
+                        <span className="text-slate-600">•</span>
+                        <span>{tmdbDetails.genres.map(g => g.name).join(', ')}</span>
+                      </>
+                    )}
+                    {tmdbDetails?.number_of_seasons > 0 && (
+                      <>
+                        <span className="text-slate-600">•</span>
+                        <span>{tmdbDetails.number_of_seasons} Season{tmdbDetails.number_of_seasons > 1 ? 's' : ''}</span>
+                      </>
+                    )}
+                    {show.tmdb_status && (
+                      <>
+                        <span className="text-slate-600">•</span>
+                        <span className={`px-1.5 py-0.5 rounded text-xs font-bold ${
+                          show.tmdb_status === 'Ended' ? 'text-rose-400 bg-rose-500/10' :
+                          show.tmdb_status === 'Returning Series' ? 'text-emerald-400 bg-emerald-500/10' :
+                          'text-slate-400 bg-slate-500/10'
+                        }`}>{show.tmdb_status}</span>
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                {/* Action Icons */}
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <button
+                    onClick={refreshAll}
+                    disabled={isRefreshing}
+                    className="p-2.5 bg-white/5 hover:bg-white/10 rounded-xl transition-colors text-slate-400 hover:text-purple-400 disabled:opacity-40 border border-white/5 hover:border-white/10"
+                    title="Refresh metadata"
+                  >
+                    <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+                  </button>
+                  <div ref={deleteMenuRef} className="relative">
+                    <button
+                      onClick={() => setDeleteMenuOpen(!deleteMenuOpen)}
+                      className="p-2.5 bg-red-500/10 hover:bg-red-500/20 rounded-xl transition-colors text-red-400 border border-red-500/20 hover:border-red-500/30"
+                      title="Delete show"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                    {deleteMenuOpen && (
+                      <div className="absolute right-0 top-full mt-2 w-60 bg-slate-800 border border-white/10 rounded-2xl shadow-2xl z-50 overflow-hidden backdrop-blur-xl">
+                        <div className="px-4 py-3 border-b border-white/5">
+                          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Remove from Library</p>
+                        </div>
+                        <button
+                          onClick={async () => {
+                            setDeleteMenuOpen(false);
+                            try {
+                              await api.delete(`/library/shows/${show.id}?deleteFiles=true`);
+                              customAlert('Show and files removed.', 'success');
+                              navigate('/shows');
+                            } catch (err) {
+                              customAlert(err.response?.data?.message || 'Failed to remove show.', 'error');
+                            }
+                          }}
+                          className="w-full flex items-center gap-3 px-4 py-3 text-sm text-red-400 hover:bg-red-500/10 transition-colors text-left"
+                        >
+                          <Trash2 className="w-4 h-4 shrink-0" />
+                          <div>
+                            <p className="font-semibold">Delete + Files</p>
+                            <p className="text-xs text-slate-500">Remove from library and delete files</p>
+                          </div>
+                        </button>
+                        <div className="border-t border-white/5" />
+                        <button
+                          onClick={async () => {
+                            setDeleteMenuOpen(false);
+                            try {
+                              await api.delete(`/library/shows/${show.id}?deleteFiles=false`);
+                              customAlert('Show removed from library.', 'success');
+                              navigate('/shows');
+                            } catch (err) {
+                              customAlert(err.response?.data?.message || 'Failed to remove show.', 'error');
+                            }
+                          }}
+                          className="w-full flex items-center gap-3 px-4 py-3 text-sm text-slate-300 hover:bg-white/5 transition-colors text-left"
+                        >
+                          <X className="w-4 h-4 shrink-0" />
+                          <div>
+                            <p className="font-semibold">Remove Only</p>
+                            <p className="text-xs text-slate-500">Remove from library, keep files</p>
+                          </div>
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Overview */}
+              <p className="text-slate-300 text-sm leading-relaxed mb-5 max-w-2xl">
+                {show.overview || 'No overview available.'}
+              </p>
+
+              {/* ── Metadata Section ── */}
+              <div className="divide-y divide-white/5">
+
+                {/* PATH */}
+                <div className="py-3">
+                  <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500 block mb-1">Path</span>
+                  <p className="text-xs font-mono text-slate-300 truncate" title={show.folder_path}>
+                    {show.folder_path || <span className="text-slate-600 italic">Not downloaded</span>}
+                  </p>
+                </div>
+
+                {/* RESOLUTION | SIZE | LANGUAGE | WATCHED */}
+                <div className="grid grid-cols-4 py-3 gap-4 bg-slate-800/30 rounded-xl px-4">
+                  <div className="flex items-center gap-2">
+                    <Film className="w-4 h-4 text-cyan-400 shrink-0" />
+                    <div>
+                      <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500 block">Resolution</span>
+                      <span className="text-sm font-semibold text-slate-200">
+                        {(() => {
+                          let res = 'Unknown';
+                          if (episodes && episodes.length > 0) {
+                            for (const ep of episodes) {
+                              if (ep.status === 'downloaded') {
+                                const epRes = parseResolution(ep.scene_name || ep.file_path);
+                                if (epRes !== 'Unknown') { res = epRes; break; }
+                              }
+                            }
+                          }
+                          return res !== 'Unknown' ? res : '—';
+                        })()}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <HardDrive className="w-4 h-4 text-cyan-400 shrink-0" />
+                    <div>
+                      <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500 block">Size</span>
+                      <span className="text-sm font-semibold text-slate-200">{formatSize(show.folder_size)}</span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Globe className="w-4 h-4 text-cyan-400 shrink-0" />
+                    <div>
+                      <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500 block">Language</span>
+                      <span className="text-sm font-semibold text-slate-200">{(tmdbDetails?.original_language || 'EN').toUpperCase()}</span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Eye className="w-4 h-4 text-cyan-400 shrink-0" />
+                    <div>
+                      <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500 block">Watched</span>
+                      <span className={`text-sm font-semibold ${show.watched ? 'text-emerald-400' : 'text-slate-500'}`}>
+                        {show.watched ? 'Yes' : 'No'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* QUALITY PROFILE | NETWORK */}
+                <div className="grid grid-cols-2 py-3 gap-4">
+                  <div>
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500 block mb-1">Quality Profile</span>
+                    {updatingQuality ? (
+                      <div className="flex items-center gap-2">
+                        <Loader2 className="w-3.5 h-3.5 animate-spin text-purple-400" />
+                        <span className="text-xs text-slate-400">Updating...</span>
+                      </div>
+                    ) : (
+                      <select
+                        className="bg-slate-800 border border-white/10 rounded-lg text-xs text-slate-300 px-3 py-1.5 focus:border-purple-500/50 focus:outline-none cursor-pointer w-full"
+                        value={show.quality_profile_id || ''}
+                        onChange={(e) => handleQualityChange(e.target.value ? parseInt(e.target.value) : null)}
+                      >
+                        <option value="">Unassigned</option>
+                        {profiles.map(p => (
+                          <option key={p.id} value={p.id}>{p.name}</option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500 block mb-1">Network</span>
+                    <p className="text-sm font-semibold text-slate-200 truncate">
+                      {tmdbDetails?.networks?.[0]?.name || <span className="text-slate-600 italic">Unknown</span>}
+                    </p>
+                  </div>
+                </div>
+
+                {/* CAST */}
+                {(() => {
+                  const castList = tmdbDetails?.credits?.cast?.slice(0, 5) || [];
+                  if (castList.length === 0) return null;
+                  return (
+                    <div className="py-3">
+                      <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500 block mb-2.5">Cast</span>
+                      <div className="flex gap-6 overflow-x-auto pb-1">
+                        {castList.map((person) => (
+                          <Link
+                            key={person.credit_id}
+                            to={`/person/${person.id}`}
+                            className="shrink-0 flex flex-col items-center gap-2 group"
+                          >
+                            <div className="w-24 h-24 rounded-full overflow-hidden bg-slate-700 ring-2 ring-white/10 group-hover:ring-purple-500/40 transition-all shadow-md">
+                              {person.profile_path ? (
+                                <img
+                                  src={`https://image.tmdb.org/t/p/w185${person.profile_path}`}
+                                  alt={person.name}
+                                  className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
+                                  loading="lazy"
+                                />
+                              ) : (
+                                <div className="w-full h-full flex items-center justify-center text-slate-500">
+                                  <svg className="w-10 h-10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                                </div>
+                              )}
+                            </div>
+                            <p className="text-xs font-semibold text-slate-300 group-hover:text-purple-400 text-center leading-tight whitespace-nowrap transition-colors">{person.name}</p>
+                          </Link>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
+
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ── Episodes Section ── */}
+        <div className="bg-slate-900/50 backdrop-blur-2xl rounded-2xl border border-white/10 shadow-xl shadow-black/30 overflow-hidden">
+          <div className="px-5 py-4 border-b border-white/5">
+            <h3 className="text-sm font-bold text-slate-200">Episodes</h3>
+          </div>
+          <div className="p-4 space-y-3">
           {(() => {
             const sortedSeasonKeys = Object.keys(seasons).sort((a, b) => Number(b) - Number(a));
             const latestSeason = sortedSeasonKeys.length > 0 ? sortedSeasonKeys[0] : null;
@@ -605,9 +697,16 @@ export default function ShowDetails() {
                   </div>
                 </div>
                 
-                {!isCollapsed && (
-                  <>
-                    {/* Desktop table */}
+                <AnimatePresence>
+                  {!isCollapsed && (
+                    <motion.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: "auto", opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      transition={{ duration: 0.25 }}
+                      className="overflow-hidden"
+                    >
+                      {/* Desktop table */}
                     <table className="hidden md:table w-full text-left border-collapse">
                       <thead>
                         <tr className="bg-slate-900/50 text-slate-400 text-sm uppercase tracking-wider border-b border-white/5">
@@ -913,40 +1012,15 @@ export default function ShowDetails() {
                         ));
                       })()}
                     </div>
-                  </>
-                )}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
             );
             });
           })()}
         </div>
       </div>
-
-      {/* Cast & Crew Section */}
-      {tmdbDetails?.credits?.cast?.length > 0 && (
-        <div className="mt-8 bg-slate-900/60 p-5 rounded-xl border border-white/5">
-          <h2 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
-            <svg className="w-5 h-5 text-purple-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-            Cast
-            <span className="text-xs font-medium text-slate-500 bg-slate-800 px-2 py-0.5 rounded-full">{tmdbDetails.credits.cast.slice(0, 15).length}</span>
-          </h2>
-          <div className="flex gap-4 overflow-x-auto pb-4 snap-x hide-scrollbar">
-            {tmdbDetails.credits.cast.slice(0, 15).map(person => (
-              <Link key={person.credit_id} to={`/person/${person.id}`} className="shrink-0 w-32 group snap-start">
-                <div className="aspect-[2/3] rounded-xl overflow-hidden bg-slate-800 mb-2 border border-white/5 group-hover:border-white/20 transition-colors">
-                  {person.profile_path ? (
-                    <img src={`https://image.tmdb.org/t/p/w185${person.profile_path}`} alt={person.name} className="w-full h-full object-cover" loading="lazy" />
-                  ) : (
-                    <div className="w-full h-full flex flex-col items-center justify-center text-slate-600"><Search className="w-6 h-6 mb-1" />No Image</div>
-                  )}
-                </div>
-                <p className="text-xs font-bold text-slate-200 truncate group-hover:text-purple-400 transition-colors">{person.name}</p>
-                <p className="text-[11px] text-slate-500 truncate">{person.character}</p>
-              </Link>
-            ))}
-          </div>
-        </div>
-      )}
 
       {/* Episode Search Modal */}
       {searchModalOpen && selectedEpisode && (
@@ -1249,7 +1323,7 @@ export default function ShowDetails() {
           </div>
         </div>
       )}
-    </div>
+    </motion.div>
     </div>
   );
 }

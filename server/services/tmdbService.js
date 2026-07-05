@@ -192,7 +192,7 @@ const searchMulti = async (query) => {
 
 const getMovieById = async (id) => {
   try {
-    const response = await tmdbApi.get(`/movie/${id}`, { params: { append_to_response: 'videos,credits' } });
+    const response = await tmdbApi.get(`/movie/${id}`, { params: { append_to_response: 'videos,credits,similar,release_dates' } });
     return response.data;
   } catch (error) {
     if (error.response?.status === 404) return null;
