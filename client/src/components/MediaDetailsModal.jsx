@@ -253,7 +253,7 @@ export default function MediaDetailsModal({ isOpen, onClose, mediaId, mediaType,
                     <div className="text-right font-bold text-slate-300 text-sm">Root Folder</div>
                     <div>
                       <select 
-                        className="w-full bg-slate-800 border border-slate-600 rounded-md text-slate-200 px-3 py-1.5 focus:outline-none focus:border-cyan-500 text-sm"
+                        className="w-full bg-slate-800/70 border border-white/5 rounded-md text-slate-200 px-3 py-1.5 focus:outline-none focus:border-cyan-500 text-sm shadow-[inset_0_1px_3px_rgba(0,0,0,0.4)]"
                         value={selectedPath}
                         onChange={e => setSelectedPath(e.target.value)}
                       >
@@ -272,13 +272,13 @@ export default function MediaDetailsModal({ isOpen, onClose, mediaId, mediaType,
 
                     {/* Monitor */}
                     <div className="text-right font-bold text-slate-300 text-sm">Monitor</div>
-                    <select className="w-full bg-slate-800 border border-slate-600 rounded-md text-slate-200 px-3 py-1.5 focus:outline-none focus:border-cyan-500 text-sm">
+                    <select className="w-full bg-slate-800/70 border border-white/5 rounded-md text-slate-200 px-3 py-1.5 focus:outline-none focus:border-cyan-500 text-sm shadow-[inset_0_1px_3px_rgba(0,0,0,0.4)]">
                       <option>{mediaType === 'movie' ? 'Movie Only' : 'All Episodes'}</option>
                     </select>
 
                     {/* Minimum Availability */}
                     <div className="text-right font-bold text-slate-300 text-sm">Minimum Availability</div>
-                    <select className="w-full bg-slate-800 border border-slate-600 rounded-md text-slate-200 px-3 py-1.5 focus:outline-none focus:border-cyan-500 text-sm">
+                    <select className="w-full bg-slate-800/70 border border-white/5 rounded-md text-slate-200 px-3 py-1.5 focus:outline-none focus:border-cyan-500 text-sm shadow-[inset_0_1px_3px_rgba(0,0,0,0.4)]">
                       <option>Released</option>
                       <option>PreDB</option>
                       <option>Physical</option>
@@ -308,45 +308,63 @@ export default function MediaDetailsModal({ isOpen, onClose, mediaId, mediaType,
                 
                 {/* Extra Actions / Status */}
                 <div className="mt-8 flex gap-4">
-                  {mode === 'add' && isInLibrary ? (
-                    <button
-                      onClick={() => {
-                        onClose();
-                        const path = mediaType === 'movie' ? `/movies/${libraryId}` : `/shows/${libraryId}`;
-                        navigate(path);
-                      }}
-                      className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2 px-4 rounded-md flex items-center justify-center gap-2 transition-colors cursor-pointer text-sm"
-                    >
-                      <CheckCircle2 className="w-4 h-4" />
-                      View in Library
-                    </button>
-                  ) : (isInLibrary || requestStatus) ? (
-                    <button 
-                      onClick={() => {
-                        if (mode === 'details' && onRequest && !isInLibrary) {
-                          onRequest(details);
-                        }
-                      }}
-                      className={`border font-bold py-2 px-4 rounded-lg flex items-center justify-center gap-2 text-sm capitalize 
-                      ${isInLibrary ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30 cursor-default' : 
-                        (mode === 'details' && onRequest ? 'bg-slate-800/80 text-slate-300 border-slate-700 hover:bg-slate-700/80 cursor-pointer' : 'bg-slate-800/80 text-slate-300 border-slate-700 cursor-default')}
-                    `}>
-                      {isInLibrary ? 'In Library' : requestStatus}
-                      {isInLibrary ? <CheckCircle2 className="w-4 h-4" /> : (
-                        requestStatus === 'approved' ? <CheckCircle2 className="w-4 h-4 text-emerald-400" /> :
-                        requestStatus === 'denied' ? <XCircle className="w-4 h-4 text-rose-400" /> :
-                        <Clock className="w-4 h-4 text-amber-400" />
-                      )}
-                    </button>
-                  ) : mode === 'details' && onRequest ? (
-                    <button
-                      onClick={() => onRequest(details)}
-                      className="bg-cyan-600 hover:bg-cyan-500 text-white font-bold py-2 px-4 rounded-lg flex items-center justify-center gap-2 transition-colors cursor-pointer text-sm"
-                    >
-                      <Plus className="w-4 h-4" />
-                      Request {mediaType === 'movie' ? 'Movie' : 'Show'}
-                    </button>
-                  ) : null}
+                  {(() => {
+                    // mode=add + in library: navigate to library page
+                    if (mode === 'add' && isInLibrary) {
+                      return (
+                        <button
+                          onClick={() => {
+                            onClose();
+                            const path = mediaType === 'movie' ? `/movies/${libraryId}` : `/shows/${libraryId}`;
+                            navigate(path);
+                          }}
+                          className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2 px-4 rounded-md flex items-center justify-center gap-2 transition-colors cursor-pointer text-sm"
+                        >
+                          <CheckCircle2 className="w-4 h-4" />
+                          View in Library
+                        </button>
+                      );
+                    }
+
+                    // in library or has a request status: show status badge (never "In Library" text in details mode)
+                    if (isInLibrary || requestStatus) {
+                      const showStatus = (mode === 'details' && requestStatus) ? requestStatus : isInLibrary ? 'approved' : requestStatus;
+                      const isApproved = showStatus === 'approved';
+                      const isDenied = showStatus === 'denied';
+                      return (
+                        <button
+                          onClick={() => {
+                            if (mode === 'details' && onRequest && !isInLibrary) onRequest(details);
+                          }}
+                          className={`border font-bold py-2 px-4 rounded-lg flex items-center justify-center gap-2 text-sm capitalize cursor-default
+                            ${isApproved ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' :
+                              isDenied   ? 'bg-rose-500/10 text-rose-400 border-rose-500/20' :
+                                           'bg-amber-500/10 text-amber-400 border-amber-500/20'}
+                          `}
+                        >
+                          {showStatus}
+                          {isApproved ? <CheckCircle2 className="w-4 h-4 text-emerald-400" /> :
+                           isDenied    ? <XCircle className="w-4 h-4 text-rose-400" /> :
+                                         <Clock className="w-4 h-4 text-amber-400" />}
+                        </button>
+                      );
+                    }
+
+                    // no status, not in library: offer to request
+                    if (mode === 'details' && onRequest) {
+                      return (
+                        <button
+                          onClick={() => onRequest(details)}
+                          className="bg-cyan-600 hover:bg-cyan-500 text-white font-bold py-2 px-4 rounded-lg flex items-center justify-center gap-2 transition-colors cursor-pointer text-sm"
+                        >
+                          <Plus className="w-4 h-4" />
+                          Request {mediaType === 'movie' ? 'Movie' : 'Show'}
+                        </button>
+                      );
+                    }
+
+                    return null;
+                  })()}
                 </div>
               </div>
             </div>

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom';
+import { motion } from 'framer-motion';
 import { Search, Settings as SettingsIcon, Film, Activity, Tv as TvIcon, DownloadCloud, ArrowDown, ArrowUp, Heart, Menu, Calendar as CalendarIcon, BarChart3, Keyboard, Key, LogOut, Eye, X } from 'lucide-react';
 import Logo from './Logo';
 import clsx from 'clsx';
@@ -10,17 +11,32 @@ import useKeyboardShortcuts from '../../lib/useKeyboardShortcuts';
 import ShortcutsModal from '../shared/ShortcutsModal';
 import ChangePasswordModal from '../ChangePasswordModal';
 
-const navItems = [
-  { name: 'Discover', path: '/discover', icon: Search },
-  { name: 'Movies', path: '/movies', icon: Film },
-  { name: 'TV Shows', path: '/shows', icon: TvIcon },
-  { name: 'Calendar', path: '/calendar', icon: CalendarIcon },
-  { name: 'Downloads', path: '/downloads', icon: DownloadCloud },
-  { name: 'Statistics', path: '/stats', icon: BarChart3 },
-  { name: 'Requests', path: '/requests', icon: Heart },
-  { name: 'Tasks', path: '/tasks', icon: Activity },
-  { name: 'Watchers', path: '/watcher', icon: Eye },
-  { name: 'Settings', path: '/settings', icon: SettingsIcon },
+const navSections = [
+  {
+    title: 'Media Hub',
+    items: [
+      { name: 'Discover', path: '/discover', icon: Search },
+      { name: 'Movies', path: '/movies', icon: Film },
+      { name: 'TV Shows', path: '/shows', icon: TvIcon },
+      { name: 'Calendar', path: '/calendar', icon: CalendarIcon },
+    ]
+  },
+  {
+    title: 'Operations',
+    items: [
+      { name: 'Downloads', path: '/downloads', icon: DownloadCloud },
+      { name: 'Requests', path: '/requests', icon: Heart },
+      { name: 'Statistics', path: '/stats', icon: BarChart3 },
+      { name: 'Tasks', path: '/tasks', icon: Activity },
+      { name: 'Watchers', path: '/watcher', icon: Eye },
+    ]
+  },
+  {
+    title: 'Configuration',
+    items: [
+      { name: 'Settings', path: '/settings', icon: SettingsIcon },
+    ]
+  }
 ];
 
 export default function Layout() {
@@ -210,16 +226,55 @@ export default function Layout() {
           sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
         )}
       >
-        <div className="p-6 pb-4 flex items-center justify-between">
-          <div className="flex items-center space-x-3">
-            <Logo className="w-12 h-12" />
-            <span className="text-3xl font-black tracking-wider drop-shadow-[0_0_12px_rgba(6,182,212,0.4)]">
-              <span className="bg-gradient-to-r from-cyan-300 via-cyan-400 to-sky-400 bg-clip-text text-transparent">
-                Atlas
-              </span>
-            </span>
+        <div className="p-6 pb-6 flex items-center justify-between relative overflow-hidden">
+
+          {/* Animated Wave divider under the logo header */}
+          <div className="absolute bottom-0 left-0 right-0 w-full h-4 overflow-hidden pointer-events-none opacity-50 dark:opacity-30">
+            <svg className="w-full h-full text-cyan-550/15 dark:text-cyan-400/10" viewBox="0 0 1200 120" preserveAspectRatio="none">
+              <path d="M0,60 C150,100 350,100 500,80 C650,60 900,40 1200,80 L1200,120 L0,120 Z" fill="currentColor">
+                <animate 
+                  attributeName="d" 
+                  dur="8s" 
+                  repeatCount="indefinite" 
+                  values="
+                    M0,60 C150,100 350,100 500,80 C650,60 900,40 1200,80 L1200,120 L0,120 Z;
+                    M0,60 C180,80 320,110 500,90 C680,70 880,50 1200,70 L1200,120 L0,120 Z;
+                    M0,60 C150,100 350,100 500,80 C650,60 900,40 1200,80 L1200,120 L0,120 Z
+                  "
+                />
+              </path>
+              <path d="M0,75 C200,110 400,90 600,100 C800,110 1000,80 1200,95 L1200,120 L0,120 Z" fill="currentColor" opacity="0.5">
+                <animate 
+                  attributeName="d" 
+                  dur="12s" 
+                  repeatCount="indefinite" 
+                  values="
+                    M0,75 C200,110 400,90 600,100 C800,110 1000,80 1200,95 L1200,120 L0,120 Z;
+                    M0,75 C150,90 350,100 600,90 C850,80 1050,100 1200,85 L1200,120 L0,120 Z;
+                    M0,75 C200,110 400,90 600,100 C800,110 1000,80 1200,95 L1200,120 L0,120 Z
+                  "
+                />
+              </path>
+            </svg>
           </div>
-          <div className="flex items-center gap-2">
+
+          <div className="flex items-center space-x-3 select-none relative group/logo p-1 px-2">
+            {/* Large background Logo watermark behind the text */}
+            <div className="absolute -left-7 -top-7 w-28 h-28 scale-150 pointer-events-none group-hover/logo:scale-[1.6] transition-transform duration-500">
+              <Logo className="w-full h-full" isWatermark={true} />
+            </div>
+
+            <div className="relative z-10 pl-10">
+              <div className="bg-white/40 dark:bg-slate-950/40 backdrop-blur-md px-3.5 py-1 rounded-xl border border-slate-200/40 dark:border-white/5 shadow-sm">
+                <span className="text-3xl font-black tracking-wider drop-shadow-[0_0_12px_rgba(6,182,212,0.3)]">
+                  <span className="bg-gradient-to-r from-cyan-300 via-cyan-400 to-sky-400 bg-clip-text text-transparent">
+                    Atlas
+                  </span>
+                </span>
+              </div>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 relative z-10">
             {hasToken && (
             <button
               onClick={handleLogout}
@@ -242,43 +297,77 @@ export default function Layout() {
         </div>
 
 
-        <nav className="flex-1 px-4 py-2 space-y-2">
-          {navItems.map((item) => (
-            <NavLink
-              key={item.name}
-              to={item.path}
-              onClick={() => setSidebarOpen(false)}
-              className={({ isActive }) =>
-                clsx(
-                  'flex items-center justify-between px-4 py-3 rounded-xl transition-all duration-300 outline-none focus-visible:ring-2 focus-visible:ring-cyan-500',
-                  isActive
-                    ? 'bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border border-cyan-500/20 shadow-[0_0_15px_rgba(6,182,212,0.15)]'
-                    : 'text-slate-500 hover:text-slate-700 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-slate-200 dark:hover:bg-white/5 border border-transparent'
-                )
-              }
-            >
-              <div className="flex items-center space-x-3">
-                <item.icon className="w-5 h-5" />
-                <span className="font-medium">{item.name}</span>
+        <nav className="flex-1 px-3 py-2 space-y-4 overflow-y-auto hide-scrollbar">
+          {navSections.map((section) => (
+            <div key={section.title} className="space-y-1">
+              <h3 className="px-4 text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">
+                {section.title}
+              </h3>
+              <div className="space-y-0.5">
+                {section.items.map((item) => (
+                  <NavLink
+                    key={item.name}
+                    to={item.path}
+                    onClick={() => setSidebarOpen(false)}
+                    className={({ isActive }) =>
+                      clsx(
+                        'group relative flex items-center justify-between px-4 py-2.5 rounded-xl transition-all duration-300 outline-none focus-visible:ring-2 focus-visible:ring-cyan-500',
+                        isActive
+                          ? 'text-cyan-600 dark:text-cyan-400 font-semibold'
+                          : 'text-slate-500 hover:text-slate-700 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-slate-200 dark:hover:bg-white/5'
+                      )
+                    }
+                  >
+                    {({ isActive }) => (
+                      <>
+                        {isActive && (
+                          <>
+                            {/* Sliding left accent bar */}
+                            <motion.div
+                              layoutId="active-nav-line"
+                              className="absolute left-0 top-1.5 bottom-1.5 w-1 bg-gradient-to-b from-cyan-400 to-sky-500 rounded-r-full"
+                              transition={{ type: 'spring', stiffness: 350, damping: 28 }}
+                            />
+                            {/* Subtle background glow with drifting particles */}
+                            <motion.div
+                              layoutId="active-nav-bg"
+                              className="absolute inset-0 bg-gradient-to-r from-cyan-500/8 via-cyan-500/2 to-transparent rounded-xl overflow-hidden active-nav-glow-container"
+                              transition={{ type: 'spring', stiffness: 350, damping: 28 }}
+                            >
+                              <span className="absolute top-2 w-1.5 h-1.5 bg-cyan-400/60 rounded-full blur-[0.4px] animate-particle-1" />
+                              <span className="absolute top-5.5 w-1 h-1 bg-sky-400/50 rounded-full blur-[0.4px] animate-particle-2" />
+                              <span className="absolute top-3.5 w-1.5 h-1.5 bg-blue-450/40 rounded-full blur-[0.4px] animate-particle-3" />
+                              <span className="absolute top-7 w-1 h-1 bg-cyan-400/30 rounded-full blur-[0.4px] animate-particle-4" />
+                            </motion.div>
+                          </>
+                        )}
+                        <div className="relative z-10 flex items-center space-x-3 group-hover:translate-x-0.5 transition-transform duration-205">
+                          <item.icon className={clsx("w-5 h-5 transition-transform duration-300", isActive ? "scale-105" : "group-hover:scale-110")} />
+                          <span className="text-sm font-medium">{item.name}</span>
+                        </div>
+                        <div className="relative z-10 flex items-center space-x-2">
+                          {item.name === 'Requests' && pendingRequests > 0 && (
+                            <span className="bg-amber-500/20 text-amber-400 text-[10px] font-bold px-2 py-0.5 rounded-full border border-amber-500/30">
+                              {pendingRequests}
+                            </span>
+                          )}
+                          {item.name === 'Downloads' && downloads.length > 0 && (
+                            <span className="bg-emerald-500/20 text-emerald-400 text-[10px] font-bold px-2 py-0.5 rounded-full border border-emerald-500/30">
+                              {downloads.length}
+                            </span>
+                          )}
+                          {item.name === 'Watchers' && watcherCount > 0 && (
+                            <span className="bg-cyan-500/20 text-cyan-400 text-[10px] font-bold px-2 py-0.5 rounded-full border border-cyan-500/30">
+                              {watcherCount}
+                            </span>
+                          )}
+                        </div>
+                      </>
+                    )}
+                  </NavLink>
+                ))}
               </div>
-              <div className="flex items-center space-x-2">
-                {item.name === 'Requests' && pendingRequests > 0 && (
-                  <span className="bg-amber-500/20 text-amber-400 text-[10px] font-bold px-2 py-0.5 rounded-full border border-amber-500/30">
-                    {pendingRequests}
-                  </span>
-                )}
-                {item.name === 'Downloads' && downloads.length > 0 && (
-                  <span className="bg-emerald-500/20 text-emerald-400 text-[10px] font-bold px-2 py-0.5 rounded-full border border-emerald-500/30">
-                    {downloads.length}
-                  </span>
-                )}
-                {item.name === 'Watchers' && watcherCount > 0 && (
-                  <span className="bg-cyan-500/20 text-cyan-400 text-[10px] font-bold px-2 py-0.5 rounded-full border border-cyan-500/30">
-                    {watcherCount}
-                  </span>
-                )}
-              </div>
-            </NavLink>
+            </div>
           ))}
         </nav>
 

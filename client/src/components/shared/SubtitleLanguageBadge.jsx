@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { Search, Download, RefreshCw, Loader2 } from 'lucide-react';
+import { Search, Download, RefreshCw, Loader2, Check, X } from 'lucide-react';
 import { LANG_LABEL, LANG_NAME } from '../../lib/format';
 
 /**
@@ -65,12 +65,17 @@ export default function SubtitleLanguageBadge({
             onOpenMenu(code);
           }
         }}
-        className={`text-xs uppercase font-bold px-2.5 py-1 rounded-md transition-colors cursor-pointer ${
+        className={`inline-flex items-center gap-1 text-xs uppercase font-bold px-2 py-1 rounded-md transition-colors cursor-pointer ${
           exists
-            ? 'bg-slate-800 text-slate-300 border border-white/5 hover:bg-slate-700 hover:text-white'
-            : 'bg-amber-500/15 text-amber-400 hover:bg-amber-500/25 hover:text-amber-300 border border-amber-500/30 hover:border-amber-400/50'
+            ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/25 hover:text-emerald-300'
+            : 'bg-rose-500/15 text-rose-400 border border-rose-500/20 hover:bg-rose-500/25 hover:text-rose-300'
         }`}
       >
+        {exists ? (
+          <Check className="w-3 h-3" />
+        ) : (
+          <X className="w-3 h-3" />
+        )}
         {LANG_LABEL[code] || code}
       </span>
       {isOpen && menuStyle && createPortal(

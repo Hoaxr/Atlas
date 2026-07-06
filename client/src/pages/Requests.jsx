@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Clock, CheckCircle2, XCircle, Loader2, Trash2, Heart } from 'lucide-react';
+import { Clock, CheckCircle2, XCircle, Loader2, Trash2, Heart, CalendarClock } from 'lucide-react';
 import api from '../lib/api';
 import { customAlert, customConfirm } from '../utils/alerts';
 import MediaDetailsModal from '../components/MediaDetailsModal';
@@ -72,6 +72,11 @@ export default function Requests() {
     }
   };
 
+  const isNotYetReleased = (releaseDate) => {
+    if (!releaseDate) return false;
+    return new Date(releaseDate) > new Date();
+  };
+
   const getStatusIcon = (status) => {
     switch (status) {
       case 'approved': return <CheckCircle2 className="w-5 h-5 text-emerald-400" />;
@@ -119,9 +124,21 @@ export default function Requests() {
               </tr>
             </thead>
             <tbody className="divide-y divide-white/5">
-              {requests.map(req => (
+              {requests.map(req => {
+                const unreleased = req.status === 'approved' && isNotYetReleased(req.release_date);
+                return (
                 <tr key={req.id} className="hover:bg-slate-800/30 transition-colors">
-                  <td className="py-4 px-6 font-medium text-slate-200">{req.title}</td>
+                  <td className="py-4 px-6 font-medium text-slate-200">
+                    <div>{req.title}</div>
+                    {unreleased && req.release_date && (
+                      <div className="flex items-center gap-1 mt-1">
+                        <span className="flex items-center gap-1 text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-full bg-violet-500/15 text-violet-300 border border-violet-500/30">
+                          <CalendarClock className="w-3 h-3" />
+                          Coming Soon · {new Date(req.release_date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                        </span>
+                      </div>
+                    )}
+                  </td>
                   <td className="py-4 px-6 text-slate-400 uppercase text-xs tracking-wider">{req.type}</td>
                   <td className="py-4 px-6 text-slate-300">{req.requested_by}</td>
                   <td className="py-4 px-6">
@@ -161,7 +178,7 @@ export default function Requests() {
                     </div>
                   </td>
                 </tr>
-              ))}
+              )})}
               {requests.length === 0 && (
                 <tr>
                   <td colSpan="6" className="py-12 text-center text-slate-500">
@@ -173,23 +190,30 @@ export default function Requests() {
           </table>
         </div>
 
-        {/* Mobile cards */}
         <div className="md:hidden divide-y divide-white/5">
           {requests.length === 0 ? (
             <div className="py-12 text-center text-slate-500">No requests found.</div>
           ) : (
-            requests.map(req => (
+            requests.map(req => {
+              const unreleased = req.status === 'approved' && isNotYetReleased(req.release_date);
+              return (
               <div key={req.id} className="p-4 space-y-3 hover:bg-slate-800/20 transition-colors">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">
                     <h3 className="font-bold text-slate-200 text-sm truncate">{req.title}</h3>
-                    <div className="flex items-center gap-2 mt-1">
+                    <div className="flex items-center gap-2 mt-1 flex-wrap">
                       <span className="text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 border border-white/5">
                         {req.type}
                       </span>
                       <span className="text-[10px] text-slate-500">
                         {new Date(req.created_at).toLocaleDateString()}
                       </span>
+                      {unreleased && (
+                        <span className="flex items-center gap-1 text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-full bg-violet-500/15 text-violet-300 border border-violet-500/30">
+                          <CalendarClock className="w-3 h-3" />
+                          Coming Soon
+                        </span>
+                      )}
                     </div>
                   </div>
                   <span className="flex items-center gap-1.5 text-xs capitalize text-slate-300 shrink-0">
@@ -229,7 +253,8 @@ export default function Requests() {
                   </div>
                 </div>
               </div>
-            ))
+              );
+            })
           )}
         </div>
       </div>

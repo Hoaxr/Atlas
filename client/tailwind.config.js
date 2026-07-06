@@ -20,6 +20,10 @@ export default {
           950: '#083344',
         },
       },
+      fontFamily: {
+        sans: ['"Plus Jakarta Sans"', 'sans-serif'],
+        display: ['Outfit', 'sans-serif'],
+      },
 
       // --- Reusable animations ---
       animation: {

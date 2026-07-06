@@ -30,9 +30,13 @@ router.get('/pending-count', (req, res) => {
 router.get('/', (req, res) => {
   try {
     const requests = db.prepare(`
-      SELECT r.*, u.username as requested_by 
-      FROM requests r 
-      LEFT JOIN users u ON r.user_id = u.id 
+      SELECT r.*,
+        u.username as requested_by,
+        COALESCE(r.poster_path, m.poster_path, s.poster_path) as poster_path
+      FROM requests r
+      LEFT JOIN users u ON r.user_id = u.id
+      LEFT JOIN movies m ON r.tmdb_id = m.tmdb_id AND r.type = 'movie'
+      LEFT JOIN shows s ON r.tmdb_id = s.tmdb_id AND r.type = 'tv'
       ORDER BY r.created_at DESC
     `).all();
     res.json({ status: 'success', data: requests });
@@ -44,7 +48,7 @@ router.get('/', (req, res) => {
 // POST /api/requests (Create request)
 router.post('/', (req, res) => {
   try {
-    const { tmdb_id, type, title } = req.body;
+    const { tmdb_id, type, title, release_date, poster_path } = req.body;
     const user_id = req.user?.id;
 
     if (!user_id) {
@@ -60,8 +64,8 @@ router.post('/', (req, res) => {
       return res.status(400).json({ status: 'error', message: 'This item has already been requested by another user' });
     }
 
-    const result = db.prepare('INSERT INTO requests (user_id, tmdb_id, type, title, status) VALUES (?, ?, ?, ?, \'pending\')').run(
-      user_id, tmdb_id, type, title
+    const result = db.prepare('INSERT INTO requests (user_id, tmdb_id, type, title, status, release_date, poster_path) VALUES (?, ?, ?, ?, \'pending\', ?, ?)').run(
+      user_id, tmdb_id, type, title, release_date || null, poster_path || null
     );
 
     res.json({ status: 'success', message: 'Request submitted successfully', data: { id: result.lastInsertRowid } });

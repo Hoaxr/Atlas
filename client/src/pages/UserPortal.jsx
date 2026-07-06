@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Search, Loader2, Plus, Clock, CheckCircle2, XCircle, LogOut, Key, Star, X, Film, Tv, Info } from 'lucide-react';
+import { Search, Loader2, Plus, Clock, CheckCircle2, XCircle, LogOut, Key, Star, X, Film, Tv, Info, CalendarClock, Hourglass } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import api from '../lib/api';
 import Logo from '../components/layout/Logo';
@@ -35,7 +35,23 @@ export default function UserPortal() {
         api.get('/trakt/trending/movies'),
         api.get('/trakt/trending/shows')
       ]);
-      setRequests(reqsRes.data?.data || []);
+      let reqs = reqsRes.data?.data || [];
+
+      // Backfill poster_path for requests that don't have one yet (old requests)
+      const missing = reqs.filter(r => !r.poster_path);
+      if (missing.length > 0) {
+        const results = await Promise.allSettled(
+          missing.map(r => {
+            const endpoint = r.type === 'movie' ? `/tmdb/movie/${r.tmdb_id}` : `/tmdb/show/${r.tmdb_id}`;
+            return api.get(endpoint).then(res => ({ id: r.id, poster_path: res.data?.data?.poster_path || null }));
+          })
+        );
+        const posterMap = {};
+        results.forEach(r => { if (r.status === 'fulfilled' && r.value.poster_path) posterMap[r.value.id] = r.value.poster_path; });
+        reqs = reqs.map(r => posterMap[r.id] ? { ...r, poster_path: posterMap[r.id] } : r);
+      }
+
+      setRequests(reqs);
       setLibraryMovies(moviesRes.data?.data || []);
       setLibraryShows(showsRes.data?.data || []);
       setTrendingMovies(trendMoviesRes.data?.data || []);
@@ -86,6 +102,10 @@ export default function UserPortal() {
         : item.type === 'movie' || (item.title !== undefined && !item.name);
       const mediaType = isMovie ? 'movie' : 'tv';
 
+      // Grab the release date and poster from the item if available
+      const releaseDate = item.release_date || item.first_air_date || null;
+      const posterPath = item.poster_path || null;
+
       const existingRequest = requests.find(r => r.tmdb_id === tmdbId && r.user_id === user?.id);
 
       if (existingRequest) {
@@ -95,7 +115,9 @@ export default function UserPortal() {
         await api.post('/requests', {
           tmdb_id: tmdbId,
           type: mediaType,
-          title: item.title || item.name
+          title: item.title || item.name,
+          release_date: releaseDate,
+          poster_path: posterPath
         });
         customAlert('Requested successfully!');
       }
@@ -109,6 +131,11 @@ export default function UserPortal() {
     localStorage.removeItem('atlas_token');
     localStorage.removeItem('atlas_user');
     navigate('/login');
+  };
+
+  const isNotYetReleased = (releaseDate) => {
+    if (!releaseDate) return false;
+    return new Date(releaseDate) > new Date();
   };
 
   const getStatusIcon = (status) => {
@@ -356,7 +383,16 @@ export default function UserPortal() {
                       ? libraryMovies.some(m => m.tmdb_id === req.tmdb_id)
                       : libraryShows.some(s => s.tmdb_id === req.tmdb_id);
                     
-                    const displayStatus = inLibrary ? 'Available' : req.status;
+                    const displayStatus = inLibrary ? 'Approved' : req.status;
+
+                    // Get release date — fall back to library item's release_date for in-library items
+                    const libraryItem = req.type === 'movie'
+                      ? libraryMovies.find(m => m.tmdb_id === req.tmdb_id)
+                      : libraryShows.find(s => s.tmdb_id === req.tmdb_id);
+                    const effectiveReleaseDate = req.release_date || libraryItem?.release_date || null;
+
+                    const unreleased = isNotYetReleased(effectiveReleaseDate);
+                    const releaseYear = effectiveReleaseDate ? new Date(effectiveReleaseDate).getFullYear() : null;
 
                     return (
                     <div 
@@ -365,15 +401,58 @@ export default function UserPortal() {
                         setSelectedMediaId(req.tmdb_id);
                         setSelectedMediaType(req.type === 'movie' ? 'movie' : 'tv');
                       }}
-                      className="flex items-center justify-between p-4 rounded-xl bg-slate-800/50 border border-white/5 hover:bg-slate-800 transition-colors cursor-pointer"
+                      className="flex items-center gap-4 p-3 rounded-xl bg-slate-800/50 border border-white/5 hover:bg-slate-800 hover:border-white/10 transition-all cursor-pointer group"
                     >
-                      <div className="truncate pr-4">
-                        <h3 className="font-medium text-white truncate">{req.title}</h3>
-                        <div className="text-xs text-slate-400 uppercase tracking-wider mt-1">{req.type}</div>
+                      {/* Poster thumbnail */}
+                      <div className="w-12 h-[72px] rounded-lg overflow-hidden bg-slate-700 flex-shrink-0 shadow-md">
+                        {(req.poster_path || libraryItem?.poster_path) ? (
+                          <img
+                            src={`https://image.tmdb.org/t/p/w92${req.poster_path || libraryItem?.poster_path}`}
+                            alt={req.title}
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center">
+                            {req.type === 'movie' ? <Film className="w-5 h-5 text-slate-500" /> : <Tv className="w-5 h-5 text-slate-500" />}
+                          </div>
+                        )}
                       </div>
-                      <div className="flex items-center gap-2 flex-shrink-0">
-                        <span className="text-sm font-medium capitalize text-slate-300">{displayStatus}</span>
-                        {getStatusIcon(displayStatus)}
+
+                      {/* Info */}
+                      <div className="flex-1 min-w-0">
+                        <h3 className="font-semibold text-white truncate group-hover:text-cyan-300 transition-colors">{req.title}</h3>
+                        <div className="flex items-center gap-2 mt-1 flex-wrap">
+                          <span className="text-[10px] uppercase tracking-wider font-bold px-1.5 py-0.5 rounded bg-slate-700 text-slate-400">
+                            {req.type === 'movie' ? 'Movie' : 'TV Show'}
+                          </span>
+                          {releaseYear && (
+                            <span className="text-xs text-slate-500">{releaseYear}</span>
+                          )}
+                          {/* Coming Soon badge */}
+                          {unreleased && (
+                            <span className="flex items-center gap-1 text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-full bg-violet-500/15 text-violet-300 border border-violet-500/30">
+                              <CalendarClock className="w-3 h-3" />
+                              Coming Soon
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Status */}
+                      <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                        <div className="flex items-center gap-1.5">
+                          {getStatusIcon(displayStatus)}
+                          <span className={`text-xs font-semibold capitalize ${
+                            displayStatus.toLowerCase() === 'approved' ? 'text-emerald-400' :
+                            displayStatus.toLowerCase() === 'denied' ? 'text-rose-400' :
+                            'text-amber-400'
+                          }`}>{displayStatus}</span>
+                        </div>
+                        {unreleased && req.release_date && (
+                          <span className="text-[10px] text-slate-500">
+                            {new Date(req.release_date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                          </span>
+                        )}
                       </div>
                     </div>
                   )})}

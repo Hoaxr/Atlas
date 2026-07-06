@@ -42,7 +42,7 @@ export const FilterSelect = memo(function FilterSelect({ value, onChange, label,
         className={`flex items-center gap-1.5 text-xs font-medium px-3 py-2 rounded-lg border transition-colors ${
           isOpen || value !== 'all'
             ? 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30'
-            : 'bg-slate-900/50 text-slate-400 border-white/5 hover:bg-slate-800/50 hover:text-slate-200'
+            : 'bg-slate-900/50 text-slate-400 border-white/5 hover:bg-slate-800/50 hover:text-slate-200 shadow-[inset_0_1px_3px_rgba(0,0,0,0.4)]'
         }`}
       >
         {selected.label}

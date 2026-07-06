@@ -72,7 +72,7 @@ export default function ModalShell({
 
       {/* Panel */}
       <div
-        className={`relative bg-slate-900 border border-white/10 rounded-2xl shadow-2xl w-full ${maxW} ${noScroll ? '' : 'max-h-[85vh] flex flex-col'} ${className}`}
+        className={`relative bg-slate-900 border border-white/10 rounded-2xl shadow-2xl w-full ${maxW} ${noScroll ? '' : 'max-h-[85vh] flex flex-col'} modal-animate-shell open ${className}`}
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"

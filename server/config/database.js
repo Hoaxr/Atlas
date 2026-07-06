@@ -254,6 +254,8 @@ try { db.exec("UPDATE shows SET status = 'downloaded' WHERE folder_path IS NOT N
 try { db.exec("UPDATE episodes SET status = 'downloaded' WHERE file_path IS NOT NULL AND file_path != '' AND status != 'downloading'"); } catch { /* ignore */ }
 // Track watched TMDB IDs even after library removal
 try { db.exec("CREATE TABLE IF NOT EXISTS watched_tmdb (tmdb_id INTEGER PRIMARY KEY, type TEXT NOT NULL);"); } catch { /* ignore */ }
+try { db.exec("ALTER TABLE requests ADD COLUMN release_date TEXT;"); } catch { /* ignore */ }
+try { db.exec("ALTER TABLE requests ADD COLUMN poster_path TEXT;"); } catch { /* ignore */ }
 
 // Seed default quality profile if none exists
 const existingProfile = db.prepare('SELECT id FROM quality_profiles LIMIT 1').get();

@@ -14,6 +14,44 @@ import ManualSearchModal from '../components/ManualSearchModal';
 import StickyBar from '../components/shared/StickyBar';
 import { useStickyBar } from '../lib/useStickyBar';
 
+function AlphabetIndex({ alphaFilter, setAlphaFilter, items }) {
+  const letters = '#ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
+  const availableLetters = useMemo(() => {
+    const set = new Set();
+    items.forEach(item => {
+      const firstChar = (item.title || '').charAt(0).toUpperCase();
+      if (/^[A-Z]$/.test(firstChar)) set.add(firstChar);
+      else set.add('#');
+    });
+    return set;
+  }, [items]);
+
+  return (
+    <div className="hidden md:flex items-center gap-0.5 overflow-x-auto bg-slate-900/90 shadow-[inset_0_2px_8px_rgba(0,0,0,0.7)] rounded-full py-1 px-2.5 ml-auto">
+      {letters.map(letter => {
+        const isAvailable = availableLetters.has(letter);
+        const isActive = alphaFilter === letter;
+        return (
+          <button
+            key={letter}
+            onClick={() => setAlphaFilter(isActive ? null : letter)}
+            disabled={!isAvailable}
+            className={`text-sm font-bold min-w-[26px] h-6 flex items-center justify-center rounded transition-colors ${
+              isActive
+                ? 'text-cyan-400 bg-cyan-500/20'
+                : isAvailable
+                  ? 'text-slate-400 hover:text-cyan-400 hover:bg-slate-800 cursor-pointer'
+                  : 'text-slate-700 cursor-default'
+            }`}
+          >
+            {letter}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function Dashboard() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -83,6 +121,7 @@ export default function Dashboard() {
   const [sort, setSort] = useState(() => localStorage.getItem(scopeKey('Sort')) || 'added_desc');
   const [viewStyle, setViewStyle] = useState(() => localStorage.getItem('dashboardViewStyle') || 'grid');
   const [searchQuery, setSearchQuery] = useState('');
+  const [alphaFilter, setAlphaFilter] = useState(null);
   
   const searchInputRef = useRef(null);
   const { headerRef, stickyVisible: stickySearchVisible } = useStickyBar();
@@ -171,12 +210,28 @@ export default function Dashboard() {
         return <td key={colKey} className="py-2.5 px-4 text-slate-400 text-sm">{formatSize(item.file_size || item.folder_size || 0)}</td>;
       case 'subtitles':
         const subsList = Array.isArray(item.subtitles) ? item.subtitles : (() => { try { return JSON.parse(item.subtitles || '[]'); } catch { return []; } })();
+        const existingLangs = subsList.map(s => typeof s === 'string' ? s.toLowerCase() : (s.lang || '').toLowerCase()).filter(Boolean);
         return (
           <td key={colKey} className="py-2.5 px-4">
-            {subsList.length > 0 ? (
+            {providerLangs && providerLangs.length > 0 ? (
+              <div className="flex flex-wrap gap-1">
+                {providerLangs.map(code => {
+                  const exists = existingLangs.includes(code.toLowerCase());
+                  return (
+                    <span key={code} className={`text-[10px] font-bold uppercase px-1.5 py-0.5 rounded border ${
+                      exists
+                        ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/20'
+                        : 'bg-rose-500/15 text-rose-400 border-rose-500/20'
+                    }`}>
+                      {code}
+                    </span>
+                  );
+                })}
+              </div>
+            ) : subsList.length > 0 ? (
               <div className="flex flex-wrap gap-1">
                 {subsList.map((sub, i) => (
-                  <span key={i} className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 border border-slate-700/50" title={sub.file || sub}>
+                  <span key={i} className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/20" title={sub.file || sub}>
                     {typeof sub === 'string' ? sub : (sub.lang || '??')}
                   </span>
                 ))}
@@ -227,7 +282,7 @@ export default function Dashboard() {
     return true;
   });
 
-  const { profiles: qualityProfiles } = useSettings();
+  const { profiles: qualityProfiles, providerLangs } = useSettings();
 
   // Apply URL params on mount (from Statistics page clicks)
   useEffect(() => {
@@ -458,6 +513,15 @@ export default function Dashboard() {
       }
     }
 
+    // Alphabet filter
+    if (alphaFilter) {
+      items = items.filter(item => {
+        const firstChar = (item.title || '').charAt(0).toUpperCase();
+        if (/^[A-Z]$/.test(firstChar)) return firstChar === alphaFilter;
+        return alphaFilter === '#';
+      });
+    }
+
     // Sort
     items.sort((a, b) => {
       if (sort === 'added_desc') return new Date(b.added_at) - new Date(a.added_at);
@@ -485,7 +549,7 @@ export default function Dashboard() {
     });
 
     return items;
-  }, [movies, shows, searchQuery, statusFilter, watchedFilter, yearFilter, genreFilter, qualityFilter, resolutionFilter, ratingFilter, tmdbStatusFilter, sort]);
+  }, [movies, shows, searchQuery, statusFilter, watchedFilter, yearFilter, genreFilter, qualityFilter, resolutionFilter, ratingFilter, tmdbStatusFilter, alphaFilter, sort]);
 
   // --- Active filter chips ---
   const activeFilters = [];
@@ -503,6 +567,7 @@ export default function Dashboard() {
   if (resolutionFilter !== 'all') activeFilters.push({ key: 'resolution', label: resolutionFilter });
   if (ratingFilter !== 'all') activeFilters.push({ key: 'rating', label: `Rating: ${ratingFilter}` });
   if (tmdbStatusFilter !== 'all') activeFilters.push({ key: 'tmdbStatus', label: `Show: ${tmdbStatusFilter}` });
+  if (alphaFilter) activeFilters.push({ key: 'alpha', label: alphaFilter });
 
   const clearFilter = (key) => {
     if (key === 'search') setSearchQuery('');
@@ -514,6 +579,7 @@ export default function Dashboard() {
     if (key === 'resolution') setResolutionFilter('all');
     if (key === 'rating') setRatingFilter('all');
     if (key === 'tmdbStatus') setTmdbStatusFilter('all');
+    if (key === 'alpha') setAlphaFilter(null);
   };
 
   const clearAllFilters = () => {
@@ -526,6 +592,7 @@ export default function Dashboard() {
     setResolutionFilter('all');
     setRatingFilter('all');
     setTmdbStatusFilter('all');
+    setAlphaFilter(null);
   };
 
   const activeFilterCount = activeFilters.length;
@@ -833,6 +900,12 @@ export default function Dashboard() {
                     ))}
                   </FilterSelect>
                 )}
+                {/* Alphabet Index */}
+                <AlphabetIndex 
+                  alphaFilter={alphaFilter} 
+                  setAlphaFilter={setAlphaFilter} 
+                  items={displayItems}
+                />
               </div>
 
               {/* Genre Chips Row */}
@@ -905,9 +978,9 @@ export default function Dashboard() {
           onAction={handleBulkAction}
         />
 
-
         {displayItems.length > 0 ? (
-          viewStyle === 'grid' ? (
+          <div>
+          {viewStyle === 'grid' ? (
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 gap-3 sm:gap-4">
               {paginatedItems.map(item => (
                 <div 
@@ -926,7 +999,7 @@ export default function Dashboard() {
                       else navigate(`/movies/${item.id}`);
                     }
                   }}
-                  className={`cursor-pointer glass-panel rounded-xl overflow-hidden group hover:scale-[1.02] transition-transform duration-300 relative flex flex-col focus:outline-none focus:ring-2 focus:ring-cyan-500/50`}
+                  className={`cursor-pointer glass-panel interactive-glow-card scroll-reveal-item rounded-xl overflow-hidden group hover:scale-[1.02] transition-transform duration-300 relative flex flex-col focus:outline-none focus:ring-2 focus:ring-cyan-500/50`}
                 >
                   <div className="absolute top-2 left-2 z-20">
                     <button 
@@ -1224,7 +1297,8 @@ export default function Dashboard() {
               </tbody>
             </table>
           </div>
-        ) : null
+        ) : null}
+          </div>
         ) : loading ? (
           <div className="flex flex-col items-center justify-center py-24 text-slate-400 gap-4">
             <div className="w-8 h-8 border-2 border-cyan-500/50 border-t-cyan-400 rounded-full animate-spin" />

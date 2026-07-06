@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
+import { motion } from 'framer-motion';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../lib/api';
-import { Search as SearchIcon, Plus, Tv, Film, Star, CheckCircle2, CheckSquare, Square, ListFilter, X, Loader2 } from 'lucide-react';
+import { Search as SearchIcon, Plus, Tv, Film, Star, CheckCircle2, CheckSquare, ListFilter, X, Loader2 } from 'lucide-react';
 import MediaDetailsModal from '../components/MediaDetailsModal';
 import MediaRow from '../components/MediaRow';
 import InlineError from '../components/shared/InlineError';
@@ -235,8 +236,8 @@ export default function Discover() {
     const displayType = media.media_type === 'tv' ? 'show' : media.media_type === 'movie' ? 'movie' : mode === 'movies' ? 'movie' : 'show';
 
     const cardClass = isGrid 
-      ? "glass-panel rounded-xl overflow-hidden group hover:scale-[1.02] transition-transform duration-300 relative"
-      : "flex-none w-40 sm:w-44 glass-panel rounded-xl overflow-hidden group hover:scale-[1.02] transition-transform duration-300 relative snap-start";
+      ? "glass-panel interactive-glow-card scroll-reveal-item rounded-xl overflow-hidden group hover:scale-[1.02] transition-transform duration-300 relative"
+      : "flex-none w-40 sm:w-44 glass-panel interactive-glow-card scroll-reveal-horizontal rounded-xl overflow-hidden group hover:scale-[1.02] transition-transform duration-300 relative snap-start";
 
     return (
       <div key={keyId} className={cardClass}>
@@ -322,18 +323,24 @@ export default function Discover() {
         
         {/* Mode Toggle */}
         <div className="flex items-center gap-2 shrink-0">
-          <div className="flex bg-slate-900/50 p-0.5 sm:p-1 rounded-xl border border-white/5 shadow-inner">
+          <div className="flex relative bg-slate-800/60 p-0.5 rounded-xl border border-white/5">
+            <motion.div
+              layoutId="discover-mode-slider"
+              className={`absolute top-0.5 bottom-0.5 rounded-lg shadow-sm ${mode === 'movies' ? 'left-0.5 bg-cyan-500/15 border border-cyan-500/20' : 'right-0.5 bg-purple-500/15 border border-purple-500/20'}`}
+              style={{ width: 'calc(50% - 2px)' }}
+              transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+            />
             <button 
               onClick={() => setMode('movies')}
-              className={`flex items-center space-x-1.5 sm:space-x-2 px-2 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-all ${mode === 'movies' ? 'bg-cyan-500/20 text-cyan-400 shadow-sm' : 'text-slate-400 hover:text-slate-200'}`}
+              className={`relative z-10 flex-1 flex items-center justify-center gap-2 px-4 sm:px-6 py-2.5 rounded-lg text-sm font-semibold whitespace-nowrap transition-colors duration-200 ${mode === 'movies' ? 'text-cyan-300' : 'text-slate-500 hover:text-slate-300'}`}
             >
-              <Film className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> <span className="hidden sm:inline">Movies</span>
+              <Film className="w-4 h-4 shrink-0" /> Movies
             </button>
             <button 
               onClick={() => setMode('shows')}
-              className={`flex items-center space-x-1.5 sm:space-x-2 px-2 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-all ${mode === 'shows' ? 'bg-purple-500/20 text-purple-400 shadow-sm' : 'text-slate-400 hover:text-slate-200'}`}
+              className={`relative z-10 flex-1 flex items-center justify-center gap-2 px-4 sm:px-6 py-2.5 rounded-lg text-sm font-semibold whitespace-nowrap transition-colors duration-200 ${mode === 'shows' ? 'text-purple-300' : 'text-slate-500 hover:text-slate-300'}`}
             >
-              <Tv className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> <span className="hidden sm:inline">TV Shows</span>
+              <Tv className="w-4 h-4 shrink-0" /> TV Shows
             </button>
           </div>
           
@@ -348,17 +355,19 @@ export default function Discover() {
                 <ListFilter className="w-5 h-5" />
               </button>
               {rowsMenuOpen && (
-                <div className="absolute right-0 top-full mt-3 w-52 bg-slate-800 border border-white/10 rounded-xl shadow-xl z-[60] overflow-hidden text-sm">
-                  <div className="p-2 border-b border-white/5 font-semibold text-slate-300">Visible Rows</div>
-                  <div className="p-2 flex flex-col gap-1">
+                <div className="absolute right-0 top-full mt-3 w-48 bg-slate-800 border border-white/10 rounded-xl shadow-xl z-[60] overflow-hidden">
+                  <div className="px-4 py-2.5 border-b border-white/10 text-xs font-bold text-slate-400 uppercase tracking-wider">Visible Rows</div>
+                  <div className="p-1.5 flex flex-col gap-0.5">
                     {ROW_KEYS.filter(k => k !== 'upcoming' || mode === 'movies').map(key => (
-                      <label key={key} className="flex items-center gap-2 px-2 py-1.5 hover:bg-white/5 rounded cursor-pointer" onClick={(e) => { e.preventDefault(); setVisibleRows(prev => ({ ...prev, [key]: !prev[key] })); }}>
+                      <label key={key} className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-white/5 cursor-pointer transition-colors group" onClick={(e) => { e.preventDefault(); setVisibleRows(prev => ({ ...prev, [key]: !prev[key] })); }}>
                         {visibleRows[key] ? (
-                          <CheckSquare className="w-4 h-4 text-cyan-400 flex-shrink-0" />
+                          <div className="w-4 h-4 rounded bg-cyan-500/20 border border-cyan-500/50 flex items-center justify-center">
+                            <CheckSquare className="w-3.5 h-3.5 text-cyan-400" />
+                          </div>
                         ) : (
-                          <Square className="w-4 h-4 text-slate-500 flex-shrink-0" />
+                          <div className="w-4 h-4 rounded bg-slate-800 border border-slate-600/50 group-hover:border-slate-500 transition-colors" />
                         )}
-                        <span className="text-slate-300 select-none">{ROW_LABELS[key]}</span>
+                        <span className="text-sm text-slate-300 capitalize select-none group-hover:text-white transition-colors">{ROW_LABELS[key]}</span>
                       </label>
                     ))}
                   </div>

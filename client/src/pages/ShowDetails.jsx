@@ -353,6 +353,7 @@ export default function ShowDetails() {
                 </div>
               </div>
 
+              <div className="flex-1 bg-slate-900/60" />
             </div>
 
             {/* ─── Right: Content Column ─── */}
@@ -504,9 +505,9 @@ export default function ShowDetails() {
                 </div>
 
                 {/* RESOLUTION | SIZE | LANGUAGE | WATCHED */}
-                <div className="grid grid-cols-4 py-3 gap-4 bg-slate-800/30 rounded-xl px-4">
-                  <div className="flex items-center gap-2">
-                    <Film className="w-4 h-4 text-purple-400 shrink-0" />
+                <div className="grid grid-cols-[1fr_20px_1fr_20px_1fr_20px_1fr] py-3 bg-slate-800/30 rounded-xl px-4 items-center">
+                  <div className="flex items-center gap-3">
+                    <Film className="w-5 h-5 text-purple-400 shrink-0" />
                     <div>
                       <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500 block">Resolution</span>
                       <span className="text-sm font-semibold text-slate-200">
@@ -525,22 +526,25 @@ export default function ShowDetails() {
                       </span>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <HardDrive className="w-4 h-4 text-purple-400 shrink-0" />
+                  <div className="w-px h-10 bg-white/10 justify-self-center" />
+                  <div className="flex items-center gap-3">
+                    <HardDrive className="w-5 h-5 text-purple-400 shrink-0" />
                     <div>
                       <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500 block">Size</span>
                       <span className="text-sm font-semibold text-slate-200">{formatSize(show.folder_size)}</span>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <Globe className="w-4 h-4 text-purple-400 shrink-0" />
+                  <div className="w-px h-10 bg-white/10 justify-self-center" />
+                  <div className="flex items-center gap-3">
+                    <Globe className="w-5 h-5 text-purple-400 shrink-0" />
                     <div>
                       <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500 block">Language</span>
                       <span className="text-sm font-semibold text-slate-200">{(tmdbDetails?.original_language || 'EN').toUpperCase()}</span>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <Eye className="w-4 h-4 text-purple-400 shrink-0" />
+                  <div className="w-px h-10 bg-white/10 justify-self-center" />
+                  <div className="flex items-center gap-3">
+                    <Eye className="w-5 h-5 text-purple-400 shrink-0" />
                     <div>
                       <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500 block">Watched</span>
                       <span className={`text-sm font-semibold ${show.watched ? 'text-emerald-400' : 'text-slate-500'}`}>
@@ -560,16 +564,19 @@ export default function ShowDetails() {
                         <span className="text-xs text-slate-400">Updating...</span>
                       </div>
                     ) : (
-                      <select
-                        className="bg-slate-800 border border-white/10 rounded-lg text-xs text-slate-300 px-3 py-1.5 focus:border-purple-500/50 focus:outline-none cursor-pointer w-full max-w-[200px]"
-                        value={show.quality_profile_id || ''}
-                        onChange={(e) => handleQualityChange(e.target.value ? parseInt(e.target.value) : null)}
-                      >
-                        <option value="">Unassigned</option>
-                        {profiles.filter(p => !p.media_type || p.media_type === 'both' || p.media_type === 'shows').map(p => (
-                          <option key={p.id} value={p.id}>{p.name}</option>
-                        ))}
-                      </select>
+                      <div className="relative">
+                        <select
+                          className="bg-slate-900/50 border border-white/5 rounded-lg text-xs text-slate-400 pl-3 pr-8 py-2 focus:border-purple-500/50 focus:outline-none cursor-pointer w-full max-w-[200px] shadow-[inset_0_1px_3px_rgba(0,0,0,0.4)] hover:bg-slate-800/50 hover:text-slate-200 transition-colors appearance-none"
+                          value={show.quality_profile_id || ''}
+                          onChange={(e) => handleQualityChange(e.target.value ? parseInt(e.target.value) : null)}
+                        >
+                          <option value="">Unassigned</option>
+                          {profiles.filter(p => !p.media_type || p.media_type === 'both' || p.media_type === 'shows').map(p => (
+                            <option key={p.id} value={p.id}>{p.name}</option>
+                          ))}
+                        </select>
+                        <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500 pointer-events-none" />
+                      </div>
                     )}
                   </div>
                 </div>
@@ -778,8 +785,8 @@ export default function ShowDetails() {
                                 ) : (
                                   <>
                                     {(() => {
-                                      const existingCodes = ep.subtitles?.map(s => s.lang) || [];
-                                      const hasExistingSub = ep.subtitles?.length > 0;
+                                      const subsData = (() => { const raw = ep.subtitles; if (!raw) return []; if (Array.isArray(raw)) return raw; try { return JSON.parse(raw); } catch { return []; } })(); const existingCodes = subsData.map(s => typeof s === 'string' ? s : s.lang).filter(Boolean);
+                                      const hasExistingSub = subsData.length > 0;
                                       const subKey = `${ep.id}`;
                                       return providerLangs.map(code => (
                                         <SubtitleLanguageBadge
@@ -923,8 +930,8 @@ export default function ShowDetails() {
                                     <span className="text-[10px] text-slate-600">—</span>
                                   ) : (
                                     (() => {
-                                      const existingCodes = ep.subtitles?.map(s => s.lang) || [];
-                                      const hasExistingSub = ep.subtitles?.length > 0;
+                                      const subsData = (() => { const raw = ep.subtitles; if (!raw) return []; if (Array.isArray(raw)) return raw; try { return JSON.parse(raw); } catch { return []; } })(); const existingCodes = subsData.map(s => typeof s === 'string' ? s : s.lang).filter(Boolean);
+                                      const hasExistingSub = subsData.length > 0;
                                       const subKey = `m-${ep.id}`;
                                       return providerLangs.map(code => (
                                         <SubtitleLanguageBadge
