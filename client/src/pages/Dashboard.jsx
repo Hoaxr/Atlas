@@ -4,7 +4,7 @@ import api from '../lib/api';
 import { Activity, Film, Tv, Search, CheckCircle2, AlertCircle, Bookmark, BookmarkMinus, LayoutGrid, List, Star, Info, X, RotateCcw, Filter as FilterIcon, CheckSquare, Square, Columns, Plus } from 'lucide-react';
 import { customAlert, customConfirm } from '../utils/alerts';
 import { cachedMovies, cachedShows, setCachedMovies, setCachedShows } from '../lib/libraryCache';
-import { formatSize, parseResolution } from '../lib/format';
+import { formatSize, parseResolution, parseCodec } from '../lib/format';
 import { useSettings } from '../lib/useSettings';
 import useWebSocket from '../lib/useWebSocket';
 import { useOutsideClick } from '../lib/useOutsideClick';
@@ -196,16 +196,20 @@ export default function Dashboard() {
             ) : <span className="text-slate-600">—</span>}
           </td>
         );
-      case 'resolution':
+
+      case 'resolution': {
+        const resVal = parseResolution(item.scene_name || item.sample_episode_path || item.file_path);
+        const codecVal = item.codec || parseCodec(item.scene_name || item.sample_episode_path || item.file_path);
         return (
           <td key={colKey} className="py-2.5 px-4 text-slate-300">
-            {parseResolution(item.scene_name || item.sample_episode_path || item.file_path) !== 'Unknown' ? (
-              <span className="px-2 py-0.5 rounded text-xs font-medium bg-slate-800 text-slate-300 border border-slate-700">
-                {parseResolution(item.scene_name || item.sample_episode_path || item.file_path)}
+            {resVal !== 'Unknown' ? (
+              <span className="px-2 py-0.5 rounded text-xs font-medium bg-slate-800 text-slate-300 border border-slate-700 whitespace-nowrap">
+                {codecVal !== 'Unknown' ? `${resVal} (${codecVal})` : resVal}
               </span>
             ) : <span className="text-slate-600">—</span>}
           </td>
         );
+      }
       case 'size':
         return <td key={colKey} className="py-2.5 px-4 text-slate-400 text-sm">{formatSize(item.file_size || item.folder_size || 0)}</td>;
       case 'subtitles':

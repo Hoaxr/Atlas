@@ -2,9 +2,10 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import api from '../lib/api';
-import { formatSize, parseResolution, LANG_NAME } from '../lib/format';
+import { formatSize, parseResolution, parseCodec, getReleaseTitleFromPath, LANG_NAME } from '../lib/format';
 import { useSettings } from '../lib/useSettings';
 import { useTMDBDetails } from '../lib/useTMDBDetails';
+import { setCachedMovies } from '../lib/libraryCache';
 import {
   ArrowLeft, Search, Download, Film, PlayCircle, Bookmark, BookmarkMinus,
   Star, X, RefreshCw, Loader2, ChevronDown, ChevronRight, ChevronLeft,
@@ -105,6 +106,9 @@ export default function MovieDetails() {
 
   useEffect(() => {
     fetchMovieData(false);
+    return () => {
+      setCachedMovies(null);
+    };
   }, [fetchMovieData]);
 
   const refreshAll = useCallback(async () => {
@@ -202,7 +206,9 @@ export default function MovieDetails() {
   if (!movie) return null;
 
   /* ─── Derived data ─── */
+
   const resolution = parseResolution(movie.scene_name || movie.file_path);
+  const codec = movie.codec || parseCodec(movie.scene_name || movie.file_path);
   const genres = tmdbDetails?.genres || [];
   const castList = tmdbDetails?.credits?.cast?.slice(0, 5) || [];
   const addedDate = movie.created_at ? new Date(movie.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : null;
@@ -555,7 +561,7 @@ export default function MovieDetails() {
                     <div>
                       <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500 block">Resolution</span>
                       <span className="text-sm font-semibold text-slate-200">
-                        {resolution !== 'Unknown' ? resolution : 'Any (1080p+)'}
+                        {resolution !== 'Unknown' ? (codec !== 'Unknown' ? `${resolution} (${codec})` : resolution) : 'Any (1080p+)'}
                       </span>
                     </div>
                   </div>
@@ -591,8 +597,10 @@ export default function MovieDetails() {
                 <div className="grid grid-cols-2 py-3 gap-4">
                   <div>
                     <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500 block mb-1">Grabbed Release</span>
-                    {movie.scene_name ? (
-                      <p className="text-xs font-mono text-slate-300 truncate" title={movie.scene_name}>{movie.scene_name}</p>
+                    {(movie.scene_name || movie.file_path) ? (
+                      <p className="text-xs font-mono text-slate-300 truncate" title={movie.scene_name || getReleaseTitleFromPath(movie.file_path)}>
+                        {movie.scene_name || getReleaseTitleFromPath(movie.file_path)}
+                      </p>
                     ) : (
                       <p className="text-slate-600 italic text-xs">No release grabbed</p>
                     )}

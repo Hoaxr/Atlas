@@ -218,6 +218,31 @@ try { db.exec("ALTER TABLE movies ADD COLUMN monitored INTEGER DEFAULT 1;"); } c
 // Ensure resolution columns exist
 try { db.exec("ALTER TABLE movies ADD COLUMN resolution TEXT;"); } catch { /* ignore */ }
 try { db.exec("ALTER TABLE episodes ADD COLUMN resolution TEXT;"); } catch { /* ignore */ }
+
+// Ensure codec columns exist
+try { db.exec("ALTER TABLE movies ADD COLUMN codec TEXT;"); } catch { /* ignore */ }
+try { db.exec("ALTER TABLE episodes ADD COLUMN codec TEXT;"); } catch { /* ignore */ }
+
+// Populate codec from existing data
+try {
+  db.exec(`
+    UPDATE movies SET codec = CASE
+      WHEN scene_name LIKE '%x265%' OR scene_name LIKE '%h265%' OR scene_name LIKE '%hevc%' OR file_path LIKE '%x265%' OR file_path LIKE '%h265%' OR file_path LIKE '%hevc%' THEN 'x265'
+      WHEN scene_name LIKE '%x264%' OR scene_name LIKE '%h264%' OR scene_name LIKE '%avc%' OR file_path LIKE '%x264%' OR file_path LIKE '%h264%' OR file_path LIKE '%avc%' THEN 'x264'
+      ELSE NULL
+    END
+    WHERE codec IS NULL
+  `);
+  db.exec(`
+    UPDATE episodes SET codec = CASE
+      WHEN scene_name LIKE '%x265%' OR scene_name LIKE '%h265%' OR scene_name LIKE '%hevc%' OR file_path LIKE '%x265%' OR file_path LIKE '%h265%' OR file_path LIKE '%hevc%' THEN 'x265'
+      WHEN scene_name LIKE '%x264%' OR scene_name LIKE '%h264%' OR scene_name LIKE '%avc%' OR file_path LIKE '%x264%' OR file_path LIKE '%h264%' OR file_path LIKE '%avc%' THEN 'x264'
+      ELSE NULL
+    END
+    WHERE codec IS NULL
+  `);
+} catch { /* ignore */ }
+
 // Populate resolution from existing scene_name data
 try {
   db.exec(`

@@ -240,12 +240,13 @@ router.post('/:id/refresh', async (req, res, next) => {
 
     let bestFile = null;
     for (const dirPath of scanPaths) {
+      dirCache.delete(dirPath);
       const result = await findBestFile(dirPath);
       if (result && (!bestFile || result.size > bestFile.size)) bestFile = result;
     }
 
     if (bestFile) {
-      const { getResolution } = require('../../utils/videoUtils');
+      const { getResolution, getCodec } = require('../../utils/videoUtils');
       // Preserve existing scene_name unless it's empty/missing/auto-generated
       let resName = movie.scene_name;
       if (!resName || resName === '' || resName.startsWith('Unknown ')) {
@@ -269,8 +270,17 @@ router.post('/:id/refresh', async (req, res, next) => {
       if (!resolution) {
         try { resolution = await getResolution(bestFile.path); } catch { /* ignore */ }
       }
-      db.prepare('UPDATE movies SET file_path = ?, file_size = ?, scene_name = ?, status = ?, resolution = ? WHERE id = ?')
-        .run(bestFile.path, bestFile.size, resName, 'downloaded', resolution, movie.id);
+
+      // Detect and update codec
+      let codec = null;
+      if (nameLower.includes('x265') || nameLower.includes('h265') || nameLower.includes('hevc')) codec = 'x265';
+      else if (nameLower.includes('x264') || nameLower.includes('h264') || nameLower.includes('avc')) codec = 'x264';
+      if (!codec) {
+        try { codec = await getCodec(bestFile.path); } catch { /* ignore */ }
+      }
+
+      db.prepare('UPDATE movies SET file_path = ?, file_size = ?, scene_name = ?, status = ?, resolution = ?, codec = ? WHERE id = ?')
+        .run(bestFile.path, bestFile.size, resName, 'downloaded', resolution, codec, movie.id);
     } else if (scanPaths.size > 0) {
       // Paths were found but contained no video — genuinely missing
       db.prepare(`UPDATE movies SET status = CASE WHEN status = 'downloaded' THEN 'missing' ELSE status END, file_path = NULL, file_size = 0, scene_name = NULL WHERE id = ?`).run(movie.id);

@@ -2,12 +2,13 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import api from '../lib/api';
-import { formatSize, parseResolution, LANG_LABEL, LANG_NAME } from '../lib/format';
+import { formatSize, parseResolution, parseCodec, LANG_LABEL, LANG_NAME } from '../lib/format';
 import { useSettings } from '../lib/useSettings';
 import { useTMDBDetails } from '../lib/useTMDBDetails';
 import { ArrowLeft, HardDrive, Tv, PlayCircle, ChevronDown, ChevronRight, ChevronLeft, Bookmark, BookmarkMinus, Search, Star, X, RefreshCw, Loader2, Download, CheckSquare, Film, Trash2, Globe, Eye } from 'lucide-react';
 import { customAlert, customConfirm } from '../utils/alerts';
 import { useOutsideClick } from '../lib/useOutsideClick';
+import { setCachedShows } from '../lib/libraryCache';
 import TrailerModal from '../components/TrailerModal';
 import ManualSearchModal from '../components/ManualSearchModal';
 import EpisodeDetailsModal from '../components/EpisodeDetailsModal';
@@ -115,6 +116,9 @@ export default function ShowDetails() {
 
   useEffect(() => {
     fetchShowData(false);
+    return () => {
+      setCachedShows(null);
+    };
   }, [fetchShowData]);
 
   const refreshAll = useCallback(async () => {
@@ -513,15 +517,20 @@ export default function ShowDetails() {
                       <span className="text-sm font-semibold text-slate-200">
                         {(() => {
                           let res = 'Unknown';
+                          let codec = 'Unknown';
                           if (episodes && episodes.length > 0) {
                             for (const ep of episodes) {
                               if (ep.status === 'downloaded') {
                                 const epRes = parseResolution(ep.scene_name || ep.file_path);
-                                if (epRes !== 'Unknown') { res = epRes; break; }
+                                if (epRes !== 'Unknown') res = epRes;
+                                const epCodec = parseCodec(ep.scene_name || ep.file_path);
+                                if (epCodec !== 'Unknown') codec = epCodec;
+                                if (res !== 'Unknown' && codec !== 'Unknown') break;
                               }
                             }
                           }
-                          return res !== 'Unknown' ? res : '—';
+                          if (res === 'Unknown') return '—';
+                          return codec !== 'Unknown' ? `${res} (${codec})` : res;
                         })()}
                       </span>
                     </div>

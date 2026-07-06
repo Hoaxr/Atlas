@@ -20,6 +20,25 @@ const getResolution = async (filePath) => {
   }
 };
 
+const getCodec = async (filePath) => {
+  try {
+    const { stdout } = await execFileAsync('ffprobe', [
+      '-v', 'error',
+      '-select_streams', 'v:0',
+      '-show_entries', 'stream=codec_name',
+      '-of', 'default=noprint_wrappers=1:nokey=1',
+      filePath
+    ]);
+    const val = stdout.trim().toLowerCase();
+    if (val === 'hevc' || val === 'h265') return 'x265';
+    if (val === 'h264' || val === 'avc') return 'x264';
+    return val || null;
+  } catch (err) {
+    return null;
+  }
+};
+
 module.exports = {
-  getResolution
+  getResolution,
+  getCodec
 };

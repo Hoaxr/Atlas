@@ -1,7 +1,7 @@
 import ModalShell from './shared/ModalShell';
 import React from 'react';
 import { X, HardDrive, CheckCircle2, Zap, Search, Trash2 } from 'lucide-react';
-import { formatSize, parseResolution } from '../lib/format';
+import { formatSize, parseResolution, parseCodec, getReleaseTitleFromPath } from '../lib/format';
 
 const EpisodeDetailsModal = ({ episode, show, onClose, onAutoSearch, onManualSearch, onDeleteFile }) => {
   if (!episode) return null;
@@ -42,10 +42,12 @@ const EpisodeDetailsModal = ({ episode, show, onClose, onAutoSearch, onManualSea
               <p className="text-slate-500 text-[10px] uppercase tracking-widest font-bold mb-1">Path</p>
               <p className="font-mono text-xs text-slate-300 break-all">{episode.file_path || 'Not downloaded'}</p>
             </div>
-            {episode.scene_name && (
+            {(episode.scene_name || episode.file_path) && (
               <div className="col-span-full">
-                <p className="text-slate-500 text-[10px] uppercase tracking-widest font-bold mb-1">Grabbed Release Name (History)</p>
-                <p className="font-mono text-xs text-slate-400 break-all">{episode.scene_name}</p>
+                <p className="text-slate-500 text-[10px] uppercase tracking-widest font-bold mb-1">Release Name</p>
+                <p className="font-mono text-xs text-slate-400 break-all">
+                  {episode.scene_name || getReleaseTitleFromPath(episode.file_path)}
+                </p>
               </div>
             )}
             
@@ -53,7 +55,10 @@ const EpisodeDetailsModal = ({ episode, show, onClose, onAutoSearch, onManualSea
               <p className="text-slate-500 text-[10px] uppercase tracking-widest font-bold mb-1">Resolution</p>
               {resolution !== 'Unknown' ? (
                 <span className="px-2 py-0.5 rounded text-xs font-medium bg-slate-800 text-slate-300 border border-slate-700">
-                  {resolution}
+                  {(() => {
+                    const codecVal = episode.codec || parseCodec(episode.scene_name || episode.file_path);
+                    return codecVal !== 'Unknown' ? `${resolution} (${codecVal})` : resolution;
+                  })()}
                 </span>
               ) : (
                 <p className="font-medium text-slate-500">-</p>

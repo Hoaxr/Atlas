@@ -432,9 +432,10 @@ const importMovie = async (torrent, movie) => {
 
     // Auto-refresh: detect resolution and update TMDB metadata
     try {
-      const { getResolution } = require('../utils/videoUtils');
+      const { getResolution, getCodec } = require('../utils/videoUtils');
       let sceneName = torrent.name;
       let resolution = null;
+      let codec = null;
       const t = sceneName.toLowerCase();
       if (t.includes('2160p') || t.includes('4k')) resolution = '2160p';
       else if (t.includes('1080p')) resolution = '1080p';
@@ -447,8 +448,15 @@ const importMovie = async (torrent, movie) => {
       if (resolution && !t.includes('2160p') && !t.includes('4k') && !t.includes('1080p') && !t.includes('720p') && !t.includes('480p') && !t.includes('sd')) {
         sceneName = `${torrent.name} ${resolution}`;
       }
-      db.prepare('UPDATE movies SET scene_name = ?, file_size = ?, resolution = ? WHERE id = ?')
-        .run(sceneName, fs.statSync(destFile).size, resolution, movie.id);
+
+      if (t.includes('x265') || t.includes('h265') || t.includes('hevc')) codec = 'x265';
+      else if (t.includes('x264') || t.includes('h264') || t.includes('avc')) codec = 'x264';
+      if (!codec) {
+        codec = await getCodec(destFile);
+      }
+
+      db.prepare('UPDATE movies SET scene_name = ?, file_size = ?, resolution = ?, codec = ? WHERE id = ?')
+        .run(sceneName, fs.statSync(destFile).size, resolution, codec, movie.id);
     } catch (resErr) {
       console.error(`[MediaManagement] Failed to detect resolution for ${movie.title}:`, resErr.message);
     }
@@ -617,18 +625,33 @@ const importEpisode = async (torrent, episode) => {
 
     // Auto-refresh: detect resolution and update TMDB metadata
     try {
-      const { getResolution } = require('../utils/videoUtils');
+      const { getResolution, getCodec } = require('../utils/videoUtils');
       let sceneName = torrent.name;
       const t = sceneName.toLowerCase();
-      const hasRes = t.includes('2160p') || t.includes('4k') || t.includes('1080p') || t.includes('720p') || t.includes('480p') || t.includes('sd');
-      if (!hasRes) {
-        const res = await getResolution(destFile);
-        if (res) sceneName = `${torrent.name} ${res}`;
+      let resolution = null;
+      if (t.includes('2160p') || t.includes('4k')) resolution = '2160p';
+      else if (t.includes('1080p')) resolution = '1080p';
+      else if (t.includes('720p')) resolution = '720p';
+      else if (t.includes('480p')) resolution = '480p';
+
+      if (!resolution) {
+        resolution = await getResolution(destFile);
       }
-      db.prepare('UPDATE episodes SET scene_name = ?, file_size = ? WHERE id = ?')
-        .run(sceneName, fs.statSync(destFile).size, episode.id);
+      if (resolution && !t.includes('2160p') && !t.includes('4k') && !t.includes('1080p') && !t.includes('720p') && !t.includes('480p') && !t.includes('sd')) {
+        sceneName = `${torrent.name} ${resolution}`;
+      }
+
+      let codec = null;
+      if (t.includes('x265') || t.includes('h265') || t.includes('hevc')) codec = 'x265';
+      else if (t.includes('x264') || t.includes('h264') || t.includes('avc')) codec = 'x264';
+      if (!codec) {
+        codec = await getCodec(destFile);
+      }
+
+      db.prepare('UPDATE episodes SET scene_name = ?, file_size = ?, resolution = ?, codec = ? WHERE id = ?')
+        .run(sceneName, fs.statSync(destFile).size, resolution, codec, episode.id);
     } catch (resErr) {
-      console.error(`[MediaManagement] Failed to detect resolution for episode:`, resErr.message);
+      console.error(`[MediaManagement] Failed to detect resolution/codec for episode:`, resErr.message);
     }
 
     // Refresh TMDB metadata in DB
