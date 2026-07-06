@@ -114,19 +114,19 @@ export default function Logo({ className = "w-8 h-8", isWatermark = false }) {
           />
 
           {/* Meridian 1 (inner ellipse) pulse */}
-          <ellipse cx="32" cy="32" rx="8" ry="26" stroke="#ffffff" strokeWidth="1" strokeOpacity="0.9" fill="none" strokeDasharray="8 24">
+          <ellipse cx="32" cy="32" rx="8" ry="26" stroke="#ffffff" strokeWidth="1" strokeOpacity="0.45" fill="none" strokeDasharray="8 24">
             <animate attributeName="stroke-dashoffset" values="64;0" dur="6.5s" repeatCount="indefinite" />
           </ellipse>
           {/* Meridian 2 (outer ellipse) pulse */}
-          <ellipse cx="32" cy="32" rx="18" ry="26" stroke="#22d3ee" strokeWidth="0.8" strokeOpacity="0.85" fill="none" strokeDasharray="12 36">
+          <ellipse cx="32" cy="32" rx="18" ry="26" stroke="#22d3ee" strokeWidth="0.8" strokeOpacity="0.4" fill="none" strokeDasharray="12 36">
             <animate attributeName="stroke-dashoffset" values="0;96" dur="8.5s" repeatCount="indefinite" />
           </ellipse>
           {/* Parallel 1 (horizontal inner ellipse) pulse */}
-          <ellipse cx="32" cy="32" rx="26" ry="8" stroke="#ffffff" strokeWidth="1" strokeOpacity="0.9" fill="none" strokeDasharray="10 30">
+          <ellipse cx="32" cy="32" rx="26" ry="8" stroke="#ffffff" strokeWidth="1" strokeOpacity="0.45" fill="none" strokeDasharray="10 30">
             <animate attributeName="stroke-dashoffset" values="80;0" dur="7s" repeatCount="indefinite" />
           </ellipse>
           {/* Parallel 2 (horizontal outer ellipse) pulse */}
-          <ellipse cx="32" cy="32" rx="26" ry="18" stroke="#22d3ee" strokeWidth="0.8" strokeOpacity="0.85" fill="none" strokeDasharray="16 48">
+          <ellipse cx="32" cy="32" rx="26" ry="18" stroke="#22d3ee" strokeWidth="0.8" strokeOpacity="0.4" fill="none" strokeDasharray="16 48">
             <animate attributeName="stroke-dashoffset" values="0;128" dur="10s" repeatCount="indefinite" />
           </ellipse>
 

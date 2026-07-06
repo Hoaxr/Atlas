@@ -260,12 +260,12 @@ export default function Layout() {
 
           <div className="flex items-center space-x-3 select-none relative group/logo p-1 px-2">
             {/* Large background Logo watermark behind the text */}
-            <div className="absolute -left-7 -top-7 w-28 h-28 scale-150 pointer-events-none group-hover/logo:scale-[1.6] transition-transform duration-500">
+            <div className="absolute -left-7 -top-7 w-28 h-28 scale-150 pointer-events-none group-hover/logo:scale-[1.6] transition-transform duration-500 will-change-transform transform-gpu">
               <Logo className="w-full h-full" isWatermark={true} />
             </div>
 
             <div className="relative z-10 pl-10">
-              <div className="bg-white/40 dark:bg-slate-950/40 backdrop-blur-md px-3.5 py-1 rounded-xl border border-slate-200/40 dark:border-white/5 shadow-sm">
+              <div className="bg-slate-100/90 dark:bg-slate-900/90 px-3.5 py-1 rounded-xl border border-slate-200/40 dark:border-white/5 shadow-sm">
                 <span className="text-3xl font-black tracking-wider drop-shadow-[0_0_12px_rgba(6,182,212,0.3)]">
                   <span className="bg-gradient-to-r from-cyan-300 via-cyan-400 to-sky-400 bg-clip-text text-transparent">
                     Atlas

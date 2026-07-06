@@ -505,8 +505,8 @@ export default function ShowDetails() {
                 </div>
 
                 {/* RESOLUTION | SIZE | LANGUAGE | WATCHED */}
-                <div className="grid grid-cols-[1fr_20px_1fr_20px_1fr_20px_1fr] py-3 bg-slate-800/30 rounded-xl px-4 items-center">
-                  <div className="flex items-center gap-3">
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                  <div className="flex items-center gap-3 bg-slate-800/30 dark:bg-slate-900/35 border border-slate-700/30 dark:border-white/5 rounded-xl p-3">
                     <Film className="w-5 h-5 text-purple-400 shrink-0" />
                     <div>
                       <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500 block">Resolution</span>
@@ -526,24 +526,24 @@ export default function ShowDetails() {
                       </span>
                     </div>
                   </div>
-                  <div className="w-px h-10 bg-white/10 justify-self-center" />
-                  <div className="flex items-center gap-3">
+
+                  <div className="flex items-center gap-3 bg-slate-800/30 dark:bg-slate-900/35 border border-slate-700/30 dark:border-white/5 rounded-xl p-3">
                     <HardDrive className="w-5 h-5 text-purple-400 shrink-0" />
                     <div>
                       <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500 block">Size</span>
                       <span className="text-sm font-semibold text-slate-200">{formatSize(show.folder_size)}</span>
                     </div>
                   </div>
-                  <div className="w-px h-10 bg-white/10 justify-self-center" />
-                  <div className="flex items-center gap-3">
+
+                  <div className="flex items-center gap-3 bg-slate-800/30 dark:bg-slate-900/35 border border-slate-700/30 dark:border-white/5 rounded-xl p-3">
                     <Globe className="w-5 h-5 text-purple-400 shrink-0" />
                     <div>
                       <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500 block">Language</span>
                       <span className="text-sm font-semibold text-slate-200">{(tmdbDetails?.original_language || 'EN').toUpperCase()}</span>
                     </div>
                   </div>
-                  <div className="w-px h-10 bg-white/10 justify-self-center" />
-                  <div className="flex items-center gap-3">
+
+                  <div className="flex items-center gap-3 bg-slate-800/30 dark:bg-slate-900/35 border border-slate-700/30 dark:border-white/5 rounded-xl p-3">
                     <Eye className="w-5 h-5 text-purple-400 shrink-0" />
                     <div>
                       <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500 block">Watched</span>
@@ -889,8 +889,8 @@ export default function ShowDetails() {
                           >
                             <span className="font-mono text-xs text-slate-500 shrink-0 mt-1 w-5 text-right">{ep.episode_number}</span>
                             <div className="min-w-0 flex-1">
-                              <div className="flex items-center gap-2">
-                                <p className="text-sm font-bold text-slate-200 truncate">{ep.title}</p>
+                              <div className="flex items-center justify-between gap-2">
+                                <p className="text-sm font-bold text-slate-200 truncate pr-2">{ep.title}</p>
                                 <button
                                   onClick={async (e) => {
                                     e.stopPropagation(); e.preventDefault();

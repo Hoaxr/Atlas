@@ -332,15 +332,17 @@ export default function Discover() {
             />
             <button 
               onClick={() => setMode('movies')}
-              className={`relative z-10 flex-1 flex items-center justify-center gap-2 px-4 sm:px-6 py-2.5 rounded-lg text-sm font-semibold whitespace-nowrap transition-colors duration-200 ${mode === 'movies' ? 'text-cyan-300' : 'text-slate-500 hover:text-slate-300'}`}
+              className={`relative z-10 flex-1 flex items-center justify-center gap-2 px-3 sm:px-6 py-2.5 rounded-lg text-sm font-semibold whitespace-nowrap transition-colors duration-200 ${mode === 'movies' ? 'text-cyan-300' : 'text-slate-500 hover:text-slate-300'}`}
             >
-              <Film className="w-4 h-4 shrink-0" /> Movies
+              <Film className="w-4 h-4 shrink-0" />
+              <span className="hidden sm:inline">Movies</span>
             </button>
             <button 
               onClick={() => setMode('shows')}
-              className={`relative z-10 flex-1 flex items-center justify-center gap-2 px-4 sm:px-6 py-2.5 rounded-lg text-sm font-semibold whitespace-nowrap transition-colors duration-200 ${mode === 'shows' ? 'text-purple-300' : 'text-slate-500 hover:text-slate-300'}`}
+              className={`relative z-10 flex-1 flex items-center justify-center gap-2 px-3 sm:px-6 py-2.5 rounded-lg text-sm font-semibold whitespace-nowrap transition-colors duration-200 ${mode === 'shows' ? 'text-purple-300' : 'text-slate-500 hover:text-slate-300'}`}
             >
-              <Tv className="w-4 h-4 shrink-0" /> TV Shows
+              <Tv className="w-4 h-4 shrink-0" />
+              <span className="hidden sm:inline">TV Shows</span>
             </button>
           </div>
           
