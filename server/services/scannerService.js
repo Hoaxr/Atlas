@@ -147,7 +147,7 @@ const setStage = (stage, phase) => {
   scanProgress.totalFiles = 0;
 };
 
-const doScan = async () => {
+const doScan = async (mode = 'full') => {
   const allPaths = db.prepare('SELECT * FROM library_paths').all();
   // Only scan movies and tv paths — skip downloads
   const paths = allPaths.filter(p => p.type !== 'downloads');
@@ -156,12 +156,39 @@ const doScan = async () => {
     return;
   }
 
+  const MODE_STAGES = {
+    full:      5,
+    new:       2,
+    refresh:   1,
+    rematch:   2,
+    subtitles: 1,
+  };
+  scanProgress.totalStages = MODE_STAGES[mode] || 5;
+
+  let stageNum = 0;
+  const nextStage = (phase) => {
+    stageNum++;
+    scanProgress.currentStage = stageNum;
+    scanProgress.currentPhase = phase;
+    scanProgress.processedFiles = 0;
+    scanProgress.totalFiles = 0;
+  };
+
   try {
+    const gatherFiles = ['full', 'new', 'rematch'].includes(mode);
+    const processFiles = ['full', 'new', 'rematch'].includes(mode);
+    const updateMetadata = ['full', 'refresh'].includes(mode);
+    const syncTrakt = mode === 'full';
+    const scanSubtitles = ['full', 'subtitles'].includes(mode);
+
+    let allFiles = []; // Scoped outside the if-blocks so processFiles can access it
+
     // ════════════════════════════════════════════
-    // Stage 1/5: Gather files
+    // Stage: Gather files
     // ════════════════════════════════════════════
-    setStage(1, 'Gathering files...');
-    const allFiles = [];
+    if (gatherFiles) {
+    nextStage('Gathering files...');
+    allFiles = [];
 
     async function getFiles(dir) {
       try {
@@ -215,10 +242,59 @@ const doScan = async () => {
 
     scanProgress.totalFiles = allFiles.length;
 
+    // Build a quick lookup set of all file paths on disk (for orphan detection)
+    const filesOnDisk = new Set(allFiles.map(f => f.path));
+
+    // Clean up orphaned items — movies/shows whose files were manually deleted
+    scanProgress.currentPhase = 'Checking for removed files...';
+    const existingMovies = db.prepare("SELECT id, title, file_path FROM movies WHERE file_path IS NOT NULL").all();
+    const existingShows = db.prepare("SELECT id, title, folder_path FROM shows WHERE folder_path IS NOT NULL").all();
+    let removedCount = 0;
+
+    for (const m of existingMovies) {
+      if (scanProgress.cancelled) throw new Error('Scan cancelled by user');
+      if (filesOnDisk.has(m.file_path)) continue;
+      // Not in gathered files — check if it still exists on disk (maybe in an unscanned path)
+      try { await fs.access(m.file_path); continue; } catch { /* file gone */ }
+      // File is gone — check if the parent folder still exists
+      const parentDir = path.dirname(m.file_path);
+      try { await fs.access(parentDir); } catch {
+        // Folder is also gone — remove the movie entirely
+        db.prepare('DELETE FROM movies WHERE id = ?').run(m.id);
+        console.log(`[Scanner] Removed movie (folder deleted): ${m.title} (${parentDir})`);
+        removedCount++;
+        continue;
+      }
+      // Folder exists but file is gone — set to monitored for re-download
+      db.prepare("UPDATE movies SET status = 'monitored', file_path = NULL, file_size = 0, scene_name = NULL, resolution = NULL, codec = NULL WHERE id = ?").run(m.id);
+      console.log(`[Scanner] Movie file missing, set to monitored: ${m.title}`);
+      removedCount++;
+    }
+
+    for (const s of existingShows) {
+      if (scanProgress.cancelled) throw new Error('Scan cancelled by user');
+      // Check if any gathered file lives under this show's folder
+      const stillExists = allFiles.some(f => f.path.startsWith(s.folder_path + path.sep));
+      if (stillExists) continue;
+      // Not in gathered files — check if folder still exists on disk
+      try { await fs.access(s.folder_path); continue; } catch { /* gone */ }
+      // Folder is gone — remove show and all episodes
+      db.prepare('DELETE FROM episodes WHERE show_id = ?').run(s.id);
+      db.prepare('DELETE FROM shows WHERE id = ?').run(s.id);
+      console.log(`[Scanner] Removed show (folder deleted): ${s.title} (${s.folder_path})`);
+      removedCount++;
+    }
+
+    if (removedCount > 0) {
+      scanProgress.addedCount = (scanProgress.addedCount || 0) - removedCount;
+    }
+    } // end gatherFiles
+
     // ════════════════════════════════════════════
-    // Stage 2/5: Process files (match to TMDB)
+    // Stage: Process files (match to TMDB)
     // ════════════════════════════════════════════
-    setStage(2, 'Processing files...');
+    if (processFiles) {
+    nextStage('Processing files...');
     scanProgress.totalFiles = allFiles.length;
 
     for (const file of allFiles) {
@@ -384,6 +460,15 @@ const doScan = async () => {
               scanProgress.addedShowsCount++;
               scanProgress.addedShows.push({ title: matchedShow.name });
             }
+            // Apply Trakt watched status
+            if (tmdbId) {
+              try {
+                const { isWatchedSyncEnabled } = require('../utils/settings');
+                if (isWatchedSyncEnabled()) {
+                  db.prepare("UPDATE shows SET watched = 1 WHERE tmdb_id = ? AND EXISTS (SELECT 1 FROM watched_tmdb WHERE tmdb_id = ? AND type = 'show')").run(tmdbId, tmdbId);
+                }
+              } catch { /* non-critical */ }
+            }
           } catch (tmdbErr) {
             console.error(`TMDB error for show ${title}:`, tmdbErr.message);
             scanProgress.failedShows.push({ title, reason: `TMDB error: ${tmdbErr.message}`, file: file.name, path: file.path });
@@ -449,28 +534,55 @@ const doScan = async () => {
 
       } else {
         // Movie logic
-        const existingMovie = db.prepare('SELECT id FROM movies WHERE file_path = ?').get(fullPath);
-        if (existingMovie) {
+        const existingMovie = db.prepare('SELECT id, tmdb_id FROM movies WHERE file_path = ?').get(fullPath);
+        if (existingMovie && mode !== 'rematch') {
           scanProgress.skippedCount++;
           scanProgress.skippedFiles.push({ name: file.name, reason: 'Already in library with this file path', path: file.path });
           continue;
         }
 
         try {
-          // Include year in search to help TMDB disambiguate
-          const searchQuery = year ? `${title} ${year}` : title;
+          // Search by title only — TMDB treats year-in-query as literal text; our scoring handles year matching
+          const searchQuery = title;
           const results = await tmdbService.searchMovies(searchQuery);
+          console.log(`[Scanner] TMDB search: "${searchQuery}" → ${results.length} results${results.length > 0 ? ': ' + results.slice(0, 3).map(r => `${r.title || r.name} (${r.release_date ? r.release_date.split('-')[0] : '?'})`).join(', ') : ''}`);
           let matchedMovie = null;
           if (results.length > 0) {
             if (year) {
-              // Try exact year match first, then ±1 year tolerance
-              matchedMovie = results.find(r => r.release_date && r.release_date.startsWith(year.toString()));
-              if (!matchedMovie) {
-                matchedMovie = results.find(r => {
-                  if (!r.release_date) return false;
+              // Score results by title relevance + year proximity
+              const normalize = (s) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+              const titleNorm = normalize(title);
+              const titleWords = titleNorm.split(/\s+/).filter(Boolean);
+
+              let bestScore = -1;
+              for (const r of results) {
+                const rTitle = normalize(r.title || r.name || '');
+                let score = 0;
+
+                // Title match scoring
+                if (rTitle === titleNorm) {
+                  score += 100;
+                } else if (rTitle.includes(titleNorm) || titleNorm.includes(rTitle)) {
+                  score += 50;
+                } else {
+                  // Word-level matching: count how many title words appear in the result
+                  const rWords = new Set(rTitle.split(/\s+/));
+                  const matchedWords = titleWords.filter(w => rWords.has(w));
+                  score += matchedWords.length * 10;
+                }
+
+                // Year proximity scoring
+                if (r.release_date) {
                   const rYear = parseInt(r.release_date.split('-')[0]);
-                  return Math.abs(rYear - year) <= 1;
-                });
+                  if (rYear === year) score += 30;
+                  else if (Math.abs(rYear - year) === 1) score += 20;
+                  else if (Math.abs(rYear - year) <= 2) score += 10;
+                }
+
+                if (score > bestScore) {
+                  bestScore = score;
+                  matchedMovie = r;
+                }
               }
             }
             // Only fall back to first result if no year was available
@@ -478,9 +590,13 @@ const doScan = async () => {
           }
 
           if (!matchedMovie) {
+            const reason = results.length === 0
+              ? `TMDB search returned no results for "${searchQuery}"`
+              : `TMDB search returned ${results.length} results for "${searchQuery}" but none matched (year: ${year}, title: "${title}")`;
+            console.warn(`[Scanner] ${reason}`);
             scanProgress.skippedCount++;
-            scanProgress.skippedFiles.push({ name: file.name, reason: `TMDB search returned no results for "${title}"` });
-            scanProgress.failedMovies.push({ title, year, reason: 'TMDB search returned no results', file: file.name, path: file.path });
+            scanProgress.skippedFiles.push({ name: file.name, reason, path: file.path });
+            scanProgress.failedMovies.push({ title, year, reason, file: file.name, path: file.path });
           }
 
           if (matchedMovie) {
@@ -506,6 +622,12 @@ const doScan = async () => {
               // Assign default profile if the movie doesn't already have one
               db.prepare('UPDATE movies SET file_path = ?, status = ?, rating = ?, file_size = ?, quality_profile_id = COALESCE(quality_profile_id, ?) WHERE tmdb_id = ?')
                 .run(fullPath, 'downloaded', movieRating, fileSize, defaultProfileId, matchedMovie.id);
+            } else if (mode === 'rematch' && existingMovie) {
+              // Re-match: update the existing record with the corrected TMDB match
+              db.prepare('UPDATE movies SET tmdb_id = ?, title = ?, year = ?, poster_path = ?, overview = ?, status = ?, file_path = ?, rating = ?, file_size = ?, release_date = ? WHERE id = ?')
+                .run(matchedMovie.id, matchedMovie.title, movieYear, matchedMovie.poster_path, matchedMovie.overview, 'downloaded', fullPath, movieRating, fileSize, matchedMovie.release_date || null, existingMovie.id);
+              scanProgress.addedMoviesCount++;
+              scanProgress.addedMovies.push({ title: matchedMovie.title, year: movieYear });
             } else {
               db.prepare(`
                 INSERT INTO movies (tmdb_id, title, year, poster_path, overview, status, file_path, rating, file_size, quality_profile_id, release_date)
@@ -525,6 +647,13 @@ const doScan = async () => {
               scanProgress.addedMoviesCount++;
               scanProgress.addedMovies.push({ title: matchedMovie.title, year: movieYear });
             }
+            // Apply Trakt watched status if this TMDB ID was already marked as watched
+            try {
+              const { isWatchedSyncEnabled } = require('../utils/settings');
+              if (isWatchedSyncEnabled()) {
+                db.prepare("UPDATE movies SET watched = 1 WHERE tmdb_id = ? AND EXISTS (SELECT 1 FROM watched_tmdb WHERE tmdb_id = ? AND type = 'movie')").run(matchedMovie.id, matchedMovie.id);
+              }
+            } catch { /* non-critical */ }
             // Detect and store resolution & codec — file name first, ffprobe as fallback
             try {
               const nameLower = file.name.toLowerCase();
@@ -563,12 +692,15 @@ const doScan = async () => {
       }
       scanProgress.processedFiles++;
     }
+    } // end processFiles
 
     if (scanProgress.cancelled) throw new Error('Scan cancelled by user');
 
     // ════════════════════════════════════════════
-    // Stage 3/5: Update sizes & ratings
+    // Stage: Update sizes & ratings (metadata refresh)
     // ════════════════════════════════════════════
+    if (updateMetadata) {
+    nextStage('Updating metadata...');
     const existingMovies = db.prepare("SELECT id, title, file_path, scene_name FROM movies WHERE status = 'downloaded' AND file_path IS NOT NULL").all();
     const existingShows = db.prepare("SELECT id, title, folder_path FROM shows WHERE status = 'downloaded' AND folder_path IS NOT NULL").all();
     const existingEpisodes = db.prepare("SELECT id, show_id, file_path, scene_name FROM episodes WHERE status = 'downloaded' AND file_path IS NOT NULL").all();
@@ -580,7 +712,6 @@ const doScan = async () => {
     const ratingTotal = allMovies.length + allShows.length;
     const stage3Total = sizeTotal + ratingTotal;
 
-    setStage(3, 'Updating file sizes and resolutions...');
     scanProgress.totalFiles = stage3Total;
 
     for (const m of existingMovies) {
@@ -744,11 +875,13 @@ const doScan = async () => {
     }
 
     if (scanProgress.cancelled) throw new Error('Scan cancelled by user');
+    } // end updateMetadata
 
     // ════════════════════════════════════════════
-    // Stage 4/5: Sync Trakt
+    // Stage: Sync Trakt
     // ════════════════════════════════════════════
-    setStage(4, 'Syncing Trakt watched status...');
+    if (syncTrakt) {
+    nextStage('Syncing Trakt watched status...');
     scanProgress.totalFiles = 1;
     scanProgress.currentFile = 'Trakt';
     try {
@@ -756,21 +889,22 @@ const doScan = async () => {
       await traktService.syncWatched();
     } catch { /* Trakt may not be configured */ }
     scanProgress.processedFiles = 1;
+    } // end syncTrakt
 
     if (scanProgress.cancelled) throw new Error('Scan cancelled by user');
 
     // ════════════════════════════════════════════
-    // Stage 5/5: Scan subtitles
+    // Stage: Scan subtitles
     // ════════════════════════════════════════════
+    if (scanSubtitles) {
+    nextStage('Scanning subtitles...');
     const subMoviesList = db.prepare("SELECT id, file_path FROM movies WHERE status = 'downloaded' AND file_path IS NOT NULL").all();
-    const subEpisodesList = db.prepare("SELECT id, file_path FROM episodes WHERE status = 'downloaded' AND file_path IS NOT NULL").all();
+    const subEpisodesList = db.prepare("SELECT id, file_path, season_number, episode_number FROM episodes WHERE status = 'downloaded' AND file_path IS NOT NULL").all();
     const subTotal = subMoviesList.length + subEpisodesList.length;
-
-    setStage(5, 'Scanning movie subtitles...');
     scanProgress.totalFiles = subTotal;
 
+    scanProgress.currentPhase = 'Scanning movie subtitles...';
     for (const m of subMoviesList) {
-      if (scanProgress.cancelled) throw new Error('Scan cancelled by user');
       scanProgress.currentFile = path.basename(m.file_path);
       try {
         const langs = await scanSubtitleLangs(m.file_path);
@@ -828,6 +962,7 @@ const doScan = async () => {
         scanProgress.processedFiles++;
       }
     }
+    } // end scanSubtitles
   } catch (error) {
     const isCancelled = error?.message === 'Scan cancelled by user';
     if (isCancelled) {
@@ -839,7 +974,7 @@ const doScan = async () => {
     scanProgress.isScanning = false;
     scanProgress.cancelled = false;
     scanProgress.currentFile = 'Finished';
-    scanProgress.currentStage = 5;
+    scanProgress.currentStage = scanProgress.totalStages;
     const eventBus = require('./eventBus');
     if (scanProgress.currentPhase === 'Scan cancelled by user') {
       scanProgress.currentPhase = 'Cancelled';
@@ -856,13 +991,13 @@ const doScan = async () => {
   }
 };
 
-const scanLibrary = async () => {
+const scanLibrary = async (mode = 'full') => {
   if (scanProgress.isScanning) {
     return { status: 'error', message: 'Scan already in progress' };
   }
 
   const eventBus = require('./eventBus');
-  eventBus.info('Library scan started');
+  eventBus.info(`Library scan started (${mode})`);
   
   scanProgress = {
     isScanning: true,
@@ -884,7 +1019,7 @@ const scanLibrary = async () => {
   };
   
   // Start in background
-  doScan();
+  doScan(mode);
   
   return { status: 'success', message: 'Scan started' };
 };

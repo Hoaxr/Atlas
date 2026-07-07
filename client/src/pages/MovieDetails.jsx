@@ -554,18 +554,23 @@ export default function MovieDetails() {
                   </p>
                 </div>
 
-                {/* RESOLUTION | SIZE | LANGUAGE | WATCHED */}
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
                   <div className="flex items-center gap-3 bg-slate-800/30 dark:bg-slate-900/35 border border-slate-700/30 dark:border-white/5 rounded-xl p-3">
                     <Film className="w-5 h-5 text-cyan-400 shrink-0" />
                     <div>
                       <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500 block">Resolution</span>
-                      <span className="text-sm font-semibold text-slate-200">
-                        {resolution !== 'Unknown' ? (codec !== 'Unknown' ? `${resolution} (${codec})` : resolution) : 'Any (1080p+)'}
-                      </span>
+                      <div className="flex items-center gap-1.5 mt-0.5">
+                        <span className="text-sm font-semibold text-slate-200">
+                          {resolution !== 'Unknown' ? resolution : 'Any (1080p+)'}
+                        </span>
+                        {resolution !== 'Unknown' && codec !== 'Unknown' && (
+                          <span className="text-[9px] font-mono font-bold text-slate-400 uppercase bg-slate-800/50 px-1.5 py-0.5 rounded border border-white/5 whitespace-nowrap">
+                            {codec}
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
-
                   <div className="flex items-center gap-3 bg-slate-800/30 dark:bg-slate-900/35 border border-slate-700/30 dark:border-white/5 rounded-xl p-3">
                     <HardDrive className="w-5 h-5 text-cyan-400 shrink-0" />
                     <div>

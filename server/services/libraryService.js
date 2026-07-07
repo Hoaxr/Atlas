@@ -99,6 +99,14 @@ const addMovie = async (tmdbId, rootFolderPath = null) => {
   // Auto-approve any pending request for this movie
   db.prepare("UPDATE requests SET status = 'approved' WHERE tmdb_id = ? AND type = 'movie' AND status = 'pending'").run(movieDetails.id);
 
+  // If this movie was already marked as watched on Trakt, apply it
+  if (isWatchedSyncEnabled()) {
+    const watchedEntry = db.prepare('SELECT 1 FROM watched_tmdb WHERE tmdb_id = ? AND type = ?').get(tmdbId, 'movie');
+    if (watchedEntry) {
+      db.prepare('UPDATE movies SET watched = 1 WHERE id = ?').run(result.lastInsertRowid);
+    }
+  }
+
   return { id: result.lastInsertRowid, tmdb_id: movieDetails.id, title: movieDetails.title };
 };
 
@@ -217,6 +225,14 @@ const addShow = async (tmdbId, rootFolderPath = null) => {
   // Auto-approve any pending request for this show
   db.prepare("UPDATE requests SET status = 'approved' WHERE tmdb_id = ? AND type = 'tv' AND status = 'pending'").run(showDetails.id);
 
+  // If this show was already marked as watched on Trakt, apply it
+  if (isWatchedSyncEnabled()) {
+    const watchedEntry = db.prepare('SELECT 1 FROM watched_tmdb WHERE tmdb_id = ? AND type = ?').get(tmdbId, 'show');
+    if (watchedEntry) {
+      db.prepare('UPDATE shows SET watched = 1 WHERE id = ?').run(internalShowId);
+    }
+  }
+
   return { id: internalShowId, tmdb_id: showDetails.id, title: showDetails.name };
 };
 
@@ -246,7 +262,8 @@ const getShows = (limit = 0, offset = 0, sort = 'added_desc') => {
         ))
       )) as missing_episodes,
       (SELECT COUNT(DISTINCT season_number) FROM episodes WHERE show_id = s.id) as season_count,
-      (SELECT COALESCE(scene_name, file_path) FROM episodes WHERE show_id = s.id AND status = 'downloaded' AND (scene_name IS NOT NULL OR file_path IS NOT NULL) LIMIT 1) as sample_episode_path
+      (SELECT COALESCE(scene_name, file_path) FROM episodes WHERE show_id = s.id AND status = 'downloaded' AND (scene_name IS NOT NULL OR file_path IS NOT NULL) LIMIT 1) as sample_episode_path,
+      (SELECT codec FROM episodes WHERE show_id = s.id AND status = 'downloaded' AND codec IS NOT NULL LIMIT 1) as codec
     FROM shows s
     LEFT JOIN quality_profiles qp ON s.quality_profile_id = qp.id
     ORDER BY ${sortMap[sort] || 's.added_at DESC, s.id DESC'}

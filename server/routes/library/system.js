@@ -248,9 +248,24 @@ router.delete('/paths/:id', (req, res, next) => {
 });
 
 
+router.get('/watched-tmdb', (req, res, next) => {
+  try {
+    const entries = db.prepare('SELECT tmdb_id, type FROM watched_tmdb').all();
+    res.json({ status: 'success', data: entries });
+  } catch (err) {
+    next(err);
+  }
+});
+
+
 router.post('/scan', async (req, res, next) => {
   try {
-    const result = await scannerService.scanLibrary();
+    const mode = req.body?.mode || 'full';
+    const validModes = ['full', 'new', 'refresh', 'rematch', 'subtitles'];
+    if (!validModes.includes(mode)) {
+      return res.status(400).json({ status: 'error', message: `Invalid scan mode. Must be one of: ${validModes.join(', ')}` });
+    }
+    const result = await scannerService.scanLibrary(mode);
     res.json(result);
   } catch (error) {
     next(error);

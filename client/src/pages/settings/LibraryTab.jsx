@@ -1,8 +1,18 @@
+import { useState, useRef } from 'react';
 import api from '../../lib/api';
-import { Plus, Trash2, RefreshCw, CheckCircle2, AlertCircle, FolderTree } from 'lucide-react';
+import { Plus, Trash2, RefreshCw, CheckCircle2, AlertCircle, FolderTree, ChevronDown } from 'lucide-react';
 import { customAlert } from '../../utils/alerts';
+import { useOutsideClick } from '../../lib/useOutsideClick';
 import DuplicateSection from './DuplicateSection';
 import CustomSelect from '../../components/shared/CustomSelect';
+
+const SCAN_MODES = [
+  { value: 'full',      label: 'Full Scan',       desc: 'Everything — new files, metadata, subtitles' },
+  { value: 'new',       label: 'New Files Only',   desc: 'Only detect and add new media files' },
+  { value: 'refresh',   label: 'Refresh Metadata', desc: 'Re-scan resolutions, codecs, ratings & sizes' },
+  { value: 'rematch',   label: 'Re-match Files',   desc: 'Re-match existing files to TMDB (fix bad matches)' },
+  { value: 'subtitles', label: 'Subtitles Only',   desc: 'Only re-scan external subtitle files' },
+];
 
 export default function LibraryTab({
   paths, newPath, newPathType, setNewPath, setNewPathType, handleAddPath, fetchPaths,
@@ -10,6 +20,9 @@ export default function LibraryTab({
   isStaleResults, setScanResults, setIsStaleResults
 }) {
   const data = scanResults || scanProgress;
+  const [scanMode, setScanMode] = useState('full');
+  const [modeMenuOpen, setModeMenuOpen] = useState(false);
+  const modeMenuRef = useOutsideClick(() => setModeMenuOpen(false), modeMenuOpen);
 
   return (
     <div className="max-w-5xl mx-auto space-y-8 animate-fade-in">
@@ -18,14 +31,41 @@ export default function LibraryTab({
           <FolderTree className="w-7 h-7" /> Library & Root Folders
         </h2>
         <div className="flex items-center gap-2">
-          <button 
-            onClick={handleScan}
-            disabled={isScanning}
-            className="bg-blue-500 hover:bg-blue-400 text-white font-bold py-2 px-4 rounded-xl flex items-center gap-2 transition-colors disabled:opacity-50"
-          >
-            {isScanning ? <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div> : <RefreshCw className="w-4 h-4" />}
-            {isScanning ? 'Scanning...' : 'Scan Now'}
-          </button>
+          <div className="relative flex" ref={modeMenuRef}>
+            <button 
+              onClick={() => handleScan(scanMode)}
+              disabled={isScanning}
+              className="bg-blue-500 hover:bg-blue-400 text-white font-bold py-2 px-4 rounded-l-xl flex items-center gap-2 transition-colors disabled:opacity-50"
+            >
+              {isScanning ? <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div> : <RefreshCw className="w-4 h-4" />}
+              {isScanning ? 'Scanning...' : 'Scan Now'}
+            </button>
+            <button
+              onClick={() => setModeMenuOpen(!modeMenuOpen)}
+              disabled={isScanning}
+              className="bg-blue-600 hover:bg-blue-500 text-white font-bold py-2 px-2 rounded-r-xl flex items-center transition-colors disabled:opacity-50 border-l border-blue-400/30"
+              title="Scan mode"
+            >
+              <ChevronDown className={`w-4 h-4 transition-transform ${modeMenuOpen ? 'rotate-180' : ''}`} />
+            </button>
+            {modeMenuOpen && (
+              <div className="absolute right-0 top-full mt-2 w-64 bg-slate-800 border border-white/10 rounded-xl shadow-xl z-50 overflow-hidden">
+                <div className="px-4 py-2.5 border-b border-white/10 text-xs font-bold text-slate-400 uppercase tracking-wider">Scan Mode</div>
+                {SCAN_MODES.map(m => (
+                  <button
+                    key={m.value}
+                    onClick={() => { setScanMode(m.value); setModeMenuOpen(false); }}
+                    className={`w-full text-left px-4 py-2.5 hover:bg-white/5 transition-colors flex flex-col ${scanMode === m.value ? 'bg-blue-500/10' : ''}`}
+                  >
+                    <span className={`text-sm font-medium ${scanMode === m.value ? 'text-blue-400' : 'text-slate-200'}`}>
+                      {scanMode === m.value && '● '}{m.label}
+                    </span>
+                    <span className="text-xs text-slate-500 mt-0.5">{m.desc}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
           {isScanning && (
             <button
               onClick={handleStopScan}
@@ -44,7 +84,7 @@ export default function LibraryTab({
           <div className="flex justify-between items-start mb-2">
             <div>
               <h3 className="font-bold text-slate-200">
-                {scanResults ? (isStaleResults ? 'Previous Scan Results' : 'Scan Results') : 'Scanning Library'}
+                {scanResults ? (isStaleResults ? 'Previous Scan Results' : 'Scan Results') : `Scanning Library — ${SCAN_MODES.find(m => m.value === scanMode)?.label || 'Full Scan'}`}
               </h3>
               <p className="text-sm text-slate-400 truncate max-w-md">
                 {scanResults ? (isStaleResults ? 'Data from last scan — run a new scan to refresh' : 'Scan completed') : (scanProgress?.currentPhase || scanProgress?.currentFile)}
@@ -195,6 +235,29 @@ export default function LibraryTab({
                 </button>
               </div>
               <p className="text-[10px] text-rose-400/60 mt-1">Check that your mounts are connected and accessible on the server.</p>
+            </div>
+          )}
+
+          {/* Skipped files */}
+          {data?.skippedFiles?.length > 0 && (
+            <div className="mt-2 p-3 bg-slate-500/10 border border-slate-500/30 rounded-xl">
+              <p className="text-xs font-bold text-slate-400 flex items-center gap-1 mb-1">
+                <AlertCircle className="w-3 h-3" /> {data.skippedFiles.length} file(s) skipped
+              </p>
+              <details>
+                <summary className="text-[10px] text-slate-400/60 cursor-pointer hover:text-slate-400 transition-colors">
+                  View skipped files
+                </summary>
+                <div className="mt-1 space-y-1 max-h-32 overflow-y-auto">
+                  {data.skippedFiles.map((sf, i) => (
+                    <div key={`lib-${i}`} className="text-[10px] text-slate-400/80">
+                      <span className="font-mono">{sf.name}</span>
+                      {sf.reason && <span className="text-slate-500 ml-2">— {sf.reason}</span>}
+                      {sf.path && <p className="text-[8px] text-slate-500 font-mono ml-0 truncate" title={sf.path}>{sf.path}</p>}
+                    </div>
+                  ))}
+                </div>
+              </details>
             </div>
           )}
 

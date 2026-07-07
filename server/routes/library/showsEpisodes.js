@@ -85,7 +85,7 @@ router.post('/shows/:id/refresh', async (req, res, next) => {
                       lastE = allEps[allEps.length - 1];
                     }
                   }
-                  const { getResolution } = require('../../utils/videoUtils');
+                  const { getResolution, getCodec } = require('../../utils/videoUtils');
                   // Always detect resolution — file name first, ffprobe as fallback
                   let resolution = null;
                   const nameLower = item.name.toLowerCase();
@@ -95,6 +95,14 @@ router.post('/shows/:id/refresh', async (req, res, next) => {
                   else if (nameLower.includes('480p')) resolution = '480p';
                   if (!resolution) {
                     try { resolution = await getResolution(fullPath); } catch { /* ignore */ }
+                  }
+
+                  // Detect codec — file name first, ffprobe as fallback
+                  let codec = null;
+                  if (nameLower.includes('x265') || nameLower.includes('h265') || nameLower.includes('hevc')) codec = 'x265';
+                  else if (nameLower.includes('x264') || nameLower.includes('h264') || nameLower.includes('avc')) codec = 'x264';
+                  if (!codec) {
+                    try { codec = await getCodec(fullPath); } catch { /* ignore */ }
                   }
 
                   // Preserve existing scene_name unless empty/missing/auto-generated
@@ -119,9 +127,9 @@ router.post('/shows/:id/refresh', async (req, res, next) => {
                     
                     db.prepare(`
                       UPDATE episodes 
-                      SET file_path = ?, file_size = ?, scene_name = ?, status = 'downloaded', resolution = ?
+                      SET file_path = ?, file_size = ?, scene_name = ?, status = 'downloaded', resolution = ?, codec = ?
                       WHERE show_id = ? AND season_number = ? AND episode_number = ?
-                    `).run(fullPath, stats.size, resName, resolution, show.id, s, ep);
+                    `).run(fullPath, stats.size, resName, resolution, codec, show.id, s, ep);
                   }
                 }
               }

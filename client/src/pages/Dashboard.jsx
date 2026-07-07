@@ -73,8 +73,8 @@ export default function Dashboard() {
   const viewMode = location.pathname.includes('shows') ? 'shows' : 'movies';
   const scopeKey = (key) => `atlas_${viewMode}_${key}`;
 
-  const DEFAULT_TABLE_COLUMNS = { year: true, rating: true, resolution: true, size: true, subtitles: true, status: true, seasons: true, episodes: true };
-  const DEFAULT_COLUMN_ORDER = ['year', 'rating', 'resolution', 'size', 'subtitles', 'seasons', 'episodes', 'status'];
+  const DEFAULT_TABLE_COLUMNS = { year: true, rating: true, resolution: true, codec: true, size: true, subtitles: true, status: true, seasons: true, episodes: true };
+  const DEFAULT_COLUMN_ORDER = ['year', 'rating', 'resolution', 'codec', 'size', 'subtitles', 'seasons', 'episodes', 'status'];
 
   const [tableColumns, setTableColumns] = useState(() => {
     try {
@@ -115,6 +115,7 @@ export default function Dashboard() {
   const [genreFilter, setGenreFilter] = useState(() => localStorage.getItem(scopeKey('GenreFilter')) || 'all');
   const [qualityFilter, setQualityFilter] = useState(() => localStorage.getItem(scopeKey('QualityFilter')) || 'all');
   const [resolutionFilter, setResolutionFilter] = useState(() => localStorage.getItem(scopeKey('ResolutionFilter')) || 'all');
+  const [codecFilter, setCodecFilter] = useState(() => localStorage.getItem(scopeKey('CodecFilter')) || 'all');
   const [yearFilter, setYearFilter] = useState(() => localStorage.getItem(scopeKey('YearFilter')) || 'all');
   const [tmdbStatusFilter, setTmdbStatusFilter] = useState(() => localStorage.getItem(scopeKey('TmdbStatusFilter')) || 'all');
   const [ratingFilter, setRatingFilter] = useState('all');
@@ -173,7 +174,8 @@ export default function Dashboard() {
   const COLUMN_DEFS = {
     year:          { label: 'Year',       sortField: 'year',         w: 'w-24' },
     rating:        { label: 'Rating',     sortField: 'rating',       w: 'w-32' },
-    resolution:    { label: 'Resolution', sortField: 'resolution',   w: 'w-28 whitespace-nowrap' },
+    resolution:    { label: 'Resolution', sortField: 'resolution',   w: 'w-24 whitespace-nowrap' },
+    codec:         { label: 'Codec',      sortField: 'codec',        w: 'w-20 whitespace-nowrap' },
     size:          { label: 'Size',       sortField: 'size',         w: 'w-28' },
     seasons:       { label: 'Seasons',    sortField: 'season_count', w: 'w-24 whitespace-nowrap', showsOnly: true },
     episodes:      { label: 'Episodes',   sortField: 'missing_episodes', w: 'w-24 whitespace-nowrap', showsOnly: true },
@@ -199,12 +201,23 @@ export default function Dashboard() {
 
       case 'resolution': {
         const resVal = parseResolution(item.scene_name || item.sample_episode_path || item.file_path);
-        const codecVal = item.codec || parseCodec(item.scene_name || item.sample_episode_path || item.file_path);
         return (
           <td key={colKey} className="py-2.5 px-4 text-slate-300">
             {resVal !== 'Unknown' ? (
               <span className="px-2 py-0.5 rounded text-xs font-medium bg-slate-800 text-slate-300 border border-slate-700 whitespace-nowrap">
-                {codecVal !== 'Unknown' ? `${resVal} (${codecVal})` : resVal}
+                {resVal}
+              </span>
+            ) : <span className="text-slate-600">—</span>}
+          </td>
+        );
+      }
+      case 'codec': {
+        const codecVal = item.codec || parseCodec(item.scene_name || item.sample_episode_path || item.file_path);
+        return (
+          <td key={colKey} className="py-2.5 px-4 text-slate-300">
+            {codecVal !== 'Unknown' ? (
+              <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-slate-800/40 text-slate-400 border border-slate-700/30 whitespace-nowrap uppercase">
+                {codecVal}
               </span>
             ) : <span className="text-slate-600">—</span>}
           </td>
@@ -307,9 +320,10 @@ export default function Dashboard() {
     localStorage.setItem(scopeKey('GenreFilter'), genreFilter);
     localStorage.setItem(scopeKey('QualityFilter'), qualityFilter);
     localStorage.setItem(scopeKey('ResolutionFilter'), resolutionFilter);
+    localStorage.setItem(scopeKey('CodecFilter'), codecFilter);
     localStorage.setItem(scopeKey('YearFilter'), yearFilter);
     localStorage.setItem(scopeKey('Sort'), sort);
-  }, [viewStyle, statusFilter, watchedFilter, genreFilter, qualityFilter, resolutionFilter, yearFilter, sort]);
+  }, [viewStyle, statusFilter, watchedFilter, genreFilter, qualityFilter, resolutionFilter, codecFilter, yearFilter, sort]);
 
   // Reset filters when switching between movies and shows
   const [page, setPage] = useState(1);
@@ -321,6 +335,7 @@ export default function Dashboard() {
     setGenreFilter(localStorage.getItem(scopeKey('GenreFilter')) || 'all');
     setQualityFilter(localStorage.getItem(scopeKey('QualityFilter')) || 'all');
     setResolutionFilter(localStorage.getItem(scopeKey('ResolutionFilter')) || 'all');
+    setCodecFilter(localStorage.getItem(scopeKey('CodecFilter')) || 'all');
     setYearFilter(localStorage.getItem(scopeKey('YearFilter')) || 'all');
     setSort(localStorage.getItem(scopeKey('Sort')) || 'added_desc');
     setPage(1);
@@ -333,7 +348,7 @@ export default function Dashboard() {
   // Reset pagination when filters/sort change
   useEffect(() => {
     setPage(1);
-  }, [sort, statusFilter, watchedFilter, genreFilter, qualityFilter, resolutionFilter, yearFilter, tmdbStatusFilter]);
+  }, [sort, statusFilter, watchedFilter, genreFilter, qualityFilter, resolutionFilter, codecFilter, yearFilter, tmdbStatusFilter]);
 
   // Capture initial viewMode for the mount-once effect (prevents stale closure)
   const initialViewModeRef = useRef(viewMode);
@@ -435,6 +450,11 @@ export default function Dashboard() {
     return (order[b] || 0) - (order[a] || 0);
   }), [sourceData]);
 
+  // Unique codecs from ALL items
+  const allCodecs = useMemo(() => [...new Set(
+    sourceData.map(item => item.codec || parseCodec(item.scene_name || item.sample_episode_path || item.file_path)).filter(c => c !== 'Unknown')
+  )].sort(), [sourceData]);
+
   // --- Apply filters (memoized) ---
   const displayItems = useMemo(() => {
     const sourceItems = viewMode === 'movies' ? movies : shows;
@@ -498,6 +518,11 @@ export default function Dashboard() {
       items = items.filter(item => parseResolution(item.scene_name || item.sample_episode_path || item.file_path) === resolutionFilter);
     }
 
+    // Codec filter
+    if (codecFilter !== 'all') {
+      items = items.filter(item => (item.codec || parseCodec(item.scene_name || item.sample_episode_path || item.file_path)) === codecFilter);
+    }
+
     // Rating filter (from statistics page)
     if (ratingFilter !== 'all') {
       if (ratingFilter.includes('–')) {
@@ -549,11 +574,16 @@ export default function Dashboard() {
         const resB = order[parseResolution(b.scene_name || b.sample_episode_path || b.file_path)] || 0;
         return sort === 'resolution_asc' ? resA - resB : resB - resA;
       }
+      if (sort === 'codec_asc' || sort === 'codec_desc') {
+        const codecA = a.codec || parseCodec(a.scene_name || a.sample_episode_path || a.file_path) || '';
+        const codecB = b.codec || parseCodec(b.scene_name || b.sample_episode_path || b.file_path) || '';
+        return sort === 'codec_asc' ? codecA.localeCompare(codecB) : codecB.localeCompare(codecA);
+      }
       return 0;
     });
 
     return items;
-  }, [movies, shows, searchQuery, statusFilter, watchedFilter, yearFilter, genreFilter, qualityFilter, resolutionFilter, ratingFilter, tmdbStatusFilter, alphaFilter, sort]);
+  }, [movies, shows, searchQuery, statusFilter, watchedFilter, yearFilter, genreFilter, qualityFilter, resolutionFilter, codecFilter, ratingFilter, tmdbStatusFilter, alphaFilter, sort]);
 
   // --- Active filter chips ---
   const activeFilters = [];
@@ -569,6 +599,7 @@ export default function Dashboard() {
   if (genreFilter !== 'all') activeFilters.push({ key: 'genre', label: genreFilter });
   if (qualityFilter !== 'all') activeFilters.push({ key: 'quality', label: qualityFilter });
   if (resolutionFilter !== 'all') activeFilters.push({ key: 'resolution', label: resolutionFilter });
+  if (codecFilter !== 'all') activeFilters.push({ key: 'codec', label: codecFilter });
   if (ratingFilter !== 'all') activeFilters.push({ key: 'rating', label: `Rating: ${ratingFilter}` });
   if (tmdbStatusFilter !== 'all') activeFilters.push({ key: 'tmdbStatus', label: `Show: ${tmdbStatusFilter}` });
   if (alphaFilter) activeFilters.push({ key: 'alpha', label: alphaFilter });
@@ -581,6 +612,7 @@ export default function Dashboard() {
     if (key === 'genre') setGenreFilter('all');
     if (key === 'quality') setQualityFilter('all');
     if (key === 'resolution') setResolutionFilter('all');
+    if (key === 'codec') setCodecFilter('all');
     if (key === 'rating') setRatingFilter('all');
     if (key === 'tmdbStatus') setTmdbStatusFilter('all');
     if (key === 'alpha') setAlphaFilter(null);
@@ -594,6 +626,7 @@ export default function Dashboard() {
     setGenreFilter('all');
     setQualityFilter('all');
     setResolutionFilter('all');
+    setCodecFilter('all');
     setRatingFilter('all');
     setTmdbStatusFilter('all');
     setAlphaFilter(null);
@@ -901,6 +934,18 @@ export default function Dashboard() {
                   >
                     {allResolutions.map(r => (
                       <option key={r} value={r}>{r}</option>
+                    ))}
+                  </FilterSelect>
+                )}
+
+                {allCodecs.length > 0 && (
+                  <FilterSelect
+                    value={codecFilter}
+                    onChange={e => setCodecFilter(e.target.value)}
+                    label="All Codecs"
+                  >
+                    {allCodecs.map(c => (
+                      <option key={c} value={c}>{c}</option>
                     ))}
                   </FilterSelect>
                 )}

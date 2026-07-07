@@ -41,22 +41,29 @@ export default function SystemTasks() {
         setTasks(newTasks);
 
         const prev = prevLastRunRef.current;
-        const updated = {};
-        for (const t of newTasks) {
-          if (t.lastRun && t.lastRun !== prev[t.id] && t.status !== 'running') {
-            updated[t.id] = true;
+        // On first fetch, seed the ref so we don't flash all tasks as "just ran"
+        if (Object.keys(prev).length === 0) {
+          for (const t of newTasks) {
+            prev[t.id] = t.lastRun;
           }
-          prev[t.id] = t.lastRun;
-        }
-        if (Object.keys(updated).length > 0) {
-          setRecentlyRan(prev => ({ ...prev, ...updated }));
-          setTimeout(() => {
-            setRecentlyRan(prev => {
-              const next = { ...prev };
-              for (const id of Object.keys(updated)) delete next[id];
-              return next;
-            });
-          }, 4000);
+        } else {
+          const updated = {};
+          for (const t of newTasks) {
+            if (t.lastRun && t.lastRun !== prev[t.id] && t.status !== 'running') {
+              updated[t.id] = true;
+            }
+            prev[t.id] = t.lastRun;
+          }
+          if (Object.keys(updated).length > 0) {
+            setRecentlyRan(prev => ({ ...prev, ...updated }));
+            setTimeout(() => {
+              setRecentlyRan(prev => {
+                const next = { ...prev };
+                for (const id of Object.keys(updated)) delete next[id];
+                return next;
+              });
+            }, 4000);
+          }
         }
       }
     } catch (err) {

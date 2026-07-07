@@ -158,6 +158,9 @@ export default function Settings() {
             if (empty.length > 0) warnings.push(`${empty.length} path(s) empty/no files`);
             const addedMovies = res.data.addedMoviesCount || 0;
             const addedShows = res.data.addedShowsCount || 0;
+            const failedMovies = res.data.failedMovies?.length || 0;
+            const failedShows = res.data.failedShows?.length || 0;
+            const skipped = res.data.skippedCount || 0;
             let addedSummary = '';
             if (addedMovies > 0 && addedShows > 0) {
               addedSummary = `${addedMovies} movie${addedMovies !== 1 ? 's' : ''} & ${addedShows} TV show${addedShows !== 1 ? 's' : ''} (${res.data.addedEpisodesCount || 0} total episode${res.data.addedEpisodesCount !== 1 ? 's' : ''})`;
@@ -168,6 +171,9 @@ export default function Settings() {
             } else {
               addedSummary = '0 items';
             }
+            const failedTotal = failedMovies + failedShows;
+            if (failedTotal > 0) warnings.push(`${failedTotal} could not be imported`);
+            if (skipped > 0) warnings.push(`${skipped} skipped`);
             if (warnings.length > 0) {
               setStatus({ type: 'error', message: `Scan completed. ${addedSummary} added. Warnings: ${warnings.join(', ')}. Check the scan panel for details.` });
             } else {
@@ -390,7 +396,7 @@ export default function Settings() {
     } catch { /* path add failed silently — fetchPaths not called */ }
   };
 
-  const handleScan = async () => {
+  const handleScan = async (mode = 'full') => {
     setIsScanning(true);
     setScanResults(null);
     setScanProgress(null);
@@ -398,7 +404,7 @@ export default function Settings() {
     sessionStorage.removeItem('lastScanResults');
     setStatus({ type: '', message: '' });
     try {
-      await api.post('/library/scan');
+      await api.post('/library/scan', { mode });
     } catch (err) {
       setStatus({ type: 'error', message: 'Failed to start library scan.' });
       setIsScanning(false);

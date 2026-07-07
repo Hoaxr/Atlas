@@ -106,11 +106,22 @@ export default function Discover() {
     try {
       // Use ?badges=true to skip expensive subtitle scanning on movies
       const endpoint = mode === 'movies' ? '/library/movies?badges=true' : '/library/shows';
-      const res = await api.get(endpoint);
-      if (res.data.status === 'success') {
-        const items = res.data.data;
+      const [libRes, watchedRes] = await Promise.all([
+        api.get(endpoint),
+        api.get('/library/watched-tmdb'),
+      ]);
+      if (libRes.data.status === 'success') {
+        const items = libRes.data.data;
         const itemMap = new Map(items.map(item => [item.tmdb_id, item.id]));
         const watched = new Map(items.map(item => [item.tmdb_id, !!item.watched]));
+        // Merge persistent watched_tmdb entries (survives library deletion)
+        if (watchedRes.data.status === 'success') {
+          for (const entry of watchedRes.data.data) {
+            if (!watched.has(entry.tmdb_id)) {
+              watched.set(entry.tmdb_id, true);
+            }
+          }
+        }
         setLibraryItems(itemMap);
         setWatchedMap(watched);
         

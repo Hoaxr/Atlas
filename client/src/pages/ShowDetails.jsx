@@ -511,28 +511,34 @@ export default function ShowDetails() {
                 {/* RESOLUTION | SIZE | LANGUAGE | WATCHED */}
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
                   <div className="flex items-center gap-3 bg-slate-800/30 dark:bg-slate-900/35 border border-slate-700/30 dark:border-white/5 rounded-xl p-3">
-                    <Film className="w-5 h-5 text-purple-400 shrink-0" />
                     <div>
                       <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500 block">Resolution</span>
-                      <span className="text-sm font-semibold text-slate-200">
-                        {(() => {
-                          let res = 'Unknown';
-                          let codec = 'Unknown';
-                          if (episodes && episodes.length > 0) {
-                            for (const ep of episodes) {
-                              if (ep.status === 'downloaded') {
-                                const epRes = parseResolution(ep.scene_name || ep.file_path);
-                                if (epRes !== 'Unknown') res = epRes;
-                                const epCodec = parseCodec(ep.scene_name || ep.file_path);
-                                if (epCodec !== 'Unknown') codec = epCodec;
-                                if (res !== 'Unknown' && codec !== 'Unknown') break;
-                              }
+                      {(() => {
+                        let res = 'Unknown';
+                        let codec = 'Unknown';
+                        if (episodes && episodes.length > 0) {
+                          for (const ep of episodes) {
+                            if (ep.status === 'downloaded') {
+                              const epRes = parseResolution(ep.scene_name || ep.file_path);
+                              if (epRes !== 'Unknown') res = epRes;
+                              const epCodec = ep.codec || parseCodec(ep.scene_name || ep.file_path);
+                              if (epCodec !== 'Unknown') codec = epCodec;
+                              if (res !== 'Unknown' && codec !== 'Unknown') break;
                             }
                           }
-                          if (res === 'Unknown') return '—';
-                          return codec !== 'Unknown' ? `${res} (${codec})` : res;
-                        })()}
-                      </span>
+                        }
+                        if (res === 'Unknown') return <span className="text-sm font-semibold text-slate-200">—</span>;
+                        return (
+                          <div className="flex items-center gap-1.5 mt-0.5">
+                            <span className="text-sm font-semibold text-slate-200">{res}</span>
+                            {codec !== 'Unknown' && (
+                              <span className="text-[9px] font-mono font-bold text-slate-400 uppercase bg-slate-800/50 px-1.5 py-0.5 rounded border border-white/5 whitespace-nowrap">
+                                {codec}
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })()}
                     </div>
                   </div>
 
