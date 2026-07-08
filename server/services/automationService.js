@@ -42,6 +42,7 @@ const runSearchCycle = async () => {
       AND (m.release_date IS NULL OR date(m.release_date) <= date('now'))
   `).all();
   
+  let movieFailures = 0;
   for (const movie of monitoredMovies) {
     try {
       const profile = getProfile(movie.quality_profile_id);
@@ -74,6 +75,7 @@ const runSearchCycle = async () => {
         eventBus.info('Download started', { title: movie.title, type: 'movie', release: bestRelease.title });
       }
     } catch (err) {
+      movieFailures++;
       console.error(`[Automation] Failed to process ${movie.title}:`, err.message);
     }
   }
@@ -88,6 +90,7 @@ const runSearchCycle = async () => {
       AND (e.air_date IS NULL OR date(e.air_date) <= date('now'))
   `).all();
 
+  let episodeFailures = 0;
   for (const ep of monitoredEpisodes) {
     try {
       const profile = getProfile(ep.quality_profile_id);
@@ -119,8 +122,18 @@ const runSearchCycle = async () => {
         eventBus.info('Download started', { title: `${ep.show_title} S${String(ep.season_number).padStart(2,'0')}E${String(ep.episode_number).padStart(2,'0')}`, type: 'episode', release: bestRelease.title });
       }
     } catch (err) {
+      episodeFailures++;
       console.error(`[Automation] Failed to process ${ep.show_title} S${ep.season_number}E${ep.episode_number}:`, err.message);
     }
+  }
+
+  if (movieFailures > 0 || episodeFailures > 0) {
+    eventBus.warn('Search cycle completed with errors', { 
+      movieFailures, 
+      episodeFailures,
+      totalMovies: monitoredMovies.length,
+      totalEpisodes: monitoredEpisodes.length
+    });
   }
 };
 

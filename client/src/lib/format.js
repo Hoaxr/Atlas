@@ -79,3 +79,35 @@ export function getReleaseTitleFromPath(filePath) {
   return parts[parts.length - 1];
 }
 
+/**
+ * Extract audio codec/channel info from a release title or filename.
+ */
+export function parseAudio(title) {
+  if (!title) return 'Unknown';
+  const lower = title.toLowerCase();
+  
+  if (lower.includes('atmos')) return 'Atmos';
+  if (lower.includes('truehd')) return 'TrueHD';
+  if (lower.includes('dts-hd') || lower.includes('dtshd')) return 'DTS-HD';
+  if (lower.includes('dts')) return 'DTS';
+  
+  if (lower.includes('ddp7.1') || lower.includes('dd+7.1') || lower.includes('e-ac3 7.1') || lower.includes('eac3 7.1')) return 'DDP 7.1';
+  if (lower.includes('ddp5.1') || lower.includes('dd+5.1') || lower.includes('e-ac3 5.1') || lower.includes('eac3 5.1') || lower.includes('ddp') || lower.includes('dd+')) return 'DDP 5.1';
+  if (lower.includes('dd5.1') || lower.includes('ac3 5.1') || lower.includes('ac-3 5.1')) return 'DD 5.1';
+  if (lower.includes('dd2.0') || lower.includes('ac3 2.0') || lower.includes('ac-3 2.0')) return 'DD Stereo';
+  if (lower.includes('ac3') || lower.includes('ac-3')) return 'AC3';
+  
+  if (lower.includes('aac 5.1') || lower.includes('aac5.1')) return 'AAC 5.1';
+  if (lower.includes('aac 2.0') || lower.includes('aac2.0') || lower.includes('aac')) return 'AAC Stereo';
+  
+  if (lower.includes('7.1')) return '7.1';
+  if (lower.includes('5.1')) return '5.1';
+  if (lower.includes('2.0') || lower.includes('stereo')) return 'Stereo';
+  
+  if (lower.includes('flac')) return 'FLAC';
+  if (lower.includes('opus')) return 'Opus';
+  if (lower.includes('mp3')) return 'MP3';
+  
+  return 'Unknown';
+}
+

@@ -1,11 +1,17 @@
 const EventEmitter = require('events');
 
+// Lazy-load database to avoid hot-path require() on every log call
+let _db;
+const getDb = () => {
+  if (!_db) _db = require('../config/database');
+  return _db;
+};
+
 class AppEventBus extends EventEmitter {
   log(level, message, metadata = {}) {
-    const db = require('../config/database');
     try {
       const payload = JSON.stringify({ level, message, ...metadata });
-      db.prepare('INSERT INTO logs (message) VALUES (?)').run(payload);
+      getDb().prepare('INSERT INTO logs (message) VALUES (?)').run(payload);
     } catch { /* ignore */ }
 
     // Emit to WebSocket clients

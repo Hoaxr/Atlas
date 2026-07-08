@@ -2,10 +2,10 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import api from '../lib/api';
-import { formatSize, parseResolution, parseCodec, LANG_LABEL, LANG_NAME } from '../lib/format';
+import { formatSize, parseResolution, parseCodec, parseAudio, LANG_LABEL, LANG_NAME } from '../lib/format';
 import { useSettings } from '../lib/useSettings';
 import { useTMDBDetails } from '../lib/useTMDBDetails';
-import { ArrowLeft, HardDrive, Tv, PlayCircle, ChevronDown, ChevronRight, ChevronLeft, Bookmark, BookmarkMinus, Search, Star, X, RefreshCw, Loader2, Download, CheckSquare, Film, Trash2, Globe, Eye } from 'lucide-react';
+import { ArrowLeft, HardDrive, Tv, PlayCircle, ChevronDown, ChevronRight, ChevronLeft, Bookmark, BookmarkMinus, Search, Star, X, RefreshCw, Loader2, Download, CheckSquare, Film, Trash2, Globe, Eye, Volume2 } from 'lucide-react';
 import { customAlert, customConfirm } from '../utils/alerts';
 import { useOutsideClick } from '../lib/useOutsideClick';
 import { setCachedShows } from '../lib/libraryCache';
@@ -509,7 +509,7 @@ export default function ShowDetails() {
                 </div>
 
                 {/* RESOLUTION | SIZE | LANGUAGE | WATCHED */}
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
                   <div className="flex items-center gap-3 bg-slate-800/30 dark:bg-slate-900/35 border border-slate-700/30 dark:border-white/5 rounded-xl p-3">
                     <div>
                       <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500 block">Resolution</span>
@@ -547,6 +547,28 @@ export default function ShowDetails() {
                     <div>
                       <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500 block">Size</span>
                       <span className="text-sm font-semibold text-slate-200">{formatSize(show.folder_size)}</span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-3 bg-slate-800/30 dark:bg-slate-900/35 border border-slate-700/30 dark:border-white/5 rounded-xl p-3">
+                    <Volume2 className="w-5 h-5 text-purple-400 shrink-0" />
+                    <div>
+                      <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500 block">Audio</span>
+                      {(() => {
+                        let audio = 'Unknown';
+                        if (episodes && episodes.length > 0) {
+                          for (const ep of episodes) {
+                            if (ep.status === 'downloaded') {
+                              const epAudio = ep.audio || parseAudio(ep.scene_name || ep.file_path);
+                              if (epAudio !== 'Unknown') {
+                                audio = epAudio;
+                                break;
+                              }
+                            }
+                          }
+                        }
+                        return <span className="text-sm font-semibold text-slate-200">{audio !== 'Unknown' ? audio : '-'}</span>;
+                      })()}
                     </div>
                   </div>
 

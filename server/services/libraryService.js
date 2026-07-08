@@ -263,7 +263,8 @@ const getShows = (limit = 0, offset = 0, sort = 'added_desc') => {
       )) as missing_episodes,
       (SELECT COUNT(DISTINCT season_number) FROM episodes WHERE show_id = s.id) as season_count,
       (SELECT COALESCE(scene_name, file_path) FROM episodes WHERE show_id = s.id AND status = 'downloaded' AND (scene_name IS NOT NULL OR file_path IS NOT NULL) LIMIT 1) as sample_episode_path,
-      (SELECT codec FROM episodes WHERE show_id = s.id AND status = 'downloaded' AND codec IS NOT NULL LIMIT 1) as codec
+      (SELECT codec FROM episodes WHERE show_id = s.id AND status = 'downloaded' AND codec IS NOT NULL LIMIT 1) as codec,
+      (SELECT audio FROM episodes WHERE show_id = s.id AND status = 'downloaded' AND audio IS NOT NULL LIMIT 1) as audio
     FROM shows s
     LEFT JOIN quality_profiles qp ON s.quality_profile_id = qp.id
     ORDER BY ${sortMap[sort] || 's.added_at DESC, s.id DESC'}

@@ -4,7 +4,9 @@ import api from '../lib/api';
 import { Activity, Film, Tv, Search, CheckCircle2, AlertCircle, Bookmark, BookmarkMinus, LayoutGrid, List, Star, Info, X, RotateCcw, Filter as FilterIcon, CheckSquare, Square, Columns, Plus } from 'lucide-react';
 import { customAlert, customConfirm } from '../utils/alerts';
 import { cachedMovies, cachedShows, setCachedMovies, setCachedShows } from '../lib/libraryCache';
-import { formatSize, parseResolution, parseCodec } from '../lib/format';
+import { parseResolution, parseCodec } from '../lib/format';
+import { sortItems } from '../lib/sortItems';
+import { renderColumnCell } from '../components/dashboard/TableCellRenderers';
 import { useSettings } from '../lib/useSettings';
 import useWebSocket from '../lib/useWebSocket';
 import { useOutsideClick } from '../lib/useOutsideClick';
@@ -73,8 +75,8 @@ export default function Dashboard() {
   const viewMode = location.pathname.includes('shows') ? 'shows' : 'movies';
   const scopeKey = (key) => `atlas_${viewMode}_${key}`;
 
-  const DEFAULT_TABLE_COLUMNS = { year: true, rating: true, resolution: true, codec: true, size: true, subtitles: true, status: true, seasons: true, episodes: true };
-  const DEFAULT_COLUMN_ORDER = ['year', 'rating', 'resolution', 'codec', 'size', 'subtitles', 'seasons', 'episodes', 'status'];
+  const DEFAULT_TABLE_COLUMNS = { year: true, rating: true, resolution: true, codec: true, audio: true, size: true, subtitles: true, status: true, seasons: true, episodes: true };
+  const DEFAULT_COLUMN_ORDER = ['year', 'rating', 'resolution', 'codec', 'audio', 'size', 'subtitles', 'seasons', 'episodes', 'status'];
 
   const [tableColumns, setTableColumns] = useState(() => {
     try {
@@ -176,6 +178,7 @@ export default function Dashboard() {
     rating:        { label: 'Rating',     sortField: 'rating',       w: 'w-32' },
     resolution:    { label: 'Resolution', sortField: 'resolution',   w: 'w-24 whitespace-nowrap' },
     codec:         { label: 'Codec',      sortField: 'codec',        w: 'w-20 whitespace-nowrap' },
+    audio:         { label: 'Audio',      sortField: 'audio',        w: 'w-24 whitespace-nowrap' },
     size:          { label: 'Size',       sortField: 'size',         w: 'w-28' },
     seasons:       { label: 'Seasons',    sortField: 'season_count', w: 'w-24 whitespace-nowrap', showsOnly: true },
     episodes:      { label: 'Episodes',   sortField: 'missing_episodes', w: 'w-24 whitespace-nowrap', showsOnly: true },
@@ -183,123 +186,18 @@ export default function Dashboard() {
     status:        { label: 'Status',     sortField: 'status',        w: 'w-32' },
   };
 
-  const renderColumnCell = (colKey, item) => {
-    switch (colKey) {
-      case 'year':
-        return <td key={colKey} className="py-2.5 px-4 text-slate-300 text-sm">{item.year || <span className="text-slate-600">—</span>}</td>;
-      case 'rating':
-        return (
-          <td key={colKey} className="py-2.5 px-4 text-slate-300 text-sm font-medium">
-            {item.rating > 0 ? (
-              <div className="flex items-center gap-1.5 w-fit bg-slate-950/50 px-2.5 py-0.5 rounded-lg border border-white/5 shadow-inner">
-                <Star className="w-3.5 h-3.5 text-yellow-400 fill-yellow-400 drop-shadow-sm" />
-                <span className="text-sm font-bold text-slate-600 dark:text-slate-200">{Number(item.rating).toFixed(1)}</span>
-              </div>
-            ) : <span className="text-slate-600">—</span>}
-          </td>
-        );
-
-      case 'resolution': {
-        const resVal = parseResolution(item.scene_name || item.sample_episode_path || item.file_path);
-        return (
-          <td key={colKey} className="py-2.5 px-4 text-slate-300">
-            {resVal !== 'Unknown' ? (
-              <span className="px-2 py-0.5 rounded text-xs font-medium bg-slate-800 text-slate-300 border border-slate-700 whitespace-nowrap">
-                {resVal}
-              </span>
-            ) : <span className="text-slate-600">—</span>}
-          </td>
-        );
-      }
-      case 'codec': {
-        const codecVal = item.codec || parseCodec(item.scene_name || item.sample_episode_path || item.file_path);
-        return (
-          <td key={colKey} className="py-2.5 px-4 text-slate-300">
-            {codecVal !== 'Unknown' ? (
-              <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-slate-800/40 text-slate-400 border border-slate-700/30 whitespace-nowrap uppercase">
-                {codecVal}
-              </span>
-            ) : <span className="text-slate-600">—</span>}
-          </td>
-        );
-      }
-      case 'size':
-        return <td key={colKey} className="py-2.5 px-4 text-slate-400 text-sm">{formatSize(item.file_size || item.folder_size || 0)}</td>;
-      case 'subtitles':
-        const subsList = Array.isArray(item.subtitles) ? item.subtitles : (() => { try { return JSON.parse(item.subtitles || '[]'); } catch { return []; } })();
-        const existingLangs = subsList.map(s => typeof s === 'string' ? s.toLowerCase() : (s.lang || '').toLowerCase()).filter(Boolean);
-        return (
-          <td key={colKey} className="py-2.5 px-4">
-            {providerLangs && providerLangs.length > 0 ? (
-              <div className="flex flex-wrap gap-1">
-                {providerLangs.map(code => {
-                  const exists = existingLangs.includes(code.toLowerCase());
-                  return (
-                    <span key={code} className={`text-[10px] font-bold uppercase px-1.5 py-0.5 rounded border ${
-                      exists
-                        ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/20'
-                        : 'bg-rose-500/15 text-rose-400 border-rose-500/20'
-                    }`}>
-                      {code}
-                    </span>
-                  );
-                })}
-              </div>
-            ) : subsList.length > 0 ? (
-              <div className="flex flex-wrap gap-1">
-                {subsList.map((sub, i) => (
-                  <span key={i} className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/20" title={sub.file || sub}>
-                    {typeof sub === 'string' ? sub : (sub.lang || '??')}
-                  </span>
-                ))}
-              </div>
-            ) : (
-              <span className="text-slate-600 text-xs">—</span>
-            )}
-          </td>
-        );
-      case 'seasons':
-        return <td key={colKey} className="py-2.5 px-4 text-slate-300 text-sm font-medium">{item.season_count || 0}</td>;
-      case 'episodes':
-        const total = item.episode_count || 0;
-        const missing = item.missing_episodes || 0;
-        return <td key={colKey} className="py-2.5 px-4 text-slate-300 text-sm font-medium">{total}<span className="text-slate-500 mx-1">/</span><span className={missing > 0 ? 'text-rose-400' : 'text-emerald-400'}>{missing}</span></td>;
-      case 'status':
-        return (
-          <td key={colKey} className="py-2.5 px-4">
-            <div className="flex items-center gap-2">
-              {(() => {
-                const isNotReleased = item.release_date && new Date(item.release_date) > new Date();
-                const label = (item.status === 'monitored' && isNotReleased) ? 'not released' : item.status;
-                const color = (item.status === 'monitored' && isNotReleased)
-                  ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
-                  : item.status === 'downloaded' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-                  : item.status === 'downloading' ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
-                  : item.status === 'monitored' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-                  : 'bg-rose-500/20 text-rose-400 border border-rose-500/30';
-                return (
-                  <span className={`text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full whitespace-nowrap ${color}`}>
-                    {label}
-                  </span>
-                );
-              })()}
-            </div>
-          </td>
-        );
-      default:
-        return null;
-    }
-  };
-
   const visibleOrderedColumns = columnOrder.filter(col => {
     if (!tableColumns[col]) return false;
     const def = COLUMN_DEFS[col];
+    if (!def) return false;
     if (def.showsOnly && viewMode !== 'shows') return false;
     if (def.moviesOnly && viewMode !== 'movies') return false;
     return true;
   });
 
   const { profiles: qualityProfiles, providerLangs } = useSettings();
+
+  const renderCell = (colKey, item) => renderColumnCell(colKey, item, providerLangs);
 
   // Apply URL params on mount (from Statistics page clicks)
   useEffect(() => {
@@ -551,36 +449,8 @@ export default function Dashboard() {
       });
     }
 
-    // Sort
-    items.sort((a, b) => {
-      if (sort === 'added_desc') return new Date(b.added_at) - new Date(a.added_at);
-      if (sort === 'rating_desc') return (b.rating || 0) - (a.rating || 0);
-      if (sort === 'rating_asc') return (a.rating || 0) - (b.rating || 0);
-      if (sort === 'size_desc') return (b.file_size || b.folder_size || 0) - (a.file_size || a.folder_size || 0);
-      if (sort === 'size_asc') return (a.file_size || a.folder_size || 0) - (b.file_size || b.folder_size || 0);
-      if (sort === 'title_asc') return (a.title || '').localeCompare(b.title || '');
-      if (sort === 'title_desc') return (b.title || '').localeCompare(a.title || '');
-      if (sort === 'year_desc') return (b.year || 0) - (a.year || 0);
-      if (sort === 'year_asc') return (a.year || 0) - (b.year || 0);
-      if (sort === 'status_asc') return (a.status || '').localeCompare(b.status || '');
-      if (sort === 'status_desc') return (b.status || '').localeCompare(a.status || '');
-      if (sort === 'season_count_desc') return (b.season_count || 0) - (a.season_count || 0);
-      if (sort === 'season_count_asc') return (a.season_count || 0) - (b.season_count || 0);
-      if (sort === 'missing_episodes_desc') return (b.missing_episodes || 0) - (a.missing_episodes || 0);
-      if (sort === 'missing_episodes_asc') return (a.missing_episodes || 0) - (b.missing_episodes || 0);
-      if (sort === 'resolution_asc' || sort === 'resolution_desc') {
-        const order = { '2160p': 4, '1080p': 3, '720p': 2, 'SD': 1, 'Unknown': 0 };
-        const resA = order[parseResolution(a.scene_name || a.sample_episode_path || a.file_path)] || 0;
-        const resB = order[parseResolution(b.scene_name || b.sample_episode_path || b.file_path)] || 0;
-        return sort === 'resolution_asc' ? resA - resB : resB - resA;
-      }
-      if (sort === 'codec_asc' || sort === 'codec_desc') {
-        const codecA = a.codec || parseCodec(a.scene_name || a.sample_episode_path || a.file_path) || '';
-        const codecB = b.codec || parseCodec(b.scene_name || b.sample_episode_path || b.file_path) || '';
-        return sort === 'codec_asc' ? codecA.localeCompare(codecB) : codecB.localeCompare(codecA);
-      }
-      return 0;
-    });
+    // Sort (delegated to shared utility)
+    items = sortItems(items, sort);
 
     return items;
   }, [movies, shows, searchQuery, statusFilter, watchedFilter, yearFilter, genreFilter, qualityFilter, resolutionFilter, codecFilter, ratingFilter, tmdbStatusFilter, alphaFilter, sort]);
@@ -767,6 +637,8 @@ export default function Dashboard() {
                     <div className="px-4 py-2.5 border-b border-white/10 text-xs font-bold text-slate-400 uppercase tracking-wider">Columns</div>
                     <div className="p-1.5 flex flex-col gap-0.5">
                       {columnOrder.filter(col => {
+                        const def = COLUMN_DEFS[col];
+                        if (!def) return false;
                         if (col === 'seasons' && viewMode !== 'shows') return false;
                         if (col === 'episodes' && viewMode !== 'shows') return false;
                         if (col === 'subtitles' && viewMode !== 'movies') return false;
@@ -1300,7 +1172,7 @@ export default function Dashboard() {
                         <span>{item.title}</span>
                       </div>
                     </td>
-                    {visibleOrderedColumns.map(colKey => renderColumnCell(colKey, item))}
+                    {visibleOrderedColumns.map(colKey => renderCell(colKey, item))}
                     <td className="py-2.5 px-4 text-right">
                       <div className="flex justify-end gap-2 items-center">
                           <>

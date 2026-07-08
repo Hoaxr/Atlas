@@ -147,94 +147,14 @@ class WatcherService {
   }
 
   async getJellyfinSessions(url, apiKey) {
-    try {
-      const response = await axios.get(`${url}/Sessions`, {
-        headers: { 'X-Emby-Token': apiKey },
-        timeout: 5000
-      });
-      const sessions = response.data || [];
-      return sessions.filter(s => s.NowPlayingItem).map(s => {
-        let type = s.NowPlayingItem.Type.toLowerCase();
-        if (type === 'tvchannel') type = 'live';
-
-        const item = s.NowPlayingItem;
-        const streams = item.MediaStreams || [];
-        const videoStream = streams.find(st => st.Type === 'Video') || {};
-        const audioStream = streams.find(st => st.Type === 'Audio') || {};
-        const subStream = streams.find(st => st.Type === 'Subtitle');
-
-        const playMethod = s.PlayState?.PlayMethod || 'DirectPlay';
-        const playMethodLabel = playMethod === 'Transcode' ? 'Transcode' : playMethod === 'DirectStream' ? 'Direct Stream' : 'Direct Play';
-
-        // Quality
-        const bitrate = item.MediaSources?.[0]?.Bitrate;
-        const bitrateMbps = bitrate ? (bitrate / 1000000).toFixed(1) : null;
-        const quality = videoStream.Height 
-          ? `${videoStream.Height}p${bitrateMbps ? ` (${bitrateMbps} Mbps)` : ''}`
-          : (bitrateMbps ? `${bitrateMbps} Mbps` : null);
-
-        // Video label
-        const videoLabel = videoStream.Codec 
-          ? `${videoStream.Codec?.toUpperCase()}${videoStream.Height ? ` ${videoStream.Height}p` : ''}`
-          : null;
-
-        // Audio label
-        const audioLabel = audioStream.Codec
-          ? `${audioStream.DisplayTitle || audioStream.Codec?.toUpperCase()}`
-          : null;
-
-        // Subtitle label
-        const subtitleLabel = subStream
-          ? `${subStream.DisplayTitle || subStream.Codec?.toUpperCase() || 'Unknown'}`
-          : null;
-
-        // ETA
-        const totalTicks = item.RunTimeTicks;
-        const posTicks = s.PlayState?.PositionTicks;
-        const remaining = totalTicks && posTicks ? Math.floor((totalTicks - posTicks) / 10000) : 0;
-        const etaTime = remaining > 0 ? new Date(Date.now() + remaining) : null;
-        const etaStr = etaTime ? etaTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : null;
-
-        const jfTitle = item.Type === 'Episode' 
-            ? `${item.SeriesName} - S${String(item.ParentIndexNumber).padStart(2, '0')}E${String(item.IndexNumber).padStart(2, '0')}` 
-            : item.Name;
-
-        return {
-          id: `jellyfin_${s.Id}`,
-          user: s.UserName || 'Unknown',
-          title: jfTitle,
-          type: type,
-          player: s.Client || 'Jellyfin',
-          product: s.Client || null,
-          platform: s.DeviceName || null,
-          playerDevice: null,
-          progress: posTicks && totalTicks ? (posTicks / totalTicks) * 100 : 0,
-          timeOffset: posTicks ? Math.floor(posTicks / 10000) : 0,
-          timeTotal: totalTicks ? Math.floor(totalTicks / 10000) : 0,
-          state: s.PlayState?.IsPaused ? 'paused' : 'playing',
-          server: 'Jellyfin',
-          poster: resolvePoster(jfTitle, type),
-          // Stream details
-          quality,
-          videoDecision: playMethodLabel,
-          audioDecision: playMethodLabel,
-          subtitleDecision: subStream ? playMethodLabel : null,
-          videoLabel,
-          audioLabel,
-          subtitleLabel,
-          container: item.Container?.toUpperCase() || null,
-          location: null,
-          bandwidth: null,
-          eta: etaStr
-        };
-      });
-    } catch (e) {
-      console.error('[WatcherService] Failed to fetch Jellyfin sessions:', e.message);
-      return [];
-    }
+    return this.getEmbyCompatibleSessions(url, apiKey, 'Jellyfin');
   }
 
   async getEmbySessions(url, apiKey) {
+    return this.getEmbyCompatibleSessions(url, apiKey, 'Emby');
+  }
+
+  async getEmbyCompatibleSessions(url, apiKey, serverLabel) {
     try {
       const response = await axios.get(`${url}/Sessions`, {
         headers: { 'X-Emby-Token': apiKey },
@@ -283,16 +203,16 @@ class WatcherService {
         const etaTime = remaining > 0 ? new Date(Date.now() + remaining) : null;
         const etaStr = etaTime ? etaTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : null;
 
-        const embyTitle = item.Type === 'Episode' 
+        const title = item.Type === 'Episode' 
             ? `${item.SeriesName} - S${String(item.ParentIndexNumber).padStart(2, '0')}E${String(item.IndexNumber).padStart(2, '0')}` 
             : item.Name;
 
         return {
-          id: `emby_${s.Id}`,
+          id: `${serverLabel.toLowerCase()}_${s.Id}`,
           user: s.UserName || 'Unknown',
-          title: embyTitle,
-          type: type,
-          player: s.Client || 'Emby',
+          title,
+          type,
+          player: s.Client || serverLabel,
           product: s.Client || null,
           platform: s.DeviceName || null,
           playerDevice: null,
@@ -300,9 +220,8 @@ class WatcherService {
           timeOffset: posTicks ? Math.floor(posTicks / 10000) : 0,
           timeTotal: totalTicks ? Math.floor(totalTicks / 10000) : 0,
           state: s.PlayState?.IsPaused ? 'paused' : 'playing',
-          server: 'Emby',
-          poster: resolvePoster(embyTitle, type),
-          // Stream details
+          server: serverLabel,
+          poster: resolvePoster(title, type),
           quality,
           videoDecision: playMethodLabel,
           audioDecision: playMethodLabel,
@@ -317,7 +236,7 @@ class WatcherService {
         };
       });
     } catch (e) {
-      console.error('[WatcherService] Failed to fetch Emby sessions:', e.message);
+      console.error(`[WatcherService] Failed to fetch ${serverLabel} sessions:`, e.message);
       return [];
     }
   }

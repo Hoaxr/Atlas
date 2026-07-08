@@ -138,7 +138,8 @@ const stopScan = () => {
   return true;
 };
 
-const { getResolution, getCodec } = require('../utils/videoUtils');
+const { getMediaMetadata, parseAudioFromFileName } = require('../utils/videoUtils');
+const { parseResolution, parseCodec } = require('../utils/mediaParsing');
 
 const setStage = (stage, phase) => {
   scanProgress.currentStage = stage;
@@ -299,7 +300,6 @@ const doScan = async (mode = 'full') => {
 
     for (const file of allFiles) {
       if (scanProgress.cancelled) throw new Error('Scan cancelled by user');
-      scanProgress.currentFile = file.name;
       scanProgress.currentFile = file.name;
       
       const fileDir = file.parentPath || file.path;
@@ -484,28 +484,25 @@ const doScan = async (mode = 'full') => {
           } catch {
             // ignore
           }
-          // Detect resolution and codec for the episode
-          let resName = null;
-          let resolution = null;
-          let codec = null;
-          try {
-            const t = file.name.toLowerCase();
-            if (t.includes('2160p') || t.includes('4k')) resolution = '2160p';
-            else if (t.includes('1080p')) resolution = '1080p';
-            else if (t.includes('720p')) resolution = '720p';
-            else if (t.includes('480p')) resolution = '480p';
-            
-            if (resolution) {
-              resName = file.name;
-            } else {
-              resolution = await getResolution(fullPath);
-              if (resolution) resName = 'Unknown ' + resolution;
-            }
+          // Detect resolution, codec & audio for the episode
+          let resolution = parseResolution(file.name);
+          let codec = parseCodec(file.name);
+          let audio = parseAudioFromFileName(file.name);
+          let resName = resolution !== 'Unknown' ? file.name : null;
 
-            if (t.includes('x265') || t.includes('h265') || t.includes('hevc')) codec = 'x265';
-            else if (t.includes('x264') || t.includes('h264') || t.includes('avc')) codec = 'x264';
-            if (!codec) {
-              codec = await getCodec(fullPath);
+          try {
+            if (resolution === 'Unknown' || codec === 'Unknown' || !audio) {
+              const meta = await getMediaMetadata(fullPath);
+              if (resolution === 'Unknown') {
+                resolution = meta.resolution;
+                if (resolution) resName = 'Unknown ' + resolution;
+              }
+              if (codec === 'Unknown') {
+                codec = meta.codec;
+              }
+              if (!audio) {
+                audio = meta.audio;
+              }
             }
           } catch { /* ignore */ }
 
@@ -518,9 +515,9 @@ const doScan = async (mode = 'full') => {
 
             db.prepare(`
               UPDATE episodes 
-              SET file_path = ?, status = 'downloaded', file_size = ?, scene_name = ?, resolution = ?, codec = ?
+              SET file_path = ?, status = 'downloaded', file_size = ?, scene_name = ?, resolution = ?, codec = ?, audio = ?
               WHERE show_id = ? AND season_number = ? AND episode_number = ?
-            `).run(fullPath, fileSize, resName, resolution, codec, showId, seasonNumber, ep);
+            `).run(fullPath, fileSize, resName, resolution, codec, audio, showId, seasonNumber, ep);
           }
           // Scan for subtitle files in the episode's directory (only for first episode)
           const epLangs = await scanSubtitleLangs(fullPath);
@@ -654,27 +651,21 @@ const doScan = async (mode = 'full') => {
                 db.prepare("UPDATE movies SET watched = 1 WHERE tmdb_id = ? AND EXISTS (SELECT 1 FROM watched_tmdb WHERE tmdb_id = ? AND type = 'movie')").run(matchedMovie.id, matchedMovie.id);
               }
             } catch { /* non-critical */ }
-            // Detect and store resolution & codec — file name first, ffprobe as fallback
+            // Detect and store resolution, codec & audio — file name first, ffprobe as fallback
             try {
-              const nameLower = file.name.toLowerCase();
-              let resolution = null;
-              if (nameLower.includes('2160p') || nameLower.includes('4k')) resolution = '2160p';
-              else if (nameLower.includes('1080p')) resolution = '1080p';
-              else if (nameLower.includes('720p')) resolution = '720p';
-              else if (nameLower.includes('480p')) resolution = '480p';
-              if (!resolution) {
-                resolution = await getResolution(fullPath);
+              let resolution = parseResolution(file.name);
+              let codec = parseCodec(file.name);
+              let audio = parseAudioFromFileName(file.name);
+
+              if (resolution === 'Unknown' || codec === 'Unknown' || !audio) {
+                const meta = await getMediaMetadata(fullPath);
+                if (resolution === 'Unknown') resolution = meta.resolution;
+                if (codec === 'Unknown') codec = meta.codec;
+                if (!audio) audio = meta.audio;
               }
 
-              let codec = null;
-              if (nameLower.includes('x265') || nameLower.includes('h265') || nameLower.includes('hevc')) codec = 'x265';
-              else if (nameLower.includes('x264') || nameLower.includes('h264') || nameLower.includes('avc')) codec = 'x264';
-              if (!codec) {
-                codec = await getCodec(fullPath);
-              }
-
-              db.prepare('UPDATE movies SET resolution = ?, codec = ?, scene_name = COALESCE(NULLIF(scene_name, \'\'), ?) WHERE tmdb_id = ?')
-                .run(resolution || null, codec || null, 'Unknown ' + (resolution || '1080p'), matchedMovie.id);
+              db.prepare('UPDATE movies SET resolution = ?, codec = ?, audio = ?, scene_name = COALESCE(NULLIF(scene_name, \'\'), ?) WHERE tmdb_id = ?')
+                .run(resolution || null, codec || null, audio || null, 'Unknown ' + (resolution || '1080p'), matchedMovie.id);
             } catch { /* ignore */ }
             // Scan for subtitle files in the movie's directory
             const movieLangs = await scanSubtitleLangs(fullPath);
@@ -719,10 +710,11 @@ const doScan = async (mode = 'full') => {
       scanProgress.currentFile = m.title;
       try {
         const stat = await fs.stat(m.file_path);
-        // Always re-detect resolution and codec on scan — file name first, ffprobe as fallback
+        // Always re-detect resolution, codec and audio on scan — file name first, ffprobe as fallback
         let resName = null;
         let resolution = null;
         let codec = null;
+        let audio = null;
         try {
           const t = m.scene_name ? m.scene_name.toLowerCase() : '';
           const fileLower = m.file_path ? m.file_path.toLowerCase() : '';
@@ -733,15 +725,24 @@ const doScan = async (mode = 'full') => {
           else if (fileLower.includes('720p')) resolution = '720p';
           else if (fileLower.includes('480p')) resolution = '480p';
           
-          if (!resolution && !hasRes) {
-            resolution = await getResolution(m.file_path);
-          }
-          if (resolution && !hasRes) resName = 'Unknown ' + resolution;
-
           if (fileLower.includes('x265') || fileLower.includes('h265') || fileLower.includes('hevc')) codec = 'x265';
           else if (fileLower.includes('x264') || fileLower.includes('h264') || fileLower.includes('avc')) codec = 'x264';
-          if (!codec) {
-            codec = await getCodec(m.file_path);
+
+          audio = parseAudioFromFileName(m.scene_name || m.file_path);
+
+          const needsRes = !resolution && !hasRes;
+          if (needsRes || !codec || !audio) {
+            const meta = await getMediaMetadata(m.file_path);
+            if (needsRes) {
+              resolution = meta.resolution;
+              if (resolution) resName = 'Unknown ' + resolution;
+            }
+            if (!codec) {
+              codec = meta.codec;
+            }
+            if (!audio) {
+              audio = meta.audio;
+            }
           }
         } catch { /* ignore */ }
         
@@ -750,6 +751,7 @@ const doScan = async (mode = 'full') => {
         if (resName) { updates.push('scene_name = ?'); params.push(resName); }
         if (resolution) { updates.push('resolution = ?'); params.push(resolution); }
         if (codec) { updates.push('codec = ?'); params.push(codec); }
+        if (audio) { updates.push('audio = ?'); params.push(audio); }
         params.push(m.id);
         db.prepare('UPDATE movies SET ' + updates.join(', ') + ' WHERE id = ?').run(...params);
       } catch { /* skip */ }
@@ -760,7 +762,7 @@ const doScan = async (mode = 'full') => {
     for (const ep of existingEpisodes) {
       if (scanProgress.cancelled) throw new Error('Scan cancelled by user');
       try {
-        // Always re-detect resolution and codec — file name first, ffprobe as fallback
+        // Always re-detect resolution, codec and audio — file name first, ffprobe as fallback
         const t = ep.scene_name ? ep.scene_name.toLowerCase() : '';
         const fileLower = ep.file_path ? ep.file_path.toLowerCase() : '';
         const hasRes = t.includes('2160p') || t.includes('4k') || t.includes('1080p') || t.includes('720p') || t.includes('480p') || t.includes('sd');
@@ -770,23 +772,26 @@ const doScan = async (mode = 'full') => {
         else if (fileLower.includes('720p')) resolution = '720p';
         else if (fileLower.includes('480p')) resolution = '480p';
         
-        if (!resolution && !hasRes) {
-          resolution = await getResolution(ep.file_path);
-        }
-
         let codec = null;
         if (fileLower.includes('x265') || fileLower.includes('h265') || fileLower.includes('hevc')) codec = 'x265';
         else if (fileLower.includes('x264') || fileLower.includes('h264') || fileLower.includes('avc')) codec = 'x264';
-        if (!codec) {
-          codec = await getCodec(ep.file_path);
+
+        let audio = parseAudioFromFileName(ep.scene_name || ep.file_path);
+
+        const needsRes = !resolution && !hasRes;
+        if (needsRes || !codec || !audio) {
+          const meta = await getMediaMetadata(ep.file_path);
+          if (needsRes) resolution = meta.resolution;
+          if (!codec) codec = meta.codec;
+          if (!audio) audio = meta.audio;
         }
 
         if (resolution && !hasRes) {
-          db.prepare('UPDATE episodes SET scene_name = ?, resolution = ?, codec = ? WHERE id = ?')
-            .run('Unknown ' + resolution, resolution, codec, ep.id);
+          db.prepare('UPDATE episodes SET scene_name = ?, resolution = ?, codec = ?, audio = ? WHERE id = ?')
+            .run('Unknown ' + resolution, resolution, codec, audio, ep.id);
         } else {
-          db.prepare('UPDATE episodes SET resolution = ?, codec = ? WHERE id = ?')
-            .run(resolution || null, codec || null, ep.id);
+          db.prepare('UPDATE episodes SET resolution = ?, codec = ?, audio = ? WHERE id = ?')
+            .run(resolution || null, codec || null, audio || null, ep.id);
         }
       } catch { /* skip */ }
       scanProgress.processedFiles++;

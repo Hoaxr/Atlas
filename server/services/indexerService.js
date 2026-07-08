@@ -1,6 +1,7 @@
 const axios = require('axios');
 const db = require('../config/database');
 const { getSetting } = require('../utils/settings');
+const { parseResolution: parseQuality } = require('../utils/mediaParsing');
 
 // ─── Circuit breaker for Prowlarr ─────────────────────────────────────
 
@@ -46,17 +47,6 @@ const getCircuitStatus = () => ({
 
 const cleanTitle = (title) =>
   title.replace(/['']/g, '').replace(/[^a-zA-Z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
-
-const parseQuality = (title) => {
-  const t = title.toLowerCase();
-  const camTerms = /\b(cam|ts|telesync|hdts|hdcam|hc|telecine|tc|workprint|wp|screener|scr)\b/;
-  if (camTerms.test(t)) return 'CAM';
-  if (t.includes('2160p') || t.includes('4k')) return '2160p';
-  if (t.includes('1080p')) return '1080p';
-  if (t.includes('720p')) return '720p';
-  if (t.includes('480p') || t.includes('dvdrip') || t.includes('xvid') || t.includes('hdtv')) return 'SD';
-  return 'Unknown';
-};
 
 // Extract a 4-digit release year (1900-2099) from a release title
 const extractReleaseYear = (title) => {

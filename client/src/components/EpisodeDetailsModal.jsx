@@ -1,7 +1,7 @@
 import ModalShell from './shared/ModalShell';
 import React from 'react';
 import { X, HardDrive, CheckCircle2, Zap, Search, Trash2 } from 'lucide-react';
-import { formatSize, parseResolution, parseCodec, getReleaseTitleFromPath } from '../lib/format';
+import { formatSize, parseResolution, parseCodec, parseAudio, getReleaseTitleFromPath } from '../lib/format';
 
 const EpisodeDetailsModal = ({ episode, show, onClose, onAutoSearch, onManualSearch, onDeleteFile }) => {
   if (!episode) return null;
@@ -63,6 +63,20 @@ const EpisodeDetailsModal = ({ episode, show, onClose, onAutoSearch, onManualSea
               ) : (
                 <p className="font-medium text-slate-500">-</p>
               )}
+            </div>
+
+            <div>
+              <p className="text-slate-500 text-[10px] uppercase tracking-widest font-bold mb-1">Audio</p>
+              {(() => {
+                const audioVal = episode.audio || parseAudio(episode.scene_name || episode.file_path);
+                return audioVal !== 'Unknown' ? (
+                  <span className="px-2 py-0.5 rounded text-xs font-medium bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 whitespace-nowrap">
+                    {audioVal}
+                  </span>
+                ) : (
+                  <p className="font-medium text-slate-500">-</p>
+                );
+              })()}
             </div>
             
             <div>

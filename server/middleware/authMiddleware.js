@@ -7,9 +7,42 @@ if (!JWT_SECRET) {
   process.exit(1);
 }
 
+// Cache frequently-read settings to avoid DB queries on every request.
+// Invalidated when settings are updated (see settings route exports).
+let _cachedAdmin = null;
+let _cacheExpiry = 0;
+const CACHE_TTL = 30000; // 30 seconds
+
+const getAdminUser = () => {
+  const now = Date.now();
+  if (_cachedAdmin && now < _cacheExpiry) return _cachedAdmin;
+  _cachedAdmin = db.prepare("SELECT id, username, role FROM users WHERE role = 'admin' LIMIT 1").get();
+  _cacheExpiry = now + CACHE_TTL;
+  return _cachedAdmin;
+};
+
+// Allow external invalidation when auth-relevant settings change
+const invalidateAuthCache = () => {
+  _cachedAdmin = null;
+  _cacheExpiry = 0;
+};
+
+const getCachedSetting = (() => {
+  const cache = {};
+  return (key) => {
+    const now = Date.now();
+    const entry = cache[key];
+    if (entry && now < entry.expiry) return entry.value;
+    const row = db.prepare('SELECT value FROM settings WHERE key = ?').get(key);
+    const value = row ? row.value : null;
+    cache[key] = { value, expiry: now + CACHE_TTL };
+    return value;
+  };
+})();
+
 const authMiddleware = (req, res, next) => {
   const attachDefaultAdmin = () => {
-    const adminUser = db.prepare("SELECT id, username, role FROM users WHERE role = 'admin' LIMIT 1").get();
+    const adminUser = getAdminUser();
     req.user = adminUser || { id: 1, role: 'admin', username: 'admin' };
   };
 
@@ -36,8 +69,7 @@ const authMiddleware = (req, res, next) => {
   }
 
   // Check if authentication is enabled
-  const authEnabledRow = db.prepare('SELECT value FROM settings WHERE key = ?').get('authEnabled');
-  const authEnabled = authEnabledRow ? authEnabledRow.value === 'true' : false;
+  const authEnabled = getCachedSetting('authEnabled') === 'true';
 
   // If no valid token, check bypass rules
   if (!authEnabled) {
@@ -46,8 +78,7 @@ const authMiddleware = (req, res, next) => {
   }
 
   // Check if bypass for localhost is enabled
-  const bypassLocalhostRow = db.prepare('SELECT value FROM settings WHERE key = ?').get('authBypassLocalhost');
-  const bypassLocalhost = bypassLocalhostRow ? bypassLocalhostRow.value === 'true' : true;
+  const bypassLocalhost = getCachedSetting('authBypassLocalhost') !== 'false'; // default true
 
   if (bypassLocalhost) {
     // Use the raw socket peer address rather than req.ip — req.ip can be derived from
@@ -81,3 +112,4 @@ const authMiddleware = (req, res, next) => {
 };
 
 module.exports = authMiddleware;
+module.exports.invalidateAuthCache = invalidateAuthCache;

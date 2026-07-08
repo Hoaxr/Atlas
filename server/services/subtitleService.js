@@ -7,6 +7,7 @@ const taskRegistry = require('./taskRegistry');
 const eventBus = require('./eventBus');
 const { runWithConcurrency } = require('../utils/concurrency');
 const { registerJob } = require('../utils/cronRegistry');
+const { translateWithProvider } = require('./aiTranslationWorker');
 
 // ─── Shared subtitle helpers ─────────────────────────────────────────────
 
@@ -237,22 +238,7 @@ const downloadSubtitlesForMovies = async () => {
               }
 
               try {
-                const provider = db.prepare("SELECT value FROM settings WHERE key = 'translationProvider'").get();
-                const activeProvider = (provider && provider.value) || 'googleTranslate';
-                const { translateWithGemini, translateWithGoogleTranslate, translateWithDeepSeek, translateWithClaude } = require('./aiTranslationWorker');
-                let translated;
-                if (activeProvider === 'gemini') {
-                  const keyRow = db.prepare("SELECT value FROM settings WHERE key = 'geminiApiKey'").get();
-                  translated = await translateWithGemini(srtContent, lang, keyRow.value);
-                } else if (activeProvider === 'deepseek') {
-                  const keyRow = db.prepare("SELECT value FROM settings WHERE key = 'deepseekApiKey'").get();
-                  translated = await translateWithDeepSeek(srtContent, lang, keyRow.value);
-                } else if (activeProvider === 'claude') {
-                  const keyRow = db.prepare("SELECT value FROM settings WHERE key = 'claudeApiKey'").get();
-                  translated = await translateWithClaude(srtContent, lang, keyRow.value);
-                } else {
-                  translated = await translateWithGoogleTranslate(srtContent, lang);
-                }
+                const translated = await translateWithProvider(srtContent, lang);
                 fs.writeFileSync(targetSubPath, translated);
                 console.log(`[SubtitleService] Auto-translated to ${lang} for ${movie.title}`);
                 eventBus.success('Subtitle translated', { title: movie.title, language: lang });
@@ -317,10 +303,6 @@ const autoTranslateExisting = async () => {
 
   const LANG_TO_CODE = { 'Dutch': 'nl', 'French': 'fr', 'German': 'de', 'Spanish': 'es', 'Italian': 'it', 'Portuguese': 'pt' };
 
-  const provider = db.prepare("SELECT value FROM settings WHERE key = 'translationProvider'").get();
-  const activeProvider = (provider && provider.value) || 'googleTranslate';
-  const { translateWithGemini, translateWithGoogleTranslate, translateWithDeepSeek, translateWithClaude } = require('./aiTranslationWorker');
-
   const translateOrNative = async (fileBase, movieOrEp, lang, enSrtContent) => {
     const tCode = LANG_TO_CODE[lang];
     if (!tCode || providerLangs.includes(tCode)) return;
@@ -340,19 +322,7 @@ const autoTranslateExisting = async () => {
 
     // Fall back to translation
     try {
-      let translated;
-      if (activeProvider === 'gemini') {
-        const keyRow = db.prepare("SELECT value FROM settings WHERE key = 'geminiApiKey'").get();
-        translated = await translateWithGemini(enSrtContent, lang, keyRow?.value);
-      } else if (activeProvider === 'deepseek') {
-        const keyRow = db.prepare("SELECT value FROM settings WHERE key = 'deepseekApiKey'").get();
-        translated = await translateWithDeepSeek(enSrtContent, lang, keyRow?.value);
-      } else if (activeProvider === 'claude') {
-        const keyRow = db.prepare("SELECT value FROM settings WHERE key = 'claudeApiKey'").get();
-        translated = await translateWithClaude(enSrtContent, lang, keyRow?.value);
-      } else {
-        translated = await translateWithGoogleTranslate(enSrtContent, lang);
-      }
+      const translated = await translateWithProvider(enSrtContent, lang);
       fs.writeFileSync(targetSubPath, translated);
       console.log(`[SubtitleService] Auto-translated ${movieOrEp.title || movieOrEp.show_title} to ${lang}`);
       eventBus.success('Subtitle translated', { title: movieOrEp.title || movieOrEp.show_title, language: lang });

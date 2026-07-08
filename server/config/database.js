@@ -223,6 +223,10 @@ try { db.exec("ALTER TABLE episodes ADD COLUMN resolution TEXT;"); } catch { /* 
 try { db.exec("ALTER TABLE movies ADD COLUMN codec TEXT;"); } catch { /* ignore */ }
 try { db.exec("ALTER TABLE episodes ADD COLUMN codec TEXT;"); } catch { /* ignore */ }
 
+// Ensure audio columns exist
+try { db.exec("ALTER TABLE movies ADD COLUMN audio TEXT;"); } catch { /* ignore */ }
+try { db.exec("ALTER TABLE episodes ADD COLUMN audio TEXT;"); } catch { /* ignore */ }
+
 // Populate codec from existing data
 try {
   db.exec(`
@@ -240,6 +244,56 @@ try {
       ELSE NULL
     END
     WHERE codec IS NULL
+  `);
+} catch { /* ignore */ }
+
+// Populate audio from existing data
+try {
+  db.exec(`
+    UPDATE movies SET audio = CASE
+      WHEN scene_name LIKE '%atmos%' OR file_path LIKE '%atmos%' THEN 'Atmos'
+      WHEN scene_name LIKE '%truehd%' OR file_path LIKE '%truehd%' THEN 'TrueHD'
+      WHEN scene_name LIKE '%dts-hd%' OR scene_name LIKE '%dtshd%' OR file_path LIKE '%dts-hd%' OR file_path LIKE '%dtshd%' THEN 'DTS-HD'
+      WHEN scene_name LIKE '%dts%' OR file_path LIKE '%dts%' THEN 'DTS'
+      WHEN scene_name LIKE '%ddp7.1%' OR scene_name LIKE '%dd+7.1%' OR file_path LIKE '%ddp7.1%' OR file_path LIKE '%dd+7.1%' THEN 'DDP 7.1'
+      WHEN scene_name LIKE '%ddp5.1%' OR scene_name LIKE '%dd+5.1%' OR scene_name LIKE '%ddp%' OR scene_name LIKE '%dd+%' OR file_path LIKE '%ddp5.1%' OR file_path LIKE '%dd+5.1%' OR file_path LIKE '%ddp%' OR file_path LIKE '%dd+%' THEN 'DDP 5.1'
+      WHEN scene_name LIKE '%dd5.1%' OR scene_name LIKE '%ac3 5.1%' OR file_path LIKE '%dd5.1%' OR file_path LIKE '%ac3 5.1%' THEN 'DD 5.1'
+      WHEN scene_name LIKE '%dd2.0%' OR scene_name LIKE '%ac3 2.0%' OR file_path LIKE '%dd2.0%' OR file_path LIKE '%ac3 2.0%' THEN 'DD Stereo'
+      WHEN scene_name LIKE '%aac 5.1%' OR file_path LIKE '%aac 5.1%' THEN 'AAC 5.1'
+      WHEN scene_name LIKE '%aac 2.0%' OR scene_name LIKE '%aac%' OR file_path LIKE '%aac 2.0%' OR file_path LIKE '%aac%' THEN 'AAC Stereo'
+      WHEN scene_name LIKE '%ac3%' OR scene_name LIKE '%ac-3%' OR file_path LIKE '%ac3%' OR file_path LIKE '%ac-3%' THEN 'AC3'
+      WHEN scene_name LIKE '%7.1%' OR file_path LIKE '%7.1%' THEN '7.1'
+      WHEN scene_name LIKE '%5.1%' OR file_path LIKE '%5.1%' THEN '5.1'
+      WHEN scene_name LIKE '%2.0%' OR scene_name LIKE '%stereo%' OR file_path LIKE '%2.0%' OR file_path LIKE '%stereo%' THEN 'Stereo'
+      WHEN scene_name LIKE '%flac%' OR file_path LIKE '%flac%' THEN 'FLAC'
+      WHEN scene_name LIKE '%opus%' OR file_path LIKE '%opus%' THEN 'Opus'
+      WHEN scene_name LIKE '%mp3%' OR file_path LIKE '%mp3%' THEN 'MP3'
+      ELSE NULL
+    END
+    WHERE audio IS NULL
+  `);
+  db.exec(`
+    UPDATE episodes SET audio = CASE
+      WHEN scene_name LIKE '%atmos%' OR file_path LIKE '%atmos%' THEN 'Atmos'
+      WHEN scene_name LIKE '%truehd%' OR file_path LIKE '%truehd%' THEN 'TrueHD'
+      WHEN scene_name LIKE '%dts-hd%' OR scene_name LIKE '%dtshd%' OR file_path LIKE '%dts-hd%' OR file_path LIKE '%dtshd%' THEN 'DTS-HD'
+      WHEN scene_name LIKE '%dts%' OR file_path LIKE '%dts%' THEN 'DTS'
+      WHEN scene_name LIKE '%ddp7.1%' OR scene_name LIKE '%dd+7.1%' OR file_path LIKE '%ddp7.1%' OR file_path LIKE '%dd+7.1%' THEN 'DDP 7.1'
+      WHEN scene_name LIKE '%ddp5.1%' OR scene_name LIKE '%dd+5.1%' OR scene_name LIKE '%ddp%' OR scene_name LIKE '%dd+%' OR file_path LIKE '%ddp5.1%' OR file_path LIKE '%dd+5.1%' OR file_path LIKE '%ddp%' OR file_path LIKE '%dd+%' THEN 'DDP 5.1'
+      WHEN scene_name LIKE '%dd5.1%' OR scene_name LIKE '%ac3 5.1%' OR file_path LIKE '%dd5.1%' OR file_path LIKE '%ac3 5.1%' THEN 'DD 5.1'
+      WHEN scene_name LIKE '%dd2.0%' OR scene_name LIKE '%ac3 2.0%' OR file_path LIKE '%dd2.0%' OR file_path LIKE '%ac3 2.0%' THEN 'DD Stereo'
+      WHEN scene_name LIKE '%aac 5.1%' OR file_path LIKE '%aac 5.1%' THEN 'AAC 5.1'
+      WHEN scene_name LIKE '%aac 2.0%' OR scene_name LIKE '%aac%' OR file_path LIKE '%aac 2.0%' OR file_path LIKE '%aac%' THEN 'AAC Stereo'
+      WHEN scene_name LIKE '%ac3%' OR scene_name LIKE '%ac-3%' OR file_path LIKE '%ac3%' OR file_path LIKE '%ac-3%' THEN 'AC3'
+      WHEN scene_name LIKE '%7.1%' OR file_path LIKE '%7.1%' THEN '7.1'
+      WHEN scene_name LIKE '%5.1%' OR file_path LIKE '%5.1%' THEN '5.1'
+      WHEN scene_name LIKE '%2.0%' OR scene_name LIKE '%stereo%' OR file_path LIKE '%2.0%' OR file_path LIKE '%stereo%' THEN 'Stereo'
+      WHEN scene_name LIKE '%flac%' OR file_path LIKE '%flac%' THEN 'FLAC'
+      WHEN scene_name LIKE '%opus%' OR file_path LIKE '%opus%' THEN 'Opus'
+      WHEN scene_name LIKE '%mp3%' OR file_path LIKE '%mp3%' THEN 'MP3'
+      ELSE NULL
+    END
+    WHERE audio IS NULL
   `);
 } catch { /* ignore */ }
 

@@ -11,6 +11,7 @@ const db = require('../config/database');
 const { getSetting, setSetting } = require('../utils/settings');
 const downloadClientService = require('../services/downloadClientService');
 const { isVideoFile } = require('../utils/fileUtils');
+const { invalidateAuthCache } = require('../middleware/authMiddleware');
 
 router.get('/', (req, res, next) => {
   try {
@@ -120,84 +121,153 @@ router.get('/', (req, res, next) => {
   }
 });
 
+// ─── Setting schema ──────────────────────────────────────────────────────
+// type: 'string' | 'boolean' | 'json' | 'apiKey' (masked, only saved if not ***) | 'url'
+const SETTING_SCHEMA = {
+  tmdbApiKey:               { type: 'apiKey' },
+  traktClientId:            { type: 'apiKey' },
+  osApiKey:                 { type: 'apiKey' },
+  subdlApiKey:              { type: 'apiKey' },
+  subsourceApiKey:          { type: 'apiKey' },
+  geminiApiKey:             { type: 'apiKey' },
+  deepseekApiKey:           { type: 'apiKey' },
+  claudeApiKey:             { type: 'apiKey' },
+  prowlarrUrl:              { type: 'url' },
+  prowlarrApiKey:           { type: 'apiKey' },
+  translationProvider:      { type: 'string', allowed: ['googleTranslate', 'gemini', 'deepseek', 'claude'] },
+  targetLang:               { type: 'string' },
+  targetLangs:              { type: 'json' },
+  providerLangs:            { type: 'json' },
+  autoTranslate:            { type: 'boolean' },
+  preferNativeBeforeTranslate: { type: 'boolean' },
+  traktWatchedSync:         { type: 'boolean' },
+  traktAccessToken:         { type: 'apiKey' },
+  traktClientSecret:        { type: 'apiKey' },
+  renameMovies:             { type: 'boolean' },
+  replaceIllegalCharacters: { type: 'boolean' },
+  colonReplacement:         { type: 'string' },
+  standardMovieFormat:      { type: 'string' },
+  renameEpisodes:           { type: 'boolean' },
+  standardEpisodeFormat:    { type: 'string' },
+  seasonFolderFormat:       { type: 'string' },
+  removeCompletedDownloads: { type: 'boolean' },
+  deleteTorrentFiles:       { type: 'boolean' },
+  hideCompletedDownloads:   { type: 'boolean' },
+  downloadPathMapping:      { type: 'json' },
+  authEnabled:              { type: 'string' },
+  authBypassLocalhost:      { type: 'string' },
+  authUsername:             { type: 'string' },
+  plexUrl:                  { type: 'url' },
+  plexToken:                { type: 'apiKey' },
+  jellyfinUrl:              { type: 'url' },
+  jellyfinApiKey:           { type: 'apiKey' },
+  embyUrl:                  { type: 'url' },
+  embyApiKey:               { type: 'apiKey' },
+  discordWebhookUrl:        { type: 'string' },
+  telegramBotToken:         { type: 'apiKey' },
+  telegramChatId:           { type: 'string' },
+  notifyOnGrab:             { type: 'string' },
+  notifyOnDownload:         { type: 'string' },
+  notifyOnPlaybackStart:    { type: 'string' },
+};
+
+const isMasked = (val) => typeof val === 'string' && /^\*+$/.test(val);
+
+const isValidUrl = (val) => {
+  if (!val || typeof val !== 'string') return false;
+  return /^https?:\/\/.+/.test(val);
+};
+
+const validateAndTransform = (key, value) => {
+  const schema = SETTING_SCHEMA[key];
+  if (!schema) return { valid: false, reason: `Unknown setting: ${key}` };
+
+  if (schema.type === 'apiKey') {
+    if (isMasked(value)) return { valid: false, skip: true };
+    if (typeof value !== 'string' || value.length > 500) return { valid: false, reason: `${key}: invalid API key format` };
+    return { valid: true, transformed: value };
+  }
+
+  if (schema.type === 'url') {
+    if (value !== '' && !isValidUrl(value)) return { valid: false, reason: `${key}: must be a valid URL` };
+    return { valid: true, transformed: value };
+  }
+
+  if (schema.type === 'boolean') {
+    return { valid: true, transformed: value ? 'true' : 'false' };
+  }
+
+  if (schema.type === 'json') {
+    try {
+      JSON.parse(JSON.stringify(value)); // validate by re-serializing
+      return { valid: true, transformed: JSON.stringify(value) };
+    } catch {
+      return { valid: false, reason: `${key}: invalid JSON` };
+    }
+  }
+
+  if (schema.type === 'string') {
+    if (schema.allowed && !schema.allowed.includes(value)) {
+      return { valid: false, reason: `${key}: must be one of: ${schema.allowed.join(', ')}` };
+    }
+    return { valid: true, transformed: value };
+  }
+
+  return { valid: true, transformed: value };
+};
+
 router.post('/', async (req, res, next) => {
   try {
-    const { tmdbApiKey, traktClientId, osApiKey, subdlApiKey, subsourceApiKey, geminiApiKey, deepseekApiKey, claudeApiKey, prowlarrUrl, prowlarrApiKey, translationProvider, targetLang, targetLangs, providerLangs, autoTranslate, preferNativeBeforeTranslate, traktWatchedSync, traktAccessToken, traktClientSecret, renameMovies, replaceIllegalCharacters, colonReplacement, standardMovieFormat, renameEpisodes, standardEpisodeFormat, seasonFolderFormat, removeCompletedDownloads, deleteTorrentFiles, hideCompletedDownloads, downloadPathMapping, defaultQualityProfileId, authEnabled, authBypassLocalhost, authUsername, authPassword, plexUrl, plexToken, jellyfinUrl, jellyfinApiKey, embyUrl, embyApiKey, discordWebhookUrl, telegramBotToken, telegramChatId, notifyOnGrab, notifyOnDownload, notifyOnPlaybackStart } = req.body;
-    
-    const isMasked = (val) => val && /^\*+$/.test(val);
-    
-    if (tmdbApiKey !== undefined && !isMasked(tmdbApiKey)) setSetting('tmdbApiKey', tmdbApiKey);
-    if (traktClientId !== undefined && !isMasked(traktClientId)) setSetting('traktClientId', traktClientId);
-    
-    if (defaultQualityProfileId !== undefined) {
-      setSetting('defaultQualityProfileId', defaultQualityProfileId);
-      if (defaultQualityProfileId !== null) {
-        db.prepare('UPDATE movies SET quality_profile_id = ? WHERE quality_profile_id IS NULL').run(defaultQualityProfileId);
-        db.prepare('UPDATE shows SET quality_profile_id = ? WHERE quality_profile_id IS NULL').run(defaultQualityProfileId);
+    const body = req.body;
+    const errors = [];
+
+    // Process all settings from the schema
+    for (const [key, schema] of Object.entries(SETTING_SCHEMA)) {
+      if (body[key] === undefined) continue;
+
+      if (key === 'authPassword') continue; // handled separately below
+
+      const result = validateAndTransform(key, body[key]);
+      if (result.skip) continue;
+      if (!result.valid) {
+        errors.push(result.reason);
+        continue;
+      }
+      setSetting(key, result.transformed);
+    }
+
+    // Special: default quality profile
+    if (body.defaultQualityProfileId !== undefined) {
+      setSetting('defaultQualityProfileId', body.defaultQualityProfileId);
+      if (body.defaultQualityProfileId !== null) {
+        db.prepare('UPDATE movies SET quality_profile_id = ? WHERE quality_profile_id IS NULL').run(body.defaultQualityProfileId);
+        db.prepare('UPDATE shows SET quality_profile_id = ? WHERE quality_profile_id IS NULL').run(body.defaultQualityProfileId);
       }
     }
-    if (osApiKey !== undefined && !isMasked(osApiKey)) setSetting('osApiKey', osApiKey);
-    if (subdlApiKey !== undefined && !isMasked(subdlApiKey)) setSetting('subdlApiKey', subdlApiKey);
-    if (subsourceApiKey !== undefined && !isMasked(subsourceApiKey)) setSetting('subsourceApiKey', subsourceApiKey);
-    if (geminiApiKey !== undefined && !isMasked(geminiApiKey)) setSetting('geminiApiKey', geminiApiKey);
-    if (deepseekApiKey !== undefined && !isMasked(deepseekApiKey)) setSetting('deepseekApiKey', deepseekApiKey);
-    if (claudeApiKey !== undefined && !isMasked(claudeApiKey)) setSetting('claudeApiKey', claudeApiKey);
-    if (prowlarrUrl !== undefined) setSetting('prowlarrUrl', prowlarrUrl);
-    if (prowlarrApiKey !== undefined && !isMasked(prowlarrApiKey)) setSetting('prowlarrApiKey', prowlarrApiKey);
-    if (translationProvider !== undefined) setSetting('translationProvider', translationProvider);
-    if (targetLang !== undefined) setSetting('targetLang', targetLang);
-    if (targetLangs !== undefined) setSetting('targetLangs', JSON.stringify(targetLangs));
-    if (providerLangs !== undefined) setSetting('providerLangs', JSON.stringify(providerLangs));
-    if (autoTranslate !== undefined) setSetting('autoTranslate', autoTranslate ? 'true' : 'false');
-    if (preferNativeBeforeTranslate !== undefined) setSetting('preferNativeBeforeTranslate', preferNativeBeforeTranslate ? 'true' : 'false');
-    if (traktWatchedSync !== undefined) setSetting('traktWatchedSync', traktWatchedSync ? 'true' : 'false');
-    if (traktAccessToken !== undefined && !isMasked(traktAccessToken)) setSetting('traktAccessToken', traktAccessToken);
-    if (traktClientSecret !== undefined && !isMasked(traktClientSecret)) setSetting('traktClientSecret', traktClientSecret);
-    
-    if (renameMovies !== undefined) setSetting('renameMovies', renameMovies ? 'true' : 'false');
-    if (replaceIllegalCharacters !== undefined) setSetting('replaceIllegalCharacters', replaceIllegalCharacters ? 'true' : 'false');
-    if (colonReplacement !== undefined) setSetting('colonReplacement', colonReplacement);
-    if (standardMovieFormat !== undefined) setSetting('standardMovieFormat', standardMovieFormat);
-    if (renameEpisodes !== undefined) setSetting('renameEpisodes', renameEpisodes ? 'true' : 'false');
-    if (standardEpisodeFormat !== undefined) setSetting('standardEpisodeFormat', standardEpisodeFormat);
-    if (seasonFolderFormat !== undefined) setSetting('seasonFolderFormat', seasonFolderFormat);
-    
-    if (removeCompletedDownloads !== undefined) setSetting('removeCompletedDownloads', removeCompletedDownloads ? 'true' : 'false');
-    if (deleteTorrentFiles !== undefined) setSetting('deleteTorrentFiles', deleteTorrentFiles ? 'true' : 'false');
-    if (hideCompletedDownloads !== undefined) setSetting('hideCompletedDownloads', hideCompletedDownloads ? 'true' : 'false');
-    if (downloadPathMapping !== undefined) setSetting('downloadPathMapping', JSON.stringify(downloadPathMapping));
 
-    if (authEnabled !== undefined) setSetting('authEnabled', authEnabled);
-    if (authBypassLocalhost !== undefined) setSetting('authBypassLocalhost', authBypassLocalhost);
-    if (authUsername !== undefined) setSetting('authUsername', authUsername);
-    if (authPassword !== undefined) {
-      setSetting('authPassword', authPassword);
-      // Create or update the admin user with a hashed password
+    // Special: auth password (needs bcrypt)
+    if (body.authPassword !== undefined) {
+      setSetting('authPassword', body.authPassword);
       const existingUser = db.prepare("SELECT id FROM users WHERE role = 'admin' LIMIT 1").get();
-      const hashed = await bcrypt.hash(authPassword, 10);
+      const hashed = await bcrypt.hash(body.authPassword, 10);
       if (existingUser) {
-        const username = authUsername !== undefined ? authUsername : getSetting('authUsername');
+        const username = body.authUsername !== undefined ? body.authUsername : getSetting('authUsername');
         db.prepare('UPDATE users SET password = ?, username = ? WHERE id = ?').run(hashed, username, existingUser.id);
       } else {
-        const username = authUsername !== undefined ? authUsername : 'admin';
+        const username = body.authUsername !== undefined ? body.authUsername : 'admin';
         db.prepare("INSERT INTO users (username, password, role) VALUES (?, ?, 'admin')").run(username, hashed);
       }
     }
-    
-    if (plexUrl !== undefined) setSetting('plexUrl', plexUrl);
-    if (plexToken !== undefined && !isMasked(plexToken)) setSetting('plexToken', plexToken);
-    if (jellyfinUrl !== undefined) setSetting('jellyfinUrl', jellyfinUrl);
-    if (jellyfinApiKey !== undefined && !isMasked(jellyfinApiKey)) setSetting('jellyfinApiKey', jellyfinApiKey);
-    if (embyUrl !== undefined) setSetting('embyUrl', embyUrl);
-    if (embyApiKey !== undefined && !isMasked(embyApiKey)) setSetting('embyApiKey', embyApiKey);
-    
-    if (discordWebhookUrl !== undefined) setSetting('discordWebhookUrl', discordWebhookUrl);
-    if (telegramBotToken !== undefined && !isMasked(telegramBotToken)) setSetting('telegramBotToken', telegramBotToken);
-    if (telegramChatId !== undefined) setSetting('telegramChatId', telegramChatId);
-    if (notifyOnGrab !== undefined) setSetting('notifyOnGrab', notifyOnGrab);
-    if (notifyOnDownload !== undefined) setSetting('notifyOnDownload', notifyOnDownload);
-    if (notifyOnPlaybackStart !== undefined) setSetting('notifyOnPlaybackStart', notifyOnPlaybackStart);
-    
+
+    // Invalidate auth middleware caches after any auth-related settings change
+    if (body.authEnabled !== undefined || body.authBypassLocalhost !== undefined || body.authUsername !== undefined || body.authPassword !== undefined) {
+      invalidateAuthCache();
+    }
+
+    if (errors.length > 0) {
+      return res.status(400).json({ status: 'error', message: 'Validation failed', errors });
+    }
+
     res.json({ status: 'success', message: 'Settings saved successfully' });
   } catch (e) {
     next(e);

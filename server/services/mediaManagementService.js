@@ -430,35 +430,39 @@ const importMovie = async (torrent, movie) => {
     console.log(`[MediaManagement] Movie ${movie.title} marked as downloaded.`);
     eventBus.success('Download complete', { title: movie.title, type: 'movie', destinationPath: destFile });
 
-    // Auto-refresh: detect resolution and update TMDB metadata
+    // Auto-refresh: detect resolution, codec & audio and update TMDB metadata
     try {
-      const { getResolution, getCodec } = require('../utils/videoUtils');
+      const { getMediaMetadata, parseAudioFromFileName } = require('../utils/videoUtils');
       let sceneName = torrent.name;
       let resolution = null;
       let codec = null;
+      let audio = null;
       const t = sceneName.toLowerCase();
       if (t.includes('2160p') || t.includes('4k')) resolution = '2160p';
       else if (t.includes('1080p')) resolution = '1080p';
       else if (t.includes('720p')) resolution = '720p';
       else if (t.includes('480p')) resolution = '480p';
       
-      if (!resolution) {
-        resolution = await getResolution(destFile);
+      if (t.includes('x265') || t.includes('h265') || t.includes('hevc')) codec = 'x265';
+      else if (t.includes('x264') || t.includes('h264') || t.includes('avc')) codec = 'x264';
+
+      audio = parseAudioFromFileName(sceneName);
+
+      if (!resolution || !codec || !audio) {
+        const meta = await getMediaMetadata(destFile);
+        if (!resolution) resolution = meta.resolution;
+        if (!codec) codec = meta.codec;
+        if (!audio) audio = meta.audio;
       }
+
       if (resolution && !t.includes('2160p') && !t.includes('4k') && !t.includes('1080p') && !t.includes('720p') && !t.includes('480p') && !t.includes('sd')) {
         sceneName = `${torrent.name} ${resolution}`;
       }
 
-      if (t.includes('x265') || t.includes('h265') || t.includes('hevc')) codec = 'x265';
-      else if (t.includes('x264') || t.includes('h264') || t.includes('avc')) codec = 'x264';
-      if (!codec) {
-        codec = await getCodec(destFile);
-      }
-
-      db.prepare('UPDATE movies SET scene_name = ?, file_size = ?, resolution = ?, codec = ? WHERE id = ?')
-        .run(sceneName, fs.statSync(destFile).size, resolution, codec, movie.id);
+      db.prepare('UPDATE movies SET scene_name = ?, file_size = ?, resolution = ?, codec = ?, audio = ? WHERE id = ?')
+        .run(sceneName, fs.statSync(destFile).size, resolution, codec, audio, movie.id);
     } catch (resErr) {
-      console.error(`[MediaManagement] Failed to detect resolution for ${movie.title}:`, resErr.message);
+      console.error(`[MediaManagement] Failed to detect metadata for ${movie.title}:`, resErr.message);
     }
 
     // Refresh TMDB metadata in DB
@@ -623,35 +627,39 @@ const importEpisode = async (torrent, episode) => {
     console.log(`[MediaManagement] Episode marked as downloaded.`);
     eventBus.success('Download complete', { title: `${episode.show_title} S${episode.season_number}E${episode.episode_number}`, type: 'episode', destinationPath: destFile });
 
-    // Auto-refresh: detect resolution and update TMDB metadata
+    // Auto-refresh: detect resolution, codec & audio and update TMDB metadata
     try {
-      const { getResolution, getCodec } = require('../utils/videoUtils');
+      const { getMediaMetadata, parseAudioFromFileName } = require('../utils/videoUtils');
       let sceneName = torrent.name;
       const t = sceneName.toLowerCase();
       let resolution = null;
+      let codec = null;
+      let audio = null;
       if (t.includes('2160p') || t.includes('4k')) resolution = '2160p';
       else if (t.includes('1080p')) resolution = '1080p';
       else if (t.includes('720p')) resolution = '720p';
       else if (t.includes('480p')) resolution = '480p';
 
-      if (!resolution) {
-        resolution = await getResolution(destFile);
+      if (t.includes('x265') || t.includes('h265') || t.includes('hevc')) codec = 'x265';
+      else if (t.includes('x264') || t.includes('h264') || t.includes('avc')) codec = 'x264';
+
+      audio = parseAudioFromFileName(sceneName);
+
+      if (!resolution || !codec || !audio) {
+        const meta = await getMediaMetadata(destFile);
+        if (!resolution) resolution = meta.resolution;
+        if (!codec) codec = meta.codec;
+        if (!audio) audio = meta.audio;
       }
+
       if (resolution && !t.includes('2160p') && !t.includes('4k') && !t.includes('1080p') && !t.includes('720p') && !t.includes('480p') && !t.includes('sd')) {
         sceneName = `${torrent.name} ${resolution}`;
       }
 
-      let codec = null;
-      if (t.includes('x265') || t.includes('h265') || t.includes('hevc')) codec = 'x265';
-      else if (t.includes('x264') || t.includes('h264') || t.includes('avc')) codec = 'x264';
-      if (!codec) {
-        codec = await getCodec(destFile);
-      }
-
-      db.prepare('UPDATE episodes SET scene_name = ?, file_size = ?, resolution = ?, codec = ? WHERE id = ?')
-        .run(sceneName, fs.statSync(destFile).size, resolution, codec, episode.id);
+      db.prepare('UPDATE episodes SET scene_name = ?, file_size = ?, resolution = ?, codec = ?, audio = ? WHERE id = ?')
+        .run(sceneName, fs.statSync(destFile).size, resolution, codec, audio, episode.id);
     } catch (resErr) {
-      console.error(`[MediaManagement] Failed to detect resolution/codec for episode:`, resErr.message);
+      console.error(`[MediaManagement] Failed to detect metadata for episode:`, resErr.message);
     }
 
     // Refresh TMDB metadata in DB

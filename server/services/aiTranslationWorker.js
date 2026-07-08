@@ -113,6 +113,43 @@ ${text}`;
   return res.data.content[0].text;
 };
 
+/**
+ * Centralized translation dispatch — reads provider & API keys from DB settings
+ * and routes to the correct translation function. Use this everywhere instead of
+ * duplicating the 4-way if/else chain.
+ *
+ * @param {string} srtContent - Raw SRT text to translate
+ * @param {string} targetLang - Target language name (e.g. 'Dutch', 'French')
+ * @param {object} [overrides] - Optional overrides: { provider, geminiApiKey, deepseekApiKey, claudeApiKey }
+ * @returns {Promise<string>} Translated SRT text
+ */
+const translateWithProvider = async (srtContent, targetLang, overrides = {}) => {
+  const provider = overrides.provider ||
+    db.prepare("SELECT value FROM settings WHERE key = 'translationProvider'").get()?.value ||
+    'googleTranslate';
+
+  const getApiKey = (keyName) => overrides[keyName] ||
+    db.prepare(`SELECT value FROM settings WHERE key = ?`).get(keyName)?.value;
+
+  if (provider === 'gemini') {
+    const apiKey = getApiKey('geminiApiKey');
+    if (!apiKey) throw new Error('Gemini API Key missing');
+    return translateWithGemini(srtContent, targetLang, apiKey);
+  }
+  if (provider === 'deepseek') {
+    const apiKey = getApiKey('deepseekApiKey');
+    if (!apiKey) throw new Error('DeepSeek API Key missing');
+    return translateWithDeepSeek(srtContent, targetLang, apiKey);
+  }
+  if (provider === 'claude') {
+    const apiKey = getApiKey('claudeApiKey');
+    if (!apiKey) throw new Error('Claude API Key missing');
+    return translateWithClaude(srtContent, targetLang, apiKey);
+  }
+  // Default: Google Translate (no API key needed)
+  return translateWithGoogleTranslate(srtContent, targetLang);
+};
+
 const translateSubtitles = async () => {
   const provider = db.prepare("SELECT value FROM settings WHERE key = 'translationProvider'").get();
   const geminiApiKeyRow = db.prepare("SELECT value FROM settings WHERE key = 'geminiApiKey'").get();
@@ -171,16 +208,12 @@ const translateSubtitles = async () => {
     
     const enSrtContent = fs.readFileSync(enSub, 'utf8');
     
-    let translatedText;
-    if (activeProvider === 'gemini') {
-      translatedText = await translateWithGemini(enSrtContent, targetLang, geminiApiKeyRow.value);
-    } else if (activeProvider === 'deepseek') {
-      translatedText = await translateWithDeepSeek(enSrtContent, targetLang, deepseekApiKeyRow.value);
-    } else if (activeProvider === 'claude') {
-      translatedText = await translateWithClaude(enSrtContent, targetLang, claudeApiKeyRow.value);
-    } else {
-      translatedText = await translateWithGoogleTranslate(enSrtContent, targetLang);
-    }
+    const translatedText = await translateWithProvider(enSrtContent, targetLang, {
+      provider: activeProvider,
+      geminiApiKey: geminiApiKeyRow?.value,
+      deepseekApiKey: deepseekApiKeyRow?.value,
+      claudeApiKey: claudeApiKeyRow?.value
+    });
 
     fs.writeFileSync(targetSub, translatedText);
     console.log(`[AITranslator] Successfully translated and saved ${targetSub}`);
@@ -249,6 +282,7 @@ const init = () => {
 module.exports = {
   init,
   translateSubtitles,
+  translateWithProvider,
   translateWithGemini,
   translateWithGoogleTranslate,
   translateWithDeepSeek,

@@ -246,18 +246,10 @@ router.post('/:id/refresh', async (req, res, next) => {
     }
 
     if (bestFile) {
-      const { getResolution, getCodec } = require('../../utils/videoUtils');
+      const { getMediaMetadata, parseAudioFromFileName } = require('../../utils/videoUtils');
       // Preserve existing scene_name unless it's empty/missing/auto-generated
       let resName = movie.scene_name;
-      if (!resName || resName === '' || resName.startsWith('Unknown ')) {
-        resName = bestFile.name;
-        const t = resName.toLowerCase();
-        const hasRes = t.includes('2160p') || t.includes('4k') || t.includes('1080p') || t.includes('720p') || t.includes('480p') || t.includes('sd');
-        if (!hasRes) {
-          const res = await getResolution(bestFile.path);
-          if (res) resName = `Unknown ${res}`;
-        }
-      }
+      
       // Always detect and update resolution
       let resolution = null;
       // First try to extract from filename
@@ -266,21 +258,34 @@ router.post('/:id/refresh', async (req, res, next) => {
       else if (nameLower.includes('1080p')) resolution = '1080p';
       else if (nameLower.includes('720p')) resolution = '720p';
       else if (nameLower.includes('480p')) resolution = '480p';
-      // Fall back to ffprobe if not found in filename
-      if (!resolution) {
-        try { resolution = await getResolution(bestFile.path); } catch { /* ignore */ }
-      }
 
       // Detect and update codec
       let codec = null;
       if (nameLower.includes('x265') || nameLower.includes('h265') || nameLower.includes('hevc')) codec = 'x265';
       else if (nameLower.includes('x264') || nameLower.includes('h264') || nameLower.includes('avc')) codec = 'x264';
-      if (!codec) {
-        try { codec = await getCodec(bestFile.path); } catch { /* ignore */ }
+
+      let audio = parseAudioFromFileName(bestFile.name);
+
+      if (!resolution || !codec || !audio) {
+        try {
+          const meta = await getMediaMetadata(bestFile.path);
+          if (!resolution) resolution = meta.resolution;
+          if (!codec) codec = meta.codec;
+          if (!audio) audio = meta.audio;
+        } catch { /* ignore */ }
       }
 
-      db.prepare('UPDATE movies SET file_path = ?, file_size = ?, scene_name = ?, status = ?, resolution = ?, codec = ? WHERE id = ?')
-        .run(bestFile.path, bestFile.size, resName, 'downloaded', resolution, codec, movie.id);
+      if (!resName || resName === '' || resName.startsWith('Unknown ')) {
+        resName = bestFile.name;
+        const t = resName.toLowerCase();
+        const hasRes = t.includes('2160p') || t.includes('4k') || t.includes('1080p') || t.includes('720p') || t.includes('480p') || t.includes('sd');
+        if (!hasRes) {
+          if (resolution) resName = `Unknown ${resolution}`;
+        }
+      }
+
+      db.prepare('UPDATE movies SET file_path = ?, file_size = ?, scene_name = ?, status = ?, resolution = ?, codec = ?, audio = ? WHERE id = ?')
+        .run(bestFile.path, bestFile.size, resName, 'downloaded', resolution, codec, audio, movie.id);
     } else if (scanPaths.size > 0) {
       // Paths were found but contained no video — genuinely missing
       db.prepare(`UPDATE movies SET status = CASE WHEN status = 'downloaded' THEN 'missing' ELSE status END, file_path = NULL, file_size = 0, scene_name = NULL WHERE id = ?`).run(movie.id);

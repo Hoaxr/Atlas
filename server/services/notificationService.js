@@ -171,8 +171,9 @@ class NotificationService {
 
   async downloadPoster(posterUrl) {
     const PORT = process.env.PORT || 3000;
+    const BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
     // Handle both relative paths (/api/watcher/image...) and full URLs (TMDB)
-    const url = posterUrl.startsWith('http') ? posterUrl : `http://localhost:${PORT}${posterUrl}`;
+    const url = posterUrl.startsWith('http') ? posterUrl : `${BASE_URL}${posterUrl}`;
     const response = await axios.get(url, { responseType: 'arraybuffer', timeout: 5000 });
     return Buffer.from(response.data);
   }

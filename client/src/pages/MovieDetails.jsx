@@ -2,14 +2,14 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import api from '../lib/api';
-import { formatSize, parseResolution, parseCodec, getReleaseTitleFromPath, LANG_NAME } from '../lib/format';
+import { formatSize, parseResolution, parseCodec, parseAudio, getReleaseTitleFromPath, LANG_NAME } from '../lib/format';
 import { useSettings } from '../lib/useSettings';
 import { useTMDBDetails } from '../lib/useTMDBDetails';
 import { setCachedMovies } from '../lib/libraryCache';
 import {
   ArrowLeft, Search, Download, Film, PlayCircle, Bookmark, BookmarkMinus,
   Star, X, RefreshCw, Loader2, ChevronDown, ChevronRight, ChevronLeft,
-  Folder, Zap, Trash2, HardDrive, Globe, Eye
+  Folder, Zap, Trash2, HardDrive, Globe, Eye, Volume2
 } from 'lucide-react';
 import { customAlert, customConfirm } from '../utils/alerts';
 import { useOutsideClick } from '../lib/useOutsideClick';
@@ -209,6 +209,7 @@ export default function MovieDetails() {
 
   const resolution = parseResolution(movie.scene_name || movie.file_path);
   const codec = movie.codec || parseCodec(movie.scene_name || movie.file_path);
+  const audio = movie.audio || parseAudio(movie.scene_name || movie.file_path);
   const genres = tmdbDetails?.genres || [];
   const castList = tmdbDetails?.credits?.cast?.slice(0, 5) || [];
   const addedDate = movie.created_at ? new Date(movie.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : null;
@@ -554,7 +555,7 @@ export default function MovieDetails() {
                   </p>
                 </div>
 
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
                   <div className="flex items-center gap-3 bg-slate-800/30 dark:bg-slate-900/35 border border-slate-700/30 dark:border-white/5 rounded-xl p-3">
                     <Film className="w-5 h-5 text-cyan-400 shrink-0" />
                     <div>
@@ -576,6 +577,14 @@ export default function MovieDetails() {
                     <div>
                       <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500 block">Size</span>
                       <span className="text-sm font-semibold text-slate-200">{formatSize(movie.size || movie.file_size)}</span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-3 bg-slate-800/30 dark:bg-slate-900/35 border border-slate-700/30 dark:border-white/5 rounded-xl p-3">
+                    <Volume2 className="w-5 h-5 text-cyan-400 shrink-0" />
+                    <div>
+                      <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500 block">Audio</span>
+                      <span className="text-sm font-semibold text-slate-200">{audio !== 'Unknown' ? audio : '-'}</span>
                     </div>
                   </div>
 
