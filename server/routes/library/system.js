@@ -313,7 +313,7 @@ router.get('/calendar', async (req, res, next) => {
         e.title, 
         e.season_number, 
         e.episode_number, 
-        e.air_date AS date, 
+        date(e.air_date, '+1 day') AS date, 
         e.overview, 
         s.title as show_title, 
         s.id as show_id, 

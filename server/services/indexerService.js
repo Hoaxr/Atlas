@@ -136,9 +136,15 @@ const filterAndSortResults = (results, profile, type, currentQuality = null, isM
     } catch { /* ignore */ }
   }
 
+  // Dangerous file extensions — block known malware/virus vectors (.exe, .bat, etc.)
+  const dangerousExts = /\.(exe|bat|cmd|com|msi|scr|pif|vbs|ps1|jar|lnk|url|app|dmg|sh|bin|reg|hta|jse|wsf|wsh|msc|cpl)\b/i;
+
   const camTerms = /\b(cam|ts|telesync|hdts|hdcam|hc|telecine|tc|workprint|wp|screener|scr)\b/;
   let camFiltered = 0;
+  let dangerousFiltered = 0;
   let filtered = results.filter(r => {
+    // Block torrents containing dangerous file extensions (virus/malware vectors)
+    if (dangerousExts.test(r.title)) { dangerousFiltered++; return false; }
     if (expectedTitle) {
       const expectedWords = expectedTitle.toLowerCase().replace(/['"]/g, '').split(/[^a-z0-9]+/).filter(Boolean);
       const cleanTitle = r.title.replace(/\[.*?\]|\(.*?\)/g, '').trim();
@@ -235,6 +241,7 @@ const filterAndSortResults = (results, profile, type, currentQuality = null, isM
   }
 
   deduplicated._camFiltered = camFiltered;
+  deduplicated._dangerousFiltered = dangerousFiltered;
   return deduplicated;
 };
 
