@@ -32,108 +32,129 @@ const getProfile = (id) => {
   return db.prepare('SELECT * FROM quality_profiles WHERE id = ?').get(id);
 };
 
+let isSearchCycleRunning = false;
+
 const runSearchCycle = async () => {
-  // Skip movies not yet released (release_date is in the future).
-  // Only include downloaded movies if their profile allows upgrades.
-  const monitoredMovies = db.prepare(`
-    SELECT m.* FROM movies m
-    LEFT JOIN quality_profiles qp ON m.quality_profile_id = qp.id
-    WHERE (m.status = 'monitored' OR (m.status = 'downloaded' AND qp.upgrade_allowed = 1))
-      AND (m.release_date IS NULL OR date(m.release_date) <= date('now'))
-  `).all();
-  
-  let movieFailures = 0;
-  for (const movie of monitoredMovies) {
-    try {
-      const profile = getProfile(movie.quality_profile_id);
-      if (!profile) continue;
-
-      let currentQuality = null;
-      if (movie.status === 'downloaded') {
-        if (!profile.upgrade_allowed) continue;
-        currentQuality = indexerService.parseQuality(movie.scene_name || '');
-        
-        if (currentQuality === profile.cutoff) continue;
-        
-        let qualities = [];
-        try { qualities = JSON.parse(profile.qualities); } catch { /* ignore */ }
-        
-        const currentIdx = qualities.indexOf(currentQuality);
-        const cutoffIdx = qualities.indexOf(profile.cutoff);
-        
-        if (currentIdx !== -1 && cutoffIdx !== -1 && currentIdx <= cutoffIdx) {
-          continue;
-        }
-      }
-
-      const results = await indexerService.searchMovie(movie.title, movie.year, profile, currentQuality, false, movie.tmdb_id);
-      
-      if (results.length > 0) {
-        const bestRelease = results[0]; 
-        await downloadClientService.addTorrent(bestRelease.link);
-        db.prepare("UPDATE movies SET status = 'downloading', scene_name = ? WHERE id = ?").run(bestRelease.title, movie.id);
-        eventBus.info('Download started', { title: movie.title, type: 'movie', release: bestRelease.title });
-      }
-    } catch (err) {
-      movieFailures++;
-      console.error(`[Automation] Failed to process ${movie.title}:`, err.message);
-    }
+  if (isSearchCycleRunning) {
+    console.warn('[Automation] Search cycle already running — skipping this tick.');
+    return;
   }
+  isSearchCycleRunning = true;
+  try {
+    // Fetch active torrents to prevent double-downloading
+    const activeTorrents = await downloadClientService.getTorrents().catch(() => []);
+    const activeTitles = new Set(activeTorrents.map(t => t.name?.toLowerCase().trim()).filter(Boolean));
 
-  const monitoredEpisodes = db.prepare(`
-    SELECT e.*, s.title as show_title, s.quality_profile_id, s.tmdb_id as show_tmdb_id
-    FROM episodes e 
-    JOIN shows s ON e.show_id = s.id
-    LEFT JOIN quality_profiles qp ON s.quality_profile_id = qp.id
-    WHERE (e.status = 'monitored' OR (e.status = 'downloaded' AND qp.upgrade_allowed = 1))
-      AND e.monitored = 1
-      AND (e.air_date IS NULL OR date(e.air_date) <= date('now'))
-  `).all();
-
-  let episodeFailures = 0;
-  for (const ep of monitoredEpisodes) {
-    try {
-      const profile = getProfile(ep.quality_profile_id);
-      if (!profile) continue;
-
-      let currentQuality = null;
-      if (ep.status === 'downloaded') {
-        if (!profile.upgrade_allowed) continue;
-        currentQuality = indexerService.parseQuality(ep.scene_name || '');
-        if (currentQuality === profile.cutoff) continue;
-        
-        let qualities = [];
-        try { qualities = JSON.parse(profile.qualities); } catch { /* ignore */ }
-        
-        const currentIdx = qualities.indexOf(currentQuality);
-        const cutoffIdx = qualities.indexOf(profile.cutoff);
-        
-        if (currentIdx !== -1 && cutoffIdx !== -1 && currentIdx <= cutoffIdx) {
-          continue;
-        }
-      }
-
-      const results = await indexerService.searchEpisode(ep.show_title, ep.season_number, ep.episode_number, profile, currentQuality, false, ep.show_tmdb_id);
+    const monitoredMovies = db.prepare(`
+      SELECT m.* FROM movies m
+      LEFT JOIN quality_profiles qp ON m.quality_profile_id = qp.id
+      WHERE (m.status = 'monitored' OR (m.status = 'downloaded' AND qp.upgrade_allowed = 1))
+        AND (m.release_date IS NULL OR date(m.release_date) <= date('now'))
+        AND (m.last_searched_at IS NULL OR m.last_searched_at < datetime('now', '-23 hours'))
+    `).all();
+    
+    let movieFailures = 0;
+    const processMovie = async (movie) => {
+      if (movie.scene_name && activeTitles.has(movie.scene_name.toLowerCase().trim())) return;
       
-      if (results.length > 0) {
-        const bestRelease = results[0];
-        await downloadClientService.addTorrent(bestRelease.link);
-        db.prepare("UPDATE episodes SET status = 'downloading', scene_name = ? WHERE id = ?").run(bestRelease.title, ep.id);
-        eventBus.info('Download started', { title: `${ep.show_title} S${String(ep.season_number).padStart(2,'0')}E${String(ep.episode_number).padStart(2,'0')}`, type: 'episode', release: bestRelease.title });
-      }
-    } catch (err) {
-      episodeFailures++;
-      console.error(`[Automation] Failed to process ${ep.show_title} S${ep.season_number}E${ep.episode_number}:`, err.message);
-    }
-  }
+      try {
+        const profile = getProfile(movie.quality_profile_id);
+        if (!profile) return;
 
-  if (movieFailures > 0 || episodeFailures > 0) {
-    eventBus.warn('Search cycle completed with errors', { 
-      movieFailures, 
-      episodeFailures,
-      totalMovies: monitoredMovies.length,
-      totalEpisodes: monitoredEpisodes.length
-    });
+        let currentQuality = null;
+        if (movie.status === 'downloaded') {
+          if (!profile.upgrade_allowed) return;
+          currentQuality = indexerService.parseQuality(movie.scene_name || '');
+          if (currentQuality === profile.cutoff) return;
+          
+          let qualities = [];
+          try { qualities = JSON.parse(profile.qualities); } catch { /* ignore */ }
+          
+          const currentIdx = qualities.indexOf(currentQuality);
+          const cutoffIdx = qualities.indexOf(profile.cutoff);
+          if (currentIdx !== -1 && cutoffIdx !== -1 && currentIdx <= cutoffIdx) return;
+        }
+
+        const results = await indexerService.searchMovie(movie.title, movie.year, profile, currentQuality, false, movie.tmdb_id);
+        
+        db.prepare("UPDATE movies SET last_searched_at = datetime('now') WHERE id = ?").run(movie.id);
+
+        if (results.length > 0) {
+          const bestRelease = results[0]; 
+          await downloadClientService.addTorrent(bestRelease.link);
+          db.prepare("UPDATE movies SET status = 'downloading', scene_name = ? WHERE id = ?").run(bestRelease.title, movie.id);
+          eventBus.info('Download started', { title: movie.title, type: 'movie', release: bestRelease.title });
+        }
+      } catch (err) {
+        movieFailures++;
+        console.error(`[Automation] Failed to process ${movie.title}:`, err.message);
+      }
+    };
+    
+    await runWithConcurrency(monitoredMovies, 3, processMovie);
+
+    const monitoredEpisodes = db.prepare(`
+      SELECT e.*, s.title as show_title, s.quality_profile_id, s.tmdb_id as show_tmdb_id
+      FROM episodes e 
+      JOIN shows s ON e.show_id = s.id
+      LEFT JOIN quality_profiles qp ON s.quality_profile_id = qp.id
+      WHERE (e.status = 'monitored' OR (e.status = 'downloaded' AND qp.upgrade_allowed = 1))
+        AND e.monitored = 1
+        AND (e.air_date IS NULL OR date(e.air_date) <= date('now'))
+        AND (e.last_searched_at IS NULL OR e.last_searched_at < datetime('now', '-23 hours'))
+    `).all();
+
+    let episodeFailures = 0;
+    const processEpisode = async (ep) => {
+      const epLabel = `${ep.show_title} S${String(ep.season_number).padStart(2,'0')}E${String(ep.episode_number).padStart(2,'0')}`;
+      if (ep.scene_name && activeTitles.has(ep.scene_name.toLowerCase().trim())) return;
+
+      try {
+        const profile = getProfile(ep.quality_profile_id);
+        if (!profile) return;
+
+        let currentQuality = null;
+        if (ep.status === 'downloaded') {
+          if (!profile.upgrade_allowed) return;
+          currentQuality = indexerService.parseQuality(ep.scene_name || '');
+          if (currentQuality === profile.cutoff) return;
+          
+          let qualities = [];
+          try { qualities = JSON.parse(profile.qualities); } catch { /* ignore */ }
+          
+          const currentIdx = qualities.indexOf(currentQuality);
+          const cutoffIdx = qualities.indexOf(profile.cutoff);
+          if (currentIdx !== -1 && cutoffIdx !== -1 && currentIdx <= cutoffIdx) return;
+        }
+
+        const results = await indexerService.searchEpisode(ep.show_title, ep.season_number, ep.episode_number, profile, currentQuality, false, ep.show_tmdb_id);
+        
+        db.prepare("UPDATE episodes SET last_searched_at = datetime('now') WHERE id = ?").run(ep.id);
+
+        if (results.length > 0) {
+          const bestRelease = results[0];
+          await downloadClientService.addTorrent(bestRelease.link);
+          db.prepare("UPDATE episodes SET status = 'downloading', scene_name = ? WHERE id = ?").run(bestRelease.title, ep.id);
+          eventBus.info('Download started', { title: epLabel, type: 'episode', release: bestRelease.title });
+        }
+      } catch (err) {
+        episodeFailures++;
+        console.error(`[Automation] Failed to process ${epLabel}:`, err.message);
+      }
+    };
+    
+    await runWithConcurrency(monitoredEpisodes, 3, processEpisode);
+
+    if (movieFailures > 0 || episodeFailures > 0) {
+      eventBus.warn('Search cycle completed with errors', { 
+        movieFailures, 
+        episodeFailures,
+        totalMovies: monitoredMovies.length,
+        totalEpisodes: monitoredEpisodes.length
+      });
+    }
+  } finally {
+    isSearchCycleRunning = false;
   }
 };
 

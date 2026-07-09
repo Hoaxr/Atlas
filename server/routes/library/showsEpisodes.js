@@ -25,7 +25,10 @@ router.get('/shows', (req, res, next) => {
     const limit = parseInt(req.query.limit) || 0;
     const offset = parseInt(req.query.offset) || 0;
     const sort = req.query.sort || 'added_desc';
-    const shows = libraryService.getShows(limit, offset, sort);
+    const filters = {};
+    if (req.query.status) filters.status = req.query.status;
+    if (req.query.qualityProfileId) filters.qualityProfileId = req.query.qualityProfileId;
+    const shows = libraryService.getShows(limit, offset, sort, filters);
     res.json({ status: 'success', data: shows });
   } catch (error) {
     next(error);

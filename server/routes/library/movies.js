@@ -44,7 +44,10 @@ router.get('/', async (req, res, next) => {
     const limit = parseInt(req.query.limit) || 0;
     const offset = parseInt(req.query.offset) || 0;
     const sort = req.query.sort || 'added_desc';
-    const movies = libraryService.getMovies(limit, offset, sort);
+    const filters = {};
+    if (req.query.status) filters.status = req.query.status;
+    if (req.query.qualityProfileId) filters.qualityProfileId = req.query.qualityProfileId;
+    const movies = libraryService.getMovies(limit, offset, sort, filters);
 
     // Skip expensive subtitle scanning when paginating
     if (limit > 0) {

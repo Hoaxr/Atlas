@@ -110,7 +110,7 @@ const addMovie = async (tmdbId, rootFolderPath = null) => {
   return { id: result.lastInsertRowid, tmdb_id: movieDetails.id, title: movieDetails.title };
 };
 
-const getMovies = (limit = 0, offset = 0, sort = 'added_desc') => {
+const getMovies = (limit = 0, offset = 0, sort = 'added_desc', filters = {}) => {
   const sortMap = {
     'added_desc': 'm.added_at DESC, m.id DESC',
     'added_asc': 'm.added_at ASC, m.id ASC',
@@ -127,10 +127,32 @@ const getMovies = (limit = 0, offset = 0, sort = 'added_desc') => {
     SELECT m.*, qp.name as quality_profile_name
     FROM movies m
     LEFT JOIN quality_profiles qp ON m.quality_profile_id = qp.id
-    ORDER BY ${sortMap[sort] || 'm.added_at DESC, m.id DESC'}
   `;
-  if (limit > 0) sql += ` LIMIT ${limit} OFFSET ${offset}`;
-  return sanitizeWatched(db.prepare(sql).all());
+
+  const conditions = [];
+  const params = [];
+
+  if (filters.status) {
+    conditions.push('m.status = ?');
+    params.push(filters.status);
+  }
+  if (filters.qualityProfileId) {
+    conditions.push('m.quality_profile_id = ?');
+    params.push(filters.qualityProfileId);
+  }
+
+  if (conditions.length > 0) {
+    sql += ` WHERE ${conditions.join(' AND ')} `;
+  }
+
+  sql += ` ORDER BY ${sortMap[sort] || 'm.added_at DESC, m.id DESC'}`;
+
+  if (limit > 0) {
+    sql += ` LIMIT ? OFFSET ?`;
+    params.push(limit, offset);
+  }
+
+  return sanitizeWatched(db.prepare(sql).all(...params));
 };
 
 const addShow = async (tmdbId, rootFolderPath = null) => {
@@ -170,25 +192,30 @@ const addShow = async (tmdbId, rootFolderPath = null) => {
   
   const internalShowId = result.lastInsertRowid;
 
-  // Fetch seasons and episodes synchronously so they're available for scanning
-  try {
-    const seasons = await tmdbService.getShowSeasons(tmdbId);
-    const insertEp = db.prepare(`
-      INSERT INTO episodes (show_id, season_number, episode_number, title, overview, status, air_date)
-      VALUES (?, ?, ?, ?, ?, 'monitored', ?)
-      ON CONFLICT(show_id, season_number, episode_number) DO NOTHING
-    `);
-    
-    for (const s of seasons) {
-      if (s.season_number === 0) continue;
-      const episodes = await tmdbService.getSeasonEpisodes(tmdbId, s.season_number);
-      for (const ep of episodes) {
-        insertEp.run(internalShowId, ep.season_number, ep.episode_number, ep.name, ep.overview, ep.air_date);
+  // Move episode population to background to prevent unbounded TMDB API requests from blocking addShow
+  setImmediate(async () => {
+    try {
+      const seasons = await tmdbService.getShowSeasons(tmdbId);
+      const insertEp = db.prepare(`
+        INSERT INTO episodes (show_id, season_number, episode_number, title, overview, status, air_date)
+        VALUES (?, ?, ?, ?, ?, 'monitored', ?)
+        ON CONFLICT(show_id, season_number, episode_number) DO NOTHING
+      `);
+      
+      for (const s of seasons) {
+        if (s.season_number === 0) continue;
+        const episodes = await tmdbService.getSeasonEpisodes(tmdbId, s.season_number);
+        for (const ep of episodes) {
+          insertEp.run(internalShowId, ep.season_number, ep.episode_number, ep.name, ep.overview, ep.air_date);
+        }
       }
+      
+      const eventBus = require('./eventBus');
+      eventBus.success('Episodes synced', { showId: internalShowId, type: 'show', title: showDetails.name });
+    } catch (err) {
+      console.error('Failed to fetch and save episodes in background:', err.message);
     }
-  } catch (err) {
-    console.error('Failed to fetch and save episodes:', err.message);
-  }
+  });
 
   // Pre-create the show folder
   try {
@@ -236,7 +263,7 @@ const addShow = async (tmdbId, rootFolderPath = null) => {
   return { id: internalShowId, tmdb_id: showDetails.id, title: showDetails.name };
 };
 
-const getShows = (limit = 0, offset = 0, sort = 'added_desc') => {
+const getShows = (limit = 0, offset = 0, sort = 'added_desc', filters = {}) => {
   const sortMap = {
     'added_desc': 's.added_at DESC, s.id DESC',
     'added_asc': 's.added_at ASC, s.id ASC',
@@ -267,10 +294,32 @@ const getShows = (limit = 0, offset = 0, sort = 'added_desc') => {
       (SELECT audio FROM episodes WHERE show_id = s.id AND status = 'downloaded' AND audio IS NOT NULL LIMIT 1) as audio
     FROM shows s
     LEFT JOIN quality_profiles qp ON s.quality_profile_id = qp.id
-    ORDER BY ${sortMap[sort] || 's.added_at DESC, s.id DESC'}
   `;
-  if (limit > 0) sql += ` LIMIT ${limit} OFFSET ${offset}`;
-  return sanitizeWatched(db.prepare(sql).all());
+
+  const conditions = [];
+  const params = [];
+
+  if (filters.status) {
+    conditions.push('s.status = ?');
+    params.push(filters.status);
+  }
+  if (filters.qualityProfileId) {
+    conditions.push('s.quality_profile_id = ?');
+    params.push(filters.qualityProfileId);
+  }
+
+  if (conditions.length > 0) {
+    sql += ` WHERE ${conditions.join(' AND ')} `;
+  }
+
+  sql += ` ORDER BY ${sortMap[sort] || 's.added_at DESC, s.id DESC'}`;
+
+  if (limit > 0) {
+    sql += ` LIMIT ? OFFSET ?`;
+    params.push(limit, offset);
+  }
+
+  return sanitizeWatched(db.prepare(sql).all(...params));
 };
 
 const getPaths = () => {

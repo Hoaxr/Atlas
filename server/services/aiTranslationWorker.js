@@ -9,8 +9,9 @@ const { runWithConcurrency } = require('../utils/concurrency');
 const { registerJob } = require('../utils/cronRegistry');
 
 const translateWithGemini = async (text, targetLang, apiKey) => {
+  const modelName = db.prepare("SELECT value FROM settings WHERE key = 'geminiModel'").get()?.value || 'gemini-1.5-flash';
   const genAI = new GoogleGenerativeAI(apiKey);
-  const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+  const model = genAI.getGenerativeModel({ model: modelName });
   const prompt = `You are a professional subtitle translator. Translate the following SRT file from English to ${targetLang}. 
 Keep the SRT formatting exactly the same (timestamps and sequence numbers). Do not add any extra text or conversational response, output ONLY the translated SRT content.
 
@@ -98,12 +99,13 @@ ${text}`;
 
 const translateWithClaude = async (text, targetLang, apiKey) => {
   const axios = require('axios');
+  const modelName = db.prepare("SELECT value FROM settings WHERE key = 'claudeModel'").get()?.value || 'claude-3-haiku-20240307';
   const prompt = `You are a professional subtitle translator. Translate the following SRT file from English to ${targetLang}. 
 Keep the SRT formatting exactly the same (timestamps and sequence numbers). Do not add any extra text or conversational response, output ONLY the translated SRT content.
 
 ${text}`;
   const res = await axios.post('https://api.anthropic.com/v1/messages', {
-    model: 'claude-3-haiku-20240307',
+    model: modelName,
     max_tokens: 4096,
     messages: [{ role: 'user', content: prompt }]
   }, {

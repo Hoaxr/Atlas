@@ -197,35 +197,45 @@ const filterAndSortResults = (results, profile, type, currentQuality = null, isM
 
   if (!profile || !profile.qualities) {
     filtered.sort((a, b) => b.seeders - a.seeders);
-    filtered._camFiltered = camFiltered;
-    return filtered;
+  } else {
+    let qualities = ['1080p'];
+    try { qualities = JSON.parse(profile.qualities); } catch { /* ignore */ }
+
+    if (currentQuality) {
+      const currentIdx = qualities.indexOf(currentQuality);
+      if (currentIdx !== -1) {
+        filtered = filtered.filter(r => {
+          const idx = qualities.indexOf(parseQuality(r.title));
+          return idx !== -1 && idx < currentIdx;
+        });
+      }
+    }
+
+    filtered.sort((a, b) => {
+      const idxA = qualities.indexOf(parseQuality(a.title));
+      const idxB = qualities.indexOf(parseQuality(b.title));
+      if (idxA === -1 && idxB === -1) return b.seeders - a.seeders;
+      if (idxA === -1) return 1;
+      if (idxB === -1) return -1;
+      if (idxA !== idxB) return idxB - idxA;
+      return b.seeders - a.seeders;
+    });
   }
 
-  let qualities = ['1080p'];
-  try { qualities = JSON.parse(profile.qualities); } catch { /* ignore */ }
-
-  if (currentQuality) {
-    const currentIdx = qualities.indexOf(currentQuality);
-    if (currentIdx !== -1) {
-      filtered = filtered.filter(r => {
-        const idx = qualities.indexOf(parseQuality(r.title));
-        return idx !== -1 && idx < currentIdx;
-      });
+  // Deduplicate: keep highest-seeded per normalized title stem
+  // Since array is already sorted by (quality -> seeders), first one we see is the best
+  const seen = new Set();
+  const deduplicated = [];
+  for (const r of filtered) {
+    const key = r.title.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+    if (!seen.has(key)) {
+      seen.add(key);
+      deduplicated.push(r);
     }
   }
 
-  filtered.sort((a, b) => {
-    const idxA = qualities.indexOf(parseQuality(a.title));
-    const idxB = qualities.indexOf(parseQuality(b.title));
-    if (idxA === -1 && idxB === -1) return b.seeders - a.seeders;
-    if (idxA === -1) return 1;
-    if (idxB === -1) return -1;
-    if (idxA !== idxB) return idxB - idxA;
-    return b.seeders - a.seeders;
-  });
-
-  filtered._camFiltered = camFiltered;
-  return filtered;
+  deduplicated._camFiltered = camFiltered;
+  return deduplicated;
 };
 
 // ─── Public API ───────────────────────────────────────────────────────────────

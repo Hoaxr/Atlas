@@ -45,13 +45,7 @@ wss.on('connection', (ws) => {
   console.log('[WS] Client connected');
   let authenticated = false;
 
-  const onEvent = (data) => {
-    try {
-      if (ws.readyState === 1) {
-        ws.send(JSON.stringify(data));
-      }
-    } catch { /* ignore */ }
-  };
+  let onEvent = null;
 
   // Handle incoming messages (for auth)
   ws.on('message', (raw) => {
@@ -61,26 +55,33 @@ wss.on('connection', (ws) => {
         authenticated = presenceTracker.handleAuthMessage(ws, msg);
         if (authenticated) {
           console.log(`[WS] User ${ws._username} authenticated`);
+          
+          onEvent = (data) => {
+            try {
+              if (ws.readyState === 1) {
+                ws.send(JSON.stringify(data));
+              }
+            } catch { /* ignore */ }
+          };
+          eventBus.on('event', onEvent);
         }
       }
     } catch { /* ignore */ }
   });
-
-  eventBus.on('event', onEvent);
 
   ws.on('close', () => {
     if (ws._userId) {
       presenceTracker.removeConnection(ws._userId, ws);
       console.log(`[WS] User ${ws._username || ws._userId} disconnected`);
     }
-    eventBus.off('event', onEvent);
+    if (onEvent) eventBus.off('event', onEvent);
   });
 
   ws.on('error', () => {
     if (ws._userId) {
       presenceTracker.removeConnection(ws._userId, ws);
     }
-    eventBus.off('event', onEvent);
+    if (onEvent) eventBus.off('event', onEvent);
   });
 });
 

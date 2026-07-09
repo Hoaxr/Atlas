@@ -166,213 +166,248 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_play_history_user ON play_history(user);
 `);
 
-try {
-  db.exec("ALTER TABLE movies ADD COLUMN file_path TEXT;");
-} catch { /* ignore */ }
+db.exec(`
+  CREATE TABLE IF NOT EXISTS schema_migrations (
+    id INTEGER PRIMARY KEY,
+    name TEXT NOT NULL,
+    applied_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+`);
 
-try {
-  db.exec("ALTER TABLE play_history ADD COLUMN player TEXT;");
-} catch { /* ignore */ }
+const hasColumn = (table, column) => {
+  const cols = db.prepare(`PRAGMA table_info(${table})`).all().map(c => c.name);
+  return cols.includes(column);
+};
 
-try {
-  db.exec("ALTER TABLE movies ADD COLUMN quality_profile_id INTEGER;");
-} catch { /* ignore */ }
+const MIGRATIONS = [
+  {
+    id: 1,
+    name: 'initial_alterations',
+    run: (db) => {
+      const alters = [
+        ['movies', 'file_path', 'TEXT'],
+        ['play_history', 'player', 'TEXT'],
+        ['movies', 'quality_profile_id', 'INTEGER'],
+        ['movies', 'scene_name', 'TEXT'],
+        ['episodes', 'scene_name', 'TEXT'],
+        ['shows', 'quality_profile_id', 'INTEGER'],
+        ['quality_profiles', 'qualities', 'TEXT'],
+        ['quality_profiles', 'cutoff', 'TEXT'],
+        ['quality_profiles', 'upgrade_allowed', 'INTEGER DEFAULT 1'],
+        ['quality_profiles', 'media_type', "TEXT DEFAULT 'both'"],
+        ['release_profiles', 'apply_to', "TEXT DEFAULT 'all'"],
+        ['users', 'origin', "TEXT DEFAULT 'atlas'"],
+        ['movies', 'rating', 'REAL DEFAULT 0'],
+        ['shows', 'rating', 'REAL DEFAULT 0'],
+        ['movies', 'file_size', 'INTEGER DEFAULT 0'],
+        ['shows', 'folder_size', 'INTEGER DEFAULT 0'],
+        ['episodes', 'file_size', 'INTEGER DEFAULT 0'],
+        ['movies', 'watched', 'INTEGER DEFAULT 0'],
+        ['shows', 'watched', 'INTEGER DEFAULT 0'],
+        ['movies', 'subtitles', "TEXT DEFAULT '[]'"],
+        ['episodes', 'subtitles', "TEXT DEFAULT '[]'"],
+        ['library_paths', 'type', "TEXT DEFAULT 'movies'"],
+        ['movies', 'genres', "TEXT DEFAULT ''"],
+        ['shows', 'genres', "TEXT DEFAULT ''"],
+        ['movies', 'monitored', 'INTEGER DEFAULT 1'],
+        ['movies', 'resolution', 'TEXT'],
+        ['episodes', 'resolution', 'TEXT'],
+        ['movies', 'codec', 'TEXT'],
+        ['episodes', 'codec', 'TEXT'],
+        ['movies', 'audio', 'TEXT'],
+        ['episodes', 'audio', 'TEXT'],
+        ['shows', 'monitored', 'INTEGER DEFAULT 1'],
+        ['episodes', 'monitored', 'INTEGER DEFAULT 1'],
+        ['episodes', 'air_date', 'TEXT'],
+        ['movies', 'release_date', 'TEXT'],
+        ['shows', 'tmdb_status', "TEXT DEFAULT ''"],
+        ['requests', 'release_date', 'TEXT'],
+        ['requests', 'poster_path', 'TEXT'],
+        ['users', 'last_login', 'DATETIME']
+      ];
+      
+      for (const [table, col, def] of alters) {
+        if (!hasColumn(table, col)) {
+          db.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${def};`);
+        }
+      }
+    }
+  },
+  {
+    id: 2,
+    name: 'populate_codecs',
+    run: (db) => {
+      db.exec(`
+        UPDATE movies SET codec = CASE
+          WHEN scene_name LIKE '%x265%' OR scene_name LIKE '%h265%' OR scene_name LIKE '%hevc%' OR file_path LIKE '%x265%' OR file_path LIKE '%h265%' OR file_path LIKE '%hevc%' THEN 'x265'
+          WHEN scene_name LIKE '%x264%' OR scene_name LIKE '%h264%' OR scene_name LIKE '%avc%' OR file_path LIKE '%x264%' OR file_path LIKE '%h264%' OR file_path LIKE '%avc%' THEN 'x264'
+          ELSE NULL
+        END
+        WHERE codec IS NULL
+      `);
+      db.exec(`
+        UPDATE episodes SET codec = CASE
+          WHEN scene_name LIKE '%x265%' OR scene_name LIKE '%h265%' OR scene_name LIKE '%hevc%' OR file_path LIKE '%x265%' OR file_path LIKE '%h265%' OR file_path LIKE '%hevc%' THEN 'x265'
+          WHEN scene_name LIKE '%x264%' OR scene_name LIKE '%h264%' OR scene_name LIKE '%avc%' OR file_path LIKE '%x264%' OR file_path LIKE '%h264%' OR file_path LIKE '%avc%' THEN 'x264'
+          ELSE NULL
+        END
+        WHERE codec IS NULL
+      `);
+    }
+  },
+  {
+    id: 3,
+    name: 'populate_audio',
+    run: (db) => {
+      db.exec(`
+        UPDATE movies SET audio = CASE
+          WHEN scene_name LIKE '%atmos%' OR file_path LIKE '%atmos%' THEN 'Atmos'
+          WHEN scene_name LIKE '%truehd%' OR file_path LIKE '%truehd%' THEN 'TrueHD'
+          WHEN scene_name LIKE '%dts-hd%' OR scene_name LIKE '%dtshd%' OR file_path LIKE '%dts-hd%' OR file_path LIKE '%dtshd%' THEN 'DTS-HD'
+          WHEN scene_name LIKE '%dts%' OR file_path LIKE '%dts%' THEN 'DTS'
+          WHEN scene_name LIKE '%ddp7.1%' OR scene_name LIKE '%dd+7.1%' OR file_path LIKE '%ddp7.1%' OR file_path LIKE '%dd+7.1%' THEN 'DDP 7.1'
+          WHEN scene_name LIKE '%ddp5.1%' OR scene_name LIKE '%dd+5.1%' OR scene_name LIKE '%ddp%' OR scene_name LIKE '%dd+%' OR file_path LIKE '%ddp5.1%' OR file_path LIKE '%dd+5.1%' OR file_path LIKE '%ddp%' OR file_path LIKE '%dd+%' THEN 'DDP 5.1'
+          WHEN scene_name LIKE '%dd5.1%' OR scene_name LIKE '%ac3 5.1%' OR file_path LIKE '%dd5.1%' OR file_path LIKE '%ac3 5.1%' THEN 'DD 5.1'
+          WHEN scene_name LIKE '%dd2.0%' OR scene_name LIKE '%ac3 2.0%' OR file_path LIKE '%dd2.0%' OR file_path LIKE '%ac3 2.0%' THEN 'DD Stereo'
+          WHEN scene_name LIKE '%aac 5.1%' OR file_path LIKE '%aac 5.1%' THEN 'AAC 5.1'
+          WHEN scene_name LIKE '%aac 2.0%' OR scene_name LIKE '%aac%' OR file_path LIKE '%aac 2.0%' OR file_path LIKE '%aac%' THEN 'AAC Stereo'
+          WHEN scene_name LIKE '%ac3%' OR scene_name LIKE '%ac-3%' OR file_path LIKE '%ac3%' OR file_path LIKE '%ac-3%' THEN 'AC3'
+          WHEN scene_name LIKE '%7.1%' OR file_path LIKE '%7.1%' THEN '7.1'
+          WHEN scene_name LIKE '%5.1%' OR file_path LIKE '%5.1%' THEN '5.1'
+          WHEN scene_name LIKE '%2.0%' OR scene_name LIKE '%stereo%' OR file_path LIKE '%2.0%' OR file_path LIKE '%stereo%' THEN 'Stereo'
+          WHEN scene_name LIKE '%flac%' OR file_path LIKE '%flac%' THEN 'FLAC'
+          WHEN scene_name LIKE '%opus%' OR file_path LIKE '%opus%' THEN 'Opus'
+          WHEN scene_name LIKE '%mp3%' OR file_path LIKE '%mp3%' THEN 'MP3'
+          ELSE NULL
+        END
+        WHERE audio IS NULL
+      `);
+      db.exec(`
+        UPDATE episodes SET audio = CASE
+          WHEN scene_name LIKE '%atmos%' OR file_path LIKE '%atmos%' THEN 'Atmos'
+          WHEN scene_name LIKE '%truehd%' OR file_path LIKE '%truehd%' THEN 'TrueHD'
+          WHEN scene_name LIKE '%dts-hd%' OR scene_name LIKE '%dtshd%' OR file_path LIKE '%dts-hd%' OR file_path LIKE '%dtshd%' THEN 'DTS-HD'
+          WHEN scene_name LIKE '%dts%' OR file_path LIKE '%dts%' THEN 'DTS'
+          WHEN scene_name LIKE '%ddp7.1%' OR scene_name LIKE '%dd+7.1%' OR file_path LIKE '%ddp7.1%' OR file_path LIKE '%dd+7.1%' THEN 'DDP 7.1'
+          WHEN scene_name LIKE '%ddp5.1%' OR scene_name LIKE '%dd+5.1%' OR scene_name LIKE '%ddp%' OR scene_name LIKE '%dd+%' OR file_path LIKE '%ddp5.1%' OR file_path LIKE '%dd+5.1%' OR file_path LIKE '%ddp%' OR file_path LIKE '%dd+%' THEN 'DDP 5.1'
+          WHEN scene_name LIKE '%dd5.1%' OR scene_name LIKE '%ac3 5.1%' OR file_path LIKE '%dd5.1%' OR file_path LIKE '%ac3 5.1%' THEN 'DD 5.1'
+          WHEN scene_name LIKE '%dd2.0%' OR scene_name LIKE '%ac3 2.0%' OR file_path LIKE '%dd2.0%' OR file_path LIKE '%ac3 2.0%' THEN 'DD Stereo'
+          WHEN scene_name LIKE '%aac 5.1%' OR file_path LIKE '%aac 5.1%' THEN 'AAC 5.1'
+          WHEN scene_name LIKE '%aac 2.0%' OR scene_name LIKE '%aac%' OR file_path LIKE '%aac 2.0%' OR file_path LIKE '%aac%' THEN 'AAC Stereo'
+          WHEN scene_name LIKE '%ac3%' OR scene_name LIKE '%ac-3%' OR file_path LIKE '%ac3%' OR file_path LIKE '%ac-3%' THEN 'AC3'
+          WHEN scene_name LIKE '%7.1%' OR file_path LIKE '%7.1%' THEN '7.1'
+          WHEN scene_name LIKE '%5.1%' OR file_path LIKE '%5.1%' THEN '5.1'
+          WHEN scene_name LIKE '%2.0%' OR scene_name LIKE '%stereo%' OR file_path LIKE '%2.0%' OR file_path LIKE '%stereo%' THEN 'Stereo'
+          WHEN scene_name LIKE '%flac%' OR file_path LIKE '%flac%' THEN 'FLAC'
+          WHEN scene_name LIKE '%opus%' OR file_path LIKE '%opus%' THEN 'Opus'
+          WHEN scene_name LIKE '%mp3%' OR file_path LIKE '%mp3%' THEN 'MP3'
+          ELSE NULL
+        END
+        WHERE audio IS NULL
+      `);
+    }
+  },
+  {
+    id: 4,
+    name: 'populate_resolution',
+    run: (db) => {
+      db.exec(`
+        UPDATE movies SET resolution = CASE
+          WHEN scene_name LIKE '%2160p%' OR scene_name LIKE '%4K%' OR scene_name LIKE '%4k%' THEN '2160p'
+          WHEN scene_name LIKE '%1080p%' THEN '1080p'
+          WHEN scene_name LIKE '%720p%' THEN '720p'
+          WHEN scene_name LIKE '%480p%' THEN '480p'
+          WHEN scene_name LIKE '%SD%' OR scene_name LIKE '%sd%' THEN 'SD'
+          ELSE NULL
+        END
+        WHERE resolution IS NULL AND scene_name IS NOT NULL
+      `);
+      db.exec(`
+        UPDATE episodes SET resolution = CASE
+          WHEN scene_name LIKE '%2160p%' OR scene_name LIKE '%4K%' OR scene_name LIKE '%4k%' THEN '2160p'
+          WHEN scene_name LIKE '%1080p%' THEN '1080p'
+          WHEN scene_name LIKE '%720p%' THEN '720p'
+          WHEN scene_name LIKE '%480p%' THEN '480p'
+          WHEN scene_name LIKE '%SD%' OR scene_name LIKE '%sd%' THEN 'SD'
+          ELSE NULL
+        END
+        WHERE resolution IS NULL AND scene_name IS NOT NULL
+      `);
+    }
+  },
+  {
+    id: 5,
+    name: 'fix_downloaded_status_and_watched_tmdb',
+    run: (db) => {
+      db.exec("UPDATE movies SET status = 'downloaded' WHERE file_path IS NOT NULL AND file_path != '' AND status != 'downloading'");
+      db.exec("UPDATE shows SET status = 'downloaded' WHERE folder_path IS NOT NULL AND folder_path != '' AND status != 'downloading'");
+      db.exec("UPDATE episodes SET status = 'downloaded' WHERE file_path IS NOT NULL AND file_path != '' AND status != 'downloading'");
+      db.exec("CREATE TABLE IF NOT EXISTS watched_tmdb (tmdb_id INTEGER PRIMARY KEY, type TEXT NOT NULL);");
+    }
+  },
+  {
+    id: 6,
+    name: 'seed_quality_profiles_and_admin',
+    run: (db) => {
+      const existingProfile = db.prepare('SELECT id FROM quality_profiles LIMIT 1').get();
+      if (!existingProfile) {
+        const defaultQualities = JSON.stringify(['720p', '1080p', '2160p']);
+        db.prepare('INSERT INTO quality_profiles (name, preferred_resolution, qualities, cutoff, upgrade_allowed) VALUES (?, ?, ?, ?, ?)').run('Any (1080p+)', '1080p', defaultQualities, '1080p', 1);
+      } else {
+        db.prepare(`UPDATE quality_profiles SET qualities = ?, cutoff = ?, upgrade_allowed = ? WHERE qualities IS NULL`).run(JSON.stringify(['1080p']), '1080p', 1);
+      }
 
-try {
-  db.exec("ALTER TABLE movies ADD COLUMN scene_name TEXT;");
-} catch { /* ignore */ }
-
-try {
-  db.exec("ALTER TABLE episodes ADD COLUMN scene_name TEXT;");
-} catch { /* ignore */ }
-
-try {
-  db.exec("ALTER TABLE shows ADD COLUMN quality_profile_id INTEGER;");
-} catch { /* ignore */ }
-
-try { db.exec("ALTER TABLE quality_profiles ADD COLUMN qualities TEXT;"); } catch { /* ignore */ }
-try { db.exec("ALTER TABLE quality_profiles ADD COLUMN cutoff TEXT;"); } catch { /* ignore */ }
-try { db.exec("ALTER TABLE quality_profiles ADD COLUMN upgrade_allowed INTEGER DEFAULT 1;"); } catch { /* ignore */ }
-try { db.exec("ALTER TABLE quality_profiles ADD COLUMN media_type TEXT DEFAULT 'both';"); } catch { /* ignore */ }
-try { db.exec("ALTER TABLE release_profiles ADD COLUMN apply_to TEXT DEFAULT 'all';"); } catch { /* ignore */ }
-try { db.exec("ALTER TABLE users ADD COLUMN origin TEXT DEFAULT 'atlas';"); } catch { /* ignore */ }
-
-// Ensure rating columns exist
-try { db.exec("ALTER TABLE movies ADD COLUMN rating REAL DEFAULT 0;"); } catch { /* ignore */ }
-try { db.exec("ALTER TABLE shows ADD COLUMN rating REAL DEFAULT 0;"); } catch { /* ignore */ }
-// Ensure size columns exist
-try { db.exec("ALTER TABLE movies ADD COLUMN file_size INTEGER DEFAULT 0;"); } catch { /* ignore */ }
-try { db.exec("ALTER TABLE shows ADD COLUMN folder_size INTEGER DEFAULT 0;"); } catch { /* ignore */ }
-try { db.exec("ALTER TABLE episodes ADD COLUMN file_size INTEGER DEFAULT 0;"); } catch { /* ignore */ }
-// Ensure watched columns exist
-try { db.exec("ALTER TABLE movies ADD COLUMN watched INTEGER DEFAULT 0;"); } catch { /* ignore */ }
-try { db.exec("ALTER TABLE shows ADD COLUMN watched INTEGER DEFAULT 0;"); } catch { /* ignore */ }// Ensure subtitle columns exist
-try { db.exec("ALTER TABLE movies ADD COLUMN subtitles TEXT DEFAULT '[]';"); } catch { /* ignore */ }
-try { db.exec("ALTER TABLE episodes ADD COLUMN subtitles TEXT DEFAULT '[]';"); } catch { /* ignore */ }
-// Ensure library_paths type column exists
-try { db.exec("ALTER TABLE library_paths ADD COLUMN type TEXT DEFAULT 'movies';"); } catch { /* ignore */ }// Ensure genres columns exist
-try { db.exec("ALTER TABLE movies ADD COLUMN genres TEXT DEFAULT '';"); } catch { /* ignore */ }
-try { db.exec("ALTER TABLE shows ADD COLUMN genres TEXT DEFAULT '';"); } catch { /* ignore */ }
-// Ensure monitored columns exist (separate from status which tracks download state)
-try { db.exec("ALTER TABLE movies ADD COLUMN monitored INTEGER DEFAULT 1;"); } catch { /* ignore */ }
-// Ensure resolution columns exist
-try { db.exec("ALTER TABLE movies ADD COLUMN resolution TEXT;"); } catch { /* ignore */ }
-try { db.exec("ALTER TABLE episodes ADD COLUMN resolution TEXT;"); } catch { /* ignore */ }
-
-// Ensure codec columns exist
-try { db.exec("ALTER TABLE movies ADD COLUMN codec TEXT;"); } catch { /* ignore */ }
-try { db.exec("ALTER TABLE episodes ADD COLUMN codec TEXT;"); } catch { /* ignore */ }
-
-// Ensure audio columns exist
-try { db.exec("ALTER TABLE movies ADD COLUMN audio TEXT;"); } catch { /* ignore */ }
-try { db.exec("ALTER TABLE episodes ADD COLUMN audio TEXT;"); } catch { /* ignore */ }
-
-// Populate codec from existing data
-try {
-  db.exec(`
-    UPDATE movies SET codec = CASE
-      WHEN scene_name LIKE '%x265%' OR scene_name LIKE '%h265%' OR scene_name LIKE '%hevc%' OR file_path LIKE '%x265%' OR file_path LIKE '%h265%' OR file_path LIKE '%hevc%' THEN 'x265'
-      WHEN scene_name LIKE '%x264%' OR scene_name LIKE '%h264%' OR scene_name LIKE '%avc%' OR file_path LIKE '%x264%' OR file_path LIKE '%h264%' OR file_path LIKE '%avc%' THEN 'x264'
-      ELSE NULL
-    END
-    WHERE codec IS NULL
-  `);
-  db.exec(`
-    UPDATE episodes SET codec = CASE
-      WHEN scene_name LIKE '%x265%' OR scene_name LIKE '%h265%' OR scene_name LIKE '%hevc%' OR file_path LIKE '%x265%' OR file_path LIKE '%h265%' OR file_path LIKE '%hevc%' THEN 'x265'
-      WHEN scene_name LIKE '%x264%' OR scene_name LIKE '%h264%' OR scene_name LIKE '%avc%' OR file_path LIKE '%x264%' OR file_path LIKE '%h264%' OR file_path LIKE '%avc%' THEN 'x264'
-      ELSE NULL
-    END
-    WHERE codec IS NULL
-  `);
-} catch { /* ignore */ }
-
-// Populate audio from existing data
-try {
-  db.exec(`
-    UPDATE movies SET audio = CASE
-      WHEN scene_name LIKE '%atmos%' OR file_path LIKE '%atmos%' THEN 'Atmos'
-      WHEN scene_name LIKE '%truehd%' OR file_path LIKE '%truehd%' THEN 'TrueHD'
-      WHEN scene_name LIKE '%dts-hd%' OR scene_name LIKE '%dtshd%' OR file_path LIKE '%dts-hd%' OR file_path LIKE '%dtshd%' THEN 'DTS-HD'
-      WHEN scene_name LIKE '%dts%' OR file_path LIKE '%dts%' THEN 'DTS'
-      WHEN scene_name LIKE '%ddp7.1%' OR scene_name LIKE '%dd+7.1%' OR file_path LIKE '%ddp7.1%' OR file_path LIKE '%dd+7.1%' THEN 'DDP 7.1'
-      WHEN scene_name LIKE '%ddp5.1%' OR scene_name LIKE '%dd+5.1%' OR scene_name LIKE '%ddp%' OR scene_name LIKE '%dd+%' OR file_path LIKE '%ddp5.1%' OR file_path LIKE '%dd+5.1%' OR file_path LIKE '%ddp%' OR file_path LIKE '%dd+%' THEN 'DDP 5.1'
-      WHEN scene_name LIKE '%dd5.1%' OR scene_name LIKE '%ac3 5.1%' OR file_path LIKE '%dd5.1%' OR file_path LIKE '%ac3 5.1%' THEN 'DD 5.1'
-      WHEN scene_name LIKE '%dd2.0%' OR scene_name LIKE '%ac3 2.0%' OR file_path LIKE '%dd2.0%' OR file_path LIKE '%ac3 2.0%' THEN 'DD Stereo'
-      WHEN scene_name LIKE '%aac 5.1%' OR file_path LIKE '%aac 5.1%' THEN 'AAC 5.1'
-      WHEN scene_name LIKE '%aac 2.0%' OR scene_name LIKE '%aac%' OR file_path LIKE '%aac 2.0%' OR file_path LIKE '%aac%' THEN 'AAC Stereo'
-      WHEN scene_name LIKE '%ac3%' OR scene_name LIKE '%ac-3%' OR file_path LIKE '%ac3%' OR file_path LIKE '%ac-3%' THEN 'AC3'
-      WHEN scene_name LIKE '%7.1%' OR file_path LIKE '%7.1%' THEN '7.1'
-      WHEN scene_name LIKE '%5.1%' OR file_path LIKE '%5.1%' THEN '5.1'
-      WHEN scene_name LIKE '%2.0%' OR scene_name LIKE '%stereo%' OR file_path LIKE '%2.0%' OR file_path LIKE '%stereo%' THEN 'Stereo'
-      WHEN scene_name LIKE '%flac%' OR file_path LIKE '%flac%' THEN 'FLAC'
-      WHEN scene_name LIKE '%opus%' OR file_path LIKE '%opus%' THEN 'Opus'
-      WHEN scene_name LIKE '%mp3%' OR file_path LIKE '%mp3%' THEN 'MP3'
-      ELSE NULL
-    END
-    WHERE audio IS NULL
-  `);
-  db.exec(`
-    UPDATE episodes SET audio = CASE
-      WHEN scene_name LIKE '%atmos%' OR file_path LIKE '%atmos%' THEN 'Atmos'
-      WHEN scene_name LIKE '%truehd%' OR file_path LIKE '%truehd%' THEN 'TrueHD'
-      WHEN scene_name LIKE '%dts-hd%' OR scene_name LIKE '%dtshd%' OR file_path LIKE '%dts-hd%' OR file_path LIKE '%dtshd%' THEN 'DTS-HD'
-      WHEN scene_name LIKE '%dts%' OR file_path LIKE '%dts%' THEN 'DTS'
-      WHEN scene_name LIKE '%ddp7.1%' OR scene_name LIKE '%dd+7.1%' OR file_path LIKE '%ddp7.1%' OR file_path LIKE '%dd+7.1%' THEN 'DDP 7.1'
-      WHEN scene_name LIKE '%ddp5.1%' OR scene_name LIKE '%dd+5.1%' OR scene_name LIKE '%ddp%' OR scene_name LIKE '%dd+%' OR file_path LIKE '%ddp5.1%' OR file_path LIKE '%dd+5.1%' OR file_path LIKE '%ddp%' OR file_path LIKE '%dd+%' THEN 'DDP 5.1'
-      WHEN scene_name LIKE '%dd5.1%' OR scene_name LIKE '%ac3 5.1%' OR file_path LIKE '%dd5.1%' OR file_path LIKE '%ac3 5.1%' THEN 'DD 5.1'
-      WHEN scene_name LIKE '%dd2.0%' OR scene_name LIKE '%ac3 2.0%' OR file_path LIKE '%dd2.0%' OR file_path LIKE '%ac3 2.0%' THEN 'DD Stereo'
-      WHEN scene_name LIKE '%aac 5.1%' OR file_path LIKE '%aac 5.1%' THEN 'AAC 5.1'
-      WHEN scene_name LIKE '%aac 2.0%' OR scene_name LIKE '%aac%' OR file_path LIKE '%aac 2.0%' OR file_path LIKE '%aac%' THEN 'AAC Stereo'
-      WHEN scene_name LIKE '%ac3%' OR scene_name LIKE '%ac-3%' OR file_path LIKE '%ac3%' OR file_path LIKE '%ac-3%' THEN 'AC3'
-      WHEN scene_name LIKE '%7.1%' OR file_path LIKE '%7.1%' THEN '7.1'
-      WHEN scene_name LIKE '%5.1%' OR file_path LIKE '%5.1%' THEN '5.1'
-      WHEN scene_name LIKE '%2.0%' OR scene_name LIKE '%stereo%' OR file_path LIKE '%2.0%' OR file_path LIKE '%stereo%' THEN 'Stereo'
-      WHEN scene_name LIKE '%flac%' OR file_path LIKE '%flac%' THEN 'FLAC'
-      WHEN scene_name LIKE '%opus%' OR file_path LIKE '%opus%' THEN 'Opus'
-      WHEN scene_name LIKE '%mp3%' OR file_path LIKE '%mp3%' THEN 'MP3'
-      ELSE NULL
-    END
-    WHERE audio IS NULL
-  `);
-} catch { /* ignore */ }
-
-// Populate resolution from existing scene_name data
-try {
-  db.exec(`
-    UPDATE movies SET resolution = CASE
-      WHEN scene_name LIKE '%2160p%' OR scene_name LIKE '%4K%' OR scene_name LIKE '%4k%' THEN '2160p'
-      WHEN scene_name LIKE '%1080p%' THEN '1080p'
-      WHEN scene_name LIKE '%720p%' THEN '720p'
-      WHEN scene_name LIKE '%480p%' THEN '480p'
-      WHEN scene_name LIKE '%SD%' OR scene_name LIKE '%sd%' THEN 'SD'
-      ELSE NULL
-    END
-    WHERE resolution IS NULL AND scene_name IS NOT NULL
-  `);
-  db.exec(`
-    UPDATE episodes SET resolution = CASE
-      WHEN scene_name LIKE '%2160p%' OR scene_name LIKE '%4K%' OR scene_name LIKE '%4k%' THEN '2160p'
-      WHEN scene_name LIKE '%1080p%' THEN '1080p'
-      WHEN scene_name LIKE '%720p%' THEN '720p'
-      WHEN scene_name LIKE '%480p%' THEN '480p'
-      WHEN scene_name LIKE '%SD%' OR scene_name LIKE '%sd%' THEN 'SD'
-      ELSE NULL
-    END
-    WHERE resolution IS NULL AND scene_name IS NOT NULL
-  `);
-} catch { /* ignore */ }
-try { db.exec("ALTER TABLE shows ADD COLUMN monitored INTEGER DEFAULT 1;"); } catch { /* ignore */ }
-try { db.exec("ALTER TABLE episodes ADD COLUMN monitored INTEGER DEFAULT 1;"); } catch { /* ignore */ }
-try { db.exec("ALTER TABLE episodes ADD COLUMN air_date TEXT;"); } catch { /* ignore */ }
-try { db.exec("ALTER TABLE movies ADD COLUMN release_date TEXT;"); } catch { /* ignore */ }
-try { db.exec("ALTER TABLE shows ADD COLUMN tmdb_status TEXT DEFAULT '';"); } catch { /* ignore */ }
-// Fix existing items: if they have a file on disk, restore 'downloaded' status
-try { db.exec("UPDATE movies SET status = 'downloaded' WHERE file_path IS NOT NULL AND file_path != '' AND status != 'downloading'"); } catch { /* ignore */ }
-try { db.exec("UPDATE shows SET status = 'downloaded' WHERE folder_path IS NOT NULL AND folder_path != '' AND status != 'downloading'"); } catch { /* ignore */ }
-try { db.exec("UPDATE episodes SET status = 'downloaded' WHERE file_path IS NOT NULL AND file_path != '' AND status != 'downloading'"); } catch { /* ignore */ }
-// Track watched TMDB IDs even after library removal
-try { db.exec("CREATE TABLE IF NOT EXISTS watched_tmdb (tmdb_id INTEGER PRIMARY KEY, type TEXT NOT NULL);"); } catch { /* ignore */ }
-try { db.exec("ALTER TABLE requests ADD COLUMN release_date TEXT;"); } catch { /* ignore */ }
-try { db.exec("ALTER TABLE requests ADD COLUMN poster_path TEXT;"); } catch { /* ignore */ }
-
-// Seed default quality profile if none exists
-const existingProfile = db.prepare('SELECT id FROM quality_profiles LIMIT 1').get();
-if (!existingProfile) {
-  const defaultQualities = JSON.stringify(['720p', '1080p', '2160p']);
-  db.prepare('INSERT INTO quality_profiles (name, preferred_resolution, qualities, cutoff, upgrade_allowed) VALUES (?, ?, ?, ?, ?)').run('Any (1080p+)', '1080p', defaultQualities, '1080p', 1);
-} else {
-  // Backfill if empty
-  db.prepare(`UPDATE quality_profiles SET qualities = ?, cutoff = ?, upgrade_allowed = ? WHERE qualities IS NULL`).run(JSON.stringify(['1080p']), '1080p', 1);
-}
-
-// Migrate initial admin if users table is empty and we have settings
-const existingAdmin = db.prepare("SELECT id FROM users WHERE role = 'admin' LIMIT 1").get();
-if (!existingAdmin) {
-  const authUsernameRow = db.prepare('SELECT value FROM settings WHERE key = ?').get('authUsername');
-  const authPasswordRow = db.prepare('SELECT value FROM settings WHERE key = ?').get('authPassword');
-  
-  if (authUsernameRow && authUsernameRow.value) {
-    const bcrypt = require('bcrypt');
-    const password = authPasswordRow ? authPasswordRow.value : '';
-    const hashedPassword = bcrypt.hashSync(password, 10);
-    db.prepare("INSERT INTO users (username, password, role) VALUES (?, ?, 'admin')").run(
-      authUsernameRow.value,
-      hashedPassword
-    );
-  } else {
-    // If no auth is set at all, maybe create a default admin 'admin'/'admin' if we want, but better to just leave it until set.
-    // We will ensure new auth setup creates an admin in the users table.
+      const existingAdmin = db.prepare("SELECT id FROM users WHERE role = 'admin' LIMIT 1").get();
+      if (!existingAdmin) {
+        const authUsernameRow = db.prepare('SELECT value FROM settings WHERE key = ?').get('authUsername');
+        const authPasswordRow = db.prepare('SELECT value FROM settings WHERE key = ?').get('authPassword');
+        
+        if (authUsernameRow && authUsernameRow.value) {
+          const bcrypt = require('bcrypt');
+          const password = authPasswordRow ? authPasswordRow.value : '';
+          const hashedPassword = bcrypt.hashSync(password, 10);
+          db.prepare("INSERT INTO users (username, password, role) VALUES (?, ?, 'admin')").run(
+            authUsernameRow.value,
+            hashedPassword
+          );
+        }
+      }
+    }
+  },
+  {
+    id: 7,
+    name: 'add_last_searched_at',
+    run: (db) => {
+      if (!hasColumn('movies', 'last_searched_at')) {
+        db.exec("ALTER TABLE movies ADD COLUMN last_searched_at DATETIME;");
+      }
+      if (!hasColumn('episodes', 'last_searched_at')) {
+        db.exec("ALTER TABLE episodes ADD COLUMN last_searched_at DATETIME;");
+      }
+    }
   }
-}
+];
 
-// Migration: add last_login column for existing databases
 try {
-  const cols = db.prepare("PRAGMA table_info(users)").all().map(c => c.name);
-  if (!cols.includes('last_login')) {
-    db.exec('ALTER TABLE users ADD COLUMN last_login DATETIME');
-    console.log('[DB] Added last_login column to users table');
+  db.exec('BEGIN TRANSACTION;');
+  for (const migration of MIGRATIONS) {
+    const applied = db.prepare("SELECT 1 FROM schema_migrations WHERE id = ?").get(migration.id);
+    if (!applied) {
+      console.log(`[DB] Running migration: ${migration.name}`);
+      try {
+        migration.run(db);
+        db.prepare("INSERT INTO schema_migrations (id, name) VALUES (?, ?)").run(migration.id, migration.name);
+      } catch (err) {
+        console.error(`[DB] Migration ${migration.name} failed:`, err);
+        throw err;
+      }
+    }
   }
-} catch { /* ignore */ }
+  db.exec('COMMIT;');
+} catch (err) {
+  db.exec('ROLLBACK;');
+  console.error('[DB] Migrations failed. Halting startup.');
+  process.exit(1);
+}
 
 module.exports = db;
