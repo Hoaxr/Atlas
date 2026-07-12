@@ -60,7 +60,8 @@ export default function Dashboard() {
   const [movies, setMovies] = useState(cachedMovies || []);
   const [shows, setShows] = useState(cachedShows || []);
   const [loading, setLoading] = useState(!cachedMovies && !cachedShows);
-  const [loadingMore, setLoadingMore] = useState(false);
+  const [isReordering, setIsReordering] = useState(false);
+  const reorderTimerRef = useRef(null);
   
   const [searchModalOpen, setSearchModalOpen] = useState(false);
   const [searchMediaId, setSearchMediaId] = useState(null);
@@ -136,7 +137,14 @@ export default function Dashboard() {
     }
   }, [viewMode]);
 
+  const triggerReorderFlash = () => {
+    setIsReordering(true);
+    if (reorderTimerRef.current) clearTimeout(reorderTimerRef.current);
+    reorderTimerRef.current = setTimeout(() => setIsReordering(false), 150);
+  };
+
   const handleSortClick = (field) => {
+    triggerReorderFlash();
     const defaultDesc = ['rating', 'size', 'year', 'season_count', 'missing_episodes'].includes(field);
     if (sort.startsWith(field)) {
       setSort(sort === `${field}_asc` ? `${field}_desc` : `${field}_asc`);
@@ -243,10 +251,11 @@ export default function Dashboard() {
     fetchViewData(viewMode, false);
   }, [viewMode]);
 
-  // Reset pagination when filters/sort change
+  // Reset pagination when filters/sort change and flash the reorder indicator
   useEffect(() => {
     setPage(1);
-  }, [sort, statusFilter, watchedFilter, genreFilter, qualityFilter, resolutionFilter, codecFilter, yearFilter, tmdbStatusFilter]);
+    triggerReorderFlash();
+  }, [sort, statusFilter, watchedFilter, genreFilter, qualityFilter, resolutionFilter, codecFilter, yearFilter, tmdbStatusFilter, alphaFilter]);
 
   // Capture initial viewMode for the mount-once effect (prevents stale closure)
   const initialViewModeRef = useRef(viewMode);
@@ -269,46 +278,14 @@ export default function Dashboard() {
   }, [onEvent, viewMode]);
 
   const fetchViewData = async (mode, isBackground) => {
-    const CHUNK_SIZE = 50;
     try {
       const endpoint = mode === 'movies' ? '/library/movies' : '/library/shows';
-      const sortParam = `&sort=${encodeURIComponent(sort)}`;
-
-      if (isBackground) {
-        // Background refresh: fetch full data with current sort
-        const res = await api.get(`${endpoint}?sort=${encodeURIComponent(sort)}`);
-        if (res.data.status === 'success') {
-          const data = res.data.data;
-          if (mode === 'movies') { setCachedMovies(data); setMovies(data); }
-          else { setCachedShows(data); setShows(data); }
-        }
-        return;
+      const res = await api.get(endpoint);
+      if (res.data.status === 'success') {
+        const data = res.data.data;
+        if (mode === 'movies') { setCachedMovies(data); setMovies(data); }
+        else { setCachedShows(data); setShows(data); }
       }
-
-      // First chunk: fetch initial 50 items in the correct sort order
-      const res = await api.get(`${endpoint}?limit=${CHUNK_SIZE}&offset=0${sortParam}`);
-      let allData = res.data.data || [];
-
-      if (mode === 'movies') { setCachedMovies(allData); setMovies(allData); }
-      else { setCachedShows(allData); setShows(allData); }
-
-      // Background: fetch remaining chunks (also sorted)
-      let offset = CHUNK_SIZE;
-      setLoadingMore(true);
-      const fetchMore = async () => {
-        try {
-          const moreRes = await api.get(`${endpoint}?limit=${CHUNK_SIZE}&offset=${offset}${sortParam}`);
-          const chunk = moreRes.data.data || [];
-          if (chunk.length === 0) { setLoadingMore(false); return; }
-          allData = [...allData, ...chunk];
-          offset += CHUNK_SIZE;
-          if (mode === 'movies') { setCachedMovies(allData); setMovies([...allData]); }
-          else { setCachedShows(allData); setShows([...allData]); }
-          if (chunk.length === CHUNK_SIZE) await fetchMore();
-          else setLoadingMore(false);
-        } catch (e) { setLoadingMore(false); }
-      };
-      fetchMore().catch(() => setLoadingMore(false));
     } catch (err) {
       console.error(`Failed to fetch ${mode}`, err);
     } finally {
@@ -878,12 +855,7 @@ export default function Dashboard() {
               <span className="text-xs text-slate-500 ml-1">
                 {displayItems.length} item{displayItems.length !== 1 ? 's' : ''}
               </span>
-              {loadingMore && (
-                <span className="text-xs text-slate-500 ml-2 flex items-center gap-1">
-                  <span className="w-3 h-3 border-2 border-cyan-500/50 border-t-cyan-400 rounded-full animate-spin" />
-                  Loading more...
-                </span>
-              )}
+
             </div>
           )}
 
@@ -900,7 +872,12 @@ export default function Dashboard() {
         />
 
         {displayItems.length > 0 ? (
-          <div>
+          <div
+            style={{
+              opacity: isReordering ? 0 : 1,
+              transition: 'opacity 0.12s ease',
+            }}
+          >
           {viewStyle === 'grid' ? (
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 gap-3 sm:gap-4">
               {paginatedItems.map(item => (

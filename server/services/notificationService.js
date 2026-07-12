@@ -20,10 +20,10 @@ class NotificationService {
     
     if (grabEvents.includes(event.message) && notifyOnGrab) {
       console.log('[NotificationService] Grab notification triggered:', event.metadata?.title);
-      await this.sendNotification('Media Grabbed', `${event.metadata?.title || 'Unknown'} sent to download client`, event.metadata);
+      await this.sendNotification('Media Grabbed', `Sent to download client`, event.metadata);
     } else if (event.message === 'Download complete' && notifyOnDownload) {
       console.log('[NotificationService] Download notification triggered:', event.metadata?.title);
-      await this.sendNotification('Download Complete', `${event.metadata?.title || 'Unknown'} has been imported`, event.metadata);
+      await this.sendNotification('Download Complete', `Has been imported`, event.metadata);
     }
   }
 

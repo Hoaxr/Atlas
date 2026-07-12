@@ -1,4 +1,4 @@
-import { parseResolution, parseCodec } from '../lib/format';
+import { parseResolution, parseCodec, parseAudio } from '../lib/format';
 
 /**
  * Sort media items by a given field and direction.
@@ -37,6 +37,12 @@ export const sortItems = (items, sort) => {
         const codecA = a.codec || parseCodec(a.scene_name || a.sample_episode_path || a.file_path) || '';
         const codecB = b.codec || parseCodec(b.scene_name || b.sample_episode_path || b.file_path) || '';
         return sort === 'codec_asc' ? codecA.localeCompare(codecB) : codecB.localeCompare(codecA);
+      }
+      case 'audio_asc':
+      case 'audio_desc': {
+        const audioA = a.audio || parseAudio(a.scene_name || a.sample_episode_path || a.file_path) || '';
+        const audioB = b.audio || parseAudio(b.scene_name || b.sample_episode_path || b.file_path) || '';
+        return sort === 'audio_asc' ? audioA.localeCompare(audioB) : audioB.localeCompare(audioA);
       }
       default: return 0;
     }

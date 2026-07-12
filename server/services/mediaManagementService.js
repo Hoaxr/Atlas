@@ -625,7 +625,8 @@ const importEpisode = async (torrent, episode) => {
 
     db.prepare("UPDATE episodes SET status = 'downloaded', file_path = ?, scene_name = ? WHERE id = ?").run(destFile, torrent.name, episode.id);
     console.log(`[MediaManagement] Episode marked as downloaded.`);
-    eventBus.success('Download complete', { title: `${episode.show_title} S${episode.season_number}E${episode.episode_number}`, type: 'episode', destinationPath: destFile });
+    const formattedSE = `S${String(episode.season_number).padStart(2, '0')}E${String(episode.episode_number).padStart(2, '0')}`;
+    eventBus.success('Download complete', { title: `${episode.show_title} ${formattedSE}`, type: 'episode', destinationPath: destFile });
 
     // Auto-refresh: detect resolution, codec & audio and update TMDB metadata
     try {
