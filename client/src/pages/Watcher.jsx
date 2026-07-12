@@ -228,16 +228,21 @@ export default function Watcher() {
                         </span>
                       </div>
                     )}
-                    {session.subtitleLabel && (
-                      <div className="flex items-center gap-2 text-xs">
-                        <span className="text-slate-500 font-medium w-20 flex-shrink-0">Subtitle</span>
+                    <div className="flex items-center gap-2 text-xs">
+                      <span className="text-slate-500 font-medium w-20 flex-shrink-0">Subtitle</span>
+                      {session.subtitleLabel ? (
                         <span className={`font-semibold flex items-center gap-1 ${session.subtitleDecision === 'Direct Play' ? 'text-emerald-400' : 'text-orange-400'}`}>
                           <Subtitles className="w-3 h-3" />
                           {session.subtitleDecision === 'Direct Play' ? 'Direct Play' : 'Transcode'}
                           {session.subtitleLabel ? ` [${session.subtitleLabel}]` : ''}
                         </span>
-                      </div>
-                    )}
+                      ) : (
+                        <span className="text-slate-500 font-semibold flex items-center gap-1">
+                          <Subtitles className="w-3 h-3 opacity-50" />
+                          None
+                        </span>
+                      )}
+                    </div>
                   </div>
                 )}
 

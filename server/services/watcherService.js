@@ -61,7 +61,7 @@ class WatcherService {
 
         const videoStream = streams.find(st => st.streamType === 1) || {};
         const audioStream = streams.find(st => st.streamType === 2 && st.selected) || streams.find(st => st.streamType === 2) || {};
-        const subStream = streams.find(st => st.streamType === 3 && st.selected) || streams.find(st => st.streamType === 3);
+        const subStream = streams.find(st => st.streamType === 3 && st.selected);
 
         // Decision labels
         const decisionLabel = (d) => {
@@ -169,7 +169,8 @@ class WatcherService {
         const streams = item.MediaStreams || [];
         const videoStream = streams.find(st => st.Type === 'Video') || {};
         const audioStream = streams.find(st => st.Type === 'Audio') || {};
-        const subStream = streams.find(st => st.Type === 'Subtitle');
+        const subIndex = s.PlayState?.SubtitleStreamIndex;
+        const subStream = subIndex !== undefined && subIndex !== -1 ? streams.find(st => st.Index === subIndex) : null;
 
         const playMethod = s.PlayState?.PlayMethod || 'DirectPlay';
         const playMethodLabel = playMethod === 'Transcode' ? 'Transcode' : playMethod === 'DirectStream' ? 'Direct Stream' : 'Direct Play';
