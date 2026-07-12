@@ -85,8 +85,8 @@ export default function Layout() {
       }
 
       const [moviesRes, showsRes] = await Promise.allSettled([
-        api.get('/library/movies?sort=added_desc'),
-        api.get('/library/shows?sort=added_desc')
+        api.get('/library/movies'),
+        api.get('/library/shows')
       ]);
       if (moviesRes.status === 'fulfilled' && moviesRes.value.data.status === 'success') {
         setCachedMovies(moviesRes.value.data.data);

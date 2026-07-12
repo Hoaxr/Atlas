@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import api from '../lib/api';
 import { AlertCircle, CheckCircle2, Search, Download, Settings2, FolderTree, Languages, ShieldAlert, Network, Users } from 'lucide-react';
 import { customAlert } from '../utils/alerts';
+import { invalidateSettingsCache } from '../lib/useSettings';
 import StickyBar from '../components/shared/StickyBar';
 import { useStickyBar } from '../lib/useStickyBar';
 
@@ -296,6 +297,7 @@ export default function Settings() {
         prowlarrUrl: settings.prowlarrUrl,
         prowlarrApiKey: settings.prowlarrApiKey
       });
+      invalidateSettingsCache();
       customAlert('Indexer settings saved!', 'success');
     } catch {
       customAlert('Failed to save indexer settings.', 'error');
@@ -310,6 +312,7 @@ export default function Settings() {
         deleteTorrentFiles: settings.deleteTorrentFiles,
         downloadPathMapping: settings.downloadPathMapping
       });
+      invalidateSettingsCache();
       customAlert('Client settings saved!', 'success');
     } catch {
       customAlert('Failed to save client settings.', 'error');
@@ -328,6 +331,7 @@ export default function Settings() {
         seasonFolderFormat: settings.seasonFolderFormat,
         separatorStyle: settings.separatorStyle
       });
+      invalidateSettingsCache();
       customAlert('Naming settings saved!', 'success');
     } catch {
       customAlert('Failed to save naming settings.', 'error');
@@ -348,16 +352,17 @@ export default function Settings() {
         targetLangs: settings.targetLangs,
         autoTranslate: settings.autoTranslate
       });
+      invalidateSettingsCache();
       customAlert('Subtitle settings saved!', 'success');
     } catch {
       customAlert('Failed to save subtitle settings.', 'error');
     }
   };
 
-  // Legacy full-settings save (used by profile default selection)
   const handleSave = async () => {
     try {
       await api.post('/settings', settings);
+      invalidateSettingsCache();
       customAlert('Settings saved!', 'success');
       if (settings.traktWatchedSync && settings.traktAccessToken) {
         api.post('/tasks/trakt_watched_sync/run').catch(() => {});

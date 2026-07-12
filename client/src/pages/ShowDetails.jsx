@@ -8,7 +8,7 @@ import { useTMDBDetails } from '../lib/useTMDBDetails';
 import { ArrowLeft, HardDrive, Tv, PlayCircle, ChevronDown, ChevronRight, ChevronLeft, Bookmark, BookmarkMinus, Search, Star, X, RefreshCw, Loader2, Download, CheckSquare, Film, Trash2, Globe, Eye, Volume2 } from 'lucide-react';
 import { customAlert, customConfirm } from '../utils/alerts';
 import { useOutsideClick } from '../lib/useOutsideClick';
-import { setCachedShows } from '../lib/libraryCache';
+import { cachedShows, setCachedShows } from '../lib/libraryCache';
 import TrailerModal from '../components/TrailerModal';
 import ManualSearchModal from '../components/ManualSearchModal';
 import EpisodeDetailsModal from '../components/EpisodeDetailsModal';
@@ -35,7 +35,13 @@ export default function ShowDetails() {
   // Prev/next navigation
   const [siblingIds, setSiblingIds] = useState([]);
 
+  // Use cached library data for sibling navigation — avoids a full re-fetch on every detail page visit.
+  // Falls back to a lightweight fetch only when cache is cold.
   useEffect(() => {
+    if (cachedShows && cachedShows.length > 0) {
+      setSiblingIds(cachedShows.map(s => s.id));
+      return;
+    }
     api.get('/library/shows').then(res => {
       if (res.data?.data) setSiblingIds(res.data.data.map(s => s.id));
     }).catch(() => {});
@@ -116,9 +122,6 @@ export default function ShowDetails() {
 
   useEffect(() => {
     fetchShowData(false);
-    return () => {
-      setCachedShows(null);
-    };
   }, [fetchShowData]);
 
   const refreshAll = useCallback(async () => {

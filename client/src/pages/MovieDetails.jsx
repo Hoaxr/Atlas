@@ -5,7 +5,7 @@ import api from '../lib/api';
 import { formatSize, parseResolution, parseCodec, parseAudio, getReleaseTitleFromPath, LANG_NAME } from '../lib/format';
 import { useSettings } from '../lib/useSettings';
 import { useTMDBDetails } from '../lib/useTMDBDetails';
-import { setCachedMovies } from '../lib/libraryCache';
+import { cachedMovies, setCachedMovies } from '../lib/libraryCache';
 import {
   ArrowLeft, Search, Download, Film, PlayCircle, Bookmark, BookmarkMinus,
   Star, X, RefreshCw, Loader2, ChevronDown, ChevronRight, ChevronLeft,
@@ -64,12 +64,18 @@ export default function MovieDetails() {
   // Prev/next navigation
   const [siblingIds, setSiblingIds] = useState([]);
 
+  // Use cached library data for sibling navigation — avoids a full re-fetch on every detail page visit.
+  // Falls back to a lightweight fetch (no badge/subtitle computation) only when cache is cold.
   useEffect(() => {
-    api.get('/library/movies?badges=true').then(res => {
+    if (cachedMovies && cachedMovies.length > 0) {
+      setSiblingIds(cachedMovies.map(m => m.id));
+      setLibraryMovieMap(new Map(cachedMovies.map(m => [m.tmdb_id, m.id])));
+      return;
+    }
+    api.get('/library/movies?badges=false').then(res => {
       if (res.data?.data) {
         setSiblingIds(res.data.data.map(m => m.id));
-        const map = new Map(res.data.data.map(m => [m.tmdb_id, m.id]));
-        setLibraryMovieMap(map);
+        setLibraryMovieMap(new Map(res.data.data.map(m => [m.tmdb_id, m.id])));
       }
     }).catch(() => {});
   }, []);
@@ -106,9 +112,6 @@ export default function MovieDetails() {
 
   useEffect(() => {
     fetchMovieData(false);
-    return () => {
-      setCachedMovies(null);
-    };
   }, [fetchMovieData]);
 
   const refreshAll = useCallback(async () => {
