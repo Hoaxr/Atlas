@@ -289,9 +289,12 @@ export default function Layout() {
         <nav className="flex-1 px-3 py-2 space-y-4 overflow-y-auto hide-scrollbar">
           {navSections.map((section) => (
             <div key={section.title} className="space-y-1">
-              <h3 className="px-4 text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">
-                {section.title}
-              </h3>
+              <div className="flex items-center px-4 mb-2">
+                <h3 className="text-[10px] font-black text-slate-800 dark:text-white uppercase tracking-widest opacity-90">
+                  {section.title}
+                </h3>
+                <div className="flex-1 h-px bg-gradient-to-r from-slate-400/50 dark:from-white/30 to-transparent mt-0.5"></div>
+              </div>
               <div className="space-y-0.5">
                 {section.items.map((item) => (
                   <NavLink
@@ -362,9 +365,12 @@ export default function Layout() {
 
         <div className="px-3 mt-auto pb-4">
           <div className="space-y-1">
-            <h3 className="px-4 text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-2">
-              Overview
-            </h3>
+            <div className="flex items-center px-4 mb-2">
+              <h3 className="text-[10px] font-black text-slate-800 dark:text-white uppercase tracking-widest opacity-90">
+                Overview
+              </h3>
+              <div className="flex-1 h-px bg-gradient-to-r from-slate-400/50 dark:from-white/30 to-transparent mt-0.5"></div>
+            </div>
             <div className="space-y-0.5">
               <div className="flex items-center justify-between px-4 py-2 rounded-xl text-slate-600 dark:text-slate-400 hover:bg-slate-200/50 dark:hover:bg-white/5 transition-colors cursor-default">
                 <div className="flex items-center gap-3">
