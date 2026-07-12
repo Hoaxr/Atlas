@@ -221,8 +221,9 @@ export default function Layout() {
       {/* Sidebar */}
       <aside
         className={clsx(
-          'w-64 border-r dark:border-white/10 border-slate-200/60 flex flex-col fixed lg:relative z-50 h-full transition-transform duration-300',
-          'bg-white/85 dark:bg-slate-950/95 backdrop-blur-xl',
+          'w-64 flex flex-col fixed lg:relative z-50 h-full transition-transform duration-300',
+          'border-r border-slate-200/60 dark:border-indigo-500/10',
+          'bg-slate-100/95 dark:bg-slate-900/95 backdrop-blur-xl',
           sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
         )}
       >
@@ -264,30 +265,18 @@ export default function Layout() {
               <Logo className="w-full h-full" isWatermark={true} />
             </div>
 
-            <div className="relative z-10 pl-10">
-              <div className="bg-slate-100/90 dark:bg-slate-900/90 px-3.5 py-1 rounded-xl border border-slate-200/40 dark:border-white/5 shadow-sm">
-                <span className="text-3xl font-black tracking-wider drop-shadow-[0_0_12px_rgba(6,182,212,0.3)]">
-                  <span className="bg-gradient-to-r from-cyan-300 via-cyan-400 to-sky-400 bg-clip-text text-transparent">
-                    Atlas
-                  </span>
+            <div className="relative z-10 pl-12">
+              <span className="text-3xl font-display font-black uppercase tracking-widest drop-shadow-atlas-glow">
+                <span className="bg-gradient-to-r from-cyan-300 via-cyan-400 to-sky-400 bg-clip-text text-transparent">
+                  Atlas
                 </span>
-              </div>
+              </span>
             </div>
           </div>
           <div className="flex items-center gap-2 relative z-10">
-            {hasToken && (
-            <button
-              onClick={handleLogout}
-              className="p-2 rounded-xl bg-slate-100 dark:bg-slate-900/50 border border-slate-200/60 dark:border-white/5 hover:bg-rose-500/10 dark:hover:bg-rose-500/10 hover:border-rose-500/30 transition-colors text-slate-500 dark:text-slate-400 hover:text-rose-500 dark:hover:text-rose-400"
-              title="Logout"
-              aria-label="Logout"
-            >
-              <LogOut className="w-5 h-5" />
-            </button>
-            )}
             <button
               onClick={() => setSidebarOpen(false)}
-              className="lg:hidden p-2 rounded-xl bg-slate-100 dark:bg-slate-900/50 border border-slate-200/60 dark:border-white/5 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300"
+              className="lg:hidden p-2 rounded-xl bg-slate-100 dark:bg-slate-800/50 border border-slate-200/60 dark:border-white/5 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300"
               title="Close menu"
               aria-label="Close menu"
             >
@@ -371,42 +360,79 @@ export default function Layout() {
           ))}
         </nav>
 
-        <div className="p-4 mt-auto space-y-4 max-h-[50vh] overflow-y-auto hide-scrollbar pb-6">
-          <div className="hidden lg:block bg-slate-100 border border-slate-200/60 dark:bg-slate-900/50 dark:border-white/5 p-5 rounded-2xl flex flex-col gap-4">
-            <h3 className="text-xs font-bold text-slate-400 dark:text-slate-400 uppercase tracking-wider">Library</h3>
-            <div className="flex justify-between items-center text-sm py-1">
-              <span className="text-slate-500 dark:text-slate-300 flex items-center gap-2"><Film className="w-4 h-4 text-cyan-500" /> Movies</span>
-              <span className="font-bold bg-slate-200 dark:bg-slate-800 text-slate-800 dark:text-white px-2 py-0.5 rounded-md">{libStats.movies}</span>
-            </div>
-            <div className="flex justify-between items-center text-sm py-1">
-              <span className="text-slate-500 dark:text-slate-300 flex items-center gap-2"><TvIcon className="w-4 h-4 text-purple-500" /> Shows</span>
-              <span className="font-bold bg-slate-200 dark:bg-slate-800 text-slate-800 dark:text-white px-2 py-0.5 rounded-md">{libStats.shows}</span>
+        <div className="px-3 mt-auto pb-4">
+          <div className="space-y-1">
+            <h3 className="px-4 text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-2">
+              Overview
+            </h3>
+            <div className="space-y-0.5">
+              <div className="flex items-center justify-between px-4 py-2 rounded-xl text-slate-600 dark:text-slate-400 hover:bg-slate-200/50 dark:hover:bg-white/5 transition-colors cursor-default">
+                <div className="flex items-center gap-3">
+                  <Film className="w-4 h-4 text-cyan-500/70" />
+                  <span className="text-sm font-medium">Movies</span>
+                </div>
+                <span className="text-xs font-bold text-slate-500 dark:text-slate-300 bg-slate-200/50 dark:bg-slate-800/80 px-2 py-0.5 rounded-md">
+                  {libStats.movies.toLocaleString()}
+                </span>
+              </div>
+              
+              <div className="flex items-center justify-between px-4 py-2 rounded-xl text-slate-600 dark:text-slate-400 hover:bg-slate-200/50 dark:hover:bg-white/5 transition-colors cursor-default">
+                <div className="flex items-center gap-3">
+                  <TvIcon className="w-4 h-4 text-purple-500/70" />
+                  <span className="text-sm font-medium">Shows</span>
+                </div>
+                <span className="text-xs font-bold text-slate-500 dark:text-slate-300 bg-slate-200/50 dark:bg-slate-800/80 px-2 py-0.5 rounded-md">
+                  {libStats.shows.toLocaleString()}
+                </span>
+              </div>
+
+              <NavLink 
+                to="/status" 
+                onClick={() => setSidebarOpen(false)}
+                className="flex items-center justify-between px-4 py-2 rounded-xl text-slate-600 dark:text-slate-400 hover:bg-slate-200/50 dark:hover:bg-white/5 transition-colors group"
+              >
+                <div className="flex items-center gap-3">
+                  <Activity className={`w-4 h-4 ${systemIssues.length > 0 ? 'text-amber-500/70 group-hover:text-amber-500' : 'text-emerald-500/70 group-hover:text-emerald-500'} transition-colors`} />
+                  <span className="text-sm font-medium">Status</span>
+                </div>
+                {systemIssues.length > 0 ? (
+                  <span className="text-[10px] font-bold text-amber-500 bg-amber-500/10 px-2 py-0.5 rounded-md flex items-center gap-1">
+                    <div className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                    {systemIssues.length} Issues
+                  </span>
+                ) : (
+                  <span className="text-[10px] font-bold text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded-md">
+                    Healthy
+                  </span>
+                )}
+              </NavLink>
             </div>
           </div>
-          
-          <NavLink to="/status" onClick={() => setSidebarOpen(false)} className="bg-slate-100 border border-slate-200/60 dark:bg-slate-900/50 dark:border-white/5 p-4 rounded-2xl flex items-center space-x-3 hover:bg-slate-200/60 dark:hover:bg-slate-800 transition-colors cursor-pointer group">
-            <div className={`p-2.5 rounded-xl shrink-0 transition-colors ${systemIssues.length > 0 ? 'bg-amber-500/10 text-amber-400 group-hover:bg-amber-500/20' : 'bg-emerald-500/10 text-emerald-400 group-hover:bg-emerald-500/20'}`}>
-              <Activity className="w-5 h-5" />
-            </div>
-            <div>
-              <p className="text-xs font-medium text-slate-400">System Status</p>
-              <p className={`text-sm font-bold ${systemIssues.length > 0 ? 'text-amber-400' : 'text-emerald-400'}`}>
-                {systemIssues.length > 0 ? `${systemIssues.length} Issue${systemIssues.length > 1 ? 's' : ''}` : 'Healthy'}
-              </p>
-            </div>
-          </NavLink>
         </div>
 
-        {/* Donate Button */}
-        <a
-          href="https://www.paypal.com/donate/?business=C5EDZZUFSMX4J&no_recurring=0&item_name=Thanks+for+the+coffee&currency_code=EUR"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="hidden lg:flex mx-4 mb-2 px-4 py-3 rounded-2xl items-center justify-center gap-2 bg-gradient-to-r from-rose-500/20 to-pink-500/20 border border-rose-500/30 text-rose-300 hover:from-rose-500/30 hover:to-pink-500/30 hover:text-rose-200 hover:border-rose-500/50 transition-all duration-300 group"
-        >
-          <Heart className="w-4 h-4 group-hover:scale-110 transition-transform duration-300 fill-rose-400/30 group-hover:fill-rose-400/60" />
-          <span className="text-sm font-semibold">Donate</span>
-        </a>
+        {/* Bottom action row: Logout + Donate side by side */}
+        <div className="px-3 pb-4 pt-1 flex gap-2">
+          {hasToken && (
+            <button
+              onClick={handleLogout}
+              className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-slate-200/60 dark:bg-slate-800/50 border border-slate-300/40 dark:border-white/5 text-slate-500 dark:text-slate-400 hover:bg-rose-500/10 hover:text-rose-400 hover:border-rose-500/20 dark:hover:bg-rose-500/10 dark:hover:text-rose-400 dark:hover:border-rose-500/20 transition-all duration-200 text-sm font-medium"
+              title="Logout"
+            >
+              <LogOut className="w-4 h-4" />
+              <span>Logout</span>
+            </button>
+          )}
+          <a
+            href="https://www.paypal.com/donate/?business=C5EDZZUFSMX4J&no_recurring=0&item_name=Thanks+for+the+coffee&currency_code=EUR"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 hover:bg-rose-500/20 hover:text-rose-300 hover:border-rose-500/35 transition-all duration-200 text-sm font-medium group"
+            title="Support Atlas"
+          >
+            <Heart className="w-4 h-4 group-hover:scale-110 transition-transform duration-200 fill-rose-400/30 group-hover:fill-rose-400/60" />
+            <span>Donate</span>
+          </a>
+        </div>
 
       </aside>
 
