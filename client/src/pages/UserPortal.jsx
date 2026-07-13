@@ -7,6 +7,7 @@ import ChangePasswordModal from '../components/ChangePasswordModal';
 import MediaDetailsModal from '../components/MediaDetailsModal';
 import MediaRow from '../components/MediaRow';
 import { customAlert } from '../utils/alerts';
+import { posterUrl, tmdbImgUrl } from '../lib/posterUrl';
 
 export default function UserPortal() {
   const [query, setQuery] = useState('');
@@ -194,7 +195,7 @@ export default function UserPortal() {
         <div className="aspect-[2/3] relative bg-slate-800">
           {item.poster_path ? (
             <img 
-              src={item.poster_path.startsWith('http') ? item.poster_path : `https://image.tmdb.org/t/p/w500${item.poster_path}`} 
+              src={tmdbImgUrl(item.poster_path)} 
               alt={title}
               className="w-full h-full object-cover"
               loading="lazy"
@@ -407,7 +408,9 @@ export default function UserPortal() {
                       <div className="w-12 h-[72px] rounded-lg overflow-hidden bg-slate-700 flex-shrink-0 shadow-md">
                         {(req.poster_path || libraryItem?.poster_path) ? (
                           <img
-                            src={`https://image.tmdb.org/t/p/w92${req.poster_path || libraryItem?.poster_path}`}
+                            src={libraryItem
+                              ? posterUrl(req.type === 'movie' ? 'movies' : 'shows', req.tmdb_id)
+                              : tmdbImgUrl(req.poster_path || libraryItem?.poster_path, 'w92')}
                             alt={req.title}
                             className="w-full h-full object-cover"
                           />

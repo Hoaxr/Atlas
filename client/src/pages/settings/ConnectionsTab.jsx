@@ -7,7 +7,7 @@ import PasswordInput from '../../components/shared/PasswordInput';
 export default function ConnectionsTab({
   settings: parentSettings, setSettings: setParentSettings, handleSave: parentHandleSave,
   traktDeviceCode, traktUserCode, traktVerificationUrl, traktPolling,
-  connectTrakt, fetchSettings
+  connectTrakt, fetchSettings, keyStatuses
 }) {
   const [localSettings, setLocalSettings] = useState({
     plexUrl: '',
@@ -301,10 +301,12 @@ export default function ConnectionsTab({
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <h3 className="text-sm font-bold text-green-400">Trakt</h3>
-                {parentSettings?.traktAccessToken ? (
-                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">Connected</span>
-                ) : (
+                {!parentSettings?.traktAccessToken ? (
                   <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-700/50 text-slate-400 border border-slate-600/50">Not configured</span>
+                ) : keyStatuses?.trakt?.status === 'error' ? (
+                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-500/20 text-rose-400 border border-rose-500/30">Auth Expired</span>
+                ) : (
+                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">Connected</span>
                 )}
               </div>
               {parentSettings?.traktAccessToken && (

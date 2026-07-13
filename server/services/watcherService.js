@@ -8,13 +8,12 @@ const { getSetting } = require('../utils/settings');
 const resolvePoster = (title, type) => {
   try {
     if (type === 'episode' || type === 'tv') {
-      // Try to find the show by title (episode titles contain "ShowName - S01E01")
       const showName = title.split(' - S')[0] || title;
-      const show = db.prepare('SELECT poster_path FROM shows WHERE title = ? COLLATE NOCASE').get(showName);
-      if (show?.poster_path) return `https://image.tmdb.org/t/p/w300${show.poster_path}`;
+      const show = db.prepare('SELECT tmdb_id FROM shows WHERE title = ? COLLATE NOCASE').get(showName);
+      if (show?.tmdb_id) return `/api/images/shows/${show.tmdb_id}/poster`;
     } else if (type === 'movie') {
-      const movie = db.prepare('SELECT poster_path FROM movies WHERE title = ? COLLATE NOCASE').get(title);
-      if (movie?.poster_path) return `https://image.tmdb.org/t/p/w300${movie.poster_path}`;
+      const movie = db.prepare('SELECT tmdb_id FROM movies WHERE title = ? COLLATE NOCASE').get(title);
+      if (movie?.tmdb_id) return `/api/images/movies/${movie.tmdb_id}/poster`;
     }
   } catch { /* ignore */ }
   return null;

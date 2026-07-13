@@ -7,6 +7,12 @@ const getTraktClientId = () => {
   return row ? row.value : null;
 };
 
+const trendingCache = {
+  movies: { data: null, timestamp: 0 },
+  shows: { data: null, timestamp: 0 }
+};
+const TRENDING_CACHE_TTL = 1000 * 60 * 60; // 1 hour
+
 const traktApi = axios.create({
   baseURL: 'https://api.trakt.tv'
 });
@@ -27,7 +33,7 @@ const traktRequest = async (config) => {
   config.headers['trakt-api-key'] = clientId;
   
   const accessToken = getTraktAccessToken();
-  if (accessToken) {
+  if (accessToken && !config.noAuth) {
     config.headers['Authorization'] = `Bearer ${accessToken}`;
   }
   
@@ -37,8 +43,12 @@ const traktRequest = async (config) => {
 traktApi.interceptors.request.use(traktRequest);
 
 const getTrendingMovies = async (limit = 20) => {
+  if (trendingCache.movies.data && Date.now() - trendingCache.movies.timestamp < TRENDING_CACHE_TTL) {
+    return trendingCache.movies.data.slice(0, limit);
+  }
+
   try {
-    const response = await traktApi.get(`/movies/trending`, { params: { limit } });
+    const response = await traktApi.get(`/movies/trending`, { params: { limit }, noAuth: true });
     const traktMovies = response.data;
 
     // Fetch TMDB data for each movie
@@ -66,7 +76,9 @@ const getTrendingMovies = async (limit = 20) => {
       })
     );
 
-    return moviesWithTmdb.filter(m => m !== null);
+    const result = moviesWithTmdb.filter(m => m !== null);
+    trendingCache.movies = { data: result, timestamp: Date.now() };
+    return result;
   } catch (error) {
     if (error.response) {
       throw new Error(`Trakt Error: ${error.response.statusText}`, { cause: error });
@@ -76,8 +88,12 @@ const getTrendingMovies = async (limit = 20) => {
 };
 
 const getTrendingShows = async (limit = 20) => {
+  if (trendingCache.shows.data && Date.now() - trendingCache.shows.timestamp < TRENDING_CACHE_TTL) {
+    return trendingCache.shows.data.slice(0, limit);
+  }
+
   try {
-    const response = await traktApi.get(`/shows/trending`, { params: { limit } });
+    const response = await traktApi.get(`/shows/trending`, { params: { limit }, noAuth: true });
     const traktShows = response.data;
 
     const showsWithTmdb = await Promise.all(
@@ -104,7 +120,9 @@ const getTrendingShows = async (limit = 20) => {
       })
     );
 
-    return showsWithTmdb.filter(s => s !== null);
+    const result = showsWithTmdb.filter(s => s !== null);
+    trendingCache.shows = { data: result, timestamp: Date.now() };
+    return result;
   } catch (error) {
     if (error.response) {
       throw new Error(`Trakt Error: ${error.response.statusText}`, { cause: error });
@@ -139,6 +157,8 @@ const refreshTokenIfExpired = async () => {
       console.log('[TraktSync] Token refreshed successfully');
     } catch (err) {
       console.error('[TraktSync] Token refresh failed:', err.response?.data || err.message);
+      const eventBus = require('./eventBus');
+      eventBus.error('Trakt token refresh failed. Please reconnect your account in Settings.', { module: 'TraktSync' });
     }
   }
 };
@@ -172,6 +192,8 @@ const syncWatchedMovies = async () => {
   } catch (error) {
     if (error.response?.status === 401) {
       console.log('[TraktSync] Cannot sync watched movies — OAuth token required. Add a Trakt access token in Settings.');
+      const eventBus = require('./eventBus');
+      eventBus.error('Trakt authentication expired or invalid. Please reconnect in Settings.', { module: 'TraktSync' });
       return 0;
     }
     console.error('[TraktSync] Failed to sync watched movies:', error.message);
@@ -208,6 +230,8 @@ const syncWatchedShows = async () => {
   } catch (error) {
     if (error.response?.status === 401) {
       console.log('[TraktSync] Cannot sync watched shows — OAuth token required. Add a Trakt access token in Settings.');
+      const eventBus = require('./eventBus');
+      eventBus.error('Trakt authentication expired or invalid. Please reconnect in Settings.', { module: 'TraktSync' });
       return 0;
     }
     console.error('[TraktSync] Failed to sync watched shows:', error.message);

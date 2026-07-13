@@ -444,7 +444,7 @@ export default function Discover() {
           ) : (
             <>
               {visibleRows.recent && <MediaRow title="Recently Added" items={recentResults} badgeText="From your library" renderMediaCard={renderMediaCard} />}
-              <MediaRow title="Trending Right Now" items={trendingResults} badgeText="Powered by Trakt.tv" isTrending={true} renderMediaCard={renderMediaCard} />
+              {visibleRows.trending && <MediaRow title="Trending Right Now" items={trendingResults} badgeText="Powered by Trakt.tv" isTrending={true} renderMediaCard={renderMediaCard} />}
               {visibleRows.upcoming && <MediaRow title="In Cinemas & Upcoming" items={upcomingResults} badgeText="Powered by TMDB" renderMediaCard={renderMediaCard} />}
               {visibleRows.recommended && <MediaRow title="Recommended For You" items={recommendedResults} badgeText="Powered by TMDB" renderMediaCard={renderMediaCard} />}
             </>

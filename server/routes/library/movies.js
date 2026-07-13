@@ -59,22 +59,6 @@ router.get('/', async (req, res, next) => {
       return res.json({ status: 'success', data: movies });
     }
 
-    // Add subtitle info for movies with a file path
-    for (const movie of movies) {
-      movie.subtitles = [];
-      if (movie.file_path) {
-        try {
-          const dir = path.dirname(movie.file_path);
-          const subFiles = await getSubtitlesInDir(dir, fsp, path);
-          movie.subtitles = subFiles.map(f => ({
-            file: f,
-            lang: extractLang(f, path),
-          }));
-        } catch (err) {
-          console.warn('[movies] Could not read subtitle directory:', err.message);
-        }
-      }
-    }
     res.json({ status: 'success', data: movies });
   } catch (error) {
     next(error);

@@ -13,6 +13,8 @@ import TrailerModal from '../components/TrailerModal';
 import ManualSearchModal from '../components/ManualSearchModal';
 import EpisodeDetailsModal from '../components/EpisodeDetailsModal';
 import RemapModal from '../components/RemapModal';
+import { posterUrl, tmdbImgUrl } from '../lib/posterUrl';
+
 import SubSearchModal from '../components/SubSearchModal';
 import SubtitleLanguageBadge from '../components/shared/SubtitleLanguageBadge';
 import { ProviderLabel } from '../utils/providerColors';
@@ -229,7 +231,7 @@ export default function ShowDetails() {
           className="fixed inset-0 z-0"
         >
           <img
-            src={`https://image.tmdb.org/t/p/original${tmdbDetails.backdrop_path}`}
+            src={tmdbImgUrl(tmdbDetails.backdrop_path, 'original')}
             alt=""
             className="w-full h-full object-cover"
           />
@@ -282,7 +284,7 @@ export default function ShowDetails() {
               {/* Poster */}
               <div className="relative group">
                 <img
-                  src={`https://image.tmdb.org/t/p/w500${show.poster_path}`}
+                  src={posterUrl('shows', show.tmdb_id)}
                   alt={show.title}
                   className="w-full aspect-[2/3] object-cover"
                 />

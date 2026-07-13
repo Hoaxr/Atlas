@@ -6,6 +6,8 @@ import { X, Star, Calendar, Clock, Plus, ExternalLink, PlayCircle, CheckCircle2,
 import { customAlert } from '../utils/alerts';
 import TrailerModal from './TrailerModal';
 import Spinner from './shared/Spinner';
+import { posterUrl, tmdbImgUrl } from '../lib/posterUrl';
+
 
 export default function MediaDetailsModal({ isOpen, onClose, mediaId, mediaType, isInLibrary, libraryId, onAdded, onRequest, mode = 'add', requestStatus, onDelete }) {
   const navigate = useNavigate();
@@ -131,7 +133,9 @@ export default function MediaDetailsModal({ isOpen, onClose, mediaId, mediaType,
               <div className="w-40 md:w-56 shrink-0 mx-auto md:mx-0 shadow-xl overflow-hidden bg-slate-900 aspect-[2/3] border border-white/5 rounded-sm relative group">
                 {details.poster_path ? (
                   <img 
-                    src={`https://image.tmdb.org/t/p/w500${details.poster_path}`} 
+                    src={isInLibrary
+                      ? posterUrl(mediaType === 'movie' ? 'movies' : 'shows', details.id)
+                      : tmdbImgUrl(details.poster_path)} 
                     alt="Poster" 
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                   />

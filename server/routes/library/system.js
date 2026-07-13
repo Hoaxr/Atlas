@@ -874,4 +874,118 @@ router.get('/deletable', async (req, res, next) => {
   }
 });
 
+// ─── Junk File Cleanup ───────────────────────────────────────────────────────
+// Walks all configured library paths and removes any file that is not a
+// video, subtitle, poster.jpg, or the first .nfo found in the folder.
+// Handles both flat movie folders and show → season subfolder structures.
+router.post('/cleanup-junk', async (req, res, next) => {
+  try {
+    const { VIDEO_EXTENSIONS, SUBTITLE_EXTENSIONS } = require('../../utils/fileUtils');
+
+    const isKeepable = (filename) => {
+      const lower = filename.toLowerCase();
+      const ext = path.extname(lower);
+      if (VIDEO_EXTENSIONS.has(ext)) return true;
+      if (SUBTITLE_EXTENSIONS.has(ext)) return true;
+      return false;
+    };
+
+    // Walk a single folder (non-recursive) and delete all junk files.
+    // Junk = anything that is not a video or subtitle file.
+    const cleanFolder = async (folderPath) => {
+      const deleted = [];
+
+      let entries;
+      try {
+        entries = await fsp.readdir(folderPath);
+      } catch {
+        return deleted;
+      }
+
+      for (const entry of entries) {
+        const fullPath = path.join(folderPath, entry);
+        let stat;
+        try { stat = await fsp.stat(fullPath); } catch { continue; }
+        if (stat.isDirectory()) continue;
+
+        if (!isKeepable(entry)) {
+          try {
+            await fsp.unlink(fullPath);
+            deleted.push(fullPath);
+          } catch (e) {
+            console.warn(`[CleanupJunk] Could not delete ${fullPath}:`, e.message);
+          }
+        }
+      }
+
+      return deleted;
+    };
+
+    // Walk a library root: iterate top-level entries.
+    // For a movie library: LibraryRoot/<MovieFolder>/ → clean directly
+    // For a show library: LibraryRoot/<ShowFolder>/<SeasonFolder>/ → recurse one more level
+    const processLibraryPath = async (libraryRoot) => {
+      const allDeleted = [];
+      let topEntries;
+      try {
+        topEntries = await fsp.readdir(libraryRoot, { withFileTypes: true });
+      } catch {
+        return allDeleted;
+      }
+
+      for (const topEntry of topEntries) {
+        if (!topEntry.isDirectory()) continue;
+        const topFolder = path.join(libraryRoot, topEntry.name);
+
+        // Check if this folder itself contains video files → it's a movie folder
+        let subEntries;
+        try {
+          subEntries = await fsp.readdir(topFolder, { withFileTypes: true });
+        } catch { continue; }
+
+        const hasVideo = subEntries.some(e => e.isFile() && VIDEO_EXTENSIONS.has(path.extname(e.name).toLowerCase()));
+        const hasSubDirs = subEntries.some(e => e.isDirectory());
+
+        if (hasVideo || !hasSubDirs) {
+          // Movie folder — clean it directly
+          const deleted = await cleanFolder(topFolder);
+          allDeleted.push(...deleted);
+        } else {
+          // Show folder — iterate season subfolders
+          for (const subEntry of subEntries) {
+            if (!subEntry.isDirectory()) continue;
+            const seasonFolder = path.join(topFolder, subEntry.name);
+            const deleted = await cleanFolder(seasonFolder);
+            allDeleted.push(...deleted);
+          }
+          // Also clean the show root folder itself (may have show-level artwork)
+          const deleted = await cleanFolder(topFolder);
+          allDeleted.push(...deleted);
+        }
+      }
+
+      return allDeleted;
+    };
+
+    const configuredPaths = db.prepare('SELECT path, type FROM library_paths').all();
+    const allDeleted = [];
+
+    for (const libPath of configuredPaths) {
+      if (libPath.type === 'downloads') continue;
+      const deleted = await processLibraryPath(libPath.path);
+      allDeleted.push(...deleted);
+    }
+
+    console.log(`[CleanupJunk] Cleanup complete. Deleted ${allDeleted.length} junk file(s).`);
+
+    res.json({
+      status: 'success',
+      deletedCount: allDeleted.length,
+      deleted: allDeleted,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
 module.exports = router;

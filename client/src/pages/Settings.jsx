@@ -214,7 +214,7 @@ export default function Settings() {
   };
 
   useEffect(() => {
-    if (activeTab === 'subtitles') {
+    if (activeTab === 'subtitles' || activeTab === 'connections') {
       fetchKeyStatuses();
     }
   }, [activeTab]);
@@ -578,6 +578,7 @@ export default function Settings() {
               traktPolling={traktPolling}
               connectTrakt={connectTrakt}
               fetchSettings={fetchSettings}
+              keyStatuses={keyStatuses}
             />
           )}
           {activeTab === 'security' && <SecurityTab />}

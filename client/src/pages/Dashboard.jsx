@@ -10,6 +10,8 @@ import { renderColumnCell } from '../components/dashboard/TableCellRenderers';
 import { useSettings } from '../lib/useSettings';
 import useWebSocket from '../lib/useWebSocket';
 import { useOutsideClick } from '../lib/useOutsideClick';
+import { posterUrl } from '../lib/posterUrl';
+
 import { SortIcon, FilterSelect } from '../components/shared/FilterSelect';
 import BulkActions from '../components/dashboard/BulkActions';
 import ManualSearchModal from '../components/ManualSearchModal';
@@ -964,7 +966,7 @@ export default function Dashboard() {
                     {/* Placeholder shown before image loads */}
                     <div className="absolute inset-0 bg-gradient-to-br from-slate-700/50 to-slate-800/50 animate-pulse" />
                     <img 
-                      src={`https://image.tmdb.org/t/p/w500${item.poster_path}`} 
+                      src={posterUrl(viewMode, item.tmdb_id)} 
                       alt={item.title}
                       width="500"
                       height="750"

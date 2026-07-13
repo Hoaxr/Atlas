@@ -13,6 +13,8 @@ import {
 } from 'lucide-react';
 import { customAlert, customConfirm } from '../utils/alerts';
 import { useOutsideClick } from '../lib/useOutsideClick';
+import { posterUrl, tmdbImgUrl } from '../lib/posterUrl';
+
 import TrailerModal from '../components/TrailerModal';
 import ManualSearchModal from '../components/ManualSearchModal';
 import RemapModal from '../components/RemapModal';
@@ -256,7 +258,7 @@ export default function MovieDetails() {
           className="fixed inset-0 z-0"
         >
           <img
-            src={`https://image.tmdb.org/t/p/original${tmdbDetails.backdrop_path}`}
+            src={tmdbImgUrl(tmdbDetails.backdrop_path, 'original')}
             alt=""
             className="w-full h-full object-cover"
           />
@@ -309,7 +311,7 @@ export default function MovieDetails() {
               {/* Poster */}
               <div className="relative group">
                 <img
-                  src={`https://image.tmdb.org/t/p/w500${movie.poster_path}`}
+                  src={posterUrl('movies', movie.tmdb_id)}
                   alt={movie.title}
                   className="w-full aspect-[2/3] object-cover"
                 />

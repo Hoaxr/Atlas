@@ -7,7 +7,8 @@ const taskRegistry = require('./taskRegistry');
 const { registerJob } = require('../utils/cronRegistry');
 const eventBus = require('./eventBus');
 const tmdbService = require('./tmdbService');
-const axios = require('axios');
+
+
 const { getSetting } = require('../utils/settings');
 const { isVideoFile } = require('../utils/fileUtils');
 
@@ -258,55 +259,6 @@ const runMediaManagement = async () => {
   }
 };
 
-const escapeXml = (unsafe) => {
-  if (!unsafe) return '';
-  return unsafe.toString().replace(/[<>&'"]/g, (c) => {
-    switch (c) {
-      case '<': return '&lt;';
-      case '>': return '&gt;';
-      case '&': return '&amp;';
-      case "'": return '&apos;';
-      case '"': return '&quot;';
-    }
-  });
-};
-
-const generateMovieNfo = (movie, tmdbData) => {
-  const genres = movie.genres ? movie.genres.split(',').map(g => g.trim()) : (tmdbData?.genres ? tmdbData.genres.map(g => g.name) : []);
-  const genreTags = genres.map(g => `  <genre>${escapeXml(g)}</genre>`).join('\n');
-  return `<?xml version="1.0" encoding="UTF-8" standalone="yes" ?>
-<movie>
-  <title>${escapeXml(movie.title)}</title>
-  <originaltitle>${escapeXml(tmdbData?.original_title || movie.title)}</originaltitle>
-  <year>${movie.year}</year>
-  <plot>${escapeXml(movie.overview)}</plot>
-  <tmdbid>${movie.tmdb_id}</tmdbid>
-  <rating>${movie.rating || 0}</rating>
-${genreTags}
-</movie>`;
-};
-
-// (Removed unused NFO generators)
-
-const downloadArtwork = async (tmdbPath, destPath) => {
-  if (!tmdbPath) return;
-  try {
-    const url = `https://image.tmdb.org/t/p/original${tmdbPath}`;
-    const response = await axios({
-      method: 'GET',
-      url: url,
-      responseType: 'stream',
-    });
-    const writer = fs.createWriteStream(destPath);
-    response.data.pipe(writer);
-    return new Promise((resolve, reject) => {
-      writer.on('finish', resolve);
-      writer.on('error', reject);
-    });
-  } catch (err) {
-    console.error(`[MediaManagement] Failed to download artwork ${tmdbPath}:`, err.message);
-  }
-};
 
 const importMovie = async (torrent, movie) => {
   console.log(`[MediaManagement] Importing movie: ${movie.title}`);
@@ -476,28 +428,16 @@ const importMovie = async (torrent, movie) => {
       console.error(`[MediaManagement] Failed to refresh TMDB metadata for ${movie.title}:`, tmdbErr.message);
     }
 
-    // Generate NFO and download artwork
+    // Cache poster in server/data/images (never written to library folder)
     try {
-      const tmdbData = await tmdbService.getMovieById(movie.tmdb_id);
-      
-      const nfoContent = generateMovieNfo(movie, tmdbData);
-      const nfoPath = path.join(destFolder, `${movie.title} (${movie.year}).nfo`);
-      await fs.promises.writeFile(nfoPath, nfoContent);
-      console.log(`[MediaManagement] Generated NFO for ${movie.title}`);
-
-      const posterPath = movie.poster_path || tmdbData?.poster_path;
-      if (posterPath) {
-        await downloadArtwork(posterPath, path.join(destFolder, 'poster.jpg'));
-        console.log(`[MediaManagement] Downloaded poster for ${movie.title}`);
-      }
-
-      const backdropPath = tmdbData?.backdrop_path;
-      if (backdropPath) {
-        await downloadArtwork(backdropPath, path.join(destFolder, 'fanart.jpg'));
-        console.log(`[MediaManagement] Downloaded fanart for ${movie.title}`);
+      const imageService = require('./imageService');
+      const posterTmdbPath = movie.poster_path || (await tmdbService.getMovieById(movie.tmdb_id).catch(() => null))?.poster_path;
+      if (posterTmdbPath) {
+        await imageService.ensurePoster('movies', movie.tmdb_id, posterTmdbPath);
+        console.log(`[MediaManagement] Poster cached for ${movie.title}`);
       }
     } catch (metaErr) {
-      console.error(`[MediaManagement] Failed to generate metadata for movie ${movie.title}:`, metaErr.message);
+      console.error(`[MediaManagement] Failed to cache poster for movie ${movie.title}:`, metaErr.message);
     }
 
   } catch (err) {

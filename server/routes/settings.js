@@ -652,6 +652,41 @@ router.get('/issues', async (req, res) => {
       });
     }
 
+    // Check Trakt Auth
+    const traktWatchedSync = getSetting('traktWatchedSync') === 'true';
+    const traktToken = getSetting('traktAccessToken');
+    const traktClientId = getSetting('traktClientId');
+    if (traktWatchedSync && !traktToken) {
+      issues.push({
+        id: 'trakt_token_missing',
+        type: 'warning',
+        message: 'Trakt Watched Sync is enabled but no account is connected.',
+        actionText: 'Connect Trakt',
+        actionLink: '/settings'
+      });
+    } else if (traktWatchedSync && traktToken && traktClientId) {
+      try {
+        await axios.get('https://api.trakt.tv/users/me/stats', {
+          headers: { 
+            'trakt-api-version': '2', 
+            'trakt-api-key': traktClientId,
+            'Authorization': `Bearer ${traktToken}`
+          },
+          timeout: 5000
+        });
+      } catch (e) {
+        if (e.response?.status === 401) {
+          issues.push({
+            id: 'trakt_token_expired',
+            type: 'error',
+            message: 'Trakt authentication expired or invalid. Watched sync will fail.',
+            actionText: 'Reconnect Trakt',
+            actionLink: '/settings'
+          });
+        }
+      }
+    }
+
     // Check Indexers (Prowlarr)
     const prowlarrUrl = getSetting('prowlarrUrl');
     const prowlarrApiKey = getSetting('prowlarrApiKey');
@@ -706,24 +741,6 @@ router.get('/issues', async (req, res) => {
     
     if (libraryPaths.length > 0) {
 
-      // Recursive check for video files up to 3 levels deep (handles Show/Season 1/ files)
-      const hasVideoFilesRecursive = async (dirPath, depth = 0) => {
-        if (depth > 3) return false;
-        try {
-          const entries = await fsp.readdir(dirPath, { withFileTypes: true });
-          for (const entry of entries) {
-            if (entry.isFile() && isVideoFile(entry.name)) return true;
-            if (entry.isDirectory()) {
-              const found = await hasVideoFilesRecursive(path.join(dirPath, entry.name), depth + 1);
-              if (found) return true;
-            }
-          }
-        } catch {
-          /* ignore */
-        }
-        return false;
-      };
-
       for (const lp of libraryPaths) {
         try {
           const stat = await fsp.stat(lp.path);
@@ -741,13 +758,14 @@ router.get('/issues', async (req, res) => {
           // Downloads path is expected to be empty — skip empty check
           if (lp.type === 'downloads') continue;
 
-          const hasVideoFiles = await hasVideoFilesRecursive(lp.path);
-
-          if (!hasVideoFiles) {
+          // Simple fast check: is the directory completely empty?
+          // (This catches unmounted docker volumes which appear as empty folders)
+          const entries = await fsp.readdir(lp.path);
+          if (entries.length === 0) {
             issues.push({
               id: `mount_empty_${lp.id}`,
               type: 'warning',
-              message: `Library path "${lp.path}" appears empty or disconnected — no video files found. Check that your mount is connected and has media files.`,
+              message: `Library path "${lp.path}" appears completely empty. Check that your mount is connected.`,
               actionText: 'View Paths',
               actionLink: '/settings'
             });
@@ -803,13 +821,33 @@ router.get('/status', async (req, res) => {
 
   // Trakt
   const traktId = getSetting('traktClientId');
+  const traktToken = getSetting('traktAccessToken');
   if (traktId) {
     await test('trakt', 'Trakt', async () => {
-      const r = await axios.get('https://api.trakt.tv/movies/trending', {
-        headers: { 'trakt-api-version': '2', 'trakt-api-key': traktId },
-        timeout: 5000
-      });
-      return { status: r.status === 200 ? 'connected' : 'error' };
+      if (traktToken) {
+        try {
+          const r = await axios.get('https://api.trakt.tv/users/me/stats', {
+            headers: { 
+              'trakt-api-version': '2', 
+              'trakt-api-key': traktId,
+              'Authorization': `Bearer ${traktToken}`
+            },
+            timeout: 5000
+          });
+          return { status: r.status === 200 ? 'connected' : 'error' };
+        } catch (e) {
+          if (e.response?.status === 401) {
+            throw new Error('Unauthorized (Please reconnect in Settings)');
+          }
+          throw e;
+        }
+      } else {
+        const r = await axios.get('https://api.trakt.tv/movies/trending', {
+          headers: { 'trakt-api-version': '2', 'trakt-api-key': traktId },
+          timeout: 5000
+        });
+        return { status: r.status === 200 ? 'connected' : 'error' };
+      }
     });
   } else {
     services.trakt = { status: 'unconfigured' };
@@ -936,23 +974,6 @@ router.get('/status', async (req, res) => {
   const mountIssues = [];
 
   if (libraryPaths.length > 0) {
-    const hasVideoFilesRecursive = async (dirPath, depth = 0) => {
-      if (depth > 3) return false;
-      try {
-        const entries = await fsp.readdir(dirPath, { withFileTypes: true });
-        for (const entry of entries) {
-          if (entry.isFile() && isVideoFile(entry.name)) return true;
-          if (entry.isDirectory()) {
-            const found = await hasVideoFilesRecursive(path.join(dirPath, entry.name), depth + 1);
-            if (found) return found;
-          }
-        }
-      } catch {
-        /* ignore */
-      }
-      return false;
-    };
-
     for (const lp of libraryPaths) {
       let status = 'healthy';
       let issue = null;
@@ -962,9 +983,9 @@ router.get('/status', async (req, res) => {
           status = 'error';
           issue = 'Not a directory';
           mountIssues.push({ path: lp.path, issue });
-        } else {
-          const hasFiles = await hasVideoFilesRecursive(lp.path);
-          if (!hasFiles) {
+        } else if (lp.type !== 'downloads') {
+          const entries = await fsp.readdir(lp.path);
+          if (entries.length === 0) {
             status = 'warning';
             issue = 'Empty or disconnected';
             mountIssues.push({ path: lp.path, issue });

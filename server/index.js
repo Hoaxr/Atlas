@@ -32,6 +32,8 @@ const mediaManagementService = require('./services/mediaManagementService');
 const subtitleService = require('./services/subtitleService');
 const aiTranslationWorker = require('./services/aiTranslationWorker');
 const notificationService = require('./services/notificationService');
+const imageService = require('./services/imageService');
+
 
 
 const app = express();
@@ -137,7 +139,7 @@ const authMiddleware = require('./middleware/authMiddleware');
 // Routes
 // Apply auth middleware to all /api routes except /api/auth
 app.use('/api', (req, res, next) => {
-  if (req.path.startsWith('/auth') || req.path.startsWith('/watcher/image')) {
+  if (req.path.startsWith('/auth') || req.path.startsWith('/watcher/image') || req.path.startsWith('/images')) {
     return next();
   }
   return authMiddleware(req, res, next);
@@ -155,6 +157,40 @@ app.use('/api/release-profiles', releaseProfilesRoutes);
 app.use('/api/users', usersRoutes);
 app.use('/api/requests', requestsRoutes);
 app.use('/api/watcher', watcherRoutes);
+
+// ── Image cache — served without auth (public static-like endpoint) ──────────
+// GET /api/images/:type/:tmdbId/poster
+// type = 'movies' | 'shows'
+app.get('/api/images/:type/:tmdbId/poster', async (req, res) => {
+  const { type, tmdbId } = req.params;
+  if (!['movies', 'shows'].includes(type)) return res.status(400).json({ error: 'Invalid type' });
+
+  const fs   = require('fs');
+  const db   = require('./config/database');
+  const dest = imageService.posterPath(type, tmdbId);
+
+  // Serve from cache if it exists
+  if (fs.existsSync(dest)) {
+    return res.sendFile(dest, { headers: { 'Cache-Control': 'public, max-age=604800, immutable' } });
+  }
+
+  // Cache miss — look up poster_path from DB and download
+  try {
+    const table      = type === 'movies' ? 'movies' : 'shows';
+    const row        = db.prepare(`SELECT poster_path FROM ${table} WHERE tmdb_id = ?`).get(tmdbId);
+    const tmdbPath   = row?.poster_path;
+    const cachedPath = await imageService.ensurePoster(type, tmdbId, tmdbPath);
+
+    if (!cachedPath || !fs.existsSync(cachedPath)) {
+      return res.status(404).json({ error: 'No poster available' });
+    }
+
+    return res.sendFile(cachedPath, { headers: { 'Cache-Control': 'public, max-age=604800, immutable' } });
+  } catch (err) {
+    console.error('[ImageRoute] Failed to serve poster:', err.message);
+    return res.status(500).json({ error: 'Failed to fetch poster' });
+  }
+});
 
 // ---- Production: serve the built client ----
 if (process.env.NODE_ENV === 'production') {

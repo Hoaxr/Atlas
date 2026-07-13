@@ -2,6 +2,8 @@ const fs = require('fs/promises');
 const path = require('path');
 const db = require('../config/database');
 const tmdbService = require('./tmdbService');
+const imageService = require('./imageService');
+
 const { isVideoFile, SUBTITLE_EXTENSIONS } = require('../utils/fileUtils');
 
 const RECYCLE_DIRS = new Set([
@@ -388,6 +390,7 @@ const doScan = async (mode = 'full') => {
 
               if (existingMonitored) {
                 db.prepare('UPDATE shows SET folder_path = ?, status = ?, rating = ?, tmdb_status = ? WHERE tmdb_id = ?').run(showFolderPath, 'downloaded', showRating, tmdbStatus, tmdbId);
+                if (matchedShow.poster_path) await imageService.ensurePoster('shows', tmdbId, matchedShow.poster_path).catch(err => console.error(`[Scanner] Poster fetch failed for show ${tmdbId}:`, err.message));
               } else {
                 // Only calculate folder size for truly new shows (one-time cost per show)
                 let folderSize = 0;
@@ -433,6 +436,8 @@ const doScan = async (mode = 'full') => {
                   tmdbStatus
                 );
                 showId = insertRes.lastInsertRowid;
+                if (matchedShow.poster_path) await imageService.ensurePoster('shows', matchedShow.id, matchedShow.poster_path).catch(err => console.error(`[Scanner] Poster fetch failed for show ${matchedShow.id}:`, err.message));
+
                 
                 // Synchronously fetch and insert episodes for the newly discovered show
                 let episodeCount = 0;
@@ -619,10 +624,14 @@ const doScan = async (mode = 'full') => {
               // Assign default profile if the movie doesn't already have one
               db.prepare('UPDATE movies SET file_path = ?, status = ?, rating = ?, file_size = ?, quality_profile_id = COALESCE(quality_profile_id, ?) WHERE tmdb_id = ?')
                 .run(fullPath, 'downloaded', movieRating, fileSize, defaultProfileId, matchedMovie.id);
+              if (matchedMovie.poster_path) await imageService.ensurePoster('movies', matchedMovie.id, matchedMovie.poster_path).catch(err => console.error(`[Scanner] Poster fetch failed for movie ${matchedMovie.id}:`, err.message));
+
             } else if (mode === 'rematch' && existingMovie) {
               // Re-match: update the existing record with the corrected TMDB match
               db.prepare('UPDATE movies SET tmdb_id = ?, title = ?, year = ?, poster_path = ?, overview = ?, status = ?, file_path = ?, rating = ?, file_size = ?, release_date = ? WHERE id = ?')
                 .run(matchedMovie.id, matchedMovie.title, movieYear, matchedMovie.poster_path, matchedMovie.overview, 'downloaded', fullPath, movieRating, fileSize, matchedMovie.release_date || null, existingMovie.id);
+              if (matchedMovie.poster_path) await imageService.ensurePoster('movies', matchedMovie.id, matchedMovie.poster_path).catch(err => console.error(`[Scanner] Poster fetch failed for movie ${matchedMovie.id}:`, err.message));
+
               scanProgress.addedMoviesCount++;
               scanProgress.addedMovies.push({ title: matchedMovie.title, year: movieYear });
             } else {
@@ -642,6 +651,7 @@ const doScan = async (mode = 'full') => {
                 matchedMovie.release_date || null
               );
               scanProgress.addedMoviesCount++;
+              if (matchedMovie.poster_path) await imageService.ensurePoster('movies', matchedMovie.id, matchedMovie.poster_path).catch(err => console.error(`[Scanner] Poster fetch failed for movie ${matchedMovie.id}:`, err.message));
               scanProgress.addedMovies.push({ title: matchedMovie.title, year: movieYear });
             }
             // Apply Trakt watched status if this TMDB ID was already marked as watched

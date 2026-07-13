@@ -6,6 +6,17 @@ const getTmdbApiKey = () => {
   return row ? row.value : null;
 };
 
+const memoryCache = new Map();
+const CACHE_TTL = 1000 * 60 * 60; // 1 hour
+
+const withCache = async (key, fetcher) => {
+  const cached = memoryCache.get(key);
+  if (cached && Date.now() - cached.timestamp < CACHE_TTL) return cached.data;
+  const data = await fetcher();
+  if (data) memoryCache.set(key, { data, timestamp: Date.now() });
+  return data;
+};
+
 const tmdbApi = axios.create({
   baseURL: 'https://api.themoviedb.org/3'
 });
@@ -191,23 +202,27 @@ const searchMulti = async (query) => {
 };
 
 const getMovieById = async (id) => {
-  try {
-    const response = await tmdbApi.get(`/movie/${id}`, { params: { append_to_response: 'videos,credits,similar,release_dates' } });
-    return response.data;
-  } catch (error) {
-    if (error.response?.status === 404) return null;
-    throw error;
-  }
+  return withCache(`movie_${id}`, async () => {
+    try {
+      const response = await tmdbApi.get(`/movie/${id}`, { params: { append_to_response: 'videos,credits,similar,release_dates' } });
+      return response.data;
+    } catch (error) {
+      if (error.response?.status === 404) return null;
+      throw error;
+    }
+  });
 };
 
 const getShowById = async (id) => {
-  try {
-    const response = await tmdbApi.get(`/tv/${id}`, { params: { append_to_response: 'videos,credits' } });
-    return response.data;
-  } catch (error) {
-    if (error.response?.status === 404) return null;
-    throw error;
-  }
+  return withCache(`show_${id}`, async () => {
+    try {
+      const response = await tmdbApi.get(`/tv/${id}`, { params: { append_to_response: 'videos,credits' } });
+      return response.data;
+    } catch (error) {
+      if (error.response?.status === 404) return null;
+      throw error;
+    }
+  });
 };
 
 const getSeasonById = async (showId, seasonNumber) => {
@@ -245,33 +260,39 @@ const getSeasonEpisodes = async (tmdbId, seasonNumber) => {
 };
 
 const getRecentMovies = async () => {
-  try {
-    const response = await tmdbApi.get('/movie/now_playing');
-    return response.data.results.map(r => ({ ...r, media_type: 'movie' }));
-  } catch (error) {
-    console.error('TMDB Recent Movies Error:', error.message);
-    return [];
-  }
+  return withCache('recent_movies', async () => {
+    try {
+      const response = await tmdbApi.get('/movie/now_playing');
+      return response.data.results.map(r => ({ ...r, media_type: 'movie' }));
+    } catch (error) {
+      console.error('TMDB Recent Movies Error:', error.message);
+      return [];
+    }
+  });
 };
 
 const getUpcomingMovies = async () => {
-  try {
-    const response = await tmdbApi.get('/movie/upcoming');
-    return response.data.results.map(r => ({ ...r, media_type: 'movie' }));
-  } catch (error) {
-    console.error('TMDB Upcoming Movies Error:', error.message);
-    return [];
-  }
+  return withCache('upcoming_movies', async () => {
+    try {
+      const response = await tmdbApi.get('/movie/upcoming');
+      return response.data.results.map(r => ({ ...r, media_type: 'movie' }));
+    } catch (error) {
+      console.error('TMDB Upcoming Movies Error:', error.message);
+      return [];
+    }
+  });
 };
 
 const getRecentShows = async () => {
-  try {
-    const response = await tmdbApi.get('/tv/on_the_air');
-    return response.data.results.map(r => ({ ...r, media_type: 'tv' }));
-  } catch (error) {
-    console.error('TMDB Recent Shows Error:', error.message);
-    return [];
-  }
+  return withCache('recent_shows', async () => {
+    try {
+      const response = await tmdbApi.get('/tv/on_the_air');
+      return response.data.results.map(r => ({ ...r, media_type: 'tv' }));
+    } catch (error) {
+      console.error('TMDB Recent Shows Error:', error.message);
+      return [];
+    }
+  });
 };
 
 const getRecommendations = async (type, libraryIds) => {

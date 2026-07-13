@@ -6,7 +6,7 @@ npm-debug.log
 .env.*
 *.md
 assets
-server/data/database.sqlite*
+server/data/*
 server/tests
 server/eslint.config.js
 client/eslint.config.js
