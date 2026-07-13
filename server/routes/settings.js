@@ -12,6 +12,7 @@ const { getSetting, setSetting } = require('../utils/settings');
 const downloadClientService = require('../services/downloadClientService');
 const { isVideoFile } = require('../utils/fileUtils');
 const { invalidateAuthCache } = require('../middleware/authMiddleware');
+const { USER_AGENT } = require('../utils/constants');
 
 router.get('/', (req, res, next) => {
   try {
@@ -245,17 +246,30 @@ router.post('/', async (req, res, next) => {
       }
     }
 
-    // Special: auth password (needs bcrypt)
+    // Special: auth password (needs bcrypt) — require current password for safety
     if (body.authPassword !== undefined) {
-      setSetting('authPassword', body.authPassword);
-      const existingUser = db.prepare("SELECT id FROM users WHERE role = 'admin' LIMIT 1").get();
-      const hashed = await bcrypt.hash(body.authPassword, 10);
-      if (existingUser) {
-        const username = body.authUsername !== undefined ? body.authUsername : getSetting('authUsername');
-        db.prepare('UPDATE users SET password = ?, username = ? WHERE id = ?').run(hashed, username, existingUser.id);
+      // Re-authentication: user must confirm their current password to change auth settings
+      if (body.currentPassword === undefined) {
+        errors.push('currentPassword is required to change authentication settings');
       } else {
-        const username = body.authUsername !== undefined ? body.authUsername : 'admin';
-        db.prepare("INSERT INTO users (username, password, role) VALUES (?, ?, 'admin')").run(username, hashed);
+        const adminUser = db.prepare("SELECT password FROM users WHERE role = 'admin' LIMIT 1").get();
+        if (adminUser) {
+          const valid = await bcrypt.compare(body.currentPassword, adminUser.password);
+          if (!valid) errors.push('Current password is incorrect');
+        }
+      }
+
+      if (errors.length === 0) {
+        setSetting('authPassword', body.authPassword);
+        const existingUser = db.prepare("SELECT id FROM users WHERE role = 'admin' LIMIT 1").get();
+        const hashed = await bcrypt.hash(body.authPassword, 10);
+        if (existingUser) {
+          const username = body.authUsername !== undefined ? body.authUsername : getSetting('authUsername');
+          db.prepare('UPDATE users SET password = ?, username = ? WHERE id = ?').run(hashed, username, existingUser.id);
+        } else {
+          const username = body.authUsername !== undefined ? body.authUsername : 'admin';
+          db.prepare("INSERT INTO users (username, password, role) VALUES (?, ?, 'admin')").run(username, hashed);
+        }
       }
     }
 
@@ -837,7 +851,7 @@ router.get('/status', async (req, res) => {
           return { status: r.status === 200 ? 'connected' : 'error' };
         } catch (e) {
           if (e.response?.status === 401) {
-            throw new Error('Unauthorized (Please reconnect in Settings)');
+            throw new Error('Unauthorized (Please reconnect in Settings)', { cause: e });
           }
           throw e;
         }

@@ -12,7 +12,8 @@ const adapters = {
 const getClient = () => {
   const client = db.prepare('SELECT * FROM download_clients LIMIT 1').get();
   if (!client) return null;
-  if (!client.host.startsWith('http')) client.host = `http://${client.host}`;
+  // Only add protocol if host doesn't already specify one (supports both http:// and https://)
+  if (!/^https?:\/\//.test(client.host)) client.host = `http://${client.host}`;
   client.type = client.type || 'qbittorrent';
   return client;
 };

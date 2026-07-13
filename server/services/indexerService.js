@@ -2,6 +2,7 @@ const axios = require('axios');
 const db = require('../config/database');
 const { getSetting } = require('../utils/settings');
 const { parseResolution: parseQuality } = require('../utils/mediaParsing');
+const { USER_AGENT } = require('../utils/constants');
 
 // ─── Circuit breaker for Prowlarr ─────────────────────────────────────
 

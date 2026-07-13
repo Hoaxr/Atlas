@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const { getNamingConfig, sanitizeTitle } = require('./mediaManagementService');
 const { isWatchedSyncEnabled } = require('../utils/settings');
+const eventBus = require('./eventBus');
 
 const sanitizeWatched = (items) => {
   if (isWatchedSyncEnabled()) return items;
@@ -196,21 +197,28 @@ const addShow = async (tmdbId, rootFolderPath = null) => {
   setImmediate(async () => {
     try {
       const seasons = await tmdbService.getShowSeasons(tmdbId);
-      const insertEp = db.prepare(`
-        INSERT INTO episodes (show_id, season_number, episode_number, title, overview, status, air_date)
-        VALUES (?, ?, ?, ?, ?, 'monitored', ?)
-        ON CONFLICT(show_id, season_number, episode_number) DO NOTHING
-      `);
+      const insertEpSync = db.transaction((eps) => {
+        const insertEp = db.prepare(`
+          INSERT INTO episodes (show_id, season_number, episode_number, title, overview, status, air_date)
+          VALUES (?, ?, ?, ?, ?, 'monitored', ?)
+          ON CONFLICT(show_id, season_number, episode_number) DO NOTHING
+        `);
+        for (const ep of eps) {
+          insertEp.run(internalShowId, ep.season_number, ep.episode_number, ep.name, ep.overview, ep.air_date);
+        }
+      });
       
+      const epsToInsert = [];
       for (const s of seasons) {
         if (s.season_number === 0) continue;
         const episodes = await tmdbService.getSeasonEpisodes(tmdbId, s.season_number);
-        for (const ep of episodes) {
-          insertEp.run(internalShowId, ep.season_number, ep.episode_number, ep.name, ep.overview, ep.air_date);
-        }
+        epsToInsert.push(...episodes);
       }
       
-      const eventBus = require('./eventBus');
+      if (epsToInsert.length > 0) {
+        insertEpSync(epsToInsert);
+      }
+      
       eventBus.success('Episodes synced', { showId: internalShowId, type: 'show', title: showDetails.name });
     } catch (err) {
       console.error('Failed to fetch and save episodes in background:', err.message);

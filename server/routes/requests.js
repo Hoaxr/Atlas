@@ -55,6 +55,14 @@ router.post('/', (req, res) => {
       return res.status(401).json({ status: 'error', message: 'Must be logged in to request' });
     }
 
+    // Validate required fields
+    if (!tmdb_id || !type || !title) {
+      return res.status(400).json({ status: 'error', message: 'tmdb_id, type, and title are required' });
+    }
+    if (!['movie', 'tv'].includes(type)) {
+      return res.status(400).json({ status: 'error', message: 'type must be "movie" or "tv"' });
+    }
+
     // Check if already requested globally
     const existing = db.prepare('SELECT id, user_id FROM requests WHERE tmdb_id = ? AND type = ?').get(tmdb_id, type);
     if (existing) {

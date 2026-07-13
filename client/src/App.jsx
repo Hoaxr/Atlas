@@ -4,7 +4,7 @@ import { Toaster } from 'react-hot-toast';
 import { ThemeProvider } from './lib/ThemeContext';
 import ErrorBoundary from './components/shared/ErrorBoundary';
 import Layout from './components/layout/Layout';
-import Dashboard from './pages/Dashboard';
+import Dashboard from './pages/dashboard/Dashboard';
 import Discover from './pages/Discover';
 import ShowDetails from './pages/ShowDetails';
 import MovieDetails from './pages/MovieDetails';

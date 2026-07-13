@@ -24,24 +24,28 @@ export default function Calendar() {
   }, [viewMode]);
 
   useEffect(() => {
+    const fetchUpcoming = async () => {
+      setLoading(true);
+      try {
+        const res = await api.get('/library/calendar');
+        if (res.data.status === 'success') {
+          setEpisodes(res.data.data);
+        }
+      } catch (err) {
+        console.error('Failed to fetch calendar', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
     fetchUpcoming();
+
+    // Auto-refresh every 5 minutes
+    const REFRESH_INTERVAL = 5 * 60 * 1000;
+    const interval = setInterval(fetchUpcoming, REFRESH_INTERVAL);
+    return () => clearInterval(interval);
   }, []);
 
-  const fetchUpcoming = async () => {
-    setLoading(true);
-    try {
-      const res = await api.get('/library/calendar');
-      if (res.data.status === 'success') {
-        setEpisodes(res.data.data);
-      }
-    } catch (err) {
-      console.error('Failed to fetch calendar', err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Group episodes and movies by date
   const groupedByDate = {};
   episodes.forEach(item => {
     if (!item.date) return;

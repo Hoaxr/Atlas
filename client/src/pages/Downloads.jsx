@@ -2,18 +2,29 @@ import { useState, useEffect } from 'react';
 import api from '../lib/api';
 import { DownloadCloud, ArrowDown, ArrowUp, Activity } from 'lucide-react';
 import { customAlert, customConfirm } from '../utils/alerts';
+import useWebSocket from '../lib/useWebSocket';
 import StickyBar from '../components/shared/StickyBar';
 import { useStickyBar } from '../lib/useStickyBar';
 
 export default function Downloads() {
   const { headerRef, stickyVisible } = useStickyBar();
+  const { onEvent } = useWebSocket();
   const [downloads, setDownloads] = useState([]);
   const [stats, setStats] = useState({ dl_info_speed: 0, up_info_speed: 0 });
 
   useEffect(() => {
+    // Initial fetch
     fetchClientData();
-    const interval = setInterval(fetchClientData, 3000);
-    return () => clearInterval(interval);
+
+    // Listen for WebSocket push updates (replaces 3s polling)
+    const cleanup = onEvent((data) => {
+      if (data.type === 'TORRENTS_UPDATE' && data.data) {
+        setDownloads(data.data.torrents || []);
+        setStats(data.data.clientStats || { dl_info_speed: 0, up_info_speed: 0 });
+      }
+    });
+
+    return () => { if (cleanup) cleanup(); };
   }, []);
 
   const fetchClientData = async () => {

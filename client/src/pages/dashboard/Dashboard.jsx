@@ -1,69 +1,34 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import api from '../lib/api';
+import api from '../../lib/api';
 import { Activity, Film, Tv, Search, CheckCircle2, AlertCircle, Bookmark, BookmarkMinus, LayoutGrid, List, Star, Info, X, RotateCcw, Filter as FilterIcon, CheckSquare, Square, Columns, Plus } from 'lucide-react';
-import { customAlert, customConfirm } from '../utils/alerts';
-import { cachedMovies, cachedShows, setCachedMovies, setCachedShows } from '../lib/libraryCache';
-import { parseResolution, parseCodec } from '../lib/format';
-import { sortItems } from '../lib/sortItems';
-import { renderColumnCell } from '../components/dashboard/TableCellRenderers';
-import { useSettings } from '../lib/useSettings';
-import useWebSocket from '../lib/useWebSocket';
-import { useOutsideClick } from '../lib/useOutsideClick';
-import { posterUrl } from '../lib/posterUrl';
+import { customAlert, customConfirm } from '../../utils/alerts';
+import { cachedMovies, cachedShows, setCachedMovies, setCachedShows } from '../../lib/libraryCache';
+import { parseResolution, parseCodec } from '../../lib/format';
+import { sortItems } from '../../lib/sortItems';
+import { renderColumnCell } from '../../components/dashboard/TableCellRenderers';
+import { useSettings } from '../../lib/useSettings';
+import useWebSocket from '../../lib/useWebSocket';
+import { useOutsideClick } from '../../lib/useOutsideClick';
+import { posterUrl } from '../../lib/posterUrl';
 
-import { SortIcon, FilterSelect } from '../components/shared/FilterSelect';
-import BulkActions from '../components/dashboard/BulkActions';
-import ManualSearchModal from '../components/ManualSearchModal';
-import StickyBar from '../components/shared/StickyBar';
-import { useStickyBar } from '../lib/useStickyBar';
+import { SortIcon, FilterSelect, MultiFilterSelect } from '../../components/shared/FilterSelect';
+import BulkActions from '../../components/dashboard/BulkActions';
+import ManualSearchModal from '../../components/ManualSearchModal';
+import StickyBar from '../../components/shared/StickyBar';
+import { useStickyBar } from '../../lib/useStickyBar';
 
-function AlphabetIndex({ alphaFilter, setAlphaFilter, items }) {
-  const letters = '#ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
-  const availableLetters = useMemo(() => {
-    const set = new Set();
-    items.forEach(item => {
-      const firstChar = (item.title || '').charAt(0).toUpperCase();
-      if (/^[A-Z]$/.test(firstChar)) set.add(firstChar);
-      else set.add('#');
-    });
-    return set;
-  }, [items]);
-
-  return (
-    <div className="hidden md:flex items-center gap-0.5 overflow-x-auto bg-slate-900/90 shadow-[inset_0_2px_8px_rgba(0,0,0,0.7)] rounded-full py-1 px-2.5 ml-auto">
-      {letters.map(letter => {
-        const isAvailable = availableLetters.has(letter);
-        const isActive = alphaFilter === letter;
-        return (
-          <button
-            key={letter}
-            onClick={() => setAlphaFilter(isActive ? null : letter)}
-            disabled={!isAvailable}
-            className={`text-sm font-bold min-w-[26px] h-6 flex items-center justify-center rounded transition-colors ${
-              isActive
-                ? 'text-cyan-400 bg-cyan-500/20'
-                : isAvailable
-                  ? 'text-slate-400 hover:text-cyan-400 hover:bg-slate-800 cursor-pointer'
-                  : 'text-slate-700 cursor-default'
-            }`}
-          >
-            {letter}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
 
 export default function Dashboard() {
   const location = useLocation();
   const navigate = useNavigate();
   const [movies, setMovies] = useState(cachedMovies || []);
   const [shows, setShows] = useState(cachedShows || []);
-  const [loading, setLoading] = useState(!cachedMovies && !cachedShows);
+  const [loading, setLoading] = useState(location.pathname.includes('shows') ? !cachedShows : !cachedMovies);
+  const [error, setError] = useState(null);
   const [isReordering, setIsReordering] = useState(false);
   const reorderTimerRef = useRef(null);
+  const initialRender = useRef(true);
   
   const [searchModalOpen, setSearchModalOpen] = useState(false);
   const [searchMediaId, setSearchMediaId] = useState(null);
@@ -117,7 +82,15 @@ export default function Dashboard() {
 
   const [statusFilter, setStatusFilter] = useState(() => localStorage.getItem(scopeKey('StatusFilter')) || 'all');
   const [watchedFilter, setWatchedFilter] = useState(() => localStorage.getItem(scopeKey('WatchedFilter')) || 'all');
-  const [genreFilter, setGenreFilter] = useState(() => localStorage.getItem(scopeKey('GenreFilter')) || 'all');
+  const [genreFilter, setGenreFilter] = useState(() => {
+    try {
+      const stored = localStorage.getItem(scopeKey('GenreFilter'));
+      if (stored && stored !== 'all') return JSON.parse(stored);
+    } catch (e) {
+      /* ignore parse error */
+    }
+    return [];
+  });
   const [qualityFilter, setQualityFilter] = useState(() => localStorage.getItem(scopeKey('QualityFilter')) || 'all');
   const [resolutionFilter, setResolutionFilter] = useState(() => localStorage.getItem(scopeKey('ResolutionFilter')) || 'all');
   const [codecFilter, setCodecFilter] = useState(() => localStorage.getItem(scopeKey('CodecFilter')) || 'all');
@@ -147,10 +120,12 @@ export default function Dashboard() {
     }
   }, [stickySearchVisible]);
 
+  const REORDER_FLASH_MS = 150;
+
   const triggerReorderFlash = () => {
     setIsReordering(true);
     if (reorderTimerRef.current) clearTimeout(reorderTimerRef.current);
-    reorderTimerRef.current = setTimeout(() => setIsReordering(false), 150);
+    reorderTimerRef.current = setTimeout(() => setIsReordering(false), REORDER_FLASH_MS);
   };
 
   const handleSortClick = (field) => {
@@ -233,7 +208,7 @@ export default function Dashboard() {
     localStorage.setItem('dashboardViewStyle', viewStyle);
     localStorage.setItem(scopeKey('StatusFilter'), statusFilter);
     localStorage.setItem(scopeKey('WatchedFilter'), watchedFilter);
-    localStorage.setItem(scopeKey('GenreFilter'), genreFilter);
+    localStorage.setItem(scopeKey('GenreFilter'), JSON.stringify(genreFilter));
     localStorage.setItem(scopeKey('QualityFilter'), qualityFilter);
     localStorage.setItem(scopeKey('ResolutionFilter'), resolutionFilter);
     localStorage.setItem(scopeKey('CodecFilter'), codecFilter);
@@ -248,7 +223,10 @@ export default function Dashboard() {
   useEffect(() => {
     setStatusFilter(() => localStorage.getItem(scopeKey('StatusFilter')) || 'all');
     setWatchedFilter(() => localStorage.getItem(scopeKey('WatchedFilter')) || 'all');
-    setGenreFilter(localStorage.getItem(scopeKey('GenreFilter')) || 'all');
+    try {
+      const stored = localStorage.getItem(scopeKey('GenreFilter'));
+      setGenreFilter(stored && stored !== 'all' ? JSON.parse(stored) : []);
+    } catch { setGenreFilter([]); }
     setQualityFilter(localStorage.getItem(scopeKey('QualityFilter')) || 'all');
     setResolutionFilter(localStorage.getItem(scopeKey('ResolutionFilter')) || 'all');
     setCodecFilter(localStorage.getItem(scopeKey('CodecFilter')) || 'all');
@@ -257,14 +235,21 @@ export default function Dashboard() {
     setPage(1);
     
     // Fetch data for the current view
-    setLoading(true);
+    const isCached = viewMode === 'movies' ? cachedMovies !== null : cachedShows !== null;
+    if (!isCached) {
+      setLoading(true);
+    }
     fetchViewData(viewMode, false);
   }, [viewMode]);
 
   // Reset pagination when filters/sort change and flash the reorder indicator
   useEffect(() => {
     setPage(1);
-    triggerReorderFlash();
+    if (initialRender.current) {
+      initialRender.current = false;
+    } else {
+      triggerReorderFlash();
+    }
   }, [sort, statusFilter, watchedFilter, genreFilter, qualityFilter, resolutionFilter, codecFilter, yearFilter, tmdbStatusFilter, alphaFilter]);
 
   // Capture initial viewMode for the mount-once effect (prevents stale closure)
@@ -295,9 +280,11 @@ export default function Dashboard() {
         const data = res.data.data;
         if (mode === 'movies') { setCachedMovies(data); setMovies(data); }
         else { setCachedShows(data); setShows(data); }
+        if (!isBackground) setError(null);
       }
     } catch (err) {
       console.error(`Failed to fetch ${mode}`, err);
+      if (!isBackground) setError('Failed to load library. Check your connection and try again.');
     } finally {
       if (!isBackground) setLoading(false);
     }
@@ -385,11 +372,11 @@ export default function Dashboard() {
     }
 
     // Genre filter
-    if (genreFilter !== 'all') {
+    if (genreFilter.length > 0) {
       items = items.filter(item => {
         if (!item.genres) return false;
         const itemGenres = item.genres.split(',').map(g => g.trim());
-        return itemGenres.includes(genreFilter);
+        return genreFilter.some(g => itemGenres.includes(g));
       });
     }
 
@@ -453,7 +440,7 @@ export default function Dashboard() {
   if (watchedFilter !== 'all') {
     activeFilters.push({ key: 'watched', label: watchedFilter === 'watched' ? 'Watched' : 'Unwatched' });
   }
-  if (genreFilter !== 'all') activeFilters.push({ key: 'genre', label: genreFilter });
+  if (genreFilter.length > 0) activeFilters.push({ key: 'genre', label: `Genres: ${genreFilter.join(', ')}` });
   if (qualityFilter !== 'all') activeFilters.push({ key: 'quality', label: qualityFilter });
   if (resolutionFilter !== 'all') activeFilters.push({ key: 'resolution', label: resolutionFilter });
   if (codecFilter !== 'all') activeFilters.push({ key: 'codec', label: codecFilter });
@@ -466,7 +453,7 @@ export default function Dashboard() {
     if (key === 'year') setYearFilter('all');
     if (key === 'status') setStatusFilter('all');
     if (key === 'watched') setWatchedFilter('all');
-    if (key === 'genre') setGenreFilter('all');
+    if (key === 'genre') setGenreFilter([]);
     if (key === 'quality') setQualityFilter('all');
     if (key === 'resolution') setResolutionFilter('all');
     if (key === 'codec') setCodecFilter('all');
@@ -480,7 +467,7 @@ export default function Dashboard() {
     setYearFilter('all');
     setStatusFilter('all');
     setWatchedFilter('all');
-    setGenreFilter('all');
+    setGenreFilter([]);
     setQualityFilter('all');
     setResolutionFilter('all');
     setCodecFilter('all');
@@ -808,43 +795,19 @@ export default function Dashboard() {
                     ))}
                   </FilterSelect>
                 )}
-                {/* Alphabet Index */}
-                <AlphabetIndex 
-                  alphaFilter={alphaFilter} 
-                  setAlphaFilter={setAlphaFilter} 
-                  items={displayItems}
-                />
-              </div>
 
-              {/* Genre Chips Row */}
-              {allGenres.length > 0 && (
-                <div className="flex flex-wrap items-center gap-1.5">
-                  <FilterIcon className="w-3.5 h-3.5 text-slate-500 shrink-0 mr-1" />
-                  <button
-                    onClick={() => setGenreFilter('all')}
-                    className={`text-xs font-medium px-2.5 py-1 rounded-full border transition-colors ${
-                      genreFilter === 'all'
-                        ? 'bg-cyan-500/15 text-cyan-400 border-cyan-500/30'
-                        : 'bg-slate-100 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-white/5 hover:border-slate-400 dark:hover:border-slate-500/30 hover:text-slate-700 dark:hover:text-slate-200'
-                    }`}
+                {allGenres.length > 0 && (
+                  <MultiFilterSelect
+                    values={genreFilter}
+                    onChange={setGenreFilter}
+                    label="All Genres"
                   >
-                    All
-                  </button>
-                  {allGenres.map(genre => (
-                    <button
-                      key={genre}
-                      onClick={() => setGenreFilter(genreFilter === genre ? 'all' : genre)}
-                      className={`text-xs font-medium px-2.5 py-1 rounded-full border transition-colors ${
-                        genreFilter === genre
-                          ? 'bg-cyan-500/15 text-cyan-400 border-cyan-500/30'
-                          : 'bg-slate-800/50 text-slate-400 border-white/5 hover:border-slate-500/30 hover:text-slate-200'
-                      }`}
-                    >
-                      {genre}
-                    </button>
-                  ))}
-                </div>
-              )}
+                    {allGenres.map(g => (
+                      <option key={g} value={g}>{g}</option>
+                    ))}
+                  </MultiFilterSelect>
+                )}
+              </div>
             </div>
           )}
 
@@ -884,7 +847,7 @@ export default function Dashboard() {
         {displayItems.length > 0 ? (
           <div
             style={{
-              opacity: isReordering ? 0 : 1,
+              opacity: isReordering ? 0.5 : 1,
               transition: 'opacity 0.12s ease',
             }}
           >
@@ -1211,6 +1174,17 @@ export default function Dashboard() {
           <div className="flex flex-col items-center justify-center py-24 text-slate-400 gap-4">
             <div className="w-8 h-8 border-2 border-cyan-500/50 border-t-cyan-400 rounded-full animate-spin" />
             <p className="text-sm font-medium">Loading data...</p>
+          </div>
+        ) : error ? (
+          <div className="flex flex-col items-center justify-center py-24 text-slate-400 gap-4">
+            <AlertCircle className="w-12 h-12 text-rose-400 mb-2" />
+            <p className="text-sm font-medium text-rose-300">{error}</p>
+            <button
+              onClick={() => { setError(null); fetchViewData(viewMode, false); }}
+              className="mt-3 px-5 py-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 rounded-xl text-sm font-bold transition-all"
+            >
+              Retry
+            </button>
           </div>
         ) : (
           <div className="flex flex-col items-center justify-center h-[300px] text-slate-500 rounded-xl">

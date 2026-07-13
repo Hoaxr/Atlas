@@ -1,13 +1,14 @@
 const fs = require('fs');
 const path = require('path');
 const cron = require('node-cron');
+const axios = require('axios');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const db = require('../config/database');
 const taskRegistry = require('./taskRegistry');
 const eventBus = require('./eventBus');
 const { runWithConcurrency } = require('../utils/concurrency');
 const { registerJob } = require('../utils/cronRegistry');
-
+const { LANG_CODE } = require('../routes/library/helpers');
 const translateWithGemini = async (text, targetLang, apiKey) => {
   const modelName = db.prepare("SELECT value FROM settings WHERE key = 'geminiModel'").get()?.value || 'gemini-1.5-flash';
   const genAI = new GoogleGenerativeAI(apiKey);
@@ -21,8 +22,6 @@ ${text}`;
 };
 
 const translateWithGoogleTranslate = async (text, targetLang) => {
-  const axios = require('axios');
-  const { LANG_CODE } = require('../routes/library/helpers');
   const target = LANG_CODE[targetLang] || 'nl';
 
   // Split SRT into lines
@@ -82,7 +81,6 @@ const translateWithGoogleTranslate = async (text, targetLang) => {
 };
 
 const translateWithDeepSeek = async (text, targetLang, apiKey) => {
-  const axios = require('axios');
   const prompt = `You are a professional subtitle translator. Translate the following SRT file from English to ${targetLang}. 
 Keep the SRT formatting exactly the same (timestamps and sequence numbers). Do not add any extra text or conversational response, output ONLY the translated SRT content.
 
@@ -98,7 +96,6 @@ ${text}`;
 };
 
 const translateWithClaude = async (text, targetLang, apiKey) => {
-  const axios = require('axios');
   const modelName = db.prepare("SELECT value FROM settings WHERE key = 'claudeModel'").get()?.value || 'claude-3-haiku-20240307';
   const prompt = `You are a professional subtitle translator. Translate the following SRT file from English to ${targetLang}. 
 Keep the SRT formatting exactly the same (timestamps and sequence numbers). Do not add any extra text or conversational response, output ONLY the translated SRT content.
@@ -172,7 +169,6 @@ const translateSubtitles = async () => {
     throw new Error(`${providerChecks[activeProvider].name} missing. Please set it in Settings.`);
   }
 
-  const { LANG_CODE } = require('../routes/library/helpers');
   const langCode = LANG_CODE[targetLang] || 'nl';
 
   const translateFile = async (filePath, displayName, seasonNum, episodeNum) => {

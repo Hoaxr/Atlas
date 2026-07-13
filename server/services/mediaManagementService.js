@@ -7,10 +7,11 @@ const taskRegistry = require('./taskRegistry');
 const { registerJob } = require('../utils/cronRegistry');
 const eventBus = require('./eventBus');
 const tmdbService = require('./tmdbService');
-
+const imageService = require('./imageService');
 
 const { getSetting } = require('../utils/settings');
 const { isVideoFile } = require('../utils/fileUtils');
+const { getMediaMetadata, parseAudioFromFileName } = require('../utils/videoUtils');
 
 const getNamingConfig = () => {
   return {
@@ -384,7 +385,6 @@ const importMovie = async (torrent, movie) => {
 
     // Auto-refresh: detect resolution, codec & audio and update TMDB metadata
     try {
-      const { getMediaMetadata, parseAudioFromFileName } = require('../utils/videoUtils');
       let sceneName = torrent.name;
       let resolution = null;
       let codec = null;
@@ -430,7 +430,6 @@ const importMovie = async (torrent, movie) => {
 
     // Cache poster in server/data/images (never written to library folder)
     try {
-      const imageService = require('./imageService');
       const posterTmdbPath = movie.poster_path || (await tmdbService.getMovieById(movie.tmdb_id).catch(() => null))?.poster_path;
       if (posterTmdbPath) {
         await imageService.ensurePoster('movies', movie.tmdb_id, posterTmdbPath);
@@ -570,7 +569,6 @@ const importEpisode = async (torrent, episode) => {
 
     // Auto-refresh: detect resolution, codec & audio and update TMDB metadata
     try {
-      const { getMediaMetadata, parseAudioFromFileName } = require('../utils/videoUtils');
       let sceneName = torrent.name;
       const t = sceneName.toLowerCase();
       let resolution = null;

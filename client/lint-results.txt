@@ -1,0 +1,196 @@
+
+> lint
+> eslint src
+
+
+/home/silence/Development/Atlas/client/src/App.jsx
+  1:50  warning  'useParams' is defined but never used. Allowed unused vars must match /^_/u  no-unused-vars
+
+/home/silence/Development/Atlas/client/src/components/EpisodeDetailsModal.jsx
+  2:8   warning  'React' is defined but never used. Allowed unused vars must match /^_/u         no-unused-vars
+  3:13  warning  'HardDrive' is defined but never used. Allowed unused vars must match /^_/u     no-unused-vars
+  3:24  warning  'CheckCircle2' is defined but never used. Allowed unused vars must match /^_/u  no-unused-vars
+
+/home/silence/Development/Atlas/client/src/components/FolderBrowserModal.jsx
+  27:6   warning  React Hook useEffect has a missing dependency: 'fetchDirectory'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  51:14  warning  'err' is defined but never used                                                                                    no-unused-vars
+
+/home/silence/Development/Atlas/client/src/components/MediaDetailsModal.jsx
+  5:42  warning  'ExternalLink' is defined but never used. Allowed unused vars must match /^_/u  no-unused-vars
+  5:82  warning  'ArrowRight' is defined but never used. Allowed unused vars must match /^_/u    no-unused-vars
+
+/home/silence/Development/Atlas/client/src/components/dashboard/BulkActions.jsx
+  1:20  warning  'useRef' is defined but never used. Allowed unused vars must match /^_/u  no-unused-vars
+
+/home/silence/Development/Atlas/client/src/components/layout/Layout.jsx
+    4:159  warning  'Keyboard' is defined but never used. Allowed unused vars must match /^_/u                                          no-unused-vars
+    4:169  warning  'Key' is defined but never used. Allowed unused vars must match /^_/u                                               no-unused-vars
+   59:10   warning  'clientConnected' is assigned a value but never used. Allowed unused vars must match /^_/u                          no-unused-vars
+  182:6    warning  React Hook useEffect has a missing dependency: 'prefetchLibrary'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+/home/silence/Development/Atlas/client/src/components/shared/FilterSelect.jsx
+  12:92  warning  'accentColor' is defined but never used. Allowed unused args must match /^_/u  no-unused-vars
+
+/home/silence/Development/Atlas/client/src/components/shared/StickyBar.jsx
+  13:51  error  'CustomEvent' is not defined  no-undef
+
+/home/silence/Development/Atlas/client/src/components/shared/SubtitleLanguageBadge.jsx
+  4:22  warning  'LANG_NAME' is defined but never used. Allowed unused vars must match /^_/u  no-unused-vars
+
+/home/silence/Development/Atlas/client/src/lib/useOutsideClick.js
+  1:29  warning  'useCallback' is defined but never used. Allowed unused vars must match /^_/u  no-unused-vars
+
+/home/silence/Development/Atlas/client/src/lib/useWebSocket.js
+  22:7  warning  Unexpected console statement. Only these console methods are allowed: warn, error  no-console
+  63:7  warning  Unexpected console statement. Only these console methods are allowed: warn, error  no-console
+
+/home/silence/Development/Atlas/client/src/pages/Calendar.jsx
+   1:40  warning  'useRef' is defined but never used. Allowed unused vars must match /^_/u                                                                                                                   no-unused-vars
+  49:9   warning  The 'groupedByDate' object makes the dependencies of useMemo Hook (at line 150) change on every render. To fix this, wrap the initialization of 'groupedByDate' in its own useMemo() Hook  react-hooks/exhaustive-deps
+
+/home/silence/Development/Atlas/client/src/pages/Dashboard.jsx
+     4:75  warning  'BookmarkMinus' is defined but never used. Allowed unused vars must match /^_/u                                                   no-unused-vars
+    78:6   warning  React Hook useEffect has a missing dependency: 'scopeKey'. Either include it or remove the dependency array                       react-hooks/exhaustive-deps
+    88:13  error    Empty block statement                                                                                                             no-empty
+   118:6   warning  React Hook useEffect has a missing dependency: 'searchQuery'. Either include it or remove the dependency array                    react-hooks/exhaustive-deps
+   203:6   warning  React Hook useEffect has missing dependencies: 'scopeKey' and 'searchParams'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
+   214:6   warning  React Hook useEffect has a missing dependency: 'scopeKey'. Either include it or remove the dependency array                       react-hooks/exhaustive-deps
+   237:6   warning  React Hook useEffect has a missing dependency: 'scopeKey'. Either include it or remove the dependency array                       react-hooks/exhaustive-deps
+   420:6   warning  React Hook useMemo has a missing dependency: 'viewMode'. Either include it or remove the dependency array                         react-hooks/exhaustive-deps
+   876:34  warning  'err' is defined but never used                                                                                                   no-unused-vars
+  1099:38  warning  'err' is defined but never used                                                                                                   no-unused-vars
+
+/home/silence/Development/Atlas/client/src/pages/Discover.jsx
+   70:6  warning  React Hook useEffect has a missing dependency: 'query'. Either include it or remove the dependency array                                                react-hooks/exhaustive-deps
+  111:6  warning  React Hook useEffect has missing dependencies: 'executeSearch', 'fetchAllData', and 'fetchLibrary'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
+  227:9  warning  'searchMovies' is assigned a value but never used. Allowed unused vars must match /^_/u                                                                 no-unused-vars
+  232:9  warning  'handleDetailsClick' is assigned a value but never used. Allowed unused vars must match /^_/u                                                           no-unused-vars
+
+/home/silence/Development/Atlas/client/src/pages/Downloads.jsx
+  28:6  warning  React Hook useEffect has a missing dependency: 'onEvent'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+/home/silence/Development/Atlas/client/src/pages/MovieDetails.jsx
+    1:44  warning  'useRef' is defined but never used. Allowed unused vars must match /^_/u                    no-unused-vars
+    8:24  warning  'setCachedMovies' is defined but never used. Allowed unused vars must match /^_/u           no-unused-vars
+   21:8   warning  'SubSearchModal' is defined but never used. Allowed unused vars must match /^_/u            no-unused-vars
+   64:10  warning  'libraryMovieMap' is assigned a value but never used. Allowed unused vars must match /^_/u  no-unused-vars
+  157:14  warning  'err' is defined but never used                                                             no-unused-vars
+  177:14  warning  'err' is defined but never used                                                             no-unused-vars
+  395:32  warning  'err' is defined but never used                                                             no-unused-vars
+  429:34  warning  'err' is defined but never used                                                             no-unused-vars
+  824:40  warning  'err' is defined but never used                                                             no-unused-vars
+
+/home/silence/Development/Atlas/client/src/pages/PersonDetails.jsx
+    2:34  warning  'Link' is defined but never used. Allowed unused vars must match /^_/u                           no-unused-vars
+   19:29  warning  'setSelectedLibraryId' is assigned a value but never used. Allowed unused vars must match /^_/u  no-unused-vars
+  182:17  warning  'detailPath' is assigned a value but never used. Allowed unused vars must match /^_/u            no-unused-vars
+
+/home/silence/Development/Atlas/client/src/pages/Requests.jsx
+  21:14  warning  'err' is defined but never used  no-unused-vars
+  44:14  warning  'err' is defined but never used  no-unused-vars
+  57:14  warning  'err' is defined but never used  no-unused-vars
+  70:14  warning  'err' is defined but never used  no-unused-vars
+
+/home/silence/Development/Atlas/client/src/pages/Settings.jsx
+   75:10  warning  'checkingKeys' is assigned a value but never used. Allowed unused vars must match /^_/u  no-unused-vars
+  370:14  warning  'err' is defined but never used                                                          no-unused-vars
+  380:14  warning  'err' is defined but never used                                                          no-unused-vars
+  390:14  warning  'err' is defined but never used                                                          no-unused-vars
+  413:14  warning  'err' is defined but never used                                                          no-unused-vars
+  487:14  warning  'err' is defined but never used                                                          no-unused-vars
+  498:14  warning  'err' is defined but never used                                                          no-unused-vars
+  508:14  warning  'err' is defined but never used                                                          no-unused-vars
+
+/home/silence/Development/Atlas/client/src/pages/ShowDetails.jsx
+     1:44   warning  'useRef' is defined but never used. Allowed unused vars must match /^_/u          no-unused-vars
+     5:63   warning  'LANG_LABEL' is defined but never used. Allowed unused vars must match /^_/u      no-unused-vars
+     8:32   warning  'Tv' is defined but never used. Allowed unused vars must match /^_/u              no-unused-vars
+     8:173  warning  'Film' is defined but never used. Allowed unused vars must match /^_/u            no-unused-vars
+    11:23   warning  'setCachedShows' is defined but never used. Allowed unused vars must match /^_/u  no-unused-vars
+    18:8    warning  'SubSearchModal' is defined but never used. Allowed unused vars must match /^_/u  no-unused-vars
+    84:14   warning  'err' is defined but never used                                                   no-unused-vars
+   168:14   warning  'err' is defined but never used                                                   no-unused-vars
+   383:34   warning  'err' is defined but never used                                                   no-unused-vars
+   695:34   warning  'err' is defined but never used                                                   no-unused-vars
+   715:34   warning  'err' is defined but never used                                                   no-unused-vars
+   945:50   warning  'e' is defined but never used                                                     no-unused-vars
+   953:48   warning  'e' is defined but never used                                                     no-unused-vars
+  1035:48   warning  'err' is defined but never used                                                   no-unused-vars
+
+/home/silence/Development/Atlas/client/src/pages/Statistics.jsx
+  158:9  warning  'maxYear' is assigned a value but never used. Allowed unused vars must match /^_/u  no-unused-vars
+
+/home/silence/Development/Atlas/client/src/pages/Status.jsx
+  7:57  warning  'List' is defined but never used. Allowed unused vars must match /^_/u  no-unused-vars
+
+/home/silence/Development/Atlas/client/src/pages/SystemTasks.jsx
+    1:52  warning  'useMemo' is defined but never used. Allowed unused vars must match /^_/u  no-unused-vars
+  245:47  warning  'gi' is defined but never used. Allowed unused args must match /^_/u       no-unused-vars
+
+/home/silence/Development/Atlas/client/src/pages/UserPortal.jsx
+    2:116  warning  'Hourglass' is defined but never used. Allowed unused vars must match /^_/u            no-unused-vars
+   86:16   warning  'err' is defined but never used                                                        no-unused-vars
+  155:34   warning  'isTrending' is assigned a value but never used. Allowed unused args must match /^_/u  no-unused-vars
+
+/home/silence/Development/Atlas/client/src/pages/Watcher.jsx
+   3:39  warning  'Activity' is defined but never used. Allowed unused vars must match /^_/u  no-unused-vars
+  83:14  warning  'err' is defined but never used                                             no-unused-vars
+
+/home/silence/Development/Atlas/client/src/pages/settings/ClientsTab.jsx
+  1:40  warning  'Info' is defined but never used. Allowed unused vars must match /^_/u    no-unused-vars
+  1:67  warning  'Search' is defined but never used. Allowed unused vars must match /^_/u  no-unused-vars
+
+/home/silence/Development/Atlas/client/src/pages/settings/ConnectionsTab.jsx
+    2:10  warning  'Network' is defined but never used. Allowed unused vars must match /^_/u                                                    no-unused-vars
+    8:73  warning  'parentHandleSave' is defined but never used. Allowed unused args must match /^_/u                                           no-unused-vars
+   45:6   warning  React Hook useEffect has a missing dependency: 'fetchConnectionsSettings'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  125:14  warning  'err' is defined but never used                                                                                              no-unused-vars
+  247:11  warning  'hasTelegram' is assigned a value but never used. Allowed unused vars must match /^_/u                                       no-unused-vars
+  266:14  warning  'err' is defined but never used                                                                                              no-unused-vars
+
+/home/silence/Development/Atlas/client/src/pages/settings/DuplicateSection.jsx
+  17:14  warning  'err' is defined but never used  no-unused-vars
+  30:14  warning  'err' is defined but never used  no-unused-vars
+
+/home/silence/Development/Atlas/client/src/pages/settings/LibraryTab.jsx
+    1:20  warning  'useRef' is defined but never used. Allowed unused vars must match /^_/u  no-unused-vars
+  228:30  warning  'err' is defined but never used                                           no-unused-vars
+
+/home/silence/Development/Atlas/client/src/pages/settings/MediaServersTab.jsx
+    2:10  warning  'Network' is defined but never used. Allowed unused vars must match /^_/u                                                    no-unused-vars
+    8:73  warning  'parentHandleSave' is defined but never used. Allowed unused args must match /^_/u                                           no-unused-vars
+   32:10  warning  'initialTestDoneProwlarr' is assigned a value but never used. Allowed unused vars must match /^_/u                           no-unused-vars
+   32:35  warning  'setInitialTestDoneProwlarr' is assigned a value but never used. Allowed unused vars must match /^_/u                        no-unused-vars
+   46:6   warning  React Hook useEffect has a missing dependency: 'fetchConnectionsSettings'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  149:14  warning  'err' is defined but never used                                                                                              no-unused-vars
+  271:11  warning  'hasTelegram' is assigned a value but never used. Allowed unused vars must match /^_/u                                       no-unused-vars
+  290:14  warning  'err' is defined but never used                                                                                              no-unused-vars
+
+/home/silence/Development/Atlas/client/src/pages/settings/NamingTab.jsx
+   1:8   warning  'React' is defined but never used. Allowed unused vars must match /^_/u  no-unused-vars
+  31:27  warning  'idx' is defined but never used. Allowed unused args must match /^_/u    no-unused-vars
+
+/home/silence/Development/Atlas/client/src/pages/settings/ProfilesTab.jsx
+    6:186  warning  'handleSave' is defined but never used. Allowed unused args must match /^_/u  no-unused-vars
+  170:30   warning  'e' is defined but never used                                                 no-unused-vars
+
+/home/silence/Development/Atlas/client/src/pages/settings/ReleaseProfilesTab.jsx
+  66:9  warning  'indexerOptions' is assigned a value but never used. Allowed unused vars must match /^_/u  no-unused-vars
+
+/home/silence/Development/Atlas/client/src/pages/settings/SecurityTab.jsx
+  2:18  warning  'Key' is defined but never used. Allowed unused vars must match /^_/u      no-unused-vars
+  2:23  warning  'Loader2' is defined but never used. Allowed unused vars must match /^_/u  no-unused-vars
+  2:38  warning  'Eye' is defined but never used. Allowed unused vars must match /^_/u      no-unused-vars
+  2:43  warning  'EyeOff' is defined but never used. Allowed unused vars must match /^_/u   no-unused-vars
+
+/home/silence/Development/Atlas/client/src/pages/settings/SubtitlesTab.jsx
+  1:16  warning  'Plus' is defined but never used. Allowed unused vars must match /^_/u    no-unused-vars
+  1:22  warning  'Trash2' is defined but never used. Allowed unused vars must match /^_/u  no-unused-vars
+  1:30  warning  'Key' is defined but never used. Allowed unused vars must match /^_/u     no-unused-vars
+
+/home/silence/Development/Atlas/client/src/pages/settings/UsersTab.jsx
+   1:40  warning  'useCallback' is defined but never used. Allowed unused vars must match /^_/u  no-unused-vars
+  86:14  warning  'err' is defined but never used                                                no-unused-vars
+
+✖ 117 problems (2 errors, 115 warnings)
+

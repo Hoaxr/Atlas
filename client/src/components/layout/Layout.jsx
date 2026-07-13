@@ -118,9 +118,21 @@ export default function Layout() {
         setCachedMovies(null);
         setCachedShows(null);
       }
+      // Layout push from server — replaces 3s polling
+      if (data.type === 'LAYOUT_UPDATE' && data.data) {
+        setLibStats({ movies: data.data.movies, shows: data.data.shows });
+        setPendingRequests(data.data.pendingRequests || 0);
+      }
+      // Torrent push from server
+      if (data.type === 'TORRENTS_UPDATE' && data.data) {
+        setDownloads(data.data.torrents || []);
+        setClientStats(data.data.clientStats || { dl_info_speed: 0, up_info_speed: 0 });
+        setClientConnected(data.data.clientConnected);
+      }
     });
 
-    const fetchData = async () => {
+    // One-time initial fetch for data not covered by WebSocket push
+    const initialFetch = async () => {
       try {
         const [libRes, statsRes, torrentsRes, issuesRes, requestsRes] = await Promise.allSettled([
           api.get('/library/stats'),
@@ -149,31 +161,21 @@ export default function Layout() {
           setPendingRequests(requestsRes.value.data.data.count || 0);
         }
       } catch (err) {
-        console.error('Failed to fetch data', err);
+        console.error('Failed to fetch initial data', err);
       }
     };
-    fetchData();
+    initialFetch();
     prefetchLibrary();
 
-    const startPolling = () => {
-      const interval = setInterval(fetchData, 3000);
-      return interval;
-    };
-
-    let interval = startPolling();
-
+    // Pause/resume WS on visibility change (no more polling to clear)
     const onVisibility = () => {
-      if (document.hidden) {
-        clearInterval(interval);
-      } else {
-        fetchData();
-        interval = startPolling();
+      if (!document.hidden) {
+        initialFetch(); // Refresh on return
       }
     };
     document.addEventListener('visibilitychange', onVisibility);
 
     return () => {
-      clearInterval(interval);
       document.removeEventListener('visibilitychange', onVisibility);
       if (cleanupWebSocket) cleanupWebSocket();
     };

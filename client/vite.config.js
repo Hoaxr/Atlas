@@ -18,11 +18,19 @@ export default defineConfig({
   build: {
     rollupOptions: {
       output: {
-        manualChunks: {
-          vendor: ['react', 'react-dom', 'react-router-dom'],
-          axios: ['axios'],
-          icons: ['lucide-react'],
-        },
+        manualChunks(id) {
+          if (id.includes('node_modules')) {
+            if (id.includes('react') || id.includes('react-dom') || id.includes('react-router-dom')) {
+              return 'vendor';
+            }
+            if (id.includes('axios')) {
+              return 'axios';
+            }
+            if (id.includes('lucide-react')) {
+              return 'icons';
+            }
+          }
+        }
       },
     },
   },

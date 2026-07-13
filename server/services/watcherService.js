@@ -4,19 +4,36 @@ const notificationService = require('./notificationService');
 const eventBus = require('./eventBus');
 const { getSetting } = require('../utils/settings');
 
+// ── Poster cache — avoids DB lookup per session per poll ──
+const posterCache = new Map();
+const POSTER_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+const MAX_POSTER_CACHE = 500;
+
 // Look up a poster from our database by title — reliable fallback for all server types
 const resolvePoster = (title, type) => {
+  const key = `${type}:${title}`;
+  const cached = posterCache.get(key);
+  if (cached && Date.now() - cached.t < POSTER_CACHE_TTL) return cached.url;
+
+  let result = null;
   try {
     if (type === 'episode' || type === 'tv') {
       const showName = title.split(' - S')[0] || title;
       const show = db.prepare('SELECT tmdb_id FROM shows WHERE title = ? COLLATE NOCASE').get(showName);
-      if (show?.tmdb_id) return `/api/images/shows/${show.tmdb_id}/poster`;
+      if (show?.tmdb_id) result = `/api/images/shows/${show.tmdb_id}/poster`;
     } else if (type === 'movie') {
       const movie = db.prepare('SELECT tmdb_id FROM movies WHERE title = ? COLLATE NOCASE').get(title);
-      if (movie?.tmdb_id) return `/api/images/movies/${movie.tmdb_id}/poster`;
+      if (movie?.tmdb_id) result = `/api/images/movies/${movie.tmdb_id}/poster`;
     }
   } catch { /* ignore */ }
-  return null;
+
+  // LRU eviction
+  if (posterCache.size >= MAX_POSTER_CACHE) {
+    const oldest = posterCache.keys().next().value;
+    posterCache.delete(oldest);
+  }
+  posterCache.set(key, { url: result, t: Date.now() });
+  return result;
 };
 
 class WatcherService {

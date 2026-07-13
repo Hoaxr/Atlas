@@ -19,8 +19,8 @@ router.get('/status', (req, res, next) => {
 // Activity log / audit trail
 router.get('/logs', (req, res, next) => {
   try {
-    const limit = parseInt(req.query.limit) || 50;
-    const offset = parseInt(req.query.offset) || 0;
+    const limit = parseInt(req.query.limit, 10) || 50;
+    const offset = parseInt(req.query.offset, 10) || 0;
     const logs = db.prepare(
       'SELECT * FROM logs ORDER BY created_at DESC LIMIT ? OFFSET ?'
     ).all(limit, offset);

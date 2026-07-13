@@ -1,13 +1,19 @@
 const express = require('express');
 const router = express.Router();
 const fs = require('fs');
+const { deleteFolderRecursive } = require('../../utils/fileUtils');
+const { USER_AGENT } = require('../../utils/constants');
 const fsp = require('fs/promises');
 const path = require('path');
+const axios = require('axios');
 const db = require('../../config/database');
 const libraryService = require('../../services/libraryService');
 const indexerService = require('../../services/indexerService');
 const downloadClientService = require('../../services/downloadClientService');
 const eventBus = require('../../services/eventBus');
+const tmdbService = require('../../services/tmdbService');
+const subtitleService = require('../../services/subtitles');
+const { getMediaMetadata, parseAudioFromFileName } = require('../../utils/videoUtils');
 const { isWatchedSyncEnabled, getSubtitlesInDir, extractLang, translateSrt, LANG_CODE } = require('./helpers');
 
 router.post('/shows/:id/watched', (req, res, next) => {
@@ -88,7 +94,7 @@ router.post('/shows/:id/refresh', async (req, res, next) => {
                       lastE = allEps[allEps.length - 1];
                     }
                   }
-                  const { getMediaMetadata, parseAudioFromFileName } = require('../../utils/videoUtils');
+                  // Extracted getMediaMetadata, parseAudioFromFileName above
                   // Always detect resolution — file name first, ffprobe as fallback
                   let resolution = null;
                   const nameLower = item.name.toLowerCase();
@@ -127,18 +133,22 @@ router.post('/shows/:id/refresh', async (req, res, next) => {
                     }
                   }
                   
-                  for (let ep = firstE; ep <= lastE; ep++) {
-                    db.prepare(`
+                  const saveEpisodes = db.transaction((startEp, endEp) => {
+                    const insertStmt = db.prepare(`
                       INSERT OR IGNORE INTO episodes (show_id, season_number, episode_number, title, overview, status, air_date)
                       VALUES (?, ?, ?, ?, ?, 'monitored', NULL)
-                    `).run(show.id, s, ep, item.name, '');
-                    
-                    db.prepare(`
+                    `);
+                    const updateStmt = db.prepare(`
                       UPDATE episodes 
                       SET file_path = ?, file_size = ?, scene_name = ?, status = 'downloaded', resolution = ?, codec = ?, audio = ?
                       WHERE show_id = ? AND season_number = ? AND episode_number = ?
-                    `).run(fullPath, stats.size, resName, resolution, codec, audio, show.id, s, ep);
-                  }
+                    `);
+                    for (let ep = startEp; ep <= endEp; ep++) {
+                      insertStmt.run(show.id, s, ep, item.name, '');
+                      updateStmt.run(fullPath, stats.size, resName, resolution, codec, audio, show.id, s, ep);
+                    }
+                  });
+                  saveEpisodes(firstE, lastE);
                 }
               }
             }
@@ -193,34 +203,37 @@ router.post('/shows/:id/refresh', async (req, res, next) => {
           subFiles = items.filter(f => subExtensions.includes(path.extname(f).toLowerCase()));
         } catch { /* skip */ }
 
-        for (const ep of episodes) {
-          const baseName = path.basename(ep.file_path, path.extname(ep.file_path));
-          const s = ep.season_number;
-          const e = ep.episode_number;
-          const matchStr1 = `s${String(s).padStart(2, '0')}e${String(e).padStart(2, '0')}`;
-          const matchStr2 = `${s}x${String(e).padStart(2, '0')}`;
+          const updateSubs = db.transaction((episodeList) => {
+            const stmt = db.prepare('UPDATE episodes SET subtitles = ? WHERE id = ?');
+            for (const ep of episodeList) {
+              const baseName = path.basename(ep.file_path, path.extname(ep.file_path));
+              const s = ep.season_number;
+              const e = ep.episode_number;
+              const matchStr1 = `s${String(s).padStart(2, '0')}e${String(e).padStart(2, '0')}`;
+              const matchStr2 = `${s}x${String(e).padStart(2, '0')}`;
 
-          const matchingSubs = subFiles.filter(f =>
-            f.startsWith(baseName) || f.toLowerCase().includes(matchStr1) || f.toLowerCase().includes(matchStr2)
-          );
+              const matchingSubs = subFiles.filter(f =>
+                f.startsWith(baseName) || f.toLowerCase().includes(matchStr1) || f.toLowerCase().includes(matchStr2)
+              );
 
-          const langs = [...new Set(
-            matchingSubs.map(f => {
-              const name = path.basename(f, path.extname(f));
-              const m = name.match(/[._-]([a-z]{2,3})(?:\.[a-z0-9]+)?$/i);
-              return m ? m[1].toLowerCase() : null;
-            }).filter(Boolean)
-          )];
+              const langs = [...new Set(
+                matchingSubs.map(f => {
+                  const name = path.basename(f, path.extname(f));
+                  const m = name.match(/[._-]([a-z]{2,3})(?:\.[a-z0-9]+)?$/i);
+                  return m ? m[1].toLowerCase() : null;
+                }).filter(Boolean)
+              )];
 
-          db.prepare('UPDATE episodes SET subtitles = ? WHERE id = ?').run(JSON.stringify(langs), ep.id);
-        }
+              stmt.run(JSON.stringify(langs), ep.id);
+            }
+          });
+          updateSubs(episodes);
       }
     }
 
     // Fire TMDB re-sync in background to avoid blocking the response
     (async () => {
       try {
-        const tmdbService = require('../../services/tmdbService');
         const data = await tmdbService.getShowById(show.tmdb_id);
         if (data) {
           db.prepare('UPDATE shows SET rating = ?, poster_path = ?, overview = ?, tmdb_status = ? WHERE id = ?')
@@ -250,15 +263,19 @@ router.post('/shows/:id/refresh', async (req, res, next) => {
           const allDbEpisodes = db.prepare(
             'SELECT id, season_number, episode_number, status FROM episodes WHERE show_id = ?'
           ).all(show.id);
-          const deleteStale = db.prepare('DELETE FROM episodes WHERE id = ?');
-          let removedCount = 0;
-          for (const ep of allDbEpisodes) {
-            const key = `${ep.season_number}|${ep.episode_number}`;
-            if (!tmdbEpisodeKeys.has(key) && ep.status !== 'downloaded') {
-              deleteStale.run(ep.id);
-              removedCount++;
+          const runStaleDeletion = db.transaction(() => {
+            const deleteStale = db.prepare('DELETE FROM episodes WHERE id = ?');
+            let removedCount = 0;
+            for (const ep of allDbEpisodes) {
+              const key = `${ep.season_number}|${ep.episode_number}`;
+              if (!tmdbEpisodeKeys.has(key) && ep.status !== 'downloaded') {
+                deleteStale.run(ep.id);
+                removedCount++;
+              }
             }
-          }
+            return removedCount;
+          });
+          const removedCount = runStaleDeletion();
           if (removedCount > 0) {
             console.log(`[ShowRefresh] Removed ${removedCount} stale episode(s) from "${show.title}"`);
           }
@@ -368,7 +385,6 @@ router.post('/episodes/:id/translate-subs', async (req, res, next) => {
 
 router.post('/episodes/:id/download-subs', async (req, res, next) => {
   try {
-    const { downloadSubtitlesForEpisode } = require('../../services/subtitleService');
     const { langCode, url, fileId, provider } = req.body;
 
     if (!langCode) return res.status(400).json({ status: 'error', message: 'langCode is required' });
@@ -385,7 +401,6 @@ router.post('/episodes/:id/download-subs', async (req, res, next) => {
 
     // If a direct URL is provided, download from there (used by SubDL unpack files)
     if (url) {
-      const axios = require('axios');
       const srtRes = await axios.get(url, { responseType: 'text' });
       await fsp.writeFile(subPath, srtRes.data);
       return res.json({ status: 'success', message: `Downloaded "${langCode}" subtitle` });
@@ -395,7 +410,6 @@ router.post('/episodes/:id/download-subs', async (req, res, next) => {
     if (fileId && provider === 'OpenSubtitles') {
       const osApiKeyRow = db.prepare("SELECT value FROM settings WHERE key = 'osApiKey'").get();
       if (osApiKeyRow?.value) {
-        const axios = require('axios');
         const downloadRes = await axios.post('https://api.opensubtitles.com/api/v1/download',
           { file_id: fileId },
           { headers: { 'Api-Key': osApiKeyRow.value, 'Content-Type': 'application/json', 'Accept': 'application/json', 'User-Agent': 'Atlas/1.0' } }
@@ -409,7 +423,7 @@ router.post('/episodes/:id/download-subs', async (req, res, next) => {
     const show = db.prepare('SELECT * FROM shows WHERE id = ?').get(episode.show_id);
     if (!show) return res.status(404).json({ status: 'error', message: 'Show not found' });
 
-    const result = await downloadSubtitlesForEpisode(episode, show, langCode);
+    const result = await subtitleService.downloadSubtitlesForEpisode(episode, show, langCode);
     if (result.alreadyExists) {
       return res.json({ status: 'success', message: `Subtitle already exists for "${langCode}"` });
     }
@@ -422,7 +436,6 @@ router.post('/episodes/:id/download-subs', async (req, res, next) => {
 
 router.get('/episodes/:id/search-subs', async (req, res, next) => {
   try {
-    const { searchSubtitlesForEpisode } = require('../../services/subtitleService');
     const { lang } = req.query;
     if (!lang) return res.status(400).json({ status: 'error', message: 'lang query param is required' });
 
@@ -432,7 +445,7 @@ router.get('/episodes/:id/search-subs', async (req, res, next) => {
     const show = db.prepare('SELECT * FROM shows WHERE id = ?').get(episode.show_id);
     if (!show) return res.status(404).json({ status: 'error', message: 'Show not found' });
 
-    const results = await searchSubtitlesForEpisode(episode, show, lang);
+    const results = await subtitleService.searchSubtitlesForEpisode(episode, show, lang);
     res.json({ status: 'success', data: results });
   } catch (err) {
     next(err);
@@ -495,6 +508,9 @@ router.post('/shows/:id/auto-search', async (req, res, next) => {
 router.post('/shows/:id/download', async (req, res, next) => {
   try {
     const { torrentUrl } = req.body;
+    if (!torrentUrl || typeof torrentUrl !== 'string' || !/^https?:\/\//.test(torrentUrl)) {
+      return res.status(400).json({ status: 'error', message: 'Valid torrent URL (http/https) is required' });
+    }
     
     await downloadClientService.addTorrent(torrentUrl, 'tv');
     db.prepare("UPDATE shows SET status = 'downloading' WHERE id = ?").run(req.params.id);
@@ -694,14 +710,6 @@ router.delete('/shows/:id', async (req, res, next) => {
 
     if (deleteFiles && show.folder_path) {
       try {
-        const deleteFolderRecursive = async (folderPath) => {
-          const entries = await fsp.readdir(folderPath, { withFileTypes: true });
-          await Promise.all(entries.map(entry => {
-            const full = path.join(folderPath, entry.name);
-            return entry.isDirectory() ? deleteFolderRecursive(full) : fsp.unlink(full).catch(() => {});
-          }));
-          await fsp.rmdir(folderPath).catch(() => {});
-        };
         await deleteFolderRecursive(show.folder_path);
       } catch {
         console.warn('[shows] Could not delete files for show:', show.title);
@@ -825,6 +833,20 @@ router.post('/episodes/:id/grab', async (req, res, next) => {
     eventBus.info('Manual grab started', { title: title || 'Unknown', type: 'episode' });
     res.json({ status: 'success', message: 'Download started' });
   } catch (err) { next(err); }
+});
+
+// Lightweight sibling navigation — avoids fetching entire library
+router.get('/shows/:id/siblings', (req, res, next) => {
+  try {
+    const ids = db.prepare('SELECT id FROM shows ORDER BY title ASC').all().map(r => r.id);
+    const idx = ids.indexOf(Number(req.params.id));
+    res.json({
+      status: 'success',
+      data: { prevId: ids[idx - 1] || null, nextId: ids[idx + 1] || null }
+    });
+  } catch (err) {
+    next(err);
+  }
 });
 
 

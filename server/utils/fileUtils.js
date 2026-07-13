@@ -1,4 +1,5 @@
 const path = require('path');
+const fsp = require('fs/promises');
 
 /**
  * Unified set of recognised video file extensions.
@@ -29,4 +30,18 @@ const isVideoFile = (filename) =>
 const isSubtitleFile = (filename) =>
   SUBTITLE_EXTENSIONS.has(path.extname(filename).toLowerCase());
 
-module.exports = { VIDEO_EXTENSIONS, SUBTITLE_EXTENSIONS, isVideoFile, isSubtitleFile };
+/**
+ * Recursively deletes a folder and all its contents.
+ * Used by movie/show delete and bulk delete endpoints.
+ * @param {string} folderPath — absolute path to delete
+ */
+const deleteFolderRecursive = async (folderPath) => {
+  const entries = await fsp.readdir(folderPath, { withFileTypes: true });
+  await Promise.all(entries.map(entry => {
+    const full = path.join(folderPath, entry.name);
+    return entry.isDirectory() ? deleteFolderRecursive(full) : fsp.unlink(full).catch(() => {});
+  }));
+  await fsp.rmdir(folderPath).catch(() => {});
+};
+
+module.exports = { VIDEO_EXTENSIONS, SUBTITLE_EXTENSIONS, isVideoFile, isSubtitleFile, deleteFolderRecursive };

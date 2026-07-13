@@ -3,17 +3,23 @@ const router = express.Router();
 const fs = require('fs');
 const fsp = require('fs/promises');
 const path = require('path');
+const axios = require('axios');
 const db = require('../../config/database');
 const libraryService = require('../../services/libraryService');
 const indexerService = require('../../services/indexerService');
 const downloadClientService = require('../../services/downloadClientService');
 const eventBus = require('../../services/eventBus');
+const tmdbService = require('../../services/tmdbService');
+const subtitleService = require('../../services/subtitles');
+const { getMediaMetadata, parseAudioFromFileName } = require('../../utils/videoUtils');
 const { isWatchedSyncEnabled, getSubtitlesInDir, extractLang, translateSrt, LANG_CODE } = require('./helpers');
+const { USER_AGENT } = require('../../utils/constants');
 
 // In-memory cache for network mount directory scans — movies are on a CIFS/SMB
 // mount with actimeo=1, so every fresh request hits the NAS. Cache avoids that.
 const dirCache = new Map();
 const DIR_CACHE_TTL = 60_000; // 60 seconds
+const MAX_DIR_CACHE = 200; // LRU eviction limit
 
 const scanDirectory = async (dirPath) => {
   const cached = dirCache.get(dirPath);
@@ -34,6 +40,11 @@ const scanDirectory = async (dirPath) => {
       ]);
       if (stats.isFile()) result.push({ name: item, size: stats.size });
     } catch { /* skip unstatable files */ }
+  }
+  // LRU eviction
+  if (dirCache.size >= MAX_DIR_CACHE) {
+    const oldest = dirCache.keys().next().value;
+    dirCache.delete(oldest);
   }
   dirCache.set(dirPath, { data: result, timestamp: Date.now() });
   return result;
@@ -233,7 +244,6 @@ router.post('/:id/refresh', async (req, res, next) => {
     }
 
     if (bestFile) {
-      const { getMediaMetadata, parseAudioFromFileName } = require('../../utils/videoUtils');
       // Preserve existing scene_name unless it's empty/missing/auto-generated
       let resName = movie.scene_name;
       
@@ -280,7 +290,6 @@ router.post('/:id/refresh', async (req, res, next) => {
     // If scanPaths is empty (no library configured), leave status untouched
 
     try {
-      const tmdbService = require('../../services/tmdbService');
       const data = await tmdbService.getMovieById(movie.tmdb_id);
       if (data) {
         let releaseDate = await tmdbService.getMovieReleaseDates(movie.tmdb_id);
@@ -449,8 +458,6 @@ router.post('/:id/translate-subs', async (req, res, next) => {
 
 router.post('/:id/download-subs', async (req, res, next) => {
   try {
-    const { downloadSubtitlesForMovie } = require('../../services/subtitleService');
-    const axios = require('axios');
     const { langCode, url, fileId } = req.body;
 
     if (!langCode) return res.status(400).json({ status: 'error', message: 'langCode is required' });
@@ -488,7 +495,7 @@ router.post('/:id/download-subs', async (req, res, next) => {
       return res.json({ status: 'success', message: `Downloaded "${langCode}" subtitle from URL` });
     }
 
-    const result = await downloadSubtitlesForMovie(movie, langCode);
+    const result = await subtitleService.downloadSubtitlesForMovie(movie, langCode);
     if (result.alreadyExists) {
       return res.json({ status: 'success', message: `Subtitle already exists for "${langCode}"` });
     }
@@ -540,15 +547,7 @@ router.delete('/:id', async (req, res, next) => {
       try {
         const dir = movie.file_path ? path.dirname(movie.file_path) : movie.folder_path;
         if (dir) {
-          const deleteFolderRecursive = async (folderPath) => {
-            const entries = await fsp.readdir(folderPath, { withFileTypes: true });
-            await Promise.all(entries.map(entry => {
-              const full = path.join(folderPath, entry.name);
-              return entry.isDirectory() ? deleteFolderRecursive(full) : fsp.unlink(full).catch(() => {});
-            }));
-            await fsp.rmdir(folderPath).catch(() => {});
-          };
-          await deleteFolderRecursive(dir);
+          await fsp.rm(dir, { recursive: true, force: true });
         }
       } catch (e) {
         console.warn('[movies] Could not delete folder:', e?.message);
@@ -565,14 +564,13 @@ router.delete('/:id', async (req, res, next) => {
 
 router.get('/:id/search-subs', async (req, res, next) => {
   try {
-    const { searchSubtitlesForMovie } = require('../../services/subtitleService');
     const { lang } = req.query;
     if (!lang) return res.status(400).json({ status: 'error', message: 'lang query param is required' });
 
     const movie = db.prepare('SELECT * FROM movies WHERE id = ?').get(req.params.id);
     if (!movie) return res.status(404).json({ status: 'error', message: 'Movie not found' });
 
-    const results = await searchSubtitlesForMovie(movie, lang);
+    const results = await subtitleService.searchSubtitlesForMovie(movie, lang);
     res.json({ status: 'success', data: results });
   } catch (err) {
     next(err);
@@ -614,10 +612,13 @@ router.post('/:id/collections', (req, res, next) => {
     if (!Array.isArray(collectionIds)) {
       return res.status(400).json({ status: 'error', message: 'collectionIds must be an array' });
     }
-    // Replace all assignments
-    db.prepare('DELETE FROM movie_collections WHERE movie_id = ?').run(req.params.id);
-    const stmt = db.prepare('INSERT OR IGNORE INTO movie_collections (movie_id, collection_id) VALUES (?, ?)');
-    for (const cid of collectionIds) stmt.run(req.params.id, cid);
+    // Replace all assignments within a transaction
+    const updateCollections = db.transaction((movieId, cIds) => {
+      db.prepare('DELETE FROM movie_collections WHERE movie_id = ?').run(movieId);
+      const stmt = db.prepare('INSERT OR IGNORE INTO movie_collections (movie_id, collection_id) VALUES (?, ?)');
+      for (const cid of cIds) stmt.run(movieId, cid);
+    });
+    updateCollections(req.params.id, collectionIds);
     res.json({ status: 'success', message: 'Collections updated' });
   } catch (err) { next(err); }
 });
@@ -735,6 +736,20 @@ router.post('/:id/set-path', async (req, res, next) => {
         message: 'Folder set but no video file found inside. It will be monitored.',
       });
     }
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Lightweight sibling navigation — avoids fetching entire library
+router.get('/:id/siblings', (req, res, next) => {
+  try {
+    const ids = db.prepare('SELECT id FROM movies ORDER BY title ASC').all().map(r => r.id);
+    const idx = ids.indexOf(Number(req.params.id));
+    res.json({
+      status: 'success',
+      data: { prevId: ids[idx - 1] || null, nextId: ids[idx + 1] || null }
+    });
   } catch (err) {
     next(err);
   }

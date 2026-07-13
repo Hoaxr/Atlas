@@ -21,6 +21,7 @@ const requestsRoutes = require('./routes/requests');
 const watcherRoutes = require('./routes/watcher');
 const watcherService = require('./services/watcherService');
 const { stopAll: stopAllCronJobs } = require('./utils/cronRegistry');
+const { LAYOUT_PUSH_INTERVAL, TORRENTS_PUSH_INTERVAL } = require('./utils/constants');
 
 const errorHandler = require('./middleware/errorHandler');
 const eventBus = require('./services/eventBus');
@@ -29,7 +30,7 @@ const presenceTracker = require('./services/presenceTracker');
 // Services
 const automationService = require('./services/automationService');
 const mediaManagementService = require('./services/mediaManagementService');
-const subtitleService = require('./services/subtitleService');
+const subtitleService = require('./services/subtitles');
 const aiTranslationWorker = require('./services/aiTranslationWorker');
 const notificationService = require('./services/notificationService');
 const imageService = require('./services/imageService');
@@ -93,6 +94,79 @@ mediaManagementService.init();
 subtitleService.init();
 aiTranslationWorker.init();
 // Notification and Media Server services auto-init in constructor
+
+// ── Layout push broadcast — replaces client-side 3s polling ──
+// Sends stats, torrents, issues, and pending request count to all
+// authenticated clients every 3 seconds via WebSocket.
+const broadcastLayoutUpdate = () => {
+  if (wss.clients.size === 0) return;
+  try {
+    const db = require('./config/database');
+    const downloadClientService = require('./services/downloadClientService');
+
+    // Lightweight stats (just counts, no heavy aggregation)
+    const moviesCount = db.prepare('SELECT COUNT(*) as c FROM movies').get().c;
+    const showsCount  = db.prepare('SELECT COUNT(*) as c FROM shows').get().c;
+    const pendingCount = db.prepare("SELECT COUNT(*) as c FROM requests WHERE status = 'pending'").get().c;
+
+    const payload = {
+      type: 'LAYOUT_UPDATE',
+      data: {
+        movies: moviesCount,
+        shows: showsCount,
+        pendingRequests: pendingCount,
+        // torrents + client stats + issues are async — only include if we have fresh data
+      }
+    };
+
+    const msg = JSON.stringify(payload);
+    wss.clients.forEach((ws) => {
+      if (ws.readyState === 1 && ws._userId) {
+        try { ws.send(msg); } catch { /* ignore */ }
+      }
+    });
+  } catch { /* ignore */ }
+};
+
+// Broadcast torrent data + download stats (heavier — separate interval at 5s)
+let _cachedTorrents = [];
+let _cachedClientStats = { dl_info_speed: 0, up_info_speed: 0 };
+let _clientConnected = false;
+
+const broadcastTorrentsUpdate = async () => {
+  if (wss.clients.size === 0) return;
+  try {
+    const downloadClientService = require('./services/downloadClientService');
+    const [torrents, stats] = await Promise.allSettled([
+      downloadClientService.getTorrents().catch(() => []),
+      downloadClientService.getTransferInfo().catch(() => null)
+    ]);
+    
+    _cachedTorrents = torrents.status === 'fulfilled' ? torrents.value : [];
+    _cachedClientStats = (stats.status === 'fulfilled' && stats.value) ? stats.value : _cachedClientStats;
+    _clientConnected = stats.status === 'fulfilled' && stats.value !== null;
+
+    const payload = {
+      type: 'TORRENTS_UPDATE',
+      data: {
+        torrents: _cachedTorrents,
+        clientStats: _cachedClientStats,
+        clientConnected: _clientConnected,
+      }
+    };
+
+    const msg = JSON.stringify(payload);
+    wss.clients.forEach((ws) => {
+      if (ws.readyState === 1 && ws._userId) {
+        try { ws.send(msg); } catch { /* ignore */ }
+      }
+    });
+  } catch { /* ignore */ }
+};
+
+setInterval(broadcastLayoutUpdate, LAYOUT_PUSH_INTERVAL);
+setInterval(broadcastTorrentsUpdate, TORRENTS_PUSH_INTERVAL);
+setTimeout(broadcastTorrentsUpdate, 1000);
 
 app.use(compression());
 app.use(helmet({

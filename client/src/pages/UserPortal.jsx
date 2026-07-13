@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Search, Loader2, Plus, Clock, CheckCircle2, XCircle, LogOut, Key, Star, X, Film, Tv, Info, CalendarClock, Hourglass } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import api from '../lib/api';
@@ -23,6 +23,7 @@ export default function UserPortal() {
   const [trendingMovies, setTrendingMovies] = useState([]);
   const [trendingShows, setTrendingShows] = useState([]);
   const navigate = useNavigate();
+  const searchTimerRef = useRef(null);
 
   const userStr = localStorage.getItem('atlas_user');
   const user = userStr ? JSON.parse(userStr) : null;
@@ -75,20 +76,23 @@ export default function UserPortal() {
       return;
     }
 
-    const performSearch = async () => {
+    // Debounce search by 500ms
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+    searchTimerRef.current = setTimeout(async () => {
       setSearching(true);
       try {
         const res = await api.get(`/tmdb/search/multi?query=${encodeURIComponent(query)}`);
-        // Filter out people, only keep movies/tv
         setResults(res.data?.data?.filter(item => item.media_type === 'movie' || item.media_type === 'tv') || []);
       } catch (err) {
         customAlert('Search failed');
       } finally {
         setSearching(false);
       }
-    };
+    }, 500);
 
-    performSearch();
+    return () => {
+      if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+    };
   }, [query]);
 
   const handleSearch = (e) => {

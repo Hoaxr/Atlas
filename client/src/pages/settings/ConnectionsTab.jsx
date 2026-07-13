@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Network, Server, BellRing, Save, CheckSquare, Square, Link, Loader2, Key } from 'lucide-react';
 import api from '../../lib/api';
 import { customAlert, customConfirm } from '../../utils/alerts';
@@ -37,9 +37,11 @@ export default function ConnectionsTab({
     polling: false
   });
   const POLL_INTERVAL = 2000; // 2 seconds
+  const mountedRef = useRef(true);
 
   useEffect(() => {
     fetchConnectionsSettings();
+    return () => { mountedRef.current = false; };
   }, []);
 
   const fetchConnectionsSettings = async () => {
@@ -127,8 +129,10 @@ export default function ConnectionsTab({
   };
 
   const pollPlexPin = async (pinId) => {
+    if (!mountedRef.current) return;
     try {
       const res = await api.get(`/settings/plex/pin/${pinId}`);
+      if (!mountedRef.current) return;
       if (res.data.data?.expired) {
         setPlexOAuth({ loading: false, pinId: null, code: null, authUrl: null, polling: false });
         customAlert('Plex authentication expired. Please try again.');

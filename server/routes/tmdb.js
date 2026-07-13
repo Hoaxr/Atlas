@@ -143,22 +143,38 @@ router.get('/test', async (req, res) => {
 });
 
 // Person details + filmography (cross-referenced with local library)
+// ── Cached lookup maps — avoids full table scans on every person request ──
+let _personLookupCache = null;
+let _personLookupTimestamp = 0;
+const PERSON_CACHE_TTL = 5 * 60 * 1000;
+
+const getLookupMaps = () => {
+  if (_personLookupCache && Date.now() - _personLookupTimestamp < PERSON_CACHE_TTL) {
+    return _personLookupCache;
+  }
+  const movies = db.prepare('SELECT id, tmdb_id FROM movies').all();
+  const shows  = db.prepare('SELECT id, tmdb_id FROM shows').all();
+  _personLookupCache = {
+    movieMap: new Map(movies.map(m => [m.tmdb_id, m.id])),
+    showMap:  new Map(shows.map(s => [s.tmdb_id, s.id])),
+  };
+  _personLookupTimestamp = Date.now();
+  return _personLookupCache;
+};
+
 router.get('/person/:id', async (req, res, next) => {
   try {
     const person = await tmdbService.getPersonById(req.params.id);
     if (!person) return res.status(404).json({ status: 'error', message: 'Person not found' });
 
-    // Cross-reference credits with local library
-    const localMovies = db.prepare('SELECT id, tmdb_id FROM movies').all();
-    const localShows  = db.prepare('SELECT id, tmdb_id FROM shows').all();
-    const localMovieMap = new Map(localMovies.map(m => [m.tmdb_id, m.id]));
-    const localShowMap  = new Map(localShows.map(s => [s.tmdb_id, s.id]));
+    // Cross-reference credits with local library (cached)
+    const { movieMap, showMap } = getLookupMaps();
 
     const credits = person.combined_credits || {};
     const enrichCredit = (credit) => {
       const libraryId = credit.media_type === 'movie'
-        ? localMovieMap.get(credit.id)
-        : localShowMap.get(credit.id);
+        ? movieMap.get(credit.id)
+        : showMap.get(credit.id);
       return {
         ...credit,
         inLibrary: libraryId !== undefined,

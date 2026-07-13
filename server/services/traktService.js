@@ -1,6 +1,7 @@
 const axios = require('axios');
 const db = require('../config/database');
 const tmdbService = require('./tmdbService');
+const eventBus = require('./eventBus');
 
 const getTraktClientId = () => {
   const row = db.prepare('SELECT value FROM settings WHERE key = ?').get('traktClientId');
@@ -157,7 +158,7 @@ const refreshTokenIfExpired = async () => {
       console.log('[TraktSync] Token refreshed successfully');
     } catch (err) {
       console.error('[TraktSync] Token refresh failed:', err.response?.data || err.message);
-      const eventBus = require('./eventBus');
+      // hoisted eventBus
       eventBus.error('Trakt token refresh failed. Please reconnect your account in Settings.', { module: 'TraktSync' });
     }
   }
@@ -169,21 +170,31 @@ const syncWatchedMovies = async () => {
     let totalPages = 1;
     let count = 0;
 
+    const processWatchedMovies = db.transaction((moviesList) => {
+      let localCount = 0;
+      const insertWatched = db.prepare('INSERT OR REPLACE INTO watched_tmdb (tmdb_id, type) VALUES (?, ?)');
+      const getMovie = db.prepare('SELECT id FROM movies WHERE tmdb_id = ?');
+      const updateWatched = db.prepare('UPDATE movies SET watched = 1 WHERE id = ?');
+
+      for (const item of moviesList) {
+        const tmdbId = item.movie.ids.tmdb;
+        if (!tmdbId) continue;
+        insertWatched.run(tmdbId, 'movie');
+        const movie = getMovie.get(tmdbId);
+        if (movie) {
+          updateWatched.run(movie.id);
+          localCount++;
+        }
+      }
+      return localCount;
+    });
+
     while (page <= totalPages) {
       const response = await traktApi.get('/sync/watched/movies', { params: { page } });
       totalPages = parseInt(response.headers['x-pagination-page-count']) || 1;
       const watchedMovies = response.data;
 
-      for (const item of watchedMovies) {
-        const tmdbId = item.movie.ids.tmdb;
-        if (!tmdbId) continue;
-        db.prepare('INSERT OR REPLACE INTO watched_tmdb (tmdb_id, type) VALUES (?, ?)').run(tmdbId, 'movie');
-        const movie = db.prepare('SELECT id FROM movies WHERE tmdb_id = ?').get(tmdbId);
-        if (movie) {
-          db.prepare('UPDATE movies SET watched = 1 WHERE id = ?').run(movie.id);
-          count++;
-        }
-      }
+      count += processWatchedMovies(watchedMovies);
       page++;
     }
 
@@ -192,7 +203,7 @@ const syncWatchedMovies = async () => {
   } catch (error) {
     if (error.response?.status === 401) {
       console.log('[TraktSync] Cannot sync watched movies — OAuth token required. Add a Trakt access token in Settings.');
-      const eventBus = require('./eventBus');
+      // hoisted eventBus
       eventBus.error('Trakt authentication expired or invalid. Please reconnect in Settings.', { module: 'TraktSync' });
       return 0;
     }
@@ -207,21 +218,31 @@ const syncWatchedShows = async () => {
     let totalPages = 1;
     let count = 0;
 
+    const processWatchedShows = db.transaction((showsList) => {
+      let localCount = 0;
+      const insertWatched = db.prepare('INSERT OR REPLACE INTO watched_tmdb (tmdb_id, type) VALUES (?, ?)');
+      const getShow = db.prepare('SELECT id FROM shows WHERE tmdb_id = ?');
+      const updateWatched = db.prepare('UPDATE shows SET watched = 1 WHERE id = ?');
+
+      for (const item of showsList) {
+        const tmdbId = item.show.ids.tmdb;
+        if (!tmdbId) continue;
+        insertWatched.run(tmdbId, 'show');
+        const show = getShow.get(tmdbId);
+        if (show) {
+          updateWatched.run(show.id);
+          localCount++;
+        }
+      }
+      return localCount;
+    });
+
     while (page <= totalPages) {
       const response = await traktApi.get('/sync/watched/shows', { params: { page } });
       totalPages = parseInt(response.headers['x-pagination-page-count']) || 1;
       const watchedShows = response.data;
 
-      for (const item of watchedShows) {
-        const tmdbId = item.show.ids.tmdb;
-        if (!tmdbId) continue;
-        db.prepare('INSERT OR REPLACE INTO watched_tmdb (tmdb_id, type) VALUES (?, ?)').run(tmdbId, 'show');
-        const show = db.prepare('SELECT id FROM shows WHERE tmdb_id = ?').get(tmdbId);
-        if (show) {
-          db.prepare('UPDATE shows SET watched = 1 WHERE id = ?').run(show.id);
-          count++;
-        }
-      }
+      count += processWatchedShows(watchedShows);
       page++;
     }
 
@@ -230,7 +251,7 @@ const syncWatchedShows = async () => {
   } catch (error) {
     if (error.response?.status === 401) {
       console.log('[TraktSync] Cannot sync watched shows — OAuth token required. Add a Trakt access token in Settings.');
-      const eventBus = require('./eventBus');
+      // hoisted eventBus
       eventBus.error('Trakt authentication expired or invalid. Please reconnect in Settings.', { module: 'TraktSync' });
       return 0;
     }

@@ -23,6 +23,7 @@ const browserGlobals = {
   FormData: 'readonly',
   FileReader: 'readonly',
   Blob: 'readonly',
+  CustomEvent: 'readonly',
   requestAnimationFrame: 'readonly',
   cancelAnimationFrame: 'readonly',
   performance: 'readonly',

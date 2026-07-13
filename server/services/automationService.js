@@ -68,7 +68,7 @@ const runSearchCycle = async () => {
           if (currentQuality === profile.cutoff) return;
           
           let qualities = [];
-          try { qualities = JSON.parse(profile.qualities); } catch { /* ignore */ }
+          try { qualities = JSON.parse(profile.qualities); } catch { qualities = []; }
           
           const currentIdx = qualities.indexOf(currentQuality);
           const cutoffIdx = qualities.indexOf(profile.cutoff);
@@ -120,7 +120,7 @@ const runSearchCycle = async () => {
           if (currentQuality === profile.cutoff) return;
           
           let qualities = [];
-          try { qualities = JSON.parse(profile.qualities); } catch { /* ignore */ }
+          try { qualities = JSON.parse(profile.qualities); } catch { qualities = []; }
           
           const currentIdx = qualities.indexOf(currentQuality);
           const cutoffIdx = qualities.indexOf(profile.cutoff);
@@ -209,17 +209,27 @@ const runUpdateAirDates = async () => {
     WHERE show_id = ? AND season_number = ? AND episode_number = ?
   `);
   
+  const updateEpSync = db.transaction((updates) => {
+    for (const u of updates) {
+      updateEp.run(u.air_date, u.show_id, u.season_number, u.episode_number);
+    }
+  });
+
   for (const show of shows) {
     try {
       const seasons = await tmdbService.getShowSeasons(show.tmdb_id);
+      const updates = [];
       for (const season of seasons) {
         if (season.season_number === 0) continue;
         const eps = await tmdbService.getSeasonEpisodes(show.tmdb_id, season.season_number);
         for (const ep of eps) {
           if (ep.air_date) {
-            updateEp.run(ep.air_date, show.id, ep.season_number, ep.episode_number);
+            updates.push({ air_date: ep.air_date, show_id: show.id, season_number: ep.season_number, episode_number: ep.episode_number });
           }
         }
+      }
+      if (updates.length > 0) {
+        updateEpSync(updates);
       }
     } catch (err) {
       console.error(`[Automation] Failed to update air dates for show ${show.tmdb_id}: ${err.message}`);
@@ -255,6 +265,7 @@ const runMissingFilesCheck = async () => {
   // Check Movies
   const movies = db.prepare("SELECT id, title, folder_path FROM movies WHERE status != 'unmonitored'").all();
   let moviesRemoved = 0;
+  const moviesToDelete = [];
   for (const movie of movies) {
     if (!movie.folder_path) continue;
     
@@ -264,14 +275,22 @@ const runMissingFilesCheck = async () => {
 
     if (!fs.existsSync(movie.folder_path)) {
       console.log(`[Automation] Movie folder missing, removing from DB: ${movie.title}`);
-      db.prepare('DELETE FROM movies WHERE id = ?').run(movie.id);
+      moviesToDelete.push(movie.id);
       moviesRemoved++;
     }
+  }
+  
+  if (moviesToDelete.length > 0) {
+    db.transaction((ids) => {
+      const delStmt = db.prepare('DELETE FROM movies WHERE id = ?');
+      for (const id of ids) delStmt.run(id);
+    })(moviesToDelete);
   }
 
   // Check Shows
   const shows = db.prepare("SELECT id, title, folder_path FROM shows WHERE status != 'unmonitored'").all();
   let showsRemoved = 0;
+  const showsToDelete = [];
   for (const show of shows) {
     if (!show.folder_path) continue;
     
@@ -281,10 +300,20 @@ const runMissingFilesCheck = async () => {
 
     if (!fs.existsSync(show.folder_path)) {
       console.log(`[Automation] Show folder missing, removing from DB: ${show.title}`);
-      db.prepare('DELETE FROM episodes WHERE show_id = ?').run(show.id);
-      db.prepare('DELETE FROM shows WHERE id = ?').run(show.id);
+      showsToDelete.push(show.id);
       showsRemoved++;
     }
+  }
+  
+  if (showsToDelete.length > 0) {
+    db.transaction((ids) => {
+      const delEpStmt = db.prepare('DELETE FROM episodes WHERE show_id = ?');
+      const delShowStmt = db.prepare('DELETE FROM shows WHERE id = ?');
+      for (const id of ids) {
+        delEpStmt.run(id);
+        delShowStmt.run(id);
+      }
+    })(showsToDelete);
   }
 
   if (moviesRemoved > 0 || showsRemoved > 0) {

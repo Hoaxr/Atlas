@@ -4,59 +4,78 @@ const path = require('path');
 const fsp = require('fs/promises');
 const db = require('../../config/database');
 const libraryService = require('../../services/libraryService');
-const scannerService = require('../../services/scannerService');
+const scannerService = require('../../services/scanner');
 const downloadClientService = require('../../services/downloadClientService');
 const tmdbService = require('../../services/tmdbService');
 const concurrency = require('../../utils/concurrency');
+const { deleteFolderRecursive } = require('../../utils/fileUtils');
+
+// ── Stats cache — avoids 20+ DB queries on every dashboard load ──
+let _statsCache = null;
+let _statsCacheTimestamp = 0;
+const STATS_CACHE_TTL = 60_000; // 60 seconds
+
+// Called by scan/import/delete handlers to invalidate
+const invalidateStatsCache = () => { _statsCache = null; _statsCacheTimestamp = 0; };
 
 router.get('/stats', (req, res, next) => {
   try {
-    const moviesCount = db.prepare('SELECT count(*) as count FROM movies').get().count;
-    const showsCount  = db.prepare('SELECT count(*) as count FROM shows').get().count;
-    const episodesCount = db.prepare('SELECT COUNT(*) as count FROM episodes').get().count;
+    // Serve from cache when available
+    if (_statsCache && Date.now() - _statsCacheTimestamp < STATS_CACHE_TTL) {
+      return res.json({ status: 'success', data: _statsCache });
+    }
 
-    // Status breakdowns
+    // ── Consolidated query 1: movie aggregates (count, statuses, size, downloaded) ──
+    const movieAgg = db.prepare(`
+      SELECT
+        COUNT(*) as total,
+        COALESCE(SUM(COALESCE(file_size, 0)), 0) as totalSize,
+        COUNT(CASE WHEN status = 'downloaded' THEN 1 END) as downloaded,
+        COUNT(CASE WHEN file_path IS NOT NULL THEN 1 END) as withFiles,
+        COUNT(CASE WHEN file_path IS NOT NULL AND subtitles IS NOT NULL AND subtitles != '[]' THEN 1 END) as withSubs
+      FROM movies
+    `).get();
+
+    // ── Consolidated query 2: show aggregates ──
+    const showAgg = db.prepare(`
+      SELECT
+        COUNT(*) as total,
+        COALESCE(SUM(COALESCE(folder_size, 0)), 0) as totalSize,
+        COUNT(CASE WHEN status = 'downloaded' THEN 1 END) as downloaded
+      FROM shows
+    `).get();
+
+    // ── Query 3: episode aggregates ──
+    const epAgg = db.prepare(`
+      SELECT
+        COUNT(*) as total,
+        COALESCE(SUM(COALESCE(file_size, 0)), 0) as totalSize,
+        COUNT(CASE WHEN file_path IS NOT NULL AND (subtitles IS NULL OR subtitles = '[]') THEN 1 END) as missingSubs
+      FROM episodes
+    `).get();
+
+    // ── Query 4: movie status breakdown ──
     const movieStatuses = db.prepare('SELECT status, COUNT(*) as count FROM movies GROUP BY status').all();
     const showStatuses  = db.prepare('SELECT status, COUNT(*) as count FROM shows GROUP BY status').all();
 
-    // Storage
-    const movieSize   = db.prepare("SELECT COALESCE(SUM(COALESCE(file_size, 0)), 0) as total FROM movies").get().total;
-    const showSize    = db.prepare("SELECT COALESCE(SUM(COALESCE(folder_size, 0)), 0) as total FROM shows").get().total;
-    const episodeSize = db.prepare("SELECT COALESCE(SUM(COALESCE(file_size, 0)), 0) as total FROM episodes").get().total;
-    const totalFileSize = movieSize + showSize + episodeSize;
-
-    // Downloaded counts
-    const downloadedMovies = db.prepare("SELECT COUNT(*) as count FROM movies WHERE status = 'downloaded'").get().count;
-    const downloadedShows  = db.prepare("SELECT COUNT(*) as count FROM shows WHERE status = 'downloaded'").get().count;
-
-    // Average rating
-    const avgRow = db.prepare(
-      "SELECT ROUND(AVG(rating), 1) as avg FROM (SELECT rating FROM movies WHERE rating > 0 UNION ALL SELECT rating FROM shows WHERE rating > 0)"
-    ).get();
-    const averageRating = avgRow?.avg ?? null;
-
-    // Rating distribution buckets — individual scores 1 through 10
-    const ratingBuckets = db.prepare(`
+    // ── Query 5: rating stats (avg + buckets) ──
+    const ratingStats = db.prepare(`
       SELECT
-        SUM(CASE WHEN CAST(rating AS INTEGER) = 1  THEN 1 ELSE 0 END) as "1",
-        SUM(CASE WHEN CAST(rating AS INTEGER) = 2  THEN 1 ELSE 0 END) as "2",
-        SUM(CASE WHEN CAST(rating AS INTEGER) = 3  THEN 1 ELSE 0 END) as "3",
-        SUM(CASE WHEN CAST(rating AS INTEGER) = 4  THEN 1 ELSE 0 END) as "4",
-        SUM(CASE WHEN CAST(rating AS INTEGER) = 5  THEN 1 ELSE 0 END) as "5",
-        SUM(CASE WHEN CAST(rating AS INTEGER) = 6  THEN 1 ELSE 0 END) as "6",
-        SUM(CASE WHEN CAST(rating AS INTEGER) = 7  THEN 1 ELSE 0 END) as "7",
-        SUM(CASE WHEN CAST(rating AS INTEGER) = 8  THEN 1 ELSE 0 END) as "8",
-        SUM(CASE WHEN CAST(rating AS INTEGER) = 9  THEN 1 ELSE 0 END) as "9",
-        SUM(CASE WHEN CAST(rating AS INTEGER) >= 10 THEN 1 ELSE 0 END) as "10"
-      FROM (SELECT rating FROM movies UNION ALL SELECT rating FROM shows)
+        ROUND(AVG(rating), 1) as avg,
+        SUM(CASE WHEN CAST(rating AS INTEGER) = 1  THEN 1 ELSE 0 END) as "r1",
+        SUM(CASE WHEN CAST(rating AS INTEGER) = 2  THEN 1 ELSE 0 END) as "r2",
+        SUM(CASE WHEN CAST(rating AS INTEGER) = 3  THEN 1 ELSE 0 END) as "r3",
+        SUM(CASE WHEN CAST(rating AS INTEGER) = 4  THEN 1 ELSE 0 END) as "r4",
+        SUM(CASE WHEN CAST(rating AS INTEGER) = 5  THEN 1 ELSE 0 END) as "r5",
+        SUM(CASE WHEN CAST(rating AS INTEGER) = 6  THEN 1 ELSE 0 END) as "r6",
+        SUM(CASE WHEN CAST(rating AS INTEGER) = 7  THEN 1 ELSE 0 END) as "r7",
+        SUM(CASE WHEN CAST(rating AS INTEGER) = 8  THEN 1 ELSE 0 END) as "r8",
+        SUM(CASE WHEN CAST(rating AS INTEGER) = 9  THEN 1 ELSE 0 END) as "r9",
+        SUM(CASE WHEN CAST(rating AS INTEGER) >= 10 THEN 1 ELSE 0 END) as "r10"
+      FROM (SELECT rating FROM movies WHERE rating > 0 UNION ALL SELECT rating FROM shows WHERE rating > 0)
     `).get();
 
-    // Average downloaded movie size
-    const avgSizeRow = db.prepare(
-      "SELECT COALESCE(ROUND(AVG(COALESCE(file_size, 0))), 0) as avg FROM movies WHERE status = 'downloaded'"
-    ).get();
-
-    // Recent items (6 most recently added across movies + shows)
+    // ── Query 6: recent items, genres, years, subtitle stats ──
     const recentMovies = db.prepare(
       "SELECT id, tmdb_id, title, year, added_at, status, 'movie' as mediaType FROM movies ORDER BY added_at DESC LIMIT 6"
     ).all();
@@ -67,7 +86,6 @@ router.get('/stats', (req, res, next) => {
       .sort((a, b) => new Date(b.added_at) - new Date(a.added_at))
       .slice(0, 6);
 
-    // Top genres (parse comma-separated genres server-side)
     const genreRows = db.prepare(
       "SELECT genres FROM movies WHERE genres IS NOT NULL AND genres != '' UNION ALL SELECT genres FROM shows WHERE genres IS NOT NULL AND genres != ''"
     ).all();
@@ -80,25 +98,10 @@ router.get('/stats', (req, res, next) => {
     }
     const topGenres = Object.entries(genreCount).sort((a, b) => b[1] - a[1]).slice(0, 10);
 
-    // Year distribution
     const yearRows = db.prepare(
       "SELECT year, COUNT(*) as count FROM (SELECT year FROM movies WHERE year IS NOT NULL UNION ALL SELECT year FROM shows WHERE year IS NOT NULL) GROUP BY year ORDER BY year ASC"
     ).all();
     const yearData = yearRows.map(r => [String(r.year), r.count]);
-
-    // Format statuses as plain objects
-    const movieStatusObj = {};
-    for (const s of movieStatuses) movieStatusObj[s.status] = s.count;
-    const showStatusObj = {};
-    for (const s of showStatuses) showStatusObj[s.status] = s.count;
-
-    const totalDownloaded = downloadedMovies + downloadedShows;
-    const totalItems = moviesCount + showsCount;
-
-    // ── Subtitle stats ──
-    const moviesWithFiles = db.prepare("SELECT COUNT(*) as count FROM movies WHERE file_path IS NOT NULL").get().count;
-    const moviesWSubs = db.prepare("SELECT COUNT(*) as count FROM movies WHERE file_path IS NOT NULL AND subtitles IS NOT NULL AND subtitles != '[]'").get().count;
-    const moviesMissingSubs = moviesWithFiles - moviesWSubs;
 
     // Shows with episodes missing subtitles
     const showsMissingSubs = db.prepare(`
@@ -107,12 +110,7 @@ router.get('/stats', (req, res, next) => {
       WHERE e.file_path IS NOT NULL AND (e.subtitles IS NULL OR e.subtitles = '[]')
     `).get().count;
 
-    const episodesMissingSubs = db.prepare(`
-      SELECT COUNT(*) as count FROM episodes
-      WHERE file_path IS NOT NULL AND (subtitles IS NULL OR subtitles = '[]')
-    `).get().count;
-    
-    // Aggregate all subtitle languages across movies
+    // Subtitle languages
     const subLangRows = db.prepare("SELECT subtitles FROM movies WHERE file_path IS NOT NULL AND subtitles IS NOT NULL AND subtitles != '[]'").all();
     const subLangCount = {};
     for (const row of subLangRows) {
@@ -121,46 +119,57 @@ router.get('/stats', (req, res, next) => {
         for (const lang of langs) {
           if (lang) subLangCount[lang] = (subLangCount[lang] || 0) + 1;
         }
-      } catch { /* ignore parse errors */ }
+      } catch { /* ignore */ }
     }
     const topSubLanguages = Object.entries(subLangCount)
       .sort((a, b) => b[1] - a[1])
       .slice(0, 10)
       .map(([lang, count]) => ({ lang, count }));
 
-    res.json({
-      status: 'success',
-      data: {
-        // Backward-compat fields (used by Layout sidebar)
-        movies: moviesCount,
-        shows: showsCount,
-        // Extended stats
-        totalMovies: moviesCount,
-        totalShows: showsCount,
-        totalEpisodes: episodesCount,
-        movieStatuses: movieStatusObj,
-        showStatuses: showStatusObj,
-        totalFileSize,
-        downloadedMovies,
-        downloadedShows,
-        totalDownloaded,
-        totalItems,
-        downloadPct: totalItems > 0 ? Math.round((totalDownloaded / totalItems) * 100) : 0,
-        averageRating: averageRating !== null ? String(averageRating) : 'N/A',
-        topGenres,
-        yearData,
-        ratingBuckets,
-        recentItems,
-        avgMovieSize: avgSizeRow?.avg ?? 0,
-        // Subtitle stats
-        moviesWithFiles,
-        moviesWithSubtitles: moviesWSubs,
-        moviesMissingSubtitles: moviesMissingSubs,
-        showsMissingSubtitles: showsMissingSubs,
-        episodesMissingSubtitles: episodesMissingSubs,
-        topSubLanguages,
-      }
-    });
+    // Build status objects
+    const movieStatusObj = {};
+    for (const s of movieStatuses) movieStatusObj[s.status] = s.count;
+    const showStatusObj = {};
+    for (const s of showStatuses) showStatusObj[s.status] = s.count;
+
+    const moviesCount = movieAgg.total;
+    const showsCount = showAgg.total;
+    const totalFileSize = movieAgg.totalSize + showAgg.totalSize + epAgg.totalSize;
+    const totalDownloaded = movieAgg.downloaded + showAgg.downloaded;
+    const totalItems = moviesCount + showsCount;
+
+    const data = {
+      movies: moviesCount,
+      shows: showsCount,
+      totalMovies: moviesCount,
+      totalShows: showsCount,
+      totalEpisodes: epAgg.total,
+      movieStatuses: movieStatusObj,
+      showStatuses: showStatusObj,
+      totalFileSize,
+      downloadedMovies: movieAgg.downloaded,
+      downloadedShows: showAgg.downloaded,
+      totalDownloaded,
+      totalItems,
+      downloadPct: totalItems > 0 ? Math.round((totalDownloaded / totalItems) * 100) : 0,
+      averageRating: ratingStats.avg !== null ? String(ratingStats.avg) : 'N/A',
+      topGenres,
+      yearData,
+      ratingBuckets: { 1: ratingStats.r1, 2: ratingStats.r2, 3: ratingStats.r3, 4: ratingStats.r4, 5: ratingStats.r5, 6: ratingStats.r6, 7: ratingStats.r7, 8: ratingStats.r8, 9: ratingStats.r9, 10: ratingStats.r10 },
+      recentItems,
+      avgMovieSize: db.prepare("SELECT COALESCE(ROUND(AVG(COALESCE(file_size, 0))), 0) as avg FROM movies WHERE status = 'downloaded'").get().avg,
+      moviesWithFiles: movieAgg.withFiles,
+      moviesWithSubtitles: movieAgg.withSubs,
+      moviesMissingSubtitles: movieAgg.withFiles - movieAgg.withSubs,
+      showsMissingSubtitles: showsMissingSubs,
+      episodesMissingSubtitles: epAgg.missingSubs,
+      topSubLanguages,
+    };
+
+    _statsCache = data;
+    _statsCacheTimestamp = Date.now();
+
+    res.json({ status: 'success', data });
   } catch (error) {
     next(error);
   }
@@ -175,23 +184,16 @@ router.get('/missing-subs', (req, res, next) => {
       ORDER BY title ASC
     `).all();
 
-    // Shows with files but no subtitles (episodes without subs)
-    const shows = db.prepare(`
-      SELECT DISTINCT s.id, s.tmdb_id, s.title, s.folder_path, s.added_at
+    // Shows with episodes missing subtitles — consolidated with COUNT in one query
+    const showsWithCounts = db.prepare(`
+      SELECT s.id, s.tmdb_id, s.title, s.folder_path, s.added_at,
+        COUNT(e.id) as missing_episode_count
       FROM shows s
       JOIN episodes e ON e.show_id = s.id
       WHERE e.file_path IS NOT NULL AND (e.subtitles IS NULL OR e.subtitles = '[]')
+      GROUP BY s.id
       ORDER BY s.title ASC
     `).all();
-
-    // Also get the episode counts for each show
-    const showsWithCounts = shows.map(show => {
-      const missingCount = db.prepare(`
-        SELECT COUNT(*) as count FROM episodes 
-        WHERE show_id = ? AND file_path IS NOT NULL AND (subtitles IS NULL OR subtitles = '[]')
-      `).get(show.id).count;
-      return { ...show, missing_episode_count: missingCount };
-    });
 
     res.json({ status: 'success', data: { movies, shows: showsWithCounts } });
   } catch (error) {
@@ -266,6 +268,7 @@ router.post('/scan', async (req, res, next) => {
       return res.status(400).json({ status: 'error', message: `Invalid scan mode. Must be one of: ${validModes.join(', ')}` });
     }
     const result = await scannerService.scanLibrary(mode);
+    invalidateStatsCache();
     res.json(result);
   } catch (error) {
     next(error);
@@ -404,14 +407,6 @@ router.post('/bulk/delete', async (req, res, next) => {
 
     if (deleteFiles) {
       const items = db.prepare(`SELECT * FROM ${table} WHERE id IN (${placeholders})`).all(...ids);
-      const deleteFolderRecursive = async (folderPath) => {
-        const entries = await fsp.readdir(folderPath, { withFileTypes: true });
-        await Promise.all(entries.map(entry => {
-          const full = path.join(folderPath, entry.name);
-          return entry.isDirectory() ? deleteFolderRecursive(full) : fsp.unlink(full).catch(() => {});
-        }));
-        await fsp.rmdir(folderPath).catch(() => {});
-      };
 
       for (const item of items) {
         try {
@@ -429,6 +424,7 @@ router.post('/bulk/delete', async (req, res, next) => {
     if (type === 'shows') {
       db.prepare(`DELETE FROM episodes WHERE show_id IN (${placeholders})`).run(...ids);
     }
+    invalidateStatsCache();
 
     res.json({ status: 'success', message: `Deleted ${ids.length} item(s)` });
   } catch (err) {
@@ -441,39 +437,36 @@ router.get('/duplicates', (req, res, next) => {
   try {
     const duplicates = { movies: [], shows: [] };
 
-    // Find duplicate movies by TMDB ID
-    const movieDupes = db.prepare(`
-      SELECT tmdb_id, COUNT(*) as count, GROUP_CONCAT(id) as ids, GROUP_CONCAT(title) as titles
-      FROM movies WHERE tmdb_id IS NOT NULL
-      GROUP BY tmdb_id HAVING COUNT(*) > 1
+    // Consolidated: join duplicate TMDB IDs with full row data in one query
+    const movieRows = db.prepare(`
+      SELECT m.*, d.cnt as dup_count
+      FROM movies m
+      JOIN (SELECT tmdb_id, COUNT(*) as cnt FROM movies WHERE tmdb_id IS NOT NULL GROUP BY tmdb_id HAVING COUNT(*) > 1) d
+        ON m.tmdb_id = d.tmdb_id
+      ORDER BY m.tmdb_id, m.id
     `).all();
 
-    for (const dupe of movieDupes) {
-      const idList = dupe.ids.split(',').map(Number);
-      const titleList = dupe.titles.split(',');
-      const items = idList.map((id, i) => {
-        const m = db.prepare('SELECT * FROM movies WHERE id = ?').get(id);
-        return { ...m, displayTitle: titleList[i] };
-      });
-      duplicates.movies.push({ tmdb_id: dupe.tmdb_id, count: dupe.count, items });
+    const movieGroups = {};
+    for (const row of movieRows) {
+      if (!movieGroups[row.tmdb_id]) movieGroups[row.tmdb_id] = { tmdb_id: row.tmdb_id, count: row.dup_count, items: [] };
+      movieGroups[row.tmdb_id].items.push({ ...row, displayTitle: row.title });
     }
+    duplicates.movies = Object.values(movieGroups);
 
-    // Find duplicate shows by TMDB ID
-    const showDupes = db.prepare(`
-      SELECT tmdb_id, COUNT(*) as count, GROUP_CONCAT(id) as ids, GROUP_CONCAT(title) as titles
-      FROM shows WHERE tmdb_id IS NOT NULL
-      GROUP BY tmdb_id HAVING COUNT(*) > 1
+    const showRows = db.prepare(`
+      SELECT s.*, d.cnt as dup_count
+      FROM shows s
+      JOIN (SELECT tmdb_id, COUNT(*) as cnt FROM shows WHERE tmdb_id IS NOT NULL GROUP BY tmdb_id HAVING COUNT(*) > 1) d
+        ON s.tmdb_id = d.tmdb_id
+      ORDER BY s.tmdb_id, s.id
     `).all();
 
-    for (const dupe of showDupes) {
-      const idList = dupe.ids.split(',').map(Number);
-      const titleList = dupe.titles.split(',');
-      const items = idList.map((id, i) => {
-        const s = db.prepare('SELECT * FROM shows WHERE id = ?').get(id);
-        return { ...s, displayTitle: titleList[i] };
-      });
-      duplicates.shows.push({ tmdb_id: dupe.tmdb_id, count: dupe.count, items });
+    const showGroups = {};
+    for (const row of showRows) {
+      if (!showGroups[row.tmdb_id]) showGroups[row.tmdb_id] = { tmdb_id: row.tmdb_id, count: row.dup_count, items: [] };
+      showGroups[row.tmdb_id].items.push({ ...row, displayTitle: row.title });
     }
+    duplicates.shows = Object.values(showGroups);
 
     res.json({ status: 'success', data: duplicates });
   } catch (err) {
@@ -987,5 +980,7 @@ router.post('/cleanup-junk', async (req, res, next) => {
     next(err);
   }
 });
+
+router.invalidateStatsCache = invalidateStatsCache;
 
 module.exports = router;
