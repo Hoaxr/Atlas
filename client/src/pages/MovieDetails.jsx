@@ -24,6 +24,7 @@ import { ProviderLabel } from '../utils/providerColors';
 import FolderBrowserModal from '../components/FolderBrowserModal';
 import SubtitleLanguageBadge from '../components/shared/SubtitleLanguageBadge';
 import MediaDetailsModal from '../components/MediaDetailsModal';
+import CustomSelect from '../components/shared/CustomSelect';
 
 export default function MovieDetails() {
   const { id } = useParams();
@@ -632,18 +633,19 @@ export default function MovieDetails() {
                         <span className="text-xs text-slate-400">Updating...</span>
                       </div>
                     ) : (
-                      <div className="relative">
-                        <select
-                          className="bg-slate-900/50 border border-white/5 rounded-lg text-xs text-slate-400 pl-3 pr-8 py-2 focus:border-cyan-500/50 focus:outline-none cursor-pointer w-full shadow-[inset_0_1px_3px_rgba(0,0,0,0.4)] hover:bg-slate-800/50 hover:text-slate-200 transition-colors appearance-none"
+                      <div>
+                        <CustomSelect
+                          theme="cyan"
                           value={movie.quality_profile_id || ''}
                           onChange={(e) => handleQualityChange(e.target.value ? parseInt(e.target.value) : null)}
-                        >
-                          <option value="" className="bg-slate-800 text-slate-300">Unassigned</option>
-                          {profiles.filter(p => !p.media_type || p.media_type === 'both' || p.media_type === 'movies').map(p => (
-                            <option key={p.id} value={p.id} className="bg-slate-800 text-slate-300">{p.name}</option>
-                          ))}
-                        </select>
-                        <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500 pointer-events-none" />
+                          options={[
+                            { label: 'Unassigned', value: '' },
+                            ...profiles.filter(p => !p.media_type || p.media_type === 'both' || p.media_type === 'movies').map(p => ({
+                              label: p.name,
+                              value: p.id
+                            }))
+                          ]}
+                        />
                       </div>
                     )}
                   </div>
