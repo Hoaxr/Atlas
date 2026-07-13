@@ -557,11 +557,11 @@ router.post('/shows/:id/seasons/:season/download', async (req, res, next) => {
 
 router.post('/shows', async (req, res, next) => {
   try {
-    const { tmdbId, qualityProfileId, autoSearch, rootFolderPath } = req.body;
+    const { tmdbId, qualityProfileId, autoSearch, rootFolderPath, monitorLevel } = req.body;
     if (!tmdbId) {
       return res.status(400).json({ status: 'error', message: 'tmdbId is required' });
     }
-    const result = await libraryService.addShow(tmdbId, rootFolderPath);
+    const result = await libraryService.addShow(tmdbId, rootFolderPath, monitorLevel || 'all');
     if (qualityProfileId) {
       db.prepare('UPDATE shows SET quality_profile_id = ? WHERE id = ?').run(qualityProfileId, result.id);
     }

@@ -156,7 +156,7 @@ const getMovies = (limit = 0, offset = 0, sort = 'added_desc', filters = {}) => 
   return sanitizeWatched(db.prepare(sql).all(...params));
 };
 
-const addShow = async (tmdbId, rootFolderPath = null) => {
+const addShow = async (tmdbId, rootFolderPath = null, monitorLevel = 'all') => {
   const existing = db.prepare('SELECT id FROM shows WHERE tmdb_id = ?').get(tmdbId);
   if (existing) {
     throw new Error('Show already in library');
@@ -199,12 +199,29 @@ const addShow = async (tmdbId, rootFolderPath = null) => {
       const seasons = await tmdbService.getShowSeasons(tmdbId);
       const insertEpSync = db.transaction((eps) => {
         const insertEp = db.prepare(`
-          INSERT INTO episodes (show_id, season_number, episode_number, title, overview, status, air_date)
-          VALUES (?, ?, ?, ?, ?, 'monitored', ?)
+          INSERT INTO episodes (show_id, season_number, episode_number, title, overview, status, air_date, monitored)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
           ON CONFLICT(show_id, season_number, episode_number) DO NOTHING
         `);
+        
+        const latestSeasonNumber = eps.length > 0 ? Math.max(...eps.map(e => e.season_number)) : 0;
+
         for (const ep of eps) {
-          insertEp.run(internalShowId, ep.season_number, ep.episode_number, ep.name, ep.overview, ep.air_date);
+          let isMonitored = 1;
+          if (monitorLevel === 'none') {
+            isMonitored = 0;
+          } else if (monitorLevel === 'first') {
+            isMonitored = ep.season_number === 1 ? 1 : 0;
+          } else if (monitorLevel === 'latest') {
+            isMonitored = ep.season_number === latestSeasonNumber ? 1 : 0;
+          } else if (monitorLevel === 'future') {
+            const isFuture = !ep.air_date || new Date(ep.air_date) > new Date();
+            isMonitored = isFuture ? 1 : 0;
+          }
+
+          const initialStatus = isMonitored ? 'monitored' : 'missing';
+
+          insertEp.run(internalShowId, ep.season_number, ep.episode_number, ep.name, ep.overview, initialStatus, ep.air_date, isMonitored);
         }
       });
       

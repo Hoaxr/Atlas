@@ -61,8 +61,8 @@ const processScannedFiles = async (allFiles, scanProgress, mode, nextStage) => {
             try {
               const seasons = await tmdbService.getShowSeasons(tmdbId);
               const insertEp = db.prepare(`
-                INSERT INTO episodes (show_id, season_number, episode_number, title, overview, status, air_date)
-                VALUES (?, ?, ?, ?, ?, 'monitored', ?)
+                INSERT INTO episodes (show_id, season_number, episode_number, title, overview, status, air_date, monitored)
+                VALUES (?, ?, ?, ?, ?, 'missing', ?, 0)
                 ON CONFLICT(show_id, season_number, episode_number) DO NOTHING
               `);
               
@@ -157,8 +157,8 @@ const processScannedFiles = async (allFiles, scanProgress, mode, nextStage) => {
                 try {
                   const seasons = await tmdbService.getShowSeasons(tmdbId);
                   const insertEp = db.prepare(`
-                    INSERT INTO episodes (show_id, season_number, episode_number, title, overview, status, air_date)
-                    VALUES (?, ?, ?, ?, ?, 'monitored', ?)
+                    INSERT INTO episodes (show_id, season_number, episode_number, title, overview, status, air_date, monitored)
+                    VALUES (?, ?, ?, ?, ?, 'missing', ?, 0)
                     ON CONFLICT(show_id, season_number, episode_number) DO NOTHING
                   `);
                   
@@ -226,8 +226,8 @@ const processScannedFiles = async (allFiles, scanProgress, mode, nextStage) => {
           const lastEp = episodeEnd || episodeNumber;
           for (let ep = episodeNumber; ep <= lastEp; ep++) {
             db.prepare(`
-              INSERT OR IGNORE INTO episodes (show_id, season_number, episode_number, title, overview, status, air_date)
-              VALUES (?, ?, ?, ?, ?, 'monitored', NULL)
+              INSERT OR IGNORE INTO episodes (show_id, season_number, episode_number, title, overview, status, air_date, monitored)
+              VALUES (?, ?, ?, ?, ?, 'missing', NULL, 0)
             `).run(showId, seasonNumber, ep, file.name, '');
 
             db.prepare(`

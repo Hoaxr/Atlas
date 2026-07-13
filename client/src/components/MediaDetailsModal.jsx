@@ -25,6 +25,7 @@ export default function MediaDetailsModal({ isOpen, onClose, mediaId, mediaType,
   const [deleting, setDeleting] = useState(false);
   const deleteBtnRef = useRef(null);
   const [dropdownPos, setDropdownPos] = useState({ top: 0, left: 0 });
+  const [monitorLevel, setMonitorLevel] = useState('all');
 
   const fetchSettings = async () => {
     try {
@@ -276,9 +277,23 @@ export default function MediaDetailsModal({ isOpen, onClose, mediaId, mediaType,
 
                     {/* Monitor */}
                     <div className="text-right font-bold text-slate-300 text-sm">Monitor</div>
-                    <select className="w-full bg-slate-800/70 border border-white/5 rounded-md text-slate-200 px-3 py-1.5 focus:outline-none focus:border-cyan-500 text-sm shadow-[inset_0_1px_3px_rgba(0,0,0,0.4)]">
-                      <option>{mediaType === 'movie' ? 'Movie Only' : 'All Episodes'}</option>
-                    </select>
+                    {mediaType === 'show' ? (
+                      <select 
+                        className="w-full bg-slate-800/70 border border-white/5 rounded-md text-slate-200 px-3 py-1.5 focus:outline-none focus:border-cyan-500 text-sm shadow-[inset_0_1px_3px_rgba(0,0,0,0.4)]"
+                        value={monitorLevel}
+                        onChange={(e) => setMonitorLevel(e.target.value)}
+                      >
+                        <option value="all">All Episodes</option>
+                        <option value="future">Future Episodes Only</option>
+                        <option value="latest">Latest Season Only</option>
+                        <option value="first">First Season Only</option>
+                        <option value="none">None</option>
+                      </select>
+                    ) : (
+                      <select className="w-full bg-slate-800/70 border border-white/5 rounded-md text-slate-200 px-3 py-1.5 focus:outline-none focus:border-cyan-500 text-sm shadow-[inset_0_1px_3px_rgba(0,0,0,0.4)]" disabled>
+                        <option>Movie Only</option>
+                      </select>
+                    )}
 
                     {/* Minimum Availability */}
                     <div className="text-right font-bold text-slate-300 text-sm">Minimum Availability</div>
@@ -290,15 +305,18 @@ export default function MediaDetailsModal({ isOpen, onClose, mediaId, mediaType,
 
                     {/* Quality Profile */}
                     <div className="text-right font-bold text-slate-300 text-sm">Quality Profile</div>
-                    <select 
-                      className="w-full bg-slate-800 border border-slate-600 rounded-md text-slate-200 px-3 py-1.5 focus:outline-none focus:border-cyan-500 text-sm" 
-                      value={selectedProfile} 
-                      onChange={e => setSelectedProfile(e.target.value)}
-                    >
-                      {profiles.filter(p => !p.media_type || p.media_type === 'both' || p.media_type === (mediaType === 'movie' ? 'movies' : 'shows')).map(p => (
-                        <option key={p.id} value={String(p.id)}>{p.name}</option>
-                      ))}
-                    </select>
+                    <div>
+                      <select 
+                        className="w-full bg-slate-800/70 border border-white/5 rounded-md text-slate-200 px-3 py-1.5 focus:outline-none focus:border-cyan-500 text-sm shadow-[inset_0_1px_3px_rgba(0,0,0,0.4)]"
+                        value={selectedProfile} 
+                        onChange={(e) => setSelectedProfile(e.target.value)}
+                      >
+                        {profiles.filter(p => !p.media_type || p.media_type === 'both' || p.media_type === (mediaType === 'movie' ? 'movies' : 'shows')).map((p) => (
+                          <option key={p.id} value={p.id}>{p.name}</option>
+                        ))}
+                      </select>
+                    </div>
+
 
                     {/* Tags */}
                     <div className="text-right font-bold text-slate-300 text-sm">Tags</div>
@@ -391,7 +409,8 @@ export default function MediaDetailsModal({ isOpen, onClose, mediaId, mediaType,
                         tmdbId: details.id, 
                         qualityProfileId: parseInt(selectedProfile) || null,
                         rootFolderPath: selectedPath,
-                        autoSearch 
+                        autoSearch,
+                        monitorLevel: mediaType === 'show' ? monitorLevel : undefined
                       };
                       const res = await api.post(endpoint, payload);
                       if (onAdded) onAdded(details.id, details);

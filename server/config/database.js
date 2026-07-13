@@ -9,6 +9,20 @@ if (!fs.existsSync(dbDir)) {
 
 const db = new DatabaseSync(path.join(dbDir, 'database.sqlite'));
 
+db.transaction = function (fn) {
+  return function (...args) {
+    db.exec('BEGIN TRANSACTION;');
+    try {
+      const result = fn.apply(this, args);
+      db.exec('COMMIT;');
+      return result;
+    } catch (err) {
+      db.exec('ROLLBACK;');
+      throw err;
+    }
+  };
+};
+
 db.exec('PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;');
 
 db.exec(`
