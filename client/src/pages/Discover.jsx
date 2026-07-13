@@ -61,6 +61,14 @@ export default function Discover() {
     }
   }, [mode]);
 
+  // If the sticky bar unmounts (e.g. because the page height shrunk after clearing the discovery rows)
+  // the user loses focus. Automatically restore it to the main search input.
+  useEffect(() => {
+    if (!stickySearchVisible && query) {
+      searchInputRef.current?.focus();
+    }
+  }, [stickySearchVisible]);
+
   // Close rows menu on outside click — handled by useOutsideClick hook above
 
   useEffect(() => {
@@ -452,8 +460,15 @@ export default function Discover() {
         </div>
       )}
 
-      {!isDiscovering && results.length > 0 && (
-        <div className="mt-8">
+      {!isDiscovering && (loading || isTyping) && (
+        <div className="mt-16 flex flex-col items-center justify-center text-slate-500 min-h-[50vh]">
+          <div className="w-8 h-8 border-2 border-cyan-500/50 border-t-cyan-400 rounded-full animate-spin mb-4" />
+          <p className="text-sm font-medium">Searching...</p>
+        </div>
+      )}
+
+      {!isDiscovering && results.length > 0 && !(loading || isTyping) && (
+        <div className="mt-8 min-h-[50vh]">
            <h2 className="text-xl font-bold text-slate-200 flex items-center space-x-2 mb-6">
              <span className="bg-gradient-to-r from-cyan-400 to-blue-500 text-transparent bg-clip-text">
                Search Results
@@ -466,7 +481,7 @@ export default function Discover() {
       )}
 
       {!isDiscovering && results.length === 0 && !loading && !isTyping && !error && (
-        <div className="mt-16 flex flex-col items-center justify-center text-slate-500">
+        <div className="mt-16 flex flex-col items-center justify-center text-slate-500 min-h-[50vh]">
            <SearchIcon className="w-16 h-16 mb-4 text-slate-600/50" />
            <p className="text-xl font-medium text-slate-400">No results found for "{query}"</p>
            <p className="text-sm mt-2 text-slate-500">Try adjusting your search terms</p>

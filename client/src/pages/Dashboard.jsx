@@ -139,6 +139,14 @@ export default function Dashboard() {
     }
   }, [viewMode]);
 
+  // If the sticky bar unmounts (e.g. because the page height shrunk after filtering)
+  // the user loses focus. Automatically restore it to the main search input.
+  useEffect(() => {
+    if (!stickySearchVisible && searchQuery) {
+      searchInputRef.current?.focus();
+    }
+  }, [stickySearchVisible]);
+
   const triggerReorderFlash = () => {
     setIsReordering(true);
     if (reorderTimerRef.current) clearTimeout(reorderTimerRef.current);
@@ -671,7 +679,7 @@ export default function Dashboard() {
 
       {/* Main Content Area */}
       
-      <div className="glass-panel rounded-2xl">
+      <div className="glass-panel rounded-2xl min-h-[100vh]">
         {/* Filter Bar Header */}
         <div className={`border-b ${viewMode === 'movies' ? 'border-cyan-500/30' : 'border-purple-500/30'} bg-slate-900/50 rounded-t-2xl`}>
           
