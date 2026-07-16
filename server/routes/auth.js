@@ -124,7 +124,7 @@ router.post('/trakt/device-token', async (req, res) => {
     const { access_token, refresh_token, created_at, expires_in } = response.data;
     setSetting('traktAccessToken', access_token);
     if (refresh_token) setSetting('traktRefreshToken', refresh_token);
-    setSetting('traktTokenExpiresAt', String(created_at + expires_in));
+    setSetting('traktTokenExpiresAt', String(Number(created_at) + Number(expires_in)));
     res.json({ status: 'success', message: 'Trakt account linked successfully!' });
   } catch (err) {
     const status = err.response?.status;
@@ -201,7 +201,7 @@ router.post('/trakt/refresh', async (req, res) => {
     const { access_token, refresh_token, created_at, expires_in } = response.data;
     setSetting('traktAccessToken', access_token);
     if (refresh_token) setSetting('traktRefreshToken', refresh_token);
-    setSetting('traktTokenExpiresAt', String(created_at + expires_in));
+    setSetting('traktTokenExpiresAt', String(Number(created_at) + Number(expires_in)));
     res.json({ status: 'success', message: 'Token refreshed successfully' });
   } catch (err) {
     console.error('[Trakt] Token refresh failed:', err.response?.data || err.message);

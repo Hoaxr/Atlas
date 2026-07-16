@@ -28,6 +28,12 @@ const traktRequest = async (config) => {
   if (!clientId) {
     throw new Error('Trakt Client ID is not configured. Please set it in Settings.');
   }
+
+  // Refresh token automatically if expired
+  if (!config.noAuth) {
+    await refreshTokenIfExpired();
+  }
+
   config.headers = config.headers || {};
   config.headers['Content-Type'] = 'application/json';
   config.headers['trakt-api-version'] = '2';
@@ -154,7 +160,7 @@ const refreshTokenIfExpired = async () => {
       const { access_token, refresh_token, created_at, expires_in } = response.data;
       db.prepare("UPDATE settings SET value = ? WHERE key = 'traktAccessToken'").run(access_token);
       if (refresh_token) db.prepare("UPDATE settings SET value = ? WHERE key = 'traktRefreshToken'").run(refresh_token);
-      db.prepare("UPDATE settings SET value = ? WHERE key = 'traktTokenExpiresAt'").run(String(created_at + expires_in));
+      db.prepare("UPDATE settings SET value = ? WHERE key = 'traktTokenExpiresAt'").run(String(Number(created_at) + Number(expires_in)));
       console.log('[TraktSync] Token refreshed successfully');
     } catch (err) {
       console.error('[TraktSync] Token refresh failed:', err.response?.data || err.message);
@@ -336,8 +342,6 @@ const syncWatched = async () => {
     console.log('[TraktSync] Trakt watched sync is disabled in Settings.');
     return;
   }
-  // Auto-refresh token if expired before syncing
-  await refreshTokenIfExpired();
   console.log('[TraktSync] Starting watched status sync...');
   const movieCount = await syncWatchedMovies();
   const showCount = await syncWatchedShows();

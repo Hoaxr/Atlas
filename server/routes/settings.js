@@ -277,7 +277,6 @@ router.post('/', async (req, res, next) => {
     if (body.authEnabled !== undefined || body.authBypassLocalhost !== undefined || body.authUsername !== undefined || body.authPassword !== undefined) {
       invalidateAuthCache();
     }
-
     if (errors.length > 0) {
       return res.status(400).json({ status: 'error', message: 'Validation failed', errors });
     }
@@ -679,25 +678,16 @@ router.get('/issues', async (req, res) => {
         actionLink: '/settings'
       });
     } else if (traktWatchedSync && traktToken && traktClientId) {
-      try {
-        await axios.get('https://api.trakt.tv/users/me/stats', {
-          headers: { 
-            'trakt-api-version': '2', 
-            'trakt-api-key': traktClientId,
-            'Authorization': `Bearer ${traktToken}`
-          },
-          timeout: 5000
+      const traktService = require('../services/traktService');
+      const stats = await traktService.getUserStats();
+      if (stats.error) {
+        issues.push({
+          id: 'trakt_token_expired',
+          type: 'error',
+          message: 'Trakt authentication expired or invalid. Watched sync will fail.',
+          actionText: 'Reconnect Trakt',
+          actionLink: '/settings'
         });
-      } catch (e) {
-        if (e.response?.status === 401) {
-          issues.push({
-            id: 'trakt_token_expired',
-            type: 'error',
-            message: 'Trakt authentication expired or invalid. Watched sync will fail.',
-            actionText: 'Reconnect Trakt',
-            actionLink: '/settings'
-          });
-        }
       }
     }
 
