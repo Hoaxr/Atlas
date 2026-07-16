@@ -193,6 +193,9 @@ const addShow = async (tmdbId, rootFolderPath = null, monitorLevel = 'all') => {
   
   const internalShowId = result.lastInsertRowid;
 
+  // Mark show as syncing so UI knows episodes aren't ready yet
+  db.prepare("UPDATE shows SET episodes_syncing = 1 WHERE id = ?").run(internalShowId);
+
   // Move episode population to background to prevent unbounded TMDB API requests from blocking addShow
   setImmediate(async () => {
     try {
@@ -235,12 +238,16 @@ const addShow = async (tmdbId, rootFolderPath = null, monitorLevel = 'all') => {
       if (epsToInsert.length > 0) {
         insertEpSync(epsToInsert);
       }
-      
+
+      // Clear the syncing flag and broadcast completion so UI can refresh episode list
+      db.prepare("UPDATE shows SET episodes_syncing = 0 WHERE id = ?").run(internalShowId);
       eventBus.success('Episodes synced', { showId: internalShowId, type: 'show', title: showDetails.name });
     } catch (err) {
+      db.prepare("UPDATE shows SET episodes_syncing = 0 WHERE id = ?").run(internalShowId);
       console.error('Failed to fetch and save episodes in background:', err.message);
     }
   });
+
 
   // Pre-create the show folder
   try {
@@ -290,36 +297,19 @@ const addShow = async (tmdbId, rootFolderPath = null, monitorLevel = 'all') => {
 
 const getShows = (limit = 0, offset = 0, sort = 'added_desc', filters = {}) => {
   const sortMap = {
-    'added_desc': 's.added_at DESC, s.id DESC',
-    'added_asc': 's.added_at ASC, s.id ASC',
-    'rating_desc': 's.rating DESC, s.added_at DESC',
-    'rating_asc': 's.rating ASC, s.added_at DESC',
-    'title_asc': 's.title ASC, s.added_at DESC',
-    'title_desc': 's.title DESC, s.added_at DESC',
-    'year_desc': 's.year DESC, s.added_at DESC',
-    'year_asc': 's.year ASC, s.added_at DESC',
-    'season_count_desc': '(SELECT COUNT(DISTINCT season_number) FROM episodes WHERE show_id = s.id) DESC, s.added_at DESC',
-    'season_count_asc': '(SELECT COUNT(DISTINCT season_number) FROM episodes WHERE show_id = s.id) ASC, s.added_at DESC',
-    'missing_episodes_desc': '(SELECT COUNT(*) FROM episodes e WHERE e.show_id = s.id AND e.monitored = 1 AND (e.file_path IS NULL OR e.file_path = \'\') AND e.status != \'downloaded\' AND ((e.air_date IS NOT NULL AND e.air_date <= date(\'now\')) OR (e.air_date IS NULL AND EXISTS (SELECT 1 FROM episodes e2 WHERE e2.show_id = e.show_id AND e2.season_number = e.season_number AND e2.status = \'downloaded\')))) DESC, s.added_at DESC',
-    'missing_episodes_asc': '(SELECT COUNT(*) FROM episodes e WHERE e.show_id = s.id AND e.monitored = 1 AND (e.file_path IS NULL OR e.file_path = \'\') AND e.status != \'downloaded\' AND ((e.air_date IS NOT NULL AND e.air_date <= date(\'now\')) OR (e.air_date IS NULL AND EXISTS (SELECT 1 FROM episodes e2 WHERE e2.show_id = e.show_id AND e2.season_number = e.season_number AND e2.status = \'downloaded\')))) ASC, s.added_at DESC',
+    'added_desc':           's.added_at DESC, s.id DESC',
+    'added_asc':            's.added_at ASC, s.id ASC',
+    'rating_desc':          's.rating DESC, s.added_at DESC',
+    'rating_asc':           's.rating ASC, s.added_at DESC',
+    'title_asc':            's.title ASC, s.added_at DESC',
+    'title_desc':           's.title DESC, s.added_at DESC',
+    'year_desc':            's.year DESC, s.added_at DESC',
+    'year_asc':             's.year ASC, s.added_at DESC',
+    'season_count_desc':    'COALESCE(es.season_count, 0) DESC, s.added_at DESC',
+    'season_count_asc':     'COALESCE(es.season_count, 0) ASC, s.added_at DESC',
+    'missing_episodes_desc':'COALESCE(es.missing_episodes, 0) DESC, s.added_at DESC',
+    'missing_episodes_asc': 'COALESCE(es.missing_episodes, 0) ASC, s.added_at DESC',
   };
-  let sql = `
-    SELECT s.*, qp.name as quality_profile_name,
-      (SELECT COUNT(*) FROM episodes WHERE show_id = s.id) as episode_count,
-      (SELECT COUNT(*) FROM episodes WHERE show_id = s.id AND status = 'downloaded') as downloaded_episodes,
-      (SELECT COUNT(*) FROM episodes e WHERE e.show_id = s.id AND e.monitored = 1 AND (e.file_path IS NULL OR e.file_path = '') AND e.status != 'downloaded' AND (
-        (e.air_date IS NOT NULL AND e.air_date <= date('now')) OR
-        (e.air_date IS NULL AND EXISTS (
-          SELECT 1 FROM episodes e2 WHERE e2.show_id = e.show_id AND e2.season_number = e.season_number AND e2.status = 'downloaded'
-        ))
-      )) as missing_episodes,
-      (SELECT COUNT(DISTINCT season_number) FROM episodes WHERE show_id = s.id) as season_count,
-      (SELECT COALESCE(scene_name, file_path) FROM episodes WHERE show_id = s.id AND status = 'downloaded' AND (scene_name IS NOT NULL OR file_path IS NOT NULL) LIMIT 1) as sample_episode_path,
-      (SELECT codec FROM episodes WHERE show_id = s.id AND status = 'downloaded' AND codec IS NOT NULL LIMIT 1) as codec,
-      (SELECT audio FROM episodes WHERE show_id = s.id AND status = 'downloaded' AND audio IS NOT NULL LIMIT 1) as audio
-    FROM shows s
-    LEFT JOIN quality_profiles qp ON s.quality_profile_id = qp.id
-  `;
 
   const conditions = [];
   const params = [];
@@ -333,11 +323,56 @@ const getShows = (limit = 0, offset = 0, sort = 'added_desc', filters = {}) => {
     params.push(filters.qualityProfileId);
   }
 
-  if (conditions.length > 0) {
-    sql += ` WHERE ${conditions.join(' AND ')} `;
-  }
+  const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+  const orderClause = sortMap[sort] || 's.added_at DESC, s.id DESC';
 
-  sql += ` ORDER BY ${sortMap[sort] || 's.added_at DESC, s.id DESC'}`;
+  // Single CTE computes all per-show aggregates in one episodes table scan,
+  // replacing the previous N+1 correlated subqueries.
+  let sql = `
+    WITH episode_stats AS (
+      SELECT
+        e.show_id,
+        COUNT(*)                                                         AS episode_count,
+        COUNT(DISTINCT e.season_number)                                  AS season_count,
+        COUNT(CASE WHEN e.status = 'downloaded' THEN 1 END)             AS downloaded_episodes,
+        COUNT(CASE
+          WHEN e.monitored = 1
+            AND (e.file_path IS NULL OR e.file_path = '')
+            AND e.status != 'downloaded'
+            AND e.air_date IS NOT NULL
+            AND e.air_date <= date('now')
+          THEN 1 END)                                                    AS missing_episodes,
+        (SELECT COALESCE(e2.scene_name, e2.file_path)
+           FROM episodes e2
+          WHERE e2.show_id = e.show_id
+            AND e2.status = 'downloaded'
+            AND (e2.scene_name IS NOT NULL OR e2.file_path IS NOT NULL)
+          LIMIT 1)                                                       AS sample_episode_path,
+        (SELECT e2.codec FROM episodes e2
+          WHERE e2.show_id = e.show_id AND e2.status = 'downloaded' AND e2.codec IS NOT NULL
+          LIMIT 1)                                                       AS codec,
+        (SELECT e2.audio FROM episodes e2
+          WHERE e2.show_id = e.show_id AND e2.status = 'downloaded' AND e2.audio IS NOT NULL
+          LIMIT 1)                                                       AS audio
+      FROM episodes e
+      GROUP BY e.show_id
+    )
+    SELECT
+      s.*,
+      qp.name                               AS quality_profile_name,
+      COALESCE(es.episode_count, 0)         AS episode_count,
+      COALESCE(es.downloaded_episodes, 0)   AS downloaded_episodes,
+      COALESCE(es.missing_episodes, 0)      AS missing_episodes,
+      COALESCE(es.season_count, 0)          AS season_count,
+      es.sample_episode_path,
+      es.codec,
+      es.audio
+    FROM shows s
+    LEFT JOIN quality_profiles qp ON s.quality_profile_id = qp.id
+    LEFT JOIN episode_stats   es  ON es.show_id = s.id
+    ${whereClause}
+    ORDER BY ${orderClause}
+  `;
 
   if (limit > 0) {
     sql += ` LIMIT ? OFFSET ?`;

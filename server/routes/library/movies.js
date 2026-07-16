@@ -24,6 +24,9 @@ const MAX_DIR_CACHE = 200; // LRU eviction limit
 const scanDirectory = async (dirPath) => {
   const cached = dirCache.get(dirPath);
   if (cached && Date.now() - cached.timestamp < DIR_CACHE_TTL) {
+    // Move to end to record access (true LRU)
+    dirCache.delete(dirPath);
+    dirCache.set(dirPath, cached);
     return cached.data;
   }
   const items = await Promise.race([
@@ -41,7 +44,7 @@ const scanDirectory = async (dirPath) => {
       if (stats.isFile()) result.push({ name: item, size: stats.size });
     } catch { /* skip unstatable files */ }
   }
-  // LRU eviction
+  // LRU eviction — delete the least-recently-used (first in Map insertion order after access updates)
   if (dirCache.size >= MAX_DIR_CACHE) {
     const oldest = dirCache.keys().next().value;
     dirCache.delete(oldest);
@@ -49,6 +52,7 @@ const scanDirectory = async (dirPath) => {
   dirCache.set(dirPath, { data: result, timestamp: Date.now() });
   return result;
 };
+
 
 router.get('/', async (req, res, next) => {
   try {

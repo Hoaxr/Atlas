@@ -4,16 +4,9 @@ const bcrypt = require('bcrypt');
 const db = require('../config/database');
 const userProvisioningService = require('../services/userProvisioningService');
 const presenceTracker = require('../services/presenceTracker');
+const requireAdmin = require('../middleware/requireAdmin');
 
 const hashPassword = (password) => bcrypt.hash(password, 12);
-
-// Middleware to ensure admin role for user management
-const requireAdmin = (req, res, next) => {
-  if (!req.user || req.user.role !== 'admin') {
-    return res.status(403).json({ status: 'error', message: 'Forbidden: Admins only' });
-  }
-  next();
-};
 
 // GET /api/users
 router.get('/', requireAdmin, (req, res) => {

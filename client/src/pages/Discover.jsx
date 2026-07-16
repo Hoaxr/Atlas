@@ -89,10 +89,22 @@ export default function Discover() {
         setLoading(false);
       }
 
-      // Fire both in parallel — library data populates badges, media data
-      // populates the posters. Loading clears on first completed request.
-      fetchAllData();
-      fetchLibrary();
+      // Fire both in parallel and wait for ALL to complete before showing rows
+      const loadInitialData = async () => {
+        const hasCache = !!cacheRef.current[mode];
+        if (!hasCache) {
+          setLoading(true);
+        }
+        
+        await Promise.all([fetchAllData(), fetchLibrary()]);
+        
+        if (!hasCache) {
+          setLoading(false);
+        }
+      };
+      
+      loadInitialData();
+
       interval = setInterval(() => {
         fetchLibrary();
         fetchAllData(true);
@@ -179,16 +191,8 @@ export default function Discover() {
       }) : Promise.resolve(null),
     ];
 
-    // Clear loading as soon as the FIRST request completes
-    let loaded = false;
-
     try {
-      const results = await Promise.all(setters.map(p =>
-        p.then(r => {
-          if (!loaded) { loaded = true; if (!isBackgroundRefresh) setLoading(false); }
-          return r;
-        }).catch(() => null)
-      ));
+      const results = await Promise.all(setters.map(p => p.catch(() => null)));
       
       cacheRef.current[mode] = {
         trending: results[0]?.data?.status === 'success' ? results[0].data.data : (cacheRef.current[mode]?.trending || []),
@@ -200,7 +204,6 @@ export default function Discover() {
     } catch (err) {
       if (!isBackgroundRefresh) {
         setError(err.response?.data?.message || 'Failed to load media.');
-        setLoading(false);
       }
     }
   };
@@ -443,20 +446,28 @@ export default function Discover() {
       )}
 
       {isDiscovering && !error && (
-        <div className="mt-2">
-          {loading ? (
-            <div className="flex flex-col items-center justify-center py-24 text-slate-400 gap-4">
-              <div className="w-8 h-8 border-2 border-cyan-500/50 border-t-cyan-400 rounded-full animate-spin" />
-              <p className="text-sm font-medium">Loading data...</p>
+        <div className="mt-2 relative min-h-[calc(100vh-200px)]">
+          {loading && (
+            <div className="absolute inset-0 z-50 bg-slate-50 dark:bg-slate-950 text-slate-400">
+              <div className="sticky top-[40vh] flex flex-col items-center justify-center gap-4">
+                <div className="w-8 h-8 border-2 border-cyan-500/50 border-t-cyan-400 rounded-full animate-spin" />
+                <p className="text-sm font-medium">Loading data...</p>
+              </div>
             </div>
-          ) : (
-            <>
-              {visibleRows.recent && <MediaRow title="Recently Added" items={recentResults} badgeText="From your library" renderMediaCard={renderMediaCard} />}
-              {visibleRows.trending && <MediaRow title="Trending Right Now" items={trendingResults} badgeText="Powered by Trakt.tv" isTrending={true} renderMediaCard={renderMediaCard} />}
-              {visibleRows.upcoming && <MediaRow title="In Cinemas & Upcoming" items={upcomingResults} badgeText="Powered by TMDB" renderMediaCard={renderMediaCard} />}
-              {visibleRows.recommended && <MediaRow title="Recommended For You" items={recommendedResults} badgeText="Powered by TMDB" renderMediaCard={renderMediaCard} />}
-            </>
           )}
+          
+          <div
+            className="transition-opacity duration-200"
+            style={{
+              opacity: loading ? 0 : 1,
+              pointerEvents: loading ? 'none' : 'auto',
+            }}
+          >
+            {visibleRows.recent && <MediaRow title="Recently Added" items={recentResults} badgeText="From your library" renderMediaCard={renderMediaCard} />}
+            {visibleRows.trending && <MediaRow title="Trending Right Now" items={trendingResults} badgeText="Powered by Trakt.tv" isTrending={true} renderMediaCard={renderMediaCard} />}
+            {visibleRows.upcoming && <MediaRow title="In Cinemas & Upcoming" items={upcomingResults} badgeText="Powered by TMDB" renderMediaCard={renderMediaCard} />}
+            {visibleRows.recommended && <MediaRow title="Recommended For You" items={recommendedResults} badgeText="Powered by TMDB" renderMediaCard={renderMediaCard} />}
+          </div>
         </div>
       )}
 

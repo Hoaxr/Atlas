@@ -1,13 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../config/database');
-
-const requireAdmin = (req, res, next) => {
-  if (!req.user || req.user.role !== 'admin') {
-    return res.status(403).json({ status: 'error', message: 'Forbidden: Admins only' });
-  }
-  next();
-};
+const requireAdmin = require('../middleware/requireAdmin');
 
 // GET /api/requests/pending-count
 router.get('/pending-count', (req, res) => {
@@ -29,16 +23,31 @@ router.get('/pending-count', (req, res) => {
 // GET /api/requests
 router.get('/', (req, res) => {
   try {
-    const requests = db.prepare(`
-      SELECT r.*,
-        u.username as requested_by,
-        COALESCE(r.poster_path, m.poster_path, s.poster_path) as poster_path
-      FROM requests r
-      LEFT JOIN users u ON r.user_id = u.id
-      LEFT JOIN movies m ON r.tmdb_id = m.tmdb_id AND r.type = 'movie'
-      LEFT JOIN shows s ON r.tmdb_id = s.tmdb_id AND r.type = 'tv'
-      ORDER BY r.created_at DESC
-    `).all();
+    let requests;
+    if (req.user?.role === 'admin') {
+      // Admins see all requests with the requesting username
+      requests = db.prepare(`
+        SELECT r.*,
+          u.username as requested_by,
+          COALESCE(r.poster_path, m.poster_path, s.poster_path) as poster_path
+        FROM requests r
+        LEFT JOIN users u ON r.user_id = u.id
+        LEFT JOIN movies m ON r.tmdb_id = m.tmdb_id AND r.type = 'movie'
+        LEFT JOIN shows s ON r.tmdb_id = s.tmdb_id AND r.type = 'tv'
+        ORDER BY r.created_at DESC
+      `).all();
+    } else {
+      // Non-admins only see their own requests (no other user's username exposed)
+      requests = db.prepare(`
+        SELECT r.id, r.tmdb_id, r.type, r.title, r.status, r.created_at, r.release_date,
+          COALESCE(r.poster_path, m.poster_path, s.poster_path) as poster_path
+        FROM requests r
+        LEFT JOIN movies m ON r.tmdb_id = m.tmdb_id AND r.type = 'movie'
+        LEFT JOIN shows s ON r.tmdb_id = s.tmdb_id AND r.type = 'tv'
+        WHERE r.user_id = ?
+        ORDER BY r.created_at DESC
+      `).all(req.user.id);
+    }
     res.json({ status: 'success', data: requests });
   } catch (err) {
     res.status(500).json({ status: 'error', message: err.message });

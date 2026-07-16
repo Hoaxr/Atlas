@@ -1,4 +1,7 @@
 const cron = require('node-cron');
+const path = require('path');
+const fs = require('fs');
+const fsp = require('fs/promises');
 const db = require('../config/database');
 const indexerService = require('./indexerService');
 const downloadClientService = require('./downloadClientService');
@@ -6,9 +9,10 @@ const taskRegistry = require('./taskRegistry');
 const tmdbService = require('./tmdbService');
 const traktService = require('./traktService');
 const eventBus = require('./eventBus');
-const fs = require('fs');
 const { runWithConcurrency } = require('../utils/concurrency');
 const { registerJob } = require('../utils/cronRegistry');
+const { isVideoFile } = require('../utils/fileUtils');
+const { isRootLibraryPath } = require('../utils/fileUtils');
 
 const DEFAULT_SCHEDULES = {
   search_cycle:       '0 * * * *',
@@ -62,9 +66,8 @@ const runSearchCycle = async () => {
       
       try {
         // Quick local check before searching: if folder exists and has video files, skip search.
-        if (movie.folder_path && require('fs').existsSync(movie.folder_path)) {
-          const files = await require('fs/promises').readdir(movie.folder_path);
-          const { isVideoFile } = require('../utils/fileUtils');
+        if (movie.folder_path && fs.existsSync(movie.folder_path)) {
+          const files = await fsp.readdir(movie.folder_path);
           if (files.some(isVideoFile)) {
             // A video file exists but Atlas hasn't fully scanned it yet. Skip search.
             db.prepare("UPDATE movies SET last_searched_at = datetime('now') WHERE id = ?").run(movie.id);
@@ -126,19 +129,18 @@ const runSearchCycle = async () => {
 
       try {
         const showRow = db.prepare("SELECT folder_path FROM shows WHERE id = ?").get(ep.show_id);
-        if (showRow && showRow.folder_path && require('fs').existsSync(showRow.folder_path)) {
+        if (showRow && showRow.folder_path && fs.existsSync(showRow.folder_path)) {
           // Quick recursive check for SxxExx
           const s = String(ep.season_number).padStart(2,'0');
           const eStr = String(ep.episode_number).padStart(2,'0');
           const epRegex = new RegExp(`s${s}e${eStr}`, 'i');
-          const { isVideoFile } = require('../utils/fileUtils');
           
           let found = false;
           const checkDir = async (dir) => {
             if (found) return;
-            const entries = await require('fs/promises').readdir(dir, { withFileTypes: true });
+            const entries = await fsp.readdir(dir, { withFileTypes: true });
             for (const entry of entries) {
-              const fullPath = require('path').join(dir, entry.name);
+              const fullPath = path.join(dir, entry.name);
               if (entry.isDirectory()) {
                 await checkDir(fullPath);
               } else if (isVideoFile(entry.name) && epRegex.test(entry.name)) {
@@ -390,20 +392,32 @@ const runMissingFilesCheck = async () => {
     }
   }
 
-  // Check Episodes specifically
-  const episodes = db.prepare("SELECT id, title, file_path, show_id FROM episodes WHERE file_path IS NOT NULL").all();
+  // Check Episodes specifically — only for episodes whose show folder is on an accessible root
+  const episodes = db.prepare("SELECT e.id, e.title, e.file_path, e.show_id, s.folder_path as show_folder FROM episodes e LEFT JOIN shows s ON s.id = e.show_id WHERE e.file_path IS NOT NULL").all();
   let episodesReset = 0;
   const episodesToReset = [];
   for (const ep of episodes) {
     // Only verify episodes of shows that aren't being deleted entirely
     if (showsToDelete.includes(ep.show_id)) continue;
-    
+
+    // Only check episodes whose show folder is on an accessible root (same guard as movies/shows)
+    const showFolder = ep.show_folder;
+    if (showFolder) {
+      const isOnAccessibleRoot = validRootPaths.some(root => showFolder.startsWith(root));
+      if (!isOnAccessibleRoot) continue;
+    } else {
+      // No show folder — fall back to checking the episode file's path against roots
+      const isOnAccessibleRoot = validRootPaths.some(root => ep.file_path.startsWith(root));
+      if (!isOnAccessibleRoot) continue;
+    }
+
     if (!fs.existsSync(ep.file_path)) {
       console.log(`[Automation] Episode file missing, reverting to monitored: ${ep.title}`);
       episodesToReset.push(ep.id);
       episodesReset++;
     }
   }
+
 
   if (episodesToReset.length > 0) {
     const chunks = chunkArray(episodesToReset, 100);
@@ -437,10 +451,9 @@ const scheduleTask = (taskId, cronExp) => {
 const runDatabaseBackup = async () => {
   console.log('[Automation] Running database backup...');
   try {
-    const fsp = require('fs/promises');
-    const path = require('path');
-    const dbPath = path.join(__dirname, '../../data/database.sqlite');
-    const backupDir = path.join(__dirname, '../../data/backups');
+    // __dirname = server/services — database is at server/data/database.sqlite
+    const dbPath = path.join(__dirname, '../data/database.sqlite');
+    const backupDir = path.join(__dirname, '../data/backups');
     
     await fsp.mkdir(backupDir, { recursive: true });
     
@@ -483,12 +496,15 @@ const runAutoDeleteWatched = async () => {
     if (isNaN(days) || days <= 0) return;
 
     console.log(`[Automation] Running auto-delete for watched media (older than ${days} days)...`);
-    const fsp = require('fs/promises');
-    const path = require('path');
-    const { isRootLibraryPath } = require('../utils/fileUtils');
 
-    const moviesToDelete = db.prepare(`SELECT id, title, file_path, folder_path FROM movies WHERE watched = 1 AND watched_at <= datetime('now', '-${days} days') AND file_path IS NOT NULL`).all();
-    
+    // Use a computed cutoff datetime bound as a parameter — avoids SQL injection (#1)
+    const cutoff = new Date(Date.now() - days * 86_400_000).toISOString().slice(0, 19);
+
+    const moviesToDelete = db.prepare(
+      `SELECT id, title, file_path, folder_path FROM movies
+       WHERE watched = 1 AND file_path IS NOT NULL AND watched_at <= ?`
+    ).all(cutoff);
+
     for (const movie of moviesToDelete) {
       try {
         if (fs.existsSync(movie.file_path)) {
@@ -506,8 +522,11 @@ const runAutoDeleteWatched = async () => {
       }
     }
 
-    const epsToDelete = db.prepare(`SELECT id, title, file_path FROM episodes WHERE watched = 1 AND watched_at <= datetime('now', '-${days} days') AND file_path IS NOT NULL`).all();
-    
+    const epsToDelete = db.prepare(
+      `SELECT id, title, file_path FROM episodes
+       WHERE watched = 1 AND file_path IS NOT NULL AND watched_at <= ?`
+    ).all(cutoff);
+
     for (const ep of epsToDelete) {
       try {
         if (fs.existsSync(ep.file_path)) {
@@ -523,6 +542,7 @@ const runAutoDeleteWatched = async () => {
     console.error(`[Automation] Error running auto-delete watched: ${err.message}`);
   }
 };
+
 
 const init = () => {
   const tasks = [

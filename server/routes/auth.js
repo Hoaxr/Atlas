@@ -9,10 +9,8 @@ const { getSetting, setSetting } = require('../utils/settings');
 const jwt = require('jsonwebtoken');
 
 const JWT_SECRET = process.env.JWT_SECRET;
-if (!JWT_SECRET) {
-  console.error('[FATAL] JWT_SECRET environment variable is not set. Authentication will be insecure.');
-  process.exit(1);
-}
+// JWT_SECRET presence is validated at startup in index.js before this module loads.
+// Using the value here is safe.
 
 const authMiddleware = require('../middleware/authMiddleware');
 

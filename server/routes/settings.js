@@ -230,7 +230,8 @@ router.post('/', async (req, res, next) => {
     const body = req.body;
     const errors = [];
 
-    // Process all settings from the schema
+    // Process all settings from the schema — collect valid writes first, then commit atomically
+    const settingsToWrite = [];
     for (const [key, schema] of Object.entries(SETTING_SCHEMA)) {
       if (body[key] === undefined) continue;
 
@@ -242,8 +243,25 @@ router.post('/', async (req, res, next) => {
         errors.push(result.reason);
         continue;
       }
-      setSetting(key, result.transformed);
+      settingsToWrite.push([key, result.transformed]);
     }
+
+    // Commit all validated settings in one transaction (#15)
+    if (settingsToWrite.length > 0 && errors.length === 0) {
+      const upsertSetting = db.prepare(
+        "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value"
+      );
+      db.transaction(() => {
+        for (const [key, val] of settingsToWrite) upsertSetting.run(key, val);
+      })();
+      // Sync to the in-memory settings cache
+      const { setSetting: setSettingFn } = require('../utils/settings');
+      for (const [key, val] of settingsToWrite) setSettingFn(key, val);
+    } else {
+      // Still write individually if there were no errors but setSetting has side-effects
+      for (const [key, val] of settingsToWrite) setSetting(key, val);
+    }
+
 
     // Special: default quality profile
     if (body.defaultQualityProfileId !== undefined) {

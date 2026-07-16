@@ -25,14 +25,15 @@ router.get('/stats', (req, res, next) => {
       return res.json({ status: 'success', data: _statsCache });
     }
 
-    // ── Consolidated query 1: movie aggregates (count, statuses, size, downloaded) ──
+    // ── Consolidated query 1: movie aggregates (count, statuses, size, downloaded, avg size) ──
     const movieAgg = db.prepare(`
       SELECT
         COUNT(*) as total,
         COALESCE(SUM(COALESCE(file_size, 0)), 0) as totalSize,
         COUNT(CASE WHEN status = 'downloaded' THEN 1 END) as downloaded,
         COUNT(CASE WHEN file_path IS NOT NULL THEN 1 END) as withFiles,
-        COUNT(CASE WHEN file_path IS NOT NULL AND subtitles IS NOT NULL AND subtitles != '[]' THEN 1 END) as withSubs
+        COUNT(CASE WHEN file_path IS NOT NULL AND subtitles IS NOT NULL AND subtitles != '[]' THEN 1 END) as withSubs,
+        COALESCE(ROUND(AVG(CASE WHEN status = 'downloaded' THEN COALESCE(file_size, 0) END)), 0) as avgSize
       FROM movies
     `).get();
 
@@ -157,7 +158,7 @@ router.get('/stats', (req, res, next) => {
       yearData,
       ratingBuckets: { 1: ratingStats.r1, 2: ratingStats.r2, 3: ratingStats.r3, 4: ratingStats.r4, 5: ratingStats.r5, 6: ratingStats.r6, 7: ratingStats.r7, 8: ratingStats.r8, 9: ratingStats.r9, 10: ratingStats.r10 },
       recentItems,
-      avgMovieSize: db.prepare("SELECT COALESCE(ROUND(AVG(COALESCE(file_size, 0))), 0) as avg FROM movies WHERE status = 'downloaded'").get().avg,
+      avgMovieSize: movieAgg.avgSize,
       moviesWithFiles: movieAgg.withFiles,
       moviesWithSubtitles: movieAgg.withSubs,
       moviesMissingSubtitles: movieAgg.withFiles - movieAgg.withSubs,

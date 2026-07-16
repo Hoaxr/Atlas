@@ -13,15 +13,20 @@ class NotificationService {
   }
 
   async handleEvent(event) {
+    const grabEvents = ['Download started', 'Manual grab started', 'Auto-search download started'];
+    const downloadEvent = 'Download complete';
+
+    // Skip DB lookup entirely for events that can never trigger a notification
+    const isRelevant = grabEvents.includes(event.message) || event.message === downloadEvent;
+    if (!isRelevant) return;
+
     const notifyOnGrab = getSetting('notifyOnGrab') === 'true';
     const notifyOnDownload = getSetting('notifyOnDownload') === 'true';
 
-    const grabEvents = ['Download started', 'Manual grab started', 'Auto-search download started'];
-    
     if (grabEvents.includes(event.message) && notifyOnGrab) {
       console.log('[NotificationService] Grab notification triggered:', event.metadata?.title);
       await this.sendNotification('Media Grabbed', `Sent to download client`, event.metadata);
-    } else if (event.message === 'Download complete' && notifyOnDownload) {
+    } else if (event.message === downloadEvent && notifyOnDownload) {
       console.log('[NotificationService] Download notification triggered:', event.metadata?.title);
       await this.sendNotification('Download Complete', `Has been imported`, event.metadata);
     }

@@ -25,7 +25,7 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const [movies, setMovies] = useState(cachedMovies || []);
   const [shows, setShows] = useState(cachedShows || []);
-  const [loading, setLoading] = useState(location.pathname.includes('shows') ? !cachedShows : !cachedMovies);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [isReordering, setIsReordering] = useState(false);
   const reorderTimerRef = useRef(null);
@@ -241,10 +241,7 @@ export default function Dashboard() {
     setPage(1);
     
     // Fetch data for the current view
-    const isCached = viewMode === 'movies' ? cachedMovies !== null : cachedShows !== null;
-    if (!isCached) {
-      setLoading(true);
-    }
+    setLoading(true);
     fetchViewData(viewMode, false);
   }, [viewMode]);
 
@@ -287,6 +284,33 @@ export default function Dashboard() {
         if (mode === 'movies') { setCachedMovies(data); setMovies(data); }
         else { setCachedShows(data); setShows(data); }
         if (!isBackground) setError(null);
+
+        if (!isBackground) {
+          try {
+            const currentSort = localStorage.getItem(`atlas_${mode}_Sort`) || 'added_desc';
+            const sortedData = sortItems([...data], currentSort);
+            const topItems = sortedData.slice(0, 50);
+            
+            const minLoadTime = new Promise(resolve => setTimeout(resolve, 600));
+            const imagePreloads = Promise.all(topItems.map(item => {
+              return new Promise(resolve => {
+                const img = new Image();
+                img.src = posterUrl(mode, item.tmdb_id);
+                if (img.decode) {
+                  img.decode().then(resolve).catch(resolve);
+                } else {
+                  img.onload = resolve;
+                  img.onerror = resolve;
+                }
+              });
+            }));
+            
+            // Wait for both minimum time AND all images to decode
+            await Promise.all([minLoadTime, imagePreloads]);
+          } catch (preloadErr) {
+            console.error('Failed to preload images', preloadErr);
+          }
+        }
       }
     } catch (err) {
       console.error(`Failed to fetch ${mode}`, err);
@@ -840,7 +864,7 @@ export default function Dashboard() {
 
         </div>
         
-        <div className="p-4">
+        <div className="p-4 relative min-h-[calc(100vh-200px)]">
         
         <BulkActions
           selectedIds={selectedIds}
@@ -850,13 +874,25 @@ export default function Dashboard() {
           onAction={handleBulkAction}
         />
 
+        {loading && (
+          <div className="absolute inset-0 z-30 bg-slate-50 dark:bg-slate-950 text-slate-400">
+            <div className="sticky top-[40vh] flex flex-col items-center justify-center gap-4">
+              <div className="w-8 h-8 border-2 border-cyan-500/50 border-t-cyan-400 rounded-full animate-spin" />
+              <p className="text-sm font-medium">Loading data...</p>
+            </div>
+          </div>
+        )}
+
         {displayItems.length > 0 ? (
           <div
+            className="relative z-20"
             style={{
-              opacity: isReordering ? 0.5 : 1,
-              transition: 'opacity 0.12s ease',
+              opacity: loading ? 0 : (isReordering ? 0.5 : 1),
+              transition: 'opacity 0.2s ease',
+              pointerEvents: loading ? 'none' : 'auto',
             }}
           >
+
           {viewStyle === 'grid' ? (
             scrollElement ? (
               <VirtuosoGrid
@@ -870,7 +906,7 @@ export default function Dashboard() {
                     ref={ref}
                     {...props}
                     style={style}
-                    className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 gap-3 sm:gap-4"
+                    className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 gap-3 sm:gap-4 relative"
                   >
                     {children}
                   </div>
@@ -958,14 +994,12 @@ export default function Dashboard() {
                         <span className="text-[10px] font-bold text-purple-400">{item.season_count}</span>
                       </div>
                     )}
-                    {/* Placeholder shown before image loads */}
-                    <div className="absolute inset-0 bg-gradient-to-br from-slate-700/50 to-slate-800/50 animate-pulse" />
+
                     <img 
                       src={posterUrl(viewMode, item.tmdb_id)} 
                       alt={item.title}
                       width="500"
                       height="750"
-                      decoding="async"
                       className="w-full h-full object-cover relative"
                     />
                     <div className="absolute inset-0 bg-slate-950/80 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col items-center justify-center gap-3 p-4 z-10">
@@ -1194,11 +1228,6 @@ export default function Dashboard() {
           </div>
         ) : null}
           </div>
-        ) : loading ? (
-          <div className="flex flex-col items-center justify-center py-24 text-slate-400 gap-4">
-            <div className="w-8 h-8 border-2 border-cyan-500/50 border-t-cyan-400 rounded-full animate-spin" />
-            <p className="text-sm font-medium">Loading data...</p>
-          </div>
         ) : error ? (
           <div className="flex flex-col items-center justify-center py-24 text-slate-400 gap-4">
             <AlertCircle className="w-12 h-12 text-rose-400 mb-2" />
@@ -1210,7 +1239,7 @@ export default function Dashboard() {
               Retry
             </button>
           </div>
-        ) : (
+        ) : !loading ? (
           <div className="flex flex-col items-center justify-center h-[300px] text-slate-500 rounded-xl">
             {viewMode === 'movies' ? <Film className="w-12 h-12 mb-4 opacity-50" /> : <Tv className="w-12 h-12 mb-4 opacity-50" />}
             <p>No {viewMode === 'movies' ? 'movies' : 'TV shows'} in your library yet.</p>
@@ -1223,7 +1252,7 @@ export default function Dashboard() {
               Browse Discover
             </button>
           </div>
-        )}
+        ) : null}
         
         {/* Infinite Scroll Observer Target */}
         <div ref={loadMoreRef} className="w-full h-4" />

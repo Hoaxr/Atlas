@@ -24,6 +24,13 @@ db.transaction = function (fn) {
 };
 
 db.exec('PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;');
+// Performance tuning — safe with WAL mode, dramatically reduces I/O
+db.exec(`
+  PRAGMA synchronous = NORMAL;
+  PRAGMA cache_size = -64000;
+  PRAGMA temp_store = MEMORY;
+  PRAGMA mmap_size = 268435456;
+`);
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS logs (
@@ -442,6 +449,36 @@ const MIGRATIONS = [
         CREATE INDEX IF NOT EXISTS idx_episodes_watched_at ON episodes(watched_at);
         CREATE INDEX IF NOT EXISTS idx_movies_monitored ON movies(monitored);
         CREATE INDEX IF NOT EXISTS idx_episodes_monitored ON episodes(monitored);
+      `);
+    }
+  },
+  {
+    id: 11,
+    name: 'add_missing_performance_indexes',
+    run: (db) => {
+      db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_movies_release_date ON movies(release_date);
+        CREATE INDEX IF NOT EXISTS idx_episodes_air_date ON episodes(air_date);
+        CREATE INDEX IF NOT EXISTS idx_shows_quality_profile ON shows(quality_profile_id);
+        CREATE INDEX IF NOT EXISTS idx_movies_quality_profile ON movies(quality_profile_id);
+        CREATE INDEX IF NOT EXISTS idx_movies_watched ON movies(watched);
+        CREATE INDEX IF NOT EXISTS idx_shows_watched ON shows(watched);
+        CREATE INDEX IF NOT EXISTS idx_movies_genres ON movies(genres);
+        CREATE INDEX IF NOT EXISTS idx_shows_genres ON shows(genres);
+        CREATE INDEX IF NOT EXISTS idx_episodes_subtitles ON episodes(subtitles);
+        CREATE INDEX IF NOT EXISTS idx_movies_added_at ON movies(added_at);
+        CREATE INDEX IF NOT EXISTS idx_shows_added_at ON shows(added_at);
+        CREATE INDEX IF NOT EXISTS idx_requests_status ON requests(status);
+        CREATE INDEX IF NOT EXISTS idx_requests_user_id ON requests(user_id);
+      `);
+    }
+  },
+  {
+    id: 12,
+    name: 'add_episodes_syncing_column',
+    run: (db) => {
+      db.exec(`
+        ALTER TABLE shows ADD COLUMN episodes_syncing INTEGER NOT NULL DEFAULT 0;
       `);
     }
   }

@@ -2,10 +2,9 @@ const jwt = require('jsonwebtoken');
 const db = require('../config/database');
 
 const JWT_SECRET = process.env.JWT_SECRET;
-if (!JWT_SECRET) {
-  console.error('[FATAL] JWT_SECRET environment variable is not set. Authentication will be insecure.');
-  process.exit(1);
-}
+// JWT_SECRET presence is validated at startup in index.js before this module loads.
+// Using the value here is safe.
+
 
 // Cache frequently-read settings to avoid DB queries on every request.
 // Invalidated when settings are updated (see settings route exports).

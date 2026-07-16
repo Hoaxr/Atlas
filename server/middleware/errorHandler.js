@@ -1,11 +1,14 @@
 const errorHandler = (err, req, res, next) => {
-  console.error(`[Error] ${err.stack}`);
   const statusCode = err.statusCode || 500;
-  // Don't leak internal error details (e.g. SQL/file system errors) for unexpected
-  // server errors in production. Errors with an explicit statusCode are intentional
-  // (e.g. validation errors) and safe to surface to the client.
-  const isProduction = process.env.NODE_ENV === 'production';
-  const message = (!err.statusCode && isProduction) ? 'Internal Server Error' : (err.message || 'Internal Server Error');
+
+  // Always log the full stack for debugging
+  console.error(`[Error] ${req.method} ${req.originalUrl} — ${err.stack || err.message}`);
+
+  // Intentional errors (with an explicit statusCode) are safe to surface verbatim.
+  // Unexpected 500s (DB errors, filesystem errors, etc.) are sanitized to avoid
+  // leaking internal paths or SQL details — even in development mode.
+  const message = err.statusCode ? (err.message || 'Error') : 'Internal Server Error';
+
   res.status(statusCode).json({
     status: 'error',
     message,

@@ -1,4 +1,11 @@
 require('dotenv').config();
+
+// ── Fail fast if JWT_SECRET is missing — must happen before any module load ──
+if (!process.env.JWT_SECRET) {
+  console.error('[FATAL] JWT_SECRET environment variable is not set. Refusing to start.');
+  process.exit(1);
+}
+
 const express = require('express');
 const path = require('path');
 const http = require('http');
@@ -7,6 +14,7 @@ const compression = require('compression');
 const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
+const db = require('./config/database');
 const apiRoutes = require('./routes/api');
 const settingsRoutes = require('./routes/settings');
 const tmdbRoutes = require('./routes/tmdb');
@@ -22,6 +30,7 @@ const watcherRoutes = require('./routes/watcher');
 const watcherService = require('./services/watcherService');
 const { stopAll: stopAllCronJobs } = require('./utils/cronRegistry');
 const { LAYOUT_PUSH_INTERVAL, TORRENTS_PUSH_INTERVAL } = require('./utils/constants');
+const downloadClientService = require('./services/downloadClientService');
 
 const errorHandler = require('./middleware/errorHandler');
 const eventBus = require('./services/eventBus');
@@ -51,7 +60,11 @@ wss.on('connection', (ws, req) => {
 
   const setupAuth = () => {
     authenticated = true;
-    if (!ws._userId) ws._userId = 1;
+    // If no _userId was set by presenceTracker (bypass path), resolve the admin user from DB
+    if (!ws._userId) {
+      const adminRow = db.prepare("SELECT id FROM users WHERE role = 'admin' ORDER BY id ASC LIMIT 1").get();
+      ws._userId = adminRow ? adminRow.id : 1;
+    }
     console.log(`[WS] User ${ws._username || ws._userId} authenticated`);
     
     onEvent = (data) => {
@@ -132,9 +145,6 @@ aiTranslationWorker.init();
 const broadcastLayoutUpdate = () => {
   if (wss.clients.size === 0) return;
   try {
-    const db = require('./config/database');
-    const downloadClientService = require('./services/downloadClientService');
-
     // Lightweight stats (just counts, no heavy aggregation)
     const moviesCount = db.prepare('SELECT COUNT(*) as c FROM movies').get().c;
     const showsCount  = db.prepare('SELECT COUNT(*) as c FROM shows').get().c;
@@ -167,7 +177,6 @@ let _clientConnected = false;
 const broadcastTorrentsUpdate = async () => {
   if (wss.clients.size === 0) return;
   try {
-    const downloadClientService = require('./services/downloadClientService');
     const [torrents, stats] = await Promise.allSettled([
       downloadClientService.getTorrents().catch(() => []),
       downloadClientService.getTransferInfo().catch(() => null)
@@ -269,9 +278,10 @@ app.use('/api/watcher', watcherRoutes);
 app.get('/api/images/:type/:tmdbId/poster', async (req, res) => {
   const { type, tmdbId } = req.params;
   if (!['movies', 'shows'].includes(type)) return res.status(400).json({ error: 'Invalid type' });
+  // Validate tmdbId is numeric to prevent path traversal via path.join (#2)
+  if (!/^\d+$/.test(tmdbId)) return res.status(400).json({ error: 'Invalid tmdbId' });
 
   const fs   = require('fs');
-  const db   = require('./config/database');
   const dest = imageService.posterPath(type, tmdbId);
 
   // Serve from cache if it exists

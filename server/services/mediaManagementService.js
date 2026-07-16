@@ -55,7 +55,7 @@ const findLargestVideoFile = async (dirPath) => {
   try {
     const stats = await fs.promises.stat(dirPath);
     if (stats.isFile()) {
-      if (isVideoFile(dirPath)) return dirPath;
+      if (isVideoFile(dirPath)) return { path: dirPath, size: stats.size };
       return null;
     }
 
@@ -65,18 +65,16 @@ const findLargestVideoFile = async (dirPath) => {
       const fileStats = await fs.promises.stat(fullPath);
       
       if (fileStats.isDirectory()) {
-        const nestedFile = await findLargestVideoFile(fullPath);
-        if (nestedFile) {
-          const nestedStats = await fs.promises.stat(nestedFile);
-          if (nestedStats.size > maxSize) {
-            maxSize = nestedStats.size;
-            largestFile = nestedFile;
-          }
+        const nested = await findLargestVideoFile(fullPath);
+        // nested already carries its size — no extra stat needed
+        if (nested && nested.size > maxSize) {
+          maxSize = nested.size;
+          largestFile = nested;
         }
       } else if (fileStats.isFile() && isVideoFile(fullPath)) {
         if (fileStats.size > maxSize) {
           maxSize = fileStats.size;
-          largestFile = fullPath;
+          largestFile = { path: fullPath, size: fileStats.size };
         }
       }
     }
@@ -298,7 +296,7 @@ const importMovie = async (torrent, movie) => {
       return;
     }
 
-    const ext = path.extname(videoFile);
+    const ext = path.extname(videoFile.path);
     const libraryRoot = paths.find(p => p.path.toLowerCase().includes('movie'))?.path || paths[0].path;
     const isDedicatedPath = libraryRoot.toLowerCase().includes('movie');
     const config = getNamingConfig();
@@ -313,7 +311,7 @@ const importMovie = async (torrent, movie) => {
       fileName = format;
     } else {
       folderName = sanitizeTitle(`${movie.title} (${movie.year})`, config);
-      fileName = path.basename(videoFile, ext);
+      fileName = path.basename(videoFile.path, ext);
     }
     
     const destFolder = isDedicatedPath 
@@ -348,15 +346,15 @@ const importMovie = async (torrent, movie) => {
     }
 
     try {
-      console.log(`[MediaManagement] Hardlinking ${videoFile} to ${destFile}`);
-      await fs.promises.link(videoFile, destFile);
+      console.log(`[MediaManagement] Hardlinking ${videoFile.path} to ${destFile}`);
+      await fs.promises.link(videoFile.path, destFile);
       console.log(`[MediaManagement] Hardlink complete for ${movie.title}`);
     } catch (linkErr) {
       if (linkErr.code === 'EXDEV') {
         console.log(`[MediaManagement] Cross-device link failed. Falling back to copy for ${movie.title}`);
-        await fs.promises.copyFile(videoFile, destFile);
+        await fs.promises.copyFile(videoFile.path, destFile);
         console.log(`[MediaManagement] Copy complete for ${movie.title}. Deleting original file.`);
-        await fs.promises.unlink(videoFile).catch(e => {
+        await fs.promises.unlink(videoFile.path).catch(e => {
           if (e.code !== 'ENOENT') throw e;
         });
       } else {
@@ -483,7 +481,7 @@ const importEpisode = async (torrent, episode) => {
       return;
     }
 
-    const ext = path.extname(videoFile);
+    const ext = path.extname(videoFile.path);
     const libraryRoot = paths.find(p => p.path.toLowerCase().includes('tv') || p.path.toLowerCase().includes('show'))?.path || paths[0].path;
     const isDedicatedPath = libraryRoot.toLowerCase().includes('tv') || libraryRoot.toLowerCase().includes('show');
     const config = getNamingConfig();
@@ -502,7 +500,7 @@ const importEpisode = async (torrent, episode) => {
       format = format.replace('{Episode Title}', sanitizeTitle(episode.title || '', config));
       fileName = format;
     } else {
-      fileName = path.basename(videoFile, ext);
+      fileName = path.basename(videoFile.path, ext);
     }
 
     let seasonFolder = config.seasonFolderFormat || 'Season {Season Number}';
@@ -531,15 +529,15 @@ const importEpisode = async (torrent, episode) => {
     }
 
     try {
-      console.log(`[MediaManagement] Hardlinking ${videoFile} to ${destFile}`);
-      await fs.promises.link(videoFile, destFile);
+      console.log(`[MediaManagement] Hardlinking ${videoFile.path} to ${destFile}`);
+      await fs.promises.link(videoFile.path, destFile);
       console.log(`[MediaManagement] Hardlink complete for episode.`);
     } catch (linkErr) {
       if (linkErr.code === 'EXDEV') {
         console.log(`[MediaManagement] Cross-device link failed. Falling back to copy for episode.`);
-        await fs.promises.copyFile(videoFile, destFile);
+        await fs.promises.copyFile(videoFile.path, destFile);
         console.log(`[MediaManagement] Copy complete for episode. Deleting original file.`);
-        await fs.promises.unlink(videoFile).catch(e => {
+        await fs.promises.unlink(videoFile.path).catch(e => {
           if (e.code !== 'ENOENT') throw e;
         });
       } else {
