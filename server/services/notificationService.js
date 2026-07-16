@@ -42,6 +42,14 @@ class NotificationService {
       ? overrides.telegramChatId 
       : getSetting('telegramChatId');
 
+    const pushoverAppToken = (overrides.pushoverAppToken !== undefined && !isMasked(overrides.pushoverAppToken)) 
+      ? overrides.pushoverAppToken 
+      : getSetting('pushoverAppToken');
+
+    const pushoverUserKey = (overrides.pushoverUserKey !== undefined && !isMasked(overrides.pushoverUserKey)) 
+      ? overrides.pushoverUserKey 
+      : getSetting('pushoverUserKey');
+
     const itemTitle = metadata.title !== undefined ? metadata.title : null;
     const description = message;
 
@@ -164,7 +172,23 @@ class NotificationService {
           parse_mode: 'Markdown'
         });
       } catch (err) {
-        console.error('[NotificationService] Telegram error:', err.message);
+        console.error('[NotificationService] Telegram notification failed:', err.response?.data || err.message);
+      }
+    }
+
+    if (pushoverAppToken && pushoverUserKey) {
+      try {
+        const titleText = itemTitle || title;
+        await axios.post('https://api.pushover.net/1/messages.json', null, {
+          params: {
+            token: pushoverAppToken,
+            user: pushoverUserKey,
+            title: titleText,
+            message: description
+          }
+        });
+      } catch (err) {
+        console.error('[NotificationService] Pushover notification failed:', err.response?.data || err.message);
       }
     }
   }

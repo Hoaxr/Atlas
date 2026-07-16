@@ -50,7 +50,8 @@ export default function Settings() {
     removeCompletedDownloads: false,
     deleteTorrentFiles: false,
     hideCompletedDownloads: true,
-    downloadPathMapping: ['', '']
+    downloadPathMapping: ['', ''],
+    autoDeleteWatchedDays: ''
   });
   const [paths, setPaths] = useState([]);
   const [indexers, setIndexers] = useState([]);
@@ -656,21 +657,12 @@ export default function Settings() {
 
           {activeTab === 'library' && (
             <LibraryTab
-              paths={paths}
-              newPath={newPath}
-              newPathType={newPathType}
-              setNewPath={setNewPath}
-              setNewPathType={setNewPathType}
-              handleAddPath={handleAddPath}
-              fetchPaths={fetchPaths}
-              handleScan={handleScan}
-              handleStopScan={handleStopScan}
-              isScanning={isScanning}
-              scanProgress={scanProgress}
-              scanResults={scanResults}
-              isStaleResults={isStaleResults}
-              setScanResults={setScanResults}
-              setIsStaleResults={setIsStaleResults}
+              paths={paths} newPath={newPath} newPathType={newPathType} setNewPath={setNewPath} setNewPathType={setNewPathType}
+              handleAddPath={handleAddPath} fetchPaths={fetchPaths}
+              handleScan={handleScan} handleStopScan={handleStopScan} isScanning={isScanning} scanProgress={scanProgress}
+              scanResults={scanResults} isStaleResults={isStaleResults} setScanResults={setScanResults} setIsStaleResults={setIsStaleResults}
+              settings={settings} setSettings={setSettings}
+              handleSave={handleSave}
             />
           )}
 

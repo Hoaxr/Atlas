@@ -17,7 +17,7 @@ const SCAN_MODES = [
 export default function LibraryTab({
   paths, newPath, newPathType, setNewPath, setNewPathType, handleAddPath, fetchPaths,
   handleScan, handleStopScan, isScanning, scanProgress, scanResults,
-  isStaleResults, setScanResults, setIsStaleResults
+  isStaleResults, setScanResults, setIsStaleResults, settings, setSettings, handleSave
 }) {
   const data = scanResults || scanProgress;
   const [scanMode, setScanMode] = useState('full');
@@ -312,6 +312,49 @@ export default function LibraryTab({
           ))}
         </div>
       </div>
+
+      {settings && (
+        <div className="space-y-6 pt-6 border-t border-white/5">
+          <div className="flex items-center justify-between">
+            <h3 className="text-xl font-bold text-slate-200">Media Management</h3>
+            <button
+              onClick={handleSave}
+              className="bg-blue-600 hover:bg-blue-500 text-white font-bold py-2 px-6 rounded-xl transition-all shadow-lg hover:shadow-blue-500/25 active:scale-95"
+            >
+              Save Settings
+            </button>
+          </div>
+          <div className="space-y-4">
+            <label className="flex items-start gap-3 cursor-pointer p-4 rounded-xl bg-slate-900/50 border border-white/5 hover:border-blue-500/30 transition-colors group">
+              <div className="mt-0.5">
+                <input type="checkbox" className="sr-only" checked={settings?.autoDeleteWatchedEnabled || false} onChange={e => setSettings({...settings, autoDeleteWatchedEnabled: e.target.checked})} />
+                <div className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out ${settings?.autoDeleteWatchedEnabled ? 'bg-blue-500' : 'bg-slate-700'}`}>
+                  <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${settings?.autoDeleteWatchedEnabled ? 'translate-x-5' : 'translate-x-0'}`} />
+                </div>
+              </div>
+              <div>
+                <p className="text-sm font-bold text-slate-200 group-hover:text-blue-400 transition-colors">Auto-Delete Watched Media</p>
+                <p className="text-xs text-slate-400 mt-1">Automatically delete media files from disk after they have been watched.</p>
+              </div>
+            </label>
+
+            {settings?.autoDeleteWatchedEnabled && (
+              <div className="ml-8 p-4 rounded-xl bg-blue-900/10 border border-blue-500/20">
+                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Delay (Days)</label>
+                <input
+                  type="number"
+                  min="0"
+                  value={settings.autoDeleteWatchedDays || ''}
+                  onChange={(e) => setSettings({ ...settings, autoDeleteWatchedDays: e.target.value })}
+                  placeholder="e.g. 7"
+                  className="w-full sm:w-64 bg-slate-800/50 border border-slate-700 rounded-xl px-4 py-2.5 text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all"
+                />
+                <p className="text-[11px] text-slate-500 mt-2">Wait this many days after the media is watched before deleting it.</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       <DuplicateSection />
     </div>

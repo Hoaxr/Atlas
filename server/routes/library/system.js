@@ -407,12 +407,18 @@ router.post('/bulk/delete', async (req, res, next) => {
 
     if (deleteFiles) {
       const items = db.prepare(`SELECT * FROM ${table} WHERE id IN (${placeholders})`).all(...ids);
+      const { isRootLibraryPath } = require('../../utils/fileUtils');
 
       for (const item of items) {
         try {
           const dir = type === 'shows' ? item.folder_path : (item.file_path ? path.dirname(item.file_path) : item.folder_path);
           if (dir) {
-            await deleteFolderRecursive(dir);
+            if (isRootLibraryPath(dir)) {
+               // Only delete the file itself if the directory is a root library path
+               if (item.file_path) await fsp.unlink(item.file_path).catch(() => {});
+            } else {
+               await deleteFolderRecursive(dir);
+            }
           }
         } catch (e) {
           console.warn(`[bulk/delete] Could not delete folder for ${item.title}:`, e?.message);
@@ -501,7 +507,7 @@ router.get('/health', async (req, res, next) => {
     // DB file size
     let dbSize = 0;
     try {
-      const dbPath = path.join(__dirname, '../data/database.sqlite');
+      const dbPath = path.join(__dirname, '../../data/database.sqlite');
       const stat = await fs.stat(dbPath);
       dbSize = stat.size;
     } catch { /* ignore */ }

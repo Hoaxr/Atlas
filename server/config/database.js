@@ -403,6 +403,47 @@ const MIGRATIONS = [
         db.exec("ALTER TABLE episodes ADD COLUMN last_searched_at DATETIME;");
       }
     }
+  },
+  {
+    id: 8,
+    name: 'add_watched_at',
+    run: (db) => {
+      if (!hasColumn('movies', 'watched_at')) {
+        db.exec("ALTER TABLE movies ADD COLUMN watched_at DATETIME;");
+      }
+      if (!hasColumn('episodes', 'watched_at')) {
+        db.exec("ALTER TABLE episodes ADD COLUMN watched_at DATETIME;");
+      }
+      if (!hasColumn('shows', 'watched_at')) {
+        db.exec("ALTER TABLE shows ADD COLUMN watched_at DATETIME;");
+      }
+    }
+  },
+  {
+    id: 9,
+    name: 'add_last_refreshed_at',
+    run: (db) => {
+      if (!hasColumn('movies', 'last_refreshed_at')) {
+        db.exec("ALTER TABLE movies ADD COLUMN last_refreshed_at DATETIME;");
+      }
+      if (!hasColumn('shows', 'last_refreshed_at')) {
+        db.exec("ALTER TABLE shows ADD COLUMN last_refreshed_at DATETIME;");
+      }
+    }
+  },
+  {
+    id: 10,
+    name: 'add_performance_indexes',
+    run: (db) => {
+      db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_movies_last_searched ON movies(last_searched_at);
+        CREATE INDEX IF NOT EXISTS idx_episodes_last_searched ON episodes(last_searched_at);
+        CREATE INDEX IF NOT EXISTS idx_movies_watched_at ON movies(watched_at);
+        CREATE INDEX IF NOT EXISTS idx_episodes_watched_at ON episodes(watched_at);
+        CREATE INDEX IF NOT EXISTS idx_movies_monitored ON movies(monitored);
+        CREATE INDEX IF NOT EXISTS idx_episodes_monitored ON episodes(monitored);
+      `);
+    }
   }
 ];
 

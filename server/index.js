@@ -44,11 +44,51 @@ const PORT = process.env.PORT || 3000;
 // WebSocket server
 const wss = new WebSocketServer({ server, path: '/ws' });
 
-wss.on('connection', (ws) => {
+wss.on('connection', (ws, req) => {
   console.log('[WS] Client connected');
   let authenticated = false;
-
   let onEvent = null;
+
+  const setupAuth = () => {
+    authenticated = true;
+    if (!ws._userId) ws._userId = 1;
+    console.log(`[WS] User ${ws._username || ws._userId} authenticated`);
+    
+    onEvent = (data) => {
+      try {
+        if (ws.readyState === 1) {
+          ws.send(JSON.stringify(data));
+        }
+      } catch { /* ignore */ }
+    };
+    eventBus.on('event', onEvent);
+  };
+
+  try {
+    const db = require('./config/database');
+    const authEnabledRow = db.prepare('SELECT value FROM settings WHERE key = ?').get('authEnabled');
+    const authEnabled = authEnabledRow ? authEnabledRow.value === 'true' : true;
+    
+    let isBypassed = !authEnabled;
+    
+    if (authEnabled) {
+      const bypassRow = db.prepare('SELECT value FROM settings WHERE key = ?').get('authBypassLocalhost');
+      const bypassLocalhost = bypassRow ? bypassRow.value !== 'false' : true;
+      
+      if (bypassLocalhost) {
+        const ip = (req.socket?.remoteAddress || req.connection?.remoteAddress || '').replace(/^::ffff:/, '');
+        if (ip === '127.0.0.1' || ip === '::1') {
+          isBypassed = true;
+        }
+      }
+    }
+    
+    if (isBypassed) {
+      setupAuth();
+    }
+  } catch (err) {
+    console.error('[WS] Error checking auth bypass:', err.message);
+  }
 
   // Handle incoming messages (for auth)
   ws.on('message', (raw) => {
@@ -57,16 +97,7 @@ wss.on('connection', (ws) => {
       if (msg.type === 'auth' && !authenticated) {
         authenticated = presenceTracker.handleAuthMessage(ws, msg);
         if (authenticated) {
-          console.log(`[WS] User ${ws._username} authenticated`);
-          
-          onEvent = (data) => {
-            try {
-              if (ws.readyState === 1) {
-                ws.send(JSON.stringify(data));
-              }
-            } catch { /* ignore */ }
-          };
-          eventBus.on('event', onEvent);
+          setupAuth();
         }
       }
     } catch { /* ignore */ }

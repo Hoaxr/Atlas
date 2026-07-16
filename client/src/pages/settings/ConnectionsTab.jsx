@@ -19,6 +19,8 @@ export default function ConnectionsTab({
     discordWebhookUrl: '',
     telegramBotToken: '',
     telegramChatId: '',
+    pushoverAppToken: '',
+    pushoverUserKey: '',
     notifyOnGrab: false,
     notifyOnDownload: false,
     notifyOnPlaybackStart: false
@@ -59,6 +61,8 @@ export default function ConnectionsTab({
           discordWebhookUrl: data.discordWebhookUrl || '',
           telegramBotToken: data.telegramBotToken || '',
           telegramChatId: data.telegramChatId || '',
+          pushoverAppToken: data.pushoverAppToken || '',
+          pushoverUserKey: data.pushoverUserKey || '',
           notifyOnGrab: data.notifyOnGrab === 'true',
           notifyOnDownload: data.notifyOnDownload === 'true',
           notifyOnPlaybackStart: data.notifyOnPlaybackStart === 'true'
@@ -245,8 +249,11 @@ export default function ConnectionsTab({
     const hasTelegramToken = !!localSettings.telegramBotToken;
     const hasTelegramChat = !!localSettings.telegramChatId;
     const hasTelegram = hasTelegramToken && hasTelegramChat;
+    const hasPushoverApp = !!localSettings.pushoverAppToken;
+    const hasPushoverUser = !!localSettings.pushoverUserKey;
+    const hasPushover = hasPushoverApp && hasPushoverUser;
 
-    if (!hasDiscord && !hasTelegramToken && !hasTelegramChat) {
+    if (!hasDiscord && !hasTelegramToken && !hasTelegramChat && !hasPushoverApp && !hasPushoverUser) {
       customAlert('Please configure at least one notification service to test');
       return;
     }
@@ -256,11 +263,18 @@ export default function ConnectionsTab({
       return;
     }
 
+    if ((hasPushoverApp && !hasPushoverUser) || (!hasPushoverApp && hasPushoverUser)) {
+      customAlert('Pushover requires both an App Token and a User Key');
+      return;
+    }
+
     try {
       await api.post('/settings/test-notification', {
         discordWebhookUrl: localSettings.discordWebhookUrl,
         telegramBotToken: localSettings.telegramBotToken,
-        telegramChatId: localSettings.telegramChatId
+        telegramChatId: localSettings.telegramChatId,
+        pushoverAppToken: localSettings.pushoverAppToken,
+        pushoverUserKey: localSettings.pushoverUserKey
       });
       customAlert('Test notification triggered');
     } catch (err) {
@@ -555,48 +569,84 @@ export default function ConnectionsTab({
           <BellRing className="w-5 h-5 text-amber-400" /> Notifications
         </h2>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+        <div className="flex flex-col space-y-6">
           {/* Discord */}
-          <div className="space-y-4">
-            <h3 className="text-sm font-semibold text-slate-300">Discord Webhook</h3>
-            <p className="text-xs text-slate-500">Discord receives grab, download, and playback notifications via webhook.</p>
+          <div className="space-y-4 bg-slate-900/50 p-5 rounded-xl border border-slate-700/50">
             <div>
-              <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Webhook URL</label>
+              <h3 className="text-sm font-semibold text-slate-300">Discord Webhook</h3>
+              <p className="text-[11px] text-slate-500 mt-0.5">Discord receives grab, download, and playback notifications via webhook.</p>
+            </div>
+            <div>
+              <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Webhook URL</label>
               <input
                 type="text"
                 name="discordWebhookUrl"
                 value={localSettings.discordWebhookUrl}
                 onChange={handleChange}
                 placeholder="https://discord.com/api/webhooks/..."
-                className="w-full bg-slate-800/50 border border-slate-700 rounded-xl px-4 py-2.5 text-slate-200 focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500/50 transition-all"
+                className="w-full bg-slate-800/50 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500/50 transition-all"
               />
             </div>
           </div>
 
           {/* Telegram */}
-          <div className="space-y-4">
-            <h3 className="text-sm font-semibold text-slate-300">Telegram Bot</h3>
-            <p className="text-xs text-slate-500">Telegram receives grab, download, and playback notifications via a bot.</p>
+          <div className="space-y-4 bg-slate-900/50 p-5 rounded-xl border border-slate-700/50">
             <div>
-              <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Bot Token</label>
-              <PasswordInput
-                name="telegramBotToken"
-                value={localSettings.telegramBotToken}
-                onChange={handleChange}
-                placeholder="123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11"
-                className="w-full bg-slate-800/50 border border-slate-700 rounded-xl px-4 py-2.5 text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all"
-              />
+              <h3 className="text-sm font-semibold text-slate-300">Telegram Bot</h3>
+              <p className="text-[11px] text-slate-500 mt-0.5">Telegram receives grab, download, and playback notifications via a bot.</p>
             </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Bot Token</label>
+                <PasswordInput
+                  name="telegramBotToken"
+                  value={localSettings.telegramBotToken}
+                  onChange={handleChange}
+                  placeholder="123456:ABC-DEF..."
+                  className="w-full bg-slate-800/50 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all"
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Chat ID</label>
+                <input
+                  type="text"
+                  name="telegramChatId"
+                  value={localSettings.telegramChatId}
+                  onChange={handleChange}
+                  placeholder="-100123456789"
+                  className="w-full bg-slate-800/50 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Pushover */}
+          <div className="space-y-4 bg-slate-900/50 p-5 rounded-xl border border-slate-700/50">
             <div>
-              <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Chat ID</label>
-              <input
-                type="text"
-                name="telegramChatId"
-                value={localSettings.telegramChatId}
-                onChange={handleChange}
-                placeholder="-100123456789"
-                className="w-full bg-slate-800/50 border border-slate-700 rounded-xl px-4 py-2.5 text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all"
-              />
+              <h3 className="text-sm font-semibold text-slate-300">Pushover</h3>
+              <p className="text-[11px] text-slate-500 mt-0.5">Receive notifications natively on your iOS or Android devices.</p>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">App Token</label>
+                <PasswordInput
+                  name="pushoverAppToken"
+                  value={localSettings.pushoverAppToken}
+                  onChange={handleChange}
+                  placeholder="a1b2c3d4e5..."
+                  className="w-full bg-slate-800/50 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/50 transition-all"
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">User Key</label>
+                <PasswordInput
+                  name="pushoverUserKey"
+                  value={localSettings.pushoverUserKey}
+                  onChange={handleChange}
+                  placeholder="u1v2w3x4y5..."
+                  className="w-full bg-slate-800/50 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/50 transition-all"
+                />
+              </div>
             </div>
           </div>
         </div>

@@ -114,7 +114,11 @@ router.get('/', (req, res, next) => {
         telegramChatId: getSetting('telegramChatId'),
         notifyOnGrab: getSetting('notifyOnGrab') || 'false',
         notifyOnDownload: getSetting('notifyOnDownload') || 'false',
-        notifyOnPlaybackStart: getSetting('notifyOnPlaybackStart') || 'false'
+        notifyOnPlaybackStart: getSetting('notifyOnPlaybackStart') || 'false',
+        pushoverAppToken: mask(getSetting('pushoverAppToken')),
+        pushoverUserKey: mask(getSetting('pushoverUserKey')),
+        autoDeleteWatchedEnabled: getSetting('autoDeleteWatchedEnabled') === 'true',
+        autoDeleteWatchedDays: getSetting('autoDeleteWatchedDays')
       }
     });
   } catch (e) {
@@ -170,6 +174,10 @@ const SETTING_SCHEMA = {
   notifyOnGrab:             { type: 'string' },
   notifyOnDownload:         { type: 'string' },
   notifyOnPlaybackStart:    { type: 'string' },
+  pushoverAppToken:         { type: 'apiKey' },
+  pushoverUserKey:          { type: 'apiKey' },
+  autoDeleteWatchedEnabled: { type: 'boolean' },
+  autoDeleteWatchedDays:    { type: 'string' },
 };
 
 const isMasked = (val) => typeof val === 'string' && /^\*+$/.test(val);

@@ -159,13 +159,7 @@ router.get('/status', (req, res) => {
   let isPrivate = false;
   if (bypassLocalhost) {
     const ip = (req.socket?.remoteAddress || req.connection?.remoteAddress || '').replace(/^::ffff:/, '');
-    isPrivate = ip === '127.0.0.1' || ip === '::1' ||
-      ip.startsWith('192.168.') || ip.startsWith('10.') ||
-      ip.startsWith('fc') || ip.startsWith('fd');
-    if (ip.startsWith('172.')) {
-      const octet = parseInt(ip.split('.')[1], 10);
-      if (octet >= 16 && octet <= 31) isPrivate = true;
-    }
+    isPrivate = ip === '127.0.0.1' || ip === '::1';
   }
   
   res.json({ status: 'success', data: { authEnabled, bypassLocalhost, isPrivate } });

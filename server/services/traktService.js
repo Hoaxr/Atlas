@@ -180,7 +180,7 @@ const syncWatchedMovies = async () => {
       let localCount = 0;
       const insertWatched = db.prepare('INSERT OR REPLACE INTO watched_tmdb (tmdb_id, type) VALUES (?, ?)');
       const getMovie = db.prepare('SELECT id FROM movies WHERE tmdb_id = ?');
-      const updateWatched = db.prepare('UPDATE movies SET watched = 1 WHERE id = ?');
+      const updateWatched = db.prepare('UPDATE movies SET watched = 1, watched_at = CURRENT_TIMESTAMP WHERE id = ?');
 
       for (const item of moviesList) {
         const tmdbId = item.movie.ids.tmdb;

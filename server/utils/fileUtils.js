@@ -44,4 +44,17 @@ const deleteFolderRecursive = async (folderPath) => {
   await fsp.rmdir(folderPath).catch(() => {});
 };
 
-module.exports = { VIDEO_EXTENSIONS, SUBTITLE_EXTENSIONS, isVideoFile, isSubtitleFile, deleteFolderRecursive };
+/**
+ * Checks if a given path is an exact match to a configured library root path.
+ */
+const isRootLibraryPath = (folderPath) => {
+  try {
+    const db = require('../config/database');
+    const paths = db.prepare('SELECT path FROM library_paths').all();
+    return paths.some(p => path.resolve(p.path) === path.resolve(folderPath));
+  } catch {
+    return false;
+  }
+};
+
+module.exports = { VIDEO_EXTENSIONS, SUBTITLE_EXTENSIONS, isVideoFile, isSubtitleFile, deleteFolderRecursive, isRootLibraryPath };

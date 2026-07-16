@@ -2,9 +2,18 @@ const express = require('express');
 const router = express.Router();
 const taskRegistry = require('../services/taskRegistry');
 
+const db = require('../config/database');
+
 router.get('/', (req, res) => {
   try {
-    const tasks = taskRegistry.getAllTasks();
+    let tasks = taskRegistry.getAllTasks();
+    
+    // Hide auto-delete watched if not enabled
+    const enabledRow = db.prepare("SELECT value FROM settings WHERE key = ?").get('autoDeleteWatchedEnabled');
+    if (!enabledRow || enabledRow.value !== 'true') {
+      tasks = tasks.filter(t => t.id !== 'auto_delete_watched');
+    }
+    
     res.json({ status: 'success', data: tasks });
   } catch (err) {
     res.status(500).json({ status: 'error', message: err.message });

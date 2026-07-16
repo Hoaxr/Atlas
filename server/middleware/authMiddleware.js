@@ -91,14 +91,6 @@ const authMiddleware = (req, res, next) => {
       const clean = addr.replace(/^::ffff:/, '');
       // Localhost
       if (clean === '127.0.0.1' || clean === '::1') return true;
-      // Docker bridge / private subnets (172.17-31.x.x)
-      if (clean.startsWith('192.168.') || clean.startsWith('10.')) return true;
-      if (clean.startsWith('172.')) {
-        const octet = parseInt(clean.split('.')[1], 10);
-        if (octet >= 16 && octet <= 31) return true;
-      }
-      // IPv6 private (unique local address)
-      if (clean.startsWith('fc') || clean.startsWith('fd')) return true;
       return false;
     };
 

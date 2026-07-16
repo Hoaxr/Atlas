@@ -19,7 +19,7 @@ const { isWatchedSyncEnabled, getSubtitlesInDir, extractLang, translateSrt, LANG
 router.post('/shows/:id/watched', (req, res, next) => {
   try {
     const { watched } = req.body;
-    db.prepare('UPDATE shows SET watched = ? WHERE id = ?').run(watched ? 1 : 0, req.params.id);
+    db.prepare('UPDATE shows SET watched = ?, watched_at = CURRENT_TIMESTAMP WHERE id = ?').run(watched ? 1 : 0, req.params.id);
     res.json({ status: 'success', message: watched ? 'Marked as watched' : 'Marked as unwatched' });
   } catch (err) {
     next(err);
@@ -57,235 +57,217 @@ router.get('/shows/:id', async (req, res, next) => {
   }
 });
 
-router.post('/shows/:id/refresh', async (req, res, next) => {
-  try {
-    const show = db.prepare('SELECT * FROM shows WHERE id = ?').get(req.params.id);
-    
-    if (!show) return res.status(404).json({ status: 'error', message: 'Show not found' });
-    
-    let totalSize = 0;
-    
-    if (show.folder_path) {
-      const calculateSize = async (dirPath) => {
-        try {
-          const items = await fsp.readdir(dirPath, { withFileTypes: true });
-          for (const item of items) {
-            const fullPath = path.join(dirPath, item.name);
-            if (item.isDirectory()) {
-              await calculateSize(fullPath);
-            } else if (item.isFile()) {
-              const ext = path.extname(item.name).toLowerCase();
-              if (['.mp4', '.mkv', '.avi', '.mov', '.wmv'].includes(ext)) {
-                const stats = await fsp.stat(fullPath);
-                totalSize += stats.size;
-                
-                const match = item.name.match(/[sS](\d+)[eE](\d+)/) || item.name.match(/(?:^|[ .-])(\d{1,2})x(\d{2})(?:[ .-]|$)/);
-                if (match) {
-                  const s = parseInt(match[1], 10);
-                  const firstE = parseInt(match[2], 10);
-                  // Extract all numbers after the season prefix for multi-episode support
-                  // Only match the contiguous episode block (stops at whitespace)
-                  const epMatch = item.name.match(/[sS]\d+[eE](\d+(?:[-][eE]?\d+)*)/i);
-                  let lastE = firstE;
-                  if (epMatch) {
-                    const epBlock = epMatch[0].replace(/^[sS]\d+[eE]/i, '');
-                    const allEps = [...epBlock.matchAll(/(\d+)/g)].map(m => parseInt(m[1], 10));
-                    if (allEps.length > 1) {
-                      lastE = allEps[allEps.length - 1];
-                    }
-                  }
-                  // Extracted getMediaMetadata, parseAudioFromFileName above
-                  // Always detect resolution — file name first, ffprobe as fallback
-                  let resolution = null;
-                  const nameLower = item.name.toLowerCase();
-                  if (nameLower.includes('2160p') || nameLower.includes('4k')) resolution = '2160p';
-                  else if (nameLower.includes('1080p')) resolution = '1080p';
-                  else if (nameLower.includes('720p')) resolution = '720p';
-                  else if (nameLower.includes('480p')) resolution = '480p';
+const refreshShowData = async (id) => {
+  const show = db.prepare('SELECT * FROM shows WHERE id = ?').get(id);
+  if (!show) return null;
 
-                  // Detect codec — file name first, ffprobe as fallback
-                  let codec = null;
-                  if (nameLower.includes('x265') || nameLower.includes('h265') || nameLower.includes('hevc')) codec = 'x265';
-                  else if (nameLower.includes('x264') || nameLower.includes('h264') || nameLower.includes('avc')) codec = 'x264';
-
-                  let audio = parseAudioFromFileName(item.name);
-
-                  if (!resolution || !codec || !audio) {
-                    try {
-                      const meta = await getMediaMetadata(fullPath);
-                      if (!resolution) resolution = meta.resolution;
-                      if (!codec) codec = meta.codec;
-                      if (!audio) audio = meta.audio;
-                    } catch { /* ignore */ }
-                  }
-
-                  // Preserve existing scene_name unless empty/missing/auto-generated
-                  const existingEp = db.prepare(
-                    'SELECT scene_name FROM episodes WHERE show_id = ? AND season_number = ? AND episode_number = ?'
-                  ).get(show.id, s, firstE);
-                  let resName = existingEp?.scene_name;
-                  if (!resName || resName === '' || resName.startsWith('Unknown ')) {
-                    resName = item.name;
-                    const t = resName.toLowerCase();
-                    const hasRes = t.includes('2160p') || t.includes('4k') || t.includes('1080p') || t.includes('720p') || t.includes('480p') || t.includes('sd');
-                    if (!hasRes) {
-                      if (resolution) resName = `Unknown ${resolution}`;
-                    }
-                  }
-                  
-                  const saveEpisodes = db.transaction((startEp, endEp) => {
-                    const insertStmt = db.prepare(`
-                      INSERT OR IGNORE INTO episodes (show_id, season_number, episode_number, title, overview, status, air_date)
-                      VALUES (?, ?, ?, ?, ?, 'monitored', NULL)
-                    `);
-                    const updateStmt = db.prepare(`
-                      UPDATE episodes 
-                      SET file_path = ?, file_size = ?, scene_name = ?, status = 'downloaded', resolution = ?, codec = ?, audio = ?
-                      WHERE show_id = ? AND season_number = ? AND episode_number = ?
-                    `);
-                    for (let ep = startEp; ep <= endEp; ep++) {
-                      insertStmt.run(show.id, s, ep, item.name, '');
-                      updateStmt.run(fullPath, stats.size, resName, resolution, codec, audio, show.id, s, ep);
-                    }
-                  });
-                  saveEpisodes(firstE, lastE);
-                }
-              }
-            }
-          }
-        } catch (e) {
-          // Ignore read errors
-        }
-      };
-
-      // Reset all downloaded/downloading episodes to missing/monitored and clear their paths before scanning
-      db.prepare(`
-        UPDATE episodes 
-        SET status = CASE WHEN status = 'downloaded' THEN 'missing'
-                          WHEN status = 'downloading' THEN 'monitored'
-                          ELSE status END,
-            file_path = NULL,
-            file_size = 0,
-            scene_name = NULL
-        WHERE show_id = ?
-      `).run(show.id);
-
-      await calculateSize(show.folder_path);
-
-      db.prepare(`
-        UPDATE shows 
-        SET folder_size = ?, 
-            status = CASE 
-              WHEN ? > 0 THEN 'downloaded'
-              WHEN status = 'downloaded' THEN 'missing'
-              ELSE status
-            END 
-        WHERE id = ?
-      `).run(totalSize, totalSize, show.id);
-
-      // Scan subtitles for this show's episodes
-      const subExtensions = ['.srt', '.sub', '.vtt', '.ass', '.ssa', '.smi', '.idx'];
-      const subEps = db.prepare(
-        "SELECT id, file_path, season_number, episode_number FROM episodes WHERE show_id = ? AND file_path IS NOT NULL"
-      ).all(show.id);
-
-      const subDirMap = {};
-      for (const ep of subEps) {
-        const dir = path.dirname(ep.file_path);
-        if (!subDirMap[dir]) subDirMap[dir] = [];
-        subDirMap[dir].push(ep);
-      }
-
-      for (const [dir, episodes] of Object.entries(subDirMap)) {
-        let subFiles = [];
-        try {
-          const items = await fsp.readdir(dir);
-          subFiles = items.filter(f => subExtensions.includes(path.extname(f).toLowerCase()));
-        } catch { /* skip */ }
-
-          const updateSubs = db.transaction((episodeList) => {
-            const stmt = db.prepare('UPDATE episodes SET subtitles = ? WHERE id = ?');
-            for (const ep of episodeList) {
-              const baseName = path.basename(ep.file_path, path.extname(ep.file_path));
-              const s = ep.season_number;
-              const e = ep.episode_number;
-              const matchStr1 = `s${String(s).padStart(2, '0')}e${String(e).padStart(2, '0')}`;
-              const matchStr2 = `${s}x${String(e).padStart(2, '0')}`;
-
-              const matchingSubs = subFiles.filter(f =>
-                f.startsWith(baseName) || f.toLowerCase().includes(matchStr1) || f.toLowerCase().includes(matchStr2)
-              );
-
-              const langs = [...new Set(
-                matchingSubs.map(f => {
-                  const name = path.basename(f, path.extname(f));
-                  const m = name.match(/[._-]([a-z]{2,3})(?:\.[a-z0-9]+)?$/i);
-                  return m ? m[1].toLowerCase() : null;
-                }).filter(Boolean)
-              )];
-
-              stmt.run(JSON.stringify(langs), ep.id);
-            }
-          });
-          updateSubs(episodes);
-      }
-    }
-
-    // Fire TMDB re-sync in background to avoid blocking the response
-    (async () => {
+  let totalSize = 0;
+  
+  if (show.folder_path) {
+    const calculateSize = async (dirPath) => {
       try {
-        const data = await tmdbService.getShowById(show.tmdb_id);
-        if (data) {
-          db.prepare('UPDATE shows SET rating = ?, poster_path = ?, overview = ?, tmdb_status = ? WHERE id = ?')
-            .run(data.vote_average || 0, data.poster_path, data.overview, data.status || '', show.id);
+        const items = await fsp.readdir(dirPath, { withFileTypes: true });
+        for (const item of items) {
+          const fullPath = path.join(dirPath, item.name);
+          if (item.isDirectory()) {
+            await calculateSize(fullPath);
+          } else if (item.isFile()) {
+            const ext = path.extname(item.name).toLowerCase();
+            if (['.mp4', '.mkv', '.avi', '.mov', '.wmv'].includes(ext)) {
+              const stats = await fsp.stat(fullPath);
+              totalSize += stats.size;
+              
+              const match = item.name.match(/[sS](\d+)[eE](\d+)/) || item.name.match(/(?:^|[ .-])(\d{1,2})x(\d{2})(?:[ .-]|$)/);
+              if (match) {
+                const s = parseInt(match[1], 10);
+                const firstE = parseInt(match[2], 10);
+                // Extract all numbers after the season prefix for multi-episode support
+                // Only match the contiguous episode block (stops at whitespace)
+                const epMatch = item.name.match(/[sS]\d+[eE](\d+(?:[-][eE]?\d+)*)/i);
+                let lastE = firstE;
+                if (epMatch) {
+                  const epBlock = epMatch[0].replace(/^[sS]\d+[eE]/i, '');
+                  const allEps = [...epBlock.matchAll(/(\d+)/g)].map(m => parseInt(m[1], 10));
+                  if (allEps.length > 1) {
+                    lastE = allEps[allEps.length - 1];
+                  }
+                }
+                // Extracted getMediaMetadata, parseAudioFromFileName above
+                // Always detect resolution — file name first, ffprobe as fallback
+                let resolution = null;
+                const nameLower = item.name.toLowerCase();
+                if (nameLower.includes('2160p') || nameLower.includes('4k')) resolution = '2160p';
+                else if (nameLower.includes('1080p')) resolution = '1080p';
+                else if (nameLower.includes('720p')) resolution = '720p';
+                else if (nameLower.includes('480p')) resolution = '480p';
 
-          const seasons = await tmdbService.getShowSeasons(show.tmdb_id);
-          const insertEp = db.prepare(`
-            INSERT INTO episodes (show_id, season_number, episode_number, title, overview, status, air_date)
-            VALUES (?, ?, ?, ?, ?, 'monitored', ?)
-            ON CONFLICT(show_id, season_number, episode_number) DO UPDATE SET
-              title = excluded.title,
-              overview = excluded.overview,
-              air_date = excluded.air_date
-          `);
+                let codec = null;
+                if (nameLower.includes('x265') || nameLower.includes('h265') || nameLower.includes('hevc')) codec = 'x265';
+                else if (nameLower.includes('x264') || nameLower.includes('h264') || nameLower.includes('avc')) codec = 'x264';
 
-          const tmdbEpisodeKeys = new Set();
-          for (const s of seasons) {
-            if (s.season_number === 0) continue;
-            const episodes = await tmdbService.getSeasonEpisodes(show.tmdb_id, s.season_number);
-            for (const ep of episodes) {
-              const key = `${ep.season_number}|${ep.episode_number}`;
-              tmdbEpisodeKeys.add(key);
-              insertEp.run(show.id, ep.season_number, ep.episode_number, ep.name, ep.overview, ep.air_date);
-            }
-          }
+                let audio = parseAudioFromFileName(item.name);
 
-          const allDbEpisodes = db.prepare(
-            'SELECT id, season_number, episode_number, status FROM episodes WHERE show_id = ?'
-          ).all(show.id);
-          const runStaleDeletion = db.transaction(() => {
-            const deleteStale = db.prepare('DELETE FROM episodes WHERE id = ?');
-            let removedCount = 0;
-            for (const ep of allDbEpisodes) {
-              const key = `${ep.season_number}|${ep.episode_number}`;
-              if (!tmdbEpisodeKeys.has(key) && ep.status !== 'downloaded') {
-                deleteStale.run(ep.id);
-                removedCount++;
+                if (!resolution || !codec || !audio) {
+                  try {
+                    const meta = await getMediaMetadata(fullPath);
+                    if (!resolution) resolution = meta.resolution;
+                    if (!codec) codec = meta.codec;
+                    if (!audio) audio = meta.audio;
+                  } catch { /* ignore */ }
+                }
+
+                const saveEpisodes = db.transaction((startEp, endEp) => {
+                  for (let ep = startEp; ep <= endEp; ep++) {
+                    db.prepare(`
+                      UPDATE episodes 
+                      SET status = 'downloaded', file_path = ?, file_size = ?, scene_name = ?, resolution = ?, codec = ?, audio = ?
+                      WHERE show_id = ? AND season_number = ? AND episode_number = ?
+                    `).run(fullPath, stats.size, item.name, resolution, codec, audio, show.id, s, ep);
+                  }
+                });
+                saveEpisodes(firstE, lastE);
               }
             }
-            return removedCount;
-          });
-          const removedCount = runStaleDeletion();
-          if (removedCount > 0) {
-            console.log(`[ShowRefresh] Removed ${removedCount} stale episode(s) from "${show.title}"`);
           }
         }
       } catch (e) {
-        console.error('TMDB refresh failed for show:', e.message);
+        // Ignore read errors
       }
-    })();
+    };
 
-    res.json({ status: 'success', message: 'Show refreshed', folder_size: totalSize });
+    // Reset all downloaded/downloading episodes to missing/monitored and clear their paths before scanning
+    db.prepare(`
+      UPDATE episodes 
+      SET status = CASE WHEN status = 'downloaded' THEN 'missing'
+                        WHEN status = 'downloading' THEN 'monitored'
+                        ELSE status END,
+          file_path = NULL,
+          file_size = 0,
+          scene_name = NULL
+      WHERE show_id = ?
+    `).run(show.id);
+
+    await calculateSize(show.folder_path);
+
+    db.prepare(`
+      UPDATE shows 
+      SET folder_size = ?, 
+          status = CASE 
+            WHEN ? > 0 THEN 'downloaded'
+            WHEN status = 'downloaded' THEN 'missing'
+            ELSE status
+          END 
+      WHERE id = ?
+    `).run(totalSize, totalSize, show.id);
+
+    // Scan subtitles for this show's episodes
+    const subExtensions = ['.srt', '.sub', '.vtt', '.ass', '.ssa', '.smi', '.idx'];
+    const subEps = db.prepare(
+      "SELECT id, file_path, season_number, episode_number FROM episodes WHERE show_id = ? AND file_path IS NOT NULL"
+    ).all(show.id);
+
+    const subDirMap = {};
+    for (const ep of subEps) {
+      const dir = path.dirname(ep.file_path);
+      if (!subDirMap[dir]) subDirMap[dir] = [];
+      subDirMap[dir].push(ep);
+    }
+
+    for (const [dir, episodes] of Object.entries(subDirMap)) {
+      let subFiles = [];
+      try {
+        const items = await fsp.readdir(dir);
+        subFiles = items.filter(f => subExtensions.includes(path.extname(f).toLowerCase()));
+      } catch { /* skip */ }
+
+        const updateSubs = db.transaction((episodeList) => {
+          const stmt = db.prepare('UPDATE episodes SET subtitles = ? WHERE id = ?');
+          for (const ep of episodeList) {
+            const baseName = path.basename(ep.file_path, path.extname(ep.file_path));
+            const s = ep.season_number;
+            const e = ep.episode_number;
+            const matchStr1 = `s${String(s).padStart(2, '0')}e${String(e).padStart(2, '0')}`;
+            const matchStr2 = `${s}x${String(e).padStart(2, '0')}`;
+
+            const matchingSubs = subFiles.filter(f =>
+              f.startsWith(baseName) || f.toLowerCase().includes(matchStr1) || f.toLowerCase().includes(matchStr2)
+            );
+
+            const langs = [...new Set(
+              matchingSubs.map(f => {
+                const name = path.basename(f, path.extname(f));
+                const m = name.match(/[._-]([a-z]{2,3})(?:\.[a-z0-9]+)?$/i);
+                return m ? m[1].toLowerCase() : null;
+              }).filter(Boolean)
+            )];
+
+            stmt.run(JSON.stringify(langs), ep.id);
+          }
+        });
+        updateSubs(episodes);
+    }
+  }
+
+  // Fire TMDB re-sync in background to avoid blocking the response
+  (async () => {
+    try {
+      const data = await tmdbService.getShowById(show.tmdb_id);
+      if (data) {
+        db.prepare('UPDATE shows SET rating = ?, poster_path = ?, overview = ?, tmdb_status = ? WHERE id = ?')
+          .run(data.vote_average || 0, data.poster_path, data.overview, data.status || '', show.id);
+
+        const seasons = await tmdbService.getShowSeasons(show.tmdb_id);
+        const insertEp = db.prepare(`
+          INSERT INTO episodes (show_id, season_number, episode_number, title, overview, status, air_date)
+          VALUES (?, ?, ?, ?, ?, 'monitored', ?)
+          ON CONFLICT(show_id, season_number, episode_number) DO UPDATE SET
+            title = excluded.title,
+            overview = excluded.overview,
+            air_date = excluded.air_date
+        `);
+        const tmdbEpisodeKeys = new Set();
+        for (const s of seasons) {
+          if (s.season_number === 0) continue;
+          const episodes = await tmdbService.getSeasonEpisodes(show.tmdb_id, s.season_number);
+          for (const ep of episodes) {
+            const key = `${ep.season_number}|${ep.episode_number}`;
+            tmdbEpisodeKeys.add(key);
+            insertEp.run(show.id, ep.season_number, ep.episode_number, ep.name, ep.overview, ep.air_date);
+          }
+        }
+
+        const allDbEpisodes = db.prepare(
+          'SELECT id, season_number, episode_number, status FROM episodes WHERE show_id = ?'
+        ).all(show.id);
+        const runStaleDeletion = db.transaction(() => {
+          const deleteStale = db.prepare('DELETE FROM episodes WHERE id = ?');
+          let removedCount = 0;
+          for (const ep of allDbEpisodes) {
+            const key = `${ep.season_number}|${ep.episode_number}`;
+            if (!tmdbEpisodeKeys.has(key) && ep.status !== 'downloaded') {
+              deleteStale.run(ep.id);
+              removedCount++;
+            }
+          }
+          return removedCount;
+        });
+        const removedCount = runStaleDeletion();
+        if (removedCount > 0) {
+          console.log(`[ShowRefresh] Removed ${removedCount} stale episode(s) from "${show.title}"`);
+        }
+      }
+    } catch (e) {
+      console.error('TMDB refresh failed for show:', e.message);
+    }
+  })();
+
+  return db.prepare('SELECT * FROM shows WHERE id = ?').get(id);
+};
+
+router.post('/shows/:id/refresh', async (req, res, next) => {
+  try {
+    const show = await refreshShowData(req.params.id);
+    res.json({ status: 'success', message: 'Show refreshed', folder_size: show.folder_size });
   } catch (e) {
     next(e);
   }
@@ -466,7 +448,7 @@ router.get('/shows/:id/search', async (req, res, next) => {
 
 router.post('/shows/:id/auto-search', async (req, res, next) => {
   try {
-    
+    await refreshShowData(req.params.id);
     const show = db.prepare('SELECT * FROM shows WHERE id = ?').get(req.params.id);
     if (!show) return res.status(404).json({ status: 'error', message: 'Show not found' });
 
@@ -758,9 +740,15 @@ router.get('/episodes/:id/search', async (req, res, next) => {
 
 router.post('/episodes/:id/auto-search', async (req, res, next) => {
   try {
-    
-    const episode = db.prepare('SELECT e.*, s.title as show_title, s.tmdb_id as show_tmdb_id FROM episodes e JOIN shows s ON e.show_id = s.id WHERE e.id = ?').get(req.params.id);
+    let episode = db.prepare('SELECT e.*, s.title as show_title, s.tmdb_id as show_tmdb_id FROM episodes e JOIN shows s ON e.show_id = s.id WHERE e.id = ?').get(req.params.id);
     if (!episode) return res.status(404).json({ status: 'error', message: 'Episode not found' });
+
+    await refreshShowData(episode.show_id);
+    episode = db.prepare('SELECT e.*, s.title as show_title, s.tmdb_id as show_tmdb_id FROM episodes e JOIN shows s ON e.show_id = s.id WHERE e.id = ?').get(req.params.id);
+    
+    if (episode.status === 'downloaded' && episode.file_path) {
+      return res.json({ status: 'success', message: 'Episode is already downloaded on disk. Skipping search.' });
+    }
 
     const results = await indexerService.searchEpisode(episode.show_title, episode.season_number, episode.episode_number, null, null, false, episode.show_tmdb_id);
     
@@ -817,7 +805,7 @@ router.post('/shows/:id/seasons/:season/watched', (req, res, next) => {
   try {
     const { watched = 1 } = req.body;
     const result = db.prepare(
-      'UPDATE episodes SET watched = ? WHERE show_id = ? AND season_number = ?'
+      'UPDATE episodes SET watched = ?, watched_at = CURRENT_TIMESTAMP WHERE show_id = ? AND season_number = ?'
     ).run(watched ? 1 : 0, req.params.id, req.params.season);
     res.json({ status: 'success', message: `${result.changes} episodes updated`, changes: result.changes });
   } catch (err) { next(err); }

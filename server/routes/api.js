@@ -50,4 +50,13 @@ router.get('/logs', (req, res, next) => {
   }
 });
 
+router.delete('/logs', (req, res, next) => {
+  try {
+    db.prepare('DELETE FROM logs').run();
+    res.json({ status: 'success', message: 'Activity logs cleared' });
+  } catch (e) {
+    next(e);
+  }
+});
+
 module.exports = router;

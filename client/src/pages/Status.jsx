@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   AlertCircle, CheckCircle2, Activity, Database, Zap,
   Film, Tv, Server, Cloud, DownloadCloud, Globe, Cpu,
-  Settings, BookOpen, MessageSquare, FolderTree, Clock, List
+  Settings, BookOpen, MessageSquare, FolderTree, Clock, List, Trash2
 } from 'lucide-react';
 import useWebSocket from '../lib/useWebSocket';
 import EmptyState from '../components/shared/EmptyState';
@@ -82,9 +82,11 @@ export default function Status() {
   // Listen for real-time events to prepend to log
   useEffect(() => {
     return onEvent((data) => {
+      if (!data.message || !['info', 'success', 'warn', 'error'].includes(data.level)) return;
+      
       setLogs(prev => [{
         id: Date.now(),
-        level: data.level || 'info',
+        level: data.level,
         message: data.message,
         metadata: data.metadata,
         created_at: new Date().toISOString(),
@@ -401,6 +403,26 @@ export default function Status() {
       ) : (
         /* Activity Feed Tab */
         <div className="space-y-4">
+          <div className="flex items-center justify-between px-2">
+            <h3 className="text-sm font-medium text-slate-300">Activity Log</h3>
+            <button
+              onClick={async () => {
+                if (window.confirm('Are you sure you want to clear all activity logs?')) {
+                  try {
+                    await api.delete('/logs');
+                    setLogs([]);
+                  } catch (e) {
+                    console.error('Failed to clear logs', e);
+                  }
+                }
+              }}
+              disabled={logs.length === 0}
+              className="text-xs text-rose-400 hover:text-rose-300 disabled:opacity-50 flex items-center gap-1.5 transition-colors"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              Clear Logs
+            </button>
+          </div>
           {logsLoading && logs.length === 0 ? (
             <div className="flex justify-center py-12">
               <Spinner />
@@ -432,8 +454,11 @@ export default function Status() {
                         <span className="text-xs text-slate-500">{time}</span>
                       </div>
                       <p className="text-sm text-slate-200 dark:text-slate-200 text-slate-700 mt-1">{log.message}</p>
-                      {log.metadata?.title && (
-                        <p className="text-xs text-slate-500 mt-0.5">{log.metadata.title}</p>
+                      {(log.title || log.metadata?.title || log.showId || log.metadata?.showId) && (
+                        <p className="text-xs text-slate-500 mt-0.5">
+                          {log.title || log.metadata?.title || `Show ID: ${log.showId || log.metadata?.showId}`}
+                          {(log.language || log.metadata?.language) ? ` (${log.language || log.metadata?.language})` : ''}
+                        </p>
                       )}
                     </div>
                   </div>

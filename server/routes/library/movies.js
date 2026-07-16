@@ -169,143 +169,149 @@ router.delete('/:id/files/:filename', async (req, res, next) => {
   }
 });
 
+const refreshMovieData = async (id) => {
+  const movie = db.prepare('SELECT * FROM movies WHERE id = ?').get(id);
+  if (!movie) return null;
+
+  // Recursively find the largest video file inside a directory
+  const findBestFile = async (dirPath) => {
+    let best = null;
+    let max = -1;
+    let items;
+    try { items = await fsp.readdir(dirPath); } catch { return null; }
+    for (const item of items) {
+      const fullPath = path.join(dirPath, item);
+      try {
+        const stats = await fsp.stat(fullPath);
+        if (stats.isDirectory()) {
+          const sub = await findBestFile(fullPath);
+          if (sub && sub.size > max) { max = sub.size; best = sub; }
+        } else {
+          const ext = path.extname(item).toLowerCase();
+          if (['.mp4', '.mkv', '.avi', '.mov', '.wmv', '.webm', '.ts', '.m2ts'].includes(ext) && stats.size > max) {
+            max = stats.size;
+            best = { path: fullPath, name: item, size: stats.size, dir: dirPath };
+          }
+        }
+      } catch { /* ignore */ }
+    }
+    return best;
+  };
+
+  // Collect candidate directories to scan
+  const scanPaths = new Set();
+  if (movie.file_path) {
+    try { scanPaths.add(path.dirname(movie.file_path)); } catch { /* ignore */ }
+  } else if (movie.folder_path) {
+    scanPaths.add(movie.folder_path);
+  }
+
+  // Fallback: when DB has no path info, search all configured library paths
+  // for a folder whose name contains the movie title (and year).
+  if (scanPaths.size === 0) {
+    const libraryPaths = db.prepare('SELECT path FROM library_paths').all();
+    const normalize = (s) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    const titleNorm = normalize(movie.title);
+    const yearStr   = movie.year ? String(movie.year) : '';
+
+    for (const lp of libraryPaths) {
+      // Scan up to two levels deep (e.g. /library/<title> or /library/Movies/<title>)
+      const scanLevel = async (basePath) => {
+        let entries;
+        try { entries = await fsp.readdir(basePath, { withFileTypes: true }); } catch { return; }
+        for (const entry of entries) {
+          if (!entry.isDirectory()) continue;
+          const nameNorm = normalize(entry.name);
+          if (nameNorm.includes(titleNorm) && (!yearStr || entry.name.includes(yearStr))) {
+            scanPaths.add(path.join(basePath, entry.name));
+          }
+        }
+      };
+
+      await scanLevel(lp.path);
+      // Also one level deeper
+      let topLevel = [];
+      try { topLevel = await fsp.readdir(lp.path, { withFileTypes: true }); } catch { /* ignore */ }
+      for (const sub of topLevel) {
+        if (sub.isDirectory()) await scanLevel(path.join(lp.path, sub.name));
+      }
+    }
+  }
+
+  let bestFile = null;
+  for (const dirPath of scanPaths) {
+    dirCache.delete(dirPath);
+    const result = await findBestFile(dirPath);
+    if (result && (!bestFile || result.size > bestFile.size)) bestFile = result;
+  }
+
+  if (bestFile) {
+    // Preserve existing scene_name unless it's empty/missing/auto-generated
+    let resName = movie.scene_name;
+    
+    // Always detect and update resolution
+    let resolution = null;
+    // First try to extract from filename
+    const nameLower = bestFile.name.toLowerCase();
+    if (nameLower.includes('2160p') || nameLower.includes('4k')) resolution = '2160p';
+    else if (nameLower.includes('1080p')) resolution = '1080p';
+    else if (nameLower.includes('720p')) resolution = '720p';
+    else if (nameLower.includes('480p')) resolution = '480p';
+
+    // Detect and update codec
+    let codec = null;
+    if (nameLower.includes('x265') || nameLower.includes('h265') || nameLower.includes('hevc')) codec = 'x265';
+    else if (nameLower.includes('x264') || nameLower.includes('h264') || nameLower.includes('avc')) codec = 'x264';
+
+    let audio = parseAudioFromFileName(bestFile.name);
+
+    if (!resolution || !codec || !audio) {
+      try {
+        const meta = await getMediaMetadata(bestFile.path);
+        if (!resolution) resolution = meta.resolution;
+        if (!codec) codec = meta.codec;
+        if (!audio) audio = meta.audio;
+      } catch { /* ignore */ }
+    }
+
+    if (!resName || resName === '' || resName.startsWith('Unknown ')) {
+      resName = bestFile.name;
+      const t = resName.toLowerCase();
+      const hasRes = t.includes('2160p') || t.includes('4k') || t.includes('1080p') || t.includes('720p') || t.includes('480p') || t.includes('sd');
+      if (!hasRes) {
+        if (resolution) resName = `Unknown ${resolution}`;
+      }
+    }
+
+    db.prepare('UPDATE movies SET file_path = ?, file_size = ?, scene_name = ?, status = ?, resolution = ?, codec = ?, audio = ? WHERE id = ?')
+      .run(bestFile.path, bestFile.size, resName, 'downloaded', resolution, codec, audio, movie.id);
+  } else if (scanPaths.size > 0) {
+    // Paths were found but contained no video — genuinely missing
+    db.prepare(`UPDATE movies SET status = CASE WHEN status = 'downloaded' THEN 'missing' ELSE status END, file_path = NULL, file_size = 0, scene_name = NULL WHERE id = ?`).run(movie.id);
+  }
+
+  try {
+    const data = await tmdbService.getMovieById(movie.tmdb_id);
+    if (data) {
+      let releaseDate = await tmdbService.getMovieReleaseDates(movie.tmdb_id);
+      if (!releaseDate && data.release_date) {
+        const theatrical = new Date(data.release_date);
+        theatrical.setDate(theatrical.getDate() + 90);
+        releaseDate = theatrical.toISOString().split('T')[0];
+      }
+      if (!releaseDate) releaseDate = data.release_date || null;
+      db.prepare('UPDATE movies SET rating = ?, poster_path = ?, overview = ?, release_date = ? WHERE id = ?')
+        .run(data.vote_average || 0, data.poster_path, data.overview, releaseDate, movie.id);
+    }
+  } catch (e) { console.error('TMDB refresh failed for movie:', e.message); }
+
+  return db.prepare('SELECT * FROM movies WHERE id = ?').get(id);
+};
+
 router.post('/:id/refresh', async (req, res, next) => {
   try {
-    const movie = db.prepare('SELECT * FROM movies WHERE id = ?').get(req.params.id);
-
+    const movie = await refreshMovieData(req.params.id);
     if (!movie) return res.status(404).json({ status: 'error', message: 'Movie not found' });
-
-    // Recursively find the largest video file inside a directory
-    const findBestFile = async (dirPath) => {
-      let best = null;
-      let max = -1;
-      let items;
-      try { items = await fsp.readdir(dirPath); } catch { return null; }
-      for (const item of items) {
-        const fullPath = path.join(dirPath, item);
-        try {
-          const stats = await fsp.stat(fullPath);
-          if (stats.isDirectory()) {
-            const sub = await findBestFile(fullPath);
-            if (sub && sub.size > max) { max = sub.size; best = sub; }
-          } else {
-            const ext = path.extname(item).toLowerCase();
-            if (['.mp4', '.mkv', '.avi', '.mov', '.wmv', '.webm', '.ts', '.m2ts'].includes(ext) && stats.size > max) {
-              max = stats.size;
-              best = { path: fullPath, name: item, size: stats.size, dir: dirPath };
-            }
-          }
-        } catch { /* ignore */ }
-      }
-      return best;
-    };
-
-    // Collect candidate directories to scan
-    const scanPaths = new Set();
-    if (movie.file_path) {
-      try { scanPaths.add(path.dirname(movie.file_path)); } catch { /* ignore */ }
-    }
-
-    // Fallback: when DB has no path info, search all configured library paths
-    // for a folder whose name contains the movie title (and year).
-    if (scanPaths.size === 0) {
-      const libraryPaths = db.prepare('SELECT path FROM library_paths').all();
-      const normalize = (s) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-      const titleNorm = normalize(movie.title);
-      const yearStr   = movie.year ? String(movie.year) : '';
-
-      for (const lp of libraryPaths) {
-        // Scan up to two levels deep (e.g. /library/<title> or /library/Movies/<title>)
-        const scanLevel = async (basePath) => {
-          let entries;
-          try { entries = await fsp.readdir(basePath, { withFileTypes: true }); } catch { return; }
-          for (const entry of entries) {
-            if (!entry.isDirectory()) continue;
-            const nameNorm = normalize(entry.name);
-            if (nameNorm.includes(titleNorm) && (!yearStr || entry.name.includes(yearStr))) {
-              scanPaths.add(path.join(basePath, entry.name));
-            }
-          }
-        };
-
-        await scanLevel(lp.path);
-        // Also one level deeper
-        let topLevel = [];
-        try { topLevel = await fsp.readdir(lp.path, { withFileTypes: true }); } catch { /* ignore */ }
-        for (const sub of topLevel) {
-          if (sub.isDirectory()) await scanLevel(path.join(lp.path, sub.name));
-        }
-      }
-    }
-
-    let bestFile = null;
-    for (const dirPath of scanPaths) {
-      dirCache.delete(dirPath);
-      const result = await findBestFile(dirPath);
-      if (result && (!bestFile || result.size > bestFile.size)) bestFile = result;
-    }
-
-    if (bestFile) {
-      // Preserve existing scene_name unless it's empty/missing/auto-generated
-      let resName = movie.scene_name;
-      
-      // Always detect and update resolution
-      let resolution = null;
-      // First try to extract from filename
-      const nameLower = bestFile.name.toLowerCase();
-      if (nameLower.includes('2160p') || nameLower.includes('4k')) resolution = '2160p';
-      else if (nameLower.includes('1080p')) resolution = '1080p';
-      else if (nameLower.includes('720p')) resolution = '720p';
-      else if (nameLower.includes('480p')) resolution = '480p';
-
-      // Detect and update codec
-      let codec = null;
-      if (nameLower.includes('x265') || nameLower.includes('h265') || nameLower.includes('hevc')) codec = 'x265';
-      else if (nameLower.includes('x264') || nameLower.includes('h264') || nameLower.includes('avc')) codec = 'x264';
-
-      let audio = parseAudioFromFileName(bestFile.name);
-
-      if (!resolution || !codec || !audio) {
-        try {
-          const meta = await getMediaMetadata(bestFile.path);
-          if (!resolution) resolution = meta.resolution;
-          if (!codec) codec = meta.codec;
-          if (!audio) audio = meta.audio;
-        } catch { /* ignore */ }
-      }
-
-      if (!resName || resName === '' || resName.startsWith('Unknown ')) {
-        resName = bestFile.name;
-        const t = resName.toLowerCase();
-        const hasRes = t.includes('2160p') || t.includes('4k') || t.includes('1080p') || t.includes('720p') || t.includes('480p') || t.includes('sd');
-        if (!hasRes) {
-          if (resolution) resName = `Unknown ${resolution}`;
-        }
-      }
-
-      db.prepare('UPDATE movies SET file_path = ?, file_size = ?, scene_name = ?, status = ?, resolution = ?, codec = ?, audio = ? WHERE id = ?')
-        .run(bestFile.path, bestFile.size, resName, 'downloaded', resolution, codec, audio, movie.id);
-    } else if (scanPaths.size > 0) {
-      // Paths were found but contained no video — genuinely missing
-      db.prepare(`UPDATE movies SET status = CASE WHEN status = 'downloaded' THEN 'missing' ELSE status END, file_path = NULL, file_size = 0, scene_name = NULL WHERE id = ?`).run(movie.id);
-    }
-    // If scanPaths is empty (no library configured), leave status untouched
-
-    try {
-      const data = await tmdbService.getMovieById(movie.tmdb_id);
-      if (data) {
-        let releaseDate = await tmdbService.getMovieReleaseDates(movie.tmdb_id);
-        if (!releaseDate && data.release_date) {
-          const theatrical = new Date(data.release_date);
-          theatrical.setDate(theatrical.getDate() + 90);
-          releaseDate = theatrical.toISOString().split('T')[0];
-        }
-        if (!releaseDate) releaseDate = data.release_date || null;
-        db.prepare('UPDATE movies SET rating = ?, poster_path = ?, overview = ?, release_date = ? WHERE id = ?')
-          .run(data.vote_average || 0, data.poster_path, data.overview, releaseDate, movie.id);
-      }
-    } catch (e) { console.error('TMDB refresh failed for movie:', e.message); }
-
     res.json({ status: 'success', message: 'Movie refreshed' });
   } catch (e) {
     next(e);
@@ -385,9 +391,13 @@ router.post('/:id/download', async (req, res, next) => {
 
 router.post('/:id/auto-search', async (req, res, next) => {
   try {
-    
-    const movie = db.prepare('SELECT * FROM movies WHERE id = ?').get(req.params.id);
+    // Before auto-searching, ensure we check the disk just in case the file is already there
+    const movie = await refreshMovieData(req.params.id);
     if (!movie) return res.status(404).json({ status: 'error', message: 'Movie not found' });
+
+    if (movie.status === 'downloaded' && movie.file_path) {
+      return res.json({ status: 'success', message: 'Movie is already downloaded on disk. Skipping search.' });
+    }
 
     const results = await indexerService.searchMovie(movie.title, movie.year, null, null, false, movie.tmdb_id);
     if (!results || results.length === 0) {
@@ -510,7 +520,7 @@ router.post('/:id/download-subs', async (req, res, next) => {
 router.post('/:id/watched', (req, res, next) => {
   try {
     const { watched } = req.body;
-    db.prepare('UPDATE movies SET watched = ? WHERE id = ?').run(watched ? 1 : 0, req.params.id);
+    db.prepare('UPDATE movies SET watched = ?, watched_at = CURRENT_TIMESTAMP WHERE id = ?').run(watched ? 1 : 0, req.params.id);
     res.json({ status: 'success', message: watched ? 'Marked as watched' : 'Marked as unwatched' });
   } catch (err) {
     next(err);
@@ -549,7 +559,13 @@ router.delete('/:id', async (req, res, next) => {
       try {
         const dir = movie.file_path ? path.dirname(movie.file_path) : movie.folder_path;
         if (dir) {
-          await fsp.rm(dir, { recursive: true, force: true });
+          const { isRootLibraryPath } = require('../../utils/fileUtils');
+          if (isRootLibraryPath(dir)) {
+            // Only delete the file itself if the directory is a root library path
+            if (movie.file_path) await fsp.unlink(movie.file_path).catch(() => {});
+          } else {
+            await fsp.rm(dir, { recursive: true, force: true });
+          }
         }
       } catch (e) {
         console.warn('[movies] Could not delete folder:', e?.message);

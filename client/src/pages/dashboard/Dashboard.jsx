@@ -1,5 +1,6 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, forwardRef } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { VirtuosoGrid } from 'react-virtuoso';
 import api from '../../lib/api';
 import { Activity, Film, Tv, Search, CheckCircle2, AlertCircle, Bookmark, BookmarkMinus, LayoutGrid, List, Star, Info, X, RotateCcw, Filter as FilterIcon, CheckSquare, Square, Columns, Plus } from 'lucide-react';
 import { customAlert, customConfirm } from '../../utils/alerts';
@@ -29,6 +30,11 @@ export default function Dashboard() {
   const [isReordering, setIsReordering] = useState(false);
   const reorderTimerRef = useRef(null);
   const initialRender = useRef(true);
+
+  const [scrollElement, setScrollElement] = useState(null);
+  useEffect(() => {
+    setScrollElement(document.querySelector('main'));
+  }, []);
   
   const [searchModalOpen, setSearchModalOpen] = useState(false);
   const [searchMediaId, setSearchMediaId] = useState(null);
@@ -852,8 +858,25 @@ export default function Dashboard() {
             }}
           >
           {viewStyle === 'grid' ? (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 gap-3 sm:gap-4">
-              {paginatedItems.map(item => (
+            scrollElement ? (
+              <VirtuosoGrid
+                customScrollParent={scrollElement}
+                overscan={3000}
+                data={displayItems}
+                components={{
+                List: forwardRef(({ style, children, ...props }, ref) => (
+                  <div
+                    ref={ref}
+                    {...props}
+                    style={style}
+                    className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 gap-3 sm:gap-4"
+                  >
+                    {children}
+                  </div>
+                )),
+                Item: ({ children, ...props }) => <div {...props} className="flex">{children}</div>
+              }}
+              itemContent={(index, item) => (
                 <div 
                   key={item.id}
                   role="button"
@@ -870,7 +893,7 @@ export default function Dashboard() {
                       else navigate(`/movies/${item.id}`);
                     }
                   }}
-                  className={`cursor-pointer glass-panel interactive-glow-card scroll-reveal-item rounded-xl overflow-hidden group hover:scale-[1.02] transition-transform duration-300 relative flex flex-col focus:outline-none focus:ring-2 focus:ring-cyan-500/50`}
+                  className={`cursor-pointer glass-panel interactive-glow-card rounded-xl overflow-hidden group hover:scale-[1.02] transition-transform duration-300 relative flex flex-col focus:outline-none focus:ring-2 focus:ring-cyan-500/50`}
                 >
                   <div className="absolute top-2 left-2 z-20">
                     <button 
@@ -941,7 +964,6 @@ export default function Dashboard() {
                       alt={item.title}
                       width="500"
                       height="750"
-                      loading="lazy"
                       decoding="async"
                       className="w-full h-full object-cover relative"
                     />
@@ -1014,8 +1036,9 @@ export default function Dashboard() {
                     </div>
                   </div>
                 </div>
-              ))}
-            </div>
+              )}
+            />
+            ) : null
           ) : viewStyle === 'list' ? (
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
