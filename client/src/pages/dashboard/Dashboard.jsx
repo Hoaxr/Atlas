@@ -862,6 +862,7 @@ export default function Dashboard() {
               <VirtuosoGrid
                 customScrollParent={scrollElement}
                 overscan={3000}
+                initialItemCount={40}
                 data={displayItems}
                 components={{
                 List: forwardRef(({ style, children, ...props }, ref) => (
