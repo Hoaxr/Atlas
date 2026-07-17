@@ -1,6 +1,6 @@
 import ModalShell from './shared/ModalShell';
 import React from 'react';
-import { X, HardDrive, CheckCircle2, Zap, Search, Trash2, Calendar, FileType, Hash, MonitorPlay, Volume2, Info } from 'lucide-react';
+import { X, HardDrive, CheckCircle2, Zap, Search, Trash2, Calendar, FileType, Hash, MonitorPlay, Volume2, Info, Eye } from 'lucide-react';
 import { formatSize, parseResolution, parseCodec, parseAudio, getReleaseTitleFromPath } from '../lib/format';
 
 const EpisodeDetailsModal = ({ episode, show, onClose, onAutoSearch, onManualSearch, onDeleteFile, renderSubtitles, renderMonitored }) => {
@@ -110,6 +110,15 @@ const EpisodeDetailsModal = ({ episode, show, onClose, onAutoSearch, onManualSea
               </div>
               <span className="text-sm sm:text-base font-medium text-slate-300 whitespace-nowrap">
                 {episode.air_date ? new Date(episode.air_date).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : 'Unknown'}
+              </span>
+            </div>
+            
+            <div className="flex-1 min-w-[130px] bg-slate-800/30 p-3 sm:p-4 rounded-xl border border-white/5 flex flex-col justify-center transition-colors hover:bg-slate-800/50">
+              <div className="flex items-center gap-1.5 text-slate-500 text-[10px] uppercase tracking-widest font-bold mb-2">
+                <Eye className="w-3.5 h-3.5" /> Watched
+              </div>
+              <span className={`text-sm sm:text-base font-bold whitespace-nowrap ${episode.watched ? 'text-emerald-400' : 'text-slate-500'}`}>
+                {episode.watched ? 'Yes' : 'No'}
               </span>
             </div>
             

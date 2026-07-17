@@ -304,11 +304,15 @@ const getRecommendations = async (type, libraryIds) => {
   const results = [];
   const seenIds = new Set(libraryIds); // Don't recommend what they already have
 
-  for (const id of seedIds) {
+  await Promise.all(seedIds.map(async (id) => {
     try {
-      const endpoint = type === 'movie' ? `/movie/${id}/recommendations` : `/tv/${id}/recommendations`;
-      const response = await tmdbApi.get(endpoint);
-      const items = response.data.results;
+      const cacheKey = `recs_${type}_${id}`;
+      const data = await withCache(cacheKey, async () => {
+        const endpoint = type === 'movie' ? `/movie/${id}/recommendations` : `/tv/${id}/recommendations`;
+        const response = await tmdbApi.get(endpoint);
+        return response.data;
+      });
+      const items = data.results || [];
       for (const item of items) {
         if (!seenIds.has(item.id)) {
           item.media_type = type;
@@ -319,7 +323,7 @@ const getRecommendations = async (type, libraryIds) => {
     } catch (e) {
       console.error(`Failed to get recommendations for ${type} ${id}:`, e.message);
     }
-  }
+  }));
 
   // Sort by popularity and return top 20
   results.sort((a, b) => (b.popularity || 0) - (a.popularity || 0));

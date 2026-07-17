@@ -106,8 +106,8 @@ router.get('/recommended/:type', async (req, res, next) => {
     if (traktSync && traktSync.value === 'true') {
       try {
         const traktType = type === 'shows' ? 'show' : 'movie';
-        const watchedIds = await traktService.getWatchedTmdbIds(traktType);
-        const watchedSet = new Set(watchedIds.map(Number));
+        const rows = db.prepare('SELECT tmdb_id FROM watched_tmdb WHERE type = ?').all(traktType);
+        const watchedSet = new Set(rows.map(r => Number(r.tmdb_id)));
         results = results.filter(item => !watchedSet.has(Number(item.id)));
       } catch (err) {
         console.error('[Recommendations] Failed to check Trakt watched status:', err.message);
