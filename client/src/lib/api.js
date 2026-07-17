@@ -6,12 +6,6 @@ const api = axios.create({
 });
 
 api.interceptors.request.use((config) => {
-  // Support dynamic server URLs for mobile apps
-  const serverUrl = localStorage.getItem('atlas_server_url');
-  if (serverUrl) {
-    config.baseURL = serverUrl.replace(/\/$/, '') + '/api';
-  }
-
   const token = localStorage.getItem('atlas_token');
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
