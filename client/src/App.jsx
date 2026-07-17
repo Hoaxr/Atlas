@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate, useParams } from 'react-router-dom';
 import { lazy, Suspense } from 'react';
+import { Capacitor } from '@capacitor/core';
 import { Toaster } from 'react-hot-toast';
 import { ThemeProvider } from './lib/ThemeContext';
 import ErrorBoundary from './components/shared/ErrorBoundary';
@@ -21,6 +22,7 @@ const Login = lazy(() => import('./pages/Login'));
 const UserPortal = lazy(() => import('./pages/UserPortal'));
 const Requests = lazy(() => import('./pages/Requests'));
 const Watcher = lazy(() => import('./pages/Watcher'));
+const ConnectServer = lazy(() => import('./pages/ConnectServer'));
 
 function PageFallback() {
   return (
@@ -35,6 +37,43 @@ function LazyPage({ children }) {
 }
 
 function App() {
+  const isNative = Capacitor?.isNativePlatform?.() || false;
+  const hasServerUrl = !!localStorage.getItem('atlas_server_url');
+
+  const router = isNative && !hasServerUrl ? (
+    <BrowserRouter>
+      <Routes>
+        <Route path="/connect" element={<LazyPage><ConnectServer /></LazyPage>} />
+        <Route path="*" element={<Navigate to="/connect" replace />} />
+      </Routes>
+    </BrowserRouter>
+  ) : (
+    <BrowserRouter>
+      <Routes>
+        <Route path="/connect" element={<LazyPage><ConnectServer /></LazyPage>} />
+        <Route path="/login" element={<LazyPage><Login /></LazyPage>} />
+        <Route path="/" element={<Layout />}>
+          <Route index element={<Navigate to="/discover" replace />} />
+          <Route path="movies" element={<Dashboard key="movies-view" />} />
+          <Route path="shows" element={<Dashboard key="shows-view" />} />
+          <Route path="movies/:id" element={<MovieDetails />} />
+          <Route path="shows/:id" element={<ShowDetails />} />
+          <Route path="downloads" element={<LazyPage><Downloads /></LazyPage>} />
+          <Route path="discover" element={<Discover />} />
+          <Route path="tasks" element={<LazyPage><SystemTasks /></LazyPage>} />
+          <Route path="settings" element={<LazyPage><Settings /></LazyPage>} />
+          <Route path="status" element={<LazyPage><Status /></LazyPage>} />
+          <Route path="calendar" element={<LazyPage><Calendar /></LazyPage>} />
+          <Route path="stats" element={<LazyPage><Statistics /></LazyPage>} />
+          <Route path="requests" element={<LazyPage><Requests /></LazyPage>} />
+          <Route path="watcher" element={<LazyPage><Watcher /></LazyPage>} />
+          <Route path="person/:id" element={<LazyPage><PersonDetails /></LazyPage>} />
+        </Route>
+        <Route path="/portal" element={<LazyPage><UserPortal /></LazyPage>} />
+      </Routes>
+    </BrowserRouter>
+  );
+
   return (
     <ErrorBoundary>
         <ThemeProvider>
@@ -49,29 +88,7 @@ function App() {
               },
             }}
           />
-          <BrowserRouter>
-            <Routes>
-              <Route path="/login" element={<LazyPage><Login /></LazyPage>} />
-              <Route path="/" element={<Layout />}>
-                <Route index element={<Navigate to="/discover" replace />} />
-                <Route path="movies" element={<Dashboard key="movies-view" />} />
-                <Route path="shows" element={<Dashboard key="shows-view" />} />
-                <Route path="movies/:id" element={<MovieDetails />} />
-                <Route path="shows/:id" element={<ShowDetails />} />
-                <Route path="downloads" element={<LazyPage><Downloads /></LazyPage>} />
-                <Route path="discover" element={<Discover />} />
-                <Route path="tasks" element={<LazyPage><SystemTasks /></LazyPage>} />
-                <Route path="settings" element={<LazyPage><Settings /></LazyPage>} />
-                <Route path="status" element={<LazyPage><Status /></LazyPage>} />
-                <Route path="calendar" element={<LazyPage><Calendar /></LazyPage>} />
-                <Route path="stats" element={<LazyPage><Statistics /></LazyPage>} />
-                <Route path="requests" element={<LazyPage><Requests /></LazyPage>} />
-                <Route path="watcher" element={<LazyPage><Watcher /></LazyPage>} />
-                <Route path="person/:id" element={<LazyPage><PersonDetails /></LazyPage>} />
-              </Route>
-              <Route path="/portal" element={<LazyPage><UserPortal /></LazyPage>} />
-            </Routes>
-          </BrowserRouter>
+          {router}
         </ThemeProvider>
     </ErrorBoundary>
   );

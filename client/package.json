@@ -9,6 +9,8 @@
     "lint:fix": "eslint src --fix"
   },
   "dependencies": {
+    "@capacitor/core": "^8.4.2",
+    "@capacitor/ios": "^8.4.2",
     "axios": "^1.18.1",
     "clsx": "^2.1.1",
     "framer-motion": "^12.42.2",
@@ -20,6 +22,7 @@
     "react-virtuoso": "^4.18.10"
   },
   "devDependencies": {
+    "@capacitor/cli": "^8.4.2",
     "@eslint/js": "^9.24.0",
     "@vitejs/plugin-react": "^6.0.3",
     "autoprefixer": "^10.4.19",
