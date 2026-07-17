@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Search, Loader2, Plus, Clock, CheckCircle2, XCircle, LogOut, Key, Star, X, Film, Tv, Info, CalendarClock } from 'lucide-react';
+import { Search, Loader2, Plus, Clock, CheckCircle2, XCircle, LogOut, Key, Star, X, Film, Tv, Info, CalendarClock, Sparkles, Filter, BarChart2, Check, TrendingUp } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import api from '../lib/api';
@@ -23,6 +23,7 @@ export default function UserPortal() {
   const [selectedMediaType, setSelectedMediaType] = useState('movie');
   const [trendingMovies, setTrendingMovies] = useState([]);
   const [trendingShows, setTrendingShows] = useState([]);
+  const [requestFilter, setRequestFilter] = useState('all');
   const navigate = useNavigate();
   const searchTimerRef = useRef(null);
 
@@ -96,6 +97,29 @@ export default function UserPortal() {
 
   const handleSearch = (e) => {
     e.preventDefault();
+  };
+
+  const handleSurpriseMe = () => {
+    const pool = [...trendingMovies, ...trendingShows];
+    if (pool.length === 0) return customAlert('Nothing found right now!');
+    
+    const requestedIds = new Set(requests.map(r => r.tmdb_id));
+    const libraryMovieIds = new Set(libraryMovies.map(m => m.tmdb_id));
+    const libraryShowIds = new Set(libraryShows.map(s => s.tmdb_id));
+
+    const available = pool.filter(item => {
+      const tmdbId = item.tmdb_id || item.id || (item.ids && item.ids.tmdb);
+      return !requestedIds.has(tmdbId) && !libraryMovieIds.has(tmdbId) && !libraryShowIds.has(tmdbId);
+    });
+
+    if (available.length === 0) return customAlert('You have seen it all!');
+    
+    const randomItem = available[Math.floor(Math.random() * available.length)];
+    const tmdbId = randomItem.tmdb_id || randomItem.id || (randomItem.ids && randomItem.ids.tmdb);
+    const isMovie = randomItem.media_type ? randomItem.media_type === 'movie' : randomItem.type === 'movie' || (randomItem.title !== undefined && !randomItem.name);
+    
+    setSelectedMediaId(tmdbId);
+    setSelectedMediaType(isMovie ? 'movie' : 'tv');
   };
 
   const handleRequest = async (item) => {
@@ -332,9 +356,17 @@ export default function UserPortal() {
             <motion.h1 layout className="text-4xl md:text-5xl font-black text-white tracking-tight mb-3">
               What do you want to <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-sky-400">watch?</span>
             </motion.h1>
-            <motion.p layout className="text-slate-400 text-lg">
+            <motion.p layout className="text-slate-400 text-lg mb-6">
               Search for movies and TV shows to request them to the server.
             </motion.p>
+            <motion.button
+              layout
+              onClick={handleSurpriseMe}
+              className="inline-flex items-center gap-2 px-6 py-2.5 rounded-full bg-gradient-to-r from-purple-500/20 to-pink-500/20 border border-purple-500/30 text-purple-300 hover:text-white hover:border-purple-400 hover:from-purple-500/40 hover:to-pink-500/40 transition-all font-semibold shadow-[0_0_20px_rgba(168,85,247,0.15)] hover:shadow-[0_0_30px_rgba(168,85,247,0.3)]"
+            >
+              <Sparkles className="w-5 h-5" />
+              Surprise Me
+            </motion.button>
           </div>
 
           <form onSubmit={handleSearch} className="relative group">
@@ -397,14 +429,84 @@ export default function UserPortal() {
               exit={{ opacity: 0 }}
               className="space-y-12"
             >
+              {/* Dashboard Stats */}
+              {userRequests.length > 0 && (
+                <section>
+                  <div className="grid grid-cols-3 gap-2 sm:gap-4">
+                    <div className="bg-slate-800/40 backdrop-blur-sm border border-white/5 rounded-2xl p-3 sm:p-6 flex flex-col sm:flex-row items-center justify-center sm:justify-start gap-2 sm:gap-4 hover:bg-slate-800/60 transition-colors text-center sm:text-left">
+                      <div className="p-2 sm:p-3 bg-cyan-500/20 rounded-xl text-cyan-400">
+                        <TrendingUp className="w-5 h-5 sm:w-6 sm:h-6" />
+                      </div>
+                      <div>
+                        <div className="text-[10px] sm:text-sm font-semibold text-slate-400 uppercase tracking-wider line-clamp-1">Total</div>
+                        <div className="text-xl sm:text-3xl font-black text-white">{userRequests.length}</div>
+                      </div>
+                    </div>
+                    <div className="bg-slate-800/40 backdrop-blur-sm border border-white/5 rounded-2xl p-3 sm:p-6 flex flex-col sm:flex-row items-center justify-center sm:justify-start gap-2 sm:gap-4 hover:bg-slate-800/60 transition-colors text-center sm:text-left">
+                      <div className="p-2 sm:p-3 bg-emerald-500/20 rounded-xl text-emerald-400">
+                        <Check className="w-5 h-5 sm:w-6 sm:h-6" />
+                      </div>
+                      <div>
+                        <div className="text-[10px] sm:text-sm font-semibold text-slate-400 uppercase tracking-wider line-clamp-1">Approved</div>
+                        <div className="text-xl sm:text-3xl font-black text-white">
+                          {userRequests.filter(req => {
+                            const inLibrary = req.type === 'movie' 
+                              ? libraryMovies.some(m => m.tmdb_id === req.tmdb_id)
+                              : libraryShows.some(s => s.tmdb_id === req.tmdb_id);
+                            return inLibrary || req.status === 'approved' || req.status === 'available';
+                          }).length}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="bg-slate-800/40 backdrop-blur-sm border border-white/5 rounded-2xl p-3 sm:p-6 flex flex-col sm:flex-row items-center justify-center sm:justify-start gap-2 sm:gap-4 hover:bg-slate-800/60 transition-colors text-center sm:text-left">
+                      <div className="p-2 sm:p-3 bg-amber-500/20 rounded-xl text-amber-400">
+                        <Clock className="w-5 h-5 sm:w-6 sm:h-6" />
+                      </div>
+                      <div>
+                        <div className="text-[10px] sm:text-sm font-semibold text-slate-400 uppercase tracking-wider line-clamp-1">Pending</div>
+                        <div className="text-xl sm:text-3xl font-black text-white">
+                          {userRequests.filter(req => {
+                            const inLibrary = req.type === 'movie' 
+                              ? libraryMovies.some(m => m.tmdb_id === req.tmdb_id)
+                              : libraryShows.some(s => s.tmdb_id === req.tmdb_id);
+                            return !inLibrary && req.status === 'pending';
+                          }).length}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </section>
+              )}
+
               {/* My Requests Section */}
               {userRequests.length > 0 && (
                 <section>
-                  <h2 className="text-2xl font-bold text-white mb-6 flex items-center gap-2">
-                    <Clock className="w-6 h-6 text-indigo-400" /> My Requests
-                  </h2>
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+                    <h2 className="text-2xl font-bold text-white flex items-center gap-2">
+                      <Clock className="w-6 h-6 text-indigo-400" /> My Requests
+                    </h2>
+                    
+                    {/* Filters */}
+                    <div className="flex items-center gap-2 bg-slate-800/50 p-1 rounded-xl border border-white/5 overflow-x-auto hide-scrollbar">
+                      <button onClick={() => setRequestFilter('all')} className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition-colors whitespace-nowrap ${requestFilter === 'all' ? 'bg-indigo-500 text-white shadow-lg' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}>All</button>
+                      <button onClick={() => setRequestFilter('pending')} className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition-colors whitespace-nowrap ${requestFilter === 'pending' ? 'bg-amber-500 text-white shadow-lg' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}>Pending</button>
+                      <button onClick={() => setRequestFilter('approved')} className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition-colors whitespace-nowrap ${requestFilter === 'approved' ? 'bg-emerald-500 text-white shadow-lg' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}>Approved</button>
+                      <button onClick={() => setRequestFilter('denied')} className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition-colors whitespace-nowrap ${requestFilter === 'denied' ? 'bg-rose-500 text-white shadow-lg' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}>Denied</button>
+                    </div>
+                  </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-                    {userRequests.map(req => {
+                    {userRequests.filter(req => {
+                      if (requestFilter === 'all') return true;
+                      const inLibrary = req.type === 'movie' 
+                        ? libraryMovies.some(m => m.tmdb_id === req.tmdb_id)
+                        : libraryShows.some(s => s.tmdb_id === req.tmdb_id);
+                      const displayStatus = inLibrary ? 'approved' : req.status.toLowerCase();
+                      
+                      if (requestFilter === 'approved') return displayStatus === 'approved' || displayStatus === 'available';
+                      if (requestFilter === 'pending') return displayStatus === 'pending';
+                      if (requestFilter === 'denied') return displayStatus === 'denied';
+                      return true;
+                    }).map(req => {
                       const inLibrary = req.type === 'movie' 
                         ? libraryMovies.some(m => m.tmdb_id === req.tmdb_id)
                         : libraryShows.some(s => s.tmdb_id === req.tmdb_id);
