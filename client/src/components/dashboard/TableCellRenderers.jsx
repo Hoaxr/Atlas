@@ -21,7 +21,7 @@ export const RatingCell = ({ item }) => (
 );
 
 export const ResolutionCell = ({ item }) => {
-  const resVal = parseResolution(item.scene_name || item.sample_episode_path || item.file_path);
+  const resVal = item.resolution || parseResolution(item.scene_name || item.sample_episode_path || item.file_path);
   return (
     <td className="py-2.5 px-4 text-slate-300">
       {resVal !== 'Unknown' ? (

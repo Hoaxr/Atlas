@@ -56,6 +56,9 @@ export default {
           '0%, 100%': { boxShadow: '0 0 12px rgba(6,182,212,0.2)' },
           '50%':      { boxShadow: '0 0 24px rgba(6,182,212,0.4)' },
         },
+        shimmer: {
+          '100%': { transform: 'translateX(100%)' },
+        },
       },
 
       // --- Custom shadows ---

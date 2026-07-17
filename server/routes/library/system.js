@@ -264,7 +264,7 @@ router.get('/watched-tmdb', (req, res, next) => {
 router.post('/scan', async (req, res, next) => {
   try {
     const mode = req.body?.mode || 'full';
-    const validModes = ['full', 'new', 'refresh', 'rematch', 'subtitles'];
+    const validModes = ['full', 'movies', 'shows', 'new', 'refresh', 'rematch', 'subtitles'];
     if (!validModes.includes(mode)) {
       return res.status(400).json({ status: 'error', message: `Invalid scan mode. Must be one of: ${validModes.join(', ')}` });
     }

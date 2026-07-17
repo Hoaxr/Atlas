@@ -213,7 +213,7 @@ export default function MovieDetails() {
 
   /* ─── Derived data ─── */
 
-  const resolution = parseResolution(movie.scene_name || movie.file_path);
+  const resolution = movie.resolution || parseResolution(movie.scene_name || movie.file_path);
   const codec = movie.codec || parseCodec(movie.scene_name || movie.file_path);
   const audio = movie.audio || parseAudio(movie.scene_name || movie.file_path);
   const genres = tmdbDetails?.genres || [];
@@ -556,57 +556,57 @@ export default function MovieDetails() {
                       <Folder className="w-3 h-3" /> Import
                     </button>
                   </div>
-                  <p className="text-xs font-mono text-slate-300 truncate" title={movie.file_path}>
+                  <p className="text-xs font-mono text-slate-300 break-all select-all">
                     {movie.file_path || <span className="text-slate-600 italic">Not downloaded</span>}
                   </p>
                 </div>
 
-                <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
-                  <div className="flex items-center gap-3 bg-slate-800/30 dark:bg-slate-900/35 border border-slate-700/30 dark:border-white/5 rounded-xl p-3">
-                    <Film className="w-5 h-5 text-cyan-400 shrink-0" />
-                    <div>
-                      <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500 block">Resolution</span>
-                      <div className="flex items-center gap-1.5 mt-0.5">
-                        <span className="text-sm font-semibold text-slate-200">
+                <div className="grid grid-cols-2 lg:grid-cols-[1.2fr_0.9fr_1.1fr_0.9fr_0.9fr] gap-2 sm:gap-3">
+                  <div className="flex items-center gap-2.5 sm:gap-3 bg-slate-800/30 dark:bg-slate-900/35 border border-slate-700/30 dark:border-white/5 rounded-xl p-2.5 sm:p-3">
+                    <Film className="w-4 h-4 sm:w-5 sm:h-5 text-cyan-400 shrink-0" />
+                    <div className="min-w-0 flex-1">
+                      <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-widest text-slate-500 block truncate">Resolution</span>
+                      <div className="flex items-center gap-1.5 mt-0.5 flex-nowrap overflow-hidden">
+                        <span className="text-xs sm:text-sm font-semibold text-slate-200 truncate">
                           {resolution !== 'Unknown' ? resolution : 'Any (1080p+)'}
                         </span>
                         {resolution !== 'Unknown' && codec !== 'Unknown' && (
-                          <span className="text-[9px] font-mono font-bold text-slate-400 uppercase bg-slate-800/50 px-1.5 py-0.5 rounded border border-white/5 whitespace-nowrap">
+                          <span className="text-[10px] sm:text-xs font-bold text-slate-300 uppercase bg-slate-800/80 px-1.5 sm:px-2 py-0.5 rounded sm:rounded-md border border-white/10 whitespace-nowrap shrink-0">
                             {codec}
                           </span>
                         )}
                       </div>
                     </div>
                   </div>
-                  <div className="flex items-center gap-3 bg-slate-800/30 dark:bg-slate-900/35 border border-slate-700/30 dark:border-white/5 rounded-xl p-3">
-                    <HardDrive className="w-5 h-5 text-cyan-400 shrink-0" />
-                    <div>
-                      <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500 block">Size</span>
-                      <span className="text-sm font-semibold text-slate-200">{formatSize(movie.size || movie.file_size)}</span>
+                  <div className="flex items-center gap-2.5 sm:gap-3 bg-slate-800/30 dark:bg-slate-900/35 border border-slate-700/30 dark:border-white/5 rounded-xl p-2.5 sm:p-3">
+                    <HardDrive className="w-4 h-4 sm:w-5 sm:h-5 text-cyan-400 shrink-0" />
+                    <div className="min-w-0 flex-1">
+                      <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-widest text-slate-500 block truncate">Size</span>
+                      <span className="text-xs sm:text-sm font-semibold text-slate-200 block truncate">{formatSize(movie.size || movie.file_size)}</span>
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-3 bg-slate-800/30 dark:bg-slate-900/35 border border-slate-700/30 dark:border-white/5 rounded-xl p-3">
-                    <Volume2 className="w-5 h-5 text-cyan-400 shrink-0" />
-                    <div>
-                      <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500 block">Audio</span>
-                      <span className="text-sm font-semibold text-slate-200">{audio !== 'Unknown' ? audio : '-'}</span>
+                  <div className="flex items-center gap-2.5 sm:gap-3 bg-slate-800/30 dark:bg-slate-900/35 border border-slate-700/30 dark:border-white/5 rounded-xl p-2.5 sm:p-3">
+                    <Volume2 className="w-4 h-4 sm:w-5 sm:h-5 text-cyan-400 shrink-0" />
+                    <div className="min-w-0 flex-1">
+                      <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-widest text-slate-500 block truncate">Audio</span>
+                      <span className="text-xs sm:text-sm font-semibold text-slate-200 block truncate">{audio !== 'Unknown' ? audio : '-'}</span>
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-3 bg-slate-800/30 dark:bg-slate-900/35 border border-slate-700/30 dark:border-white/5 rounded-xl p-3">
-                    <Globe className="w-5 h-5 text-cyan-400 shrink-0" />
-                    <div>
-                      <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500 block">Language</span>
-                      <span className="text-sm font-semibold text-slate-200">{(tmdbDetails?.original_language || movie.language || 'EN').toUpperCase()}</span>
+                  <div className="flex items-center gap-2.5 sm:gap-3 bg-slate-800/30 dark:bg-slate-900/35 border border-slate-700/30 dark:border-white/5 rounded-xl p-2.5 sm:p-3">
+                    <Globe className="w-4 h-4 sm:w-5 sm:h-5 text-cyan-400 shrink-0" />
+                    <div className="min-w-0 flex-1">
+                      <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-widest text-slate-500 block truncate">Language</span>
+                      <span className="text-xs sm:text-sm font-semibold text-slate-200 block truncate">{(tmdbDetails?.original_language || movie.language || 'EN').toUpperCase()}</span>
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-3 bg-slate-800/30 dark:bg-slate-900/35 border border-slate-700/30 dark:border-white/5 rounded-xl p-3">
-                    <Eye className="w-5 h-5 text-cyan-400 shrink-0" />
-                    <div>
-                      <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500 block">Watched</span>
-                      <span className={`text-sm font-semibold ${movie.watched ? 'text-emerald-400' : 'text-slate-500'}`}>
+                  <div className="flex items-center gap-2.5 sm:gap-3 bg-slate-800/30 dark:bg-slate-900/35 border border-slate-700/30 dark:border-white/5 rounded-xl p-2.5 sm:p-3">
+                    <Eye className="w-4 h-4 sm:w-5 sm:h-5 text-cyan-400 shrink-0" />
+                    <div className="min-w-0 flex-1">
+                      <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-widest text-slate-500 block truncate">Watched</span>
+                      <span className={`text-xs sm:text-sm font-semibold block truncate ${movie.watched ? 'text-emerald-400' : 'text-slate-500'}`}>
                         {movie.watched ? 'Yes' : 'No'}
                       </span>
                     </div>
@@ -618,7 +618,7 @@ export default function MovieDetails() {
                   <div>
                     <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500 block mb-1">Grabbed Release</span>
                     {(movie.scene_name || movie.file_path) ? (
-                      <p className="text-xs font-mono text-slate-300 truncate" title={movie.scene_name || getReleaseTitleFromPath(movie.file_path)}>
+                      <p className="text-xs font-mono text-slate-300 break-all select-all">
                         {movie.scene_name || getReleaseTitleFromPath(movie.file_path)}
                       </p>
                     ) : (

@@ -514,18 +514,19 @@ export default function ShowDetails() {
                   </p>
                 </div>
 
-                {/* RESOLUTION | SIZE | LANGUAGE | WATCHED */}
-                <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
-                  <div className="flex items-center gap-3 bg-slate-800/30 dark:bg-slate-900/35 border border-slate-700/30 dark:border-white/5 rounded-xl p-3">
-                    <div>
-                      <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500 block">Resolution</span>
+                {/* RESOLUTION | SIZE | LANGUAGE | WATCHED | AUDIO */}
+                <div className="grid grid-cols-2 lg:grid-cols-[1.2fr_0.9fr_1.1fr_0.9fr_0.9fr] gap-2 sm:gap-3">
+                  <div className="flex items-center gap-2.5 sm:gap-3 bg-slate-800/30 dark:bg-slate-900/35 border border-slate-700/30 dark:border-white/5 rounded-xl p-2.5 sm:p-3">
+                    <Film className="w-4 h-4 sm:w-5 sm:h-5 text-purple-400 shrink-0" />
+                    <div className="min-w-0 flex-1">
+                      <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-widest text-slate-500 block truncate">Resolution</span>
                       {(() => {
                         let res = 'Unknown';
                         let codec = 'Unknown';
                         if (episodes && episodes.length > 0) {
                           for (const ep of episodes) {
                             if (ep.status === 'downloaded') {
-                              const epRes = parseResolution(ep.scene_name || ep.file_path);
+                              const epRes = ep.resolution || parseResolution(ep.scene_name || ep.file_path);
                               if (epRes !== 'Unknown') res = epRes;
                               const epCodec = ep.codec || parseCodec(ep.scene_name || ep.file_path);
                               if (epCodec !== 'Unknown') codec = epCodec;
@@ -533,12 +534,12 @@ export default function ShowDetails() {
                             }
                           }
                         }
-                        if (res === 'Unknown') return <span className="text-sm font-semibold text-slate-200">—</span>;
+                        if (res === 'Unknown') return <span className="text-xs sm:text-sm font-semibold text-slate-200 truncate">—</span>;
                         return (
-                          <div className="flex items-center gap-1.5 mt-0.5">
-                            <span className="text-sm font-semibold text-slate-200">{res}</span>
+                          <div className="flex items-center gap-1.5 mt-0.5 flex-nowrap overflow-hidden">
+                            <span className="text-xs sm:text-sm font-semibold text-slate-200 truncate">{res}</span>
                             {codec !== 'Unknown' && (
-                              <span className="text-[9px] font-mono font-bold text-slate-400 uppercase bg-slate-800/50 px-1.5 py-0.5 rounded border border-white/5 whitespace-nowrap">
+                              <span className="text-[10px] sm:text-xs font-bold text-slate-300 uppercase bg-slate-800/80 px-1.5 sm:px-2 py-0.5 rounded sm:rounded-md border border-white/10 whitespace-nowrap shrink-0">
                                 {codec}
                               </span>
                             )}
@@ -548,18 +549,18 @@ export default function ShowDetails() {
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-3 bg-slate-800/30 dark:bg-slate-900/35 border border-slate-700/30 dark:border-white/5 rounded-xl p-3">
-                    <HardDrive className="w-5 h-5 text-purple-400 shrink-0" />
-                    <div>
-                      <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500 block">Size</span>
-                      <span className="text-sm font-semibold text-slate-200">{formatSize(show.folder_size)}</span>
+                  <div className="flex items-center gap-2.5 sm:gap-3 bg-slate-800/30 dark:bg-slate-900/35 border border-slate-700/30 dark:border-white/5 rounded-xl p-2.5 sm:p-3">
+                    <HardDrive className="w-4 h-4 sm:w-5 sm:h-5 text-purple-400 shrink-0" />
+                    <div className="min-w-0 flex-1">
+                      <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-widest text-slate-500 block truncate">Size</span>
+                      <span className="text-xs sm:text-sm font-semibold text-slate-200 block truncate">{formatSize(show.size || show.folder_size || 0)}</span>
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-3 bg-slate-800/30 dark:bg-slate-900/35 border border-slate-700/30 dark:border-white/5 rounded-xl p-3">
-                    <Volume2 className="w-5 h-5 text-purple-400 shrink-0" />
-                    <div>
-                      <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500 block">Audio</span>
+                  <div className="flex items-center gap-2.5 sm:gap-3 bg-slate-800/30 dark:bg-slate-900/35 border border-slate-700/30 dark:border-white/5 rounded-xl p-2.5 sm:p-3">
+                    <Volume2 className="w-4 h-4 sm:w-5 sm:h-5 text-purple-400 shrink-0" />
+                    <div className="min-w-0 flex-1">
+                      <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-widest text-slate-500 block truncate">Audio</span>
                       {(() => {
                         let audio = 'Unknown';
                         if (episodes && episodes.length > 0) {
@@ -573,24 +574,24 @@ export default function ShowDetails() {
                             }
                           }
                         }
-                        return <span className="text-sm font-semibold text-slate-200">{audio !== 'Unknown' ? audio : '-'}</span>;
+                        return <span className="text-xs sm:text-sm font-semibold text-slate-200 block truncate">{audio !== 'Unknown' ? audio : '-'}</span>;
                       })()}
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-3 bg-slate-800/30 dark:bg-slate-900/35 border border-slate-700/30 dark:border-white/5 rounded-xl p-3">
-                    <Globe className="w-5 h-5 text-purple-400 shrink-0" />
-                    <div>
-                      <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500 block">Language</span>
-                      <span className="text-sm font-semibold text-slate-200">{(tmdbDetails?.original_language || 'EN').toUpperCase()}</span>
+                  <div className="flex items-center gap-2.5 sm:gap-3 bg-slate-800/30 dark:bg-slate-900/35 border border-slate-700/30 dark:border-white/5 rounded-xl p-2.5 sm:p-3">
+                    <Globe className="w-4 h-4 sm:w-5 sm:h-5 text-purple-400 shrink-0" />
+                    <div className="min-w-0 flex-1">
+                      <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-widest text-slate-500 block truncate">Language</span>
+                      <span className="text-xs sm:text-sm font-semibold text-slate-200 block truncate">{(tmdbDetails?.original_language || 'EN').toUpperCase()}</span>
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-3 bg-slate-800/30 dark:bg-slate-900/35 border border-slate-700/30 dark:border-white/5 rounded-xl p-3">
-                    <Eye className="w-5 h-5 text-purple-400 shrink-0" />
-                    <div>
-                      <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500 block">Watched</span>
-                      <span className={`text-sm font-semibold ${show.watched ? 'text-emerald-400' : 'text-slate-500'}`}>
+                  <div className="flex items-center gap-2.5 sm:gap-3 bg-slate-800/30 dark:bg-slate-900/35 border border-slate-700/30 dark:border-white/5 rounded-xl p-2.5 sm:p-3">
+                    <Eye className="w-4 h-4 sm:w-5 sm:h-5 text-purple-400 shrink-0" />
+                    <div className="min-w-0 flex-1">
+                      <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-widest text-slate-500 block truncate">Watched</span>
+                      <span className={`text-xs sm:text-sm font-semibold block truncate ${show.watched ? 'text-emerald-400' : 'text-slate-500'}`}>
                         {show.watched ? 'Yes' : 'No'}
                       </span>
                     </div>
@@ -1132,6 +1133,132 @@ export default function ShowDetails() {
           } catch (err) {
             customAlert(err.response?.data?.message || 'Failed to delete episode file.', 'error');
           }
+        }}
+        renderMonitored={() => {
+          const ep = detailsModalEpisode;
+          if (!ep) return null;
+          return (
+            <button
+              onClick={async (e) => {
+                e.stopPropagation();
+                if (ep.status === 'downloading') {
+                  if (await customConfirm("Reset status to monitored?")) {
+                    try {
+                      await api.post(`/library/episodes/${ep.id}/reset-downloading`);
+                      customAlert('Status reset to monitored');
+                      fetchShowData();
+                      setDetailsModalEpisode(prev => ({...prev, status: 'monitored', monitored: true}));
+                    } catch (e) {
+                      customAlert('Failed to reset status', 'error');
+                    }
+                  }
+                } else {
+                  try {
+                    await api.post(`/library/episodes/${ep.id}/toggle-monitor`);
+                    fetchShowData();
+                    setDetailsModalEpisode(prev => ({...prev, monitored: !prev.monitored}));
+                  } catch (e) {
+                    customAlert('Failed to toggle monitor status', 'error');
+                  }
+                }
+              }}
+              className={`px-2.5 py-1 text-xs font-bold uppercase tracking-wider rounded-md transition-colors border
+                ${ep.status === 'downloading' ? 'bg-indigo-500/20 text-indigo-400 border-indigo-500/30' :
+                  ep.status === 'downloaded' ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' :
+                  !ep.monitored ? 'bg-rose-500/20 text-rose-400 border-rose-500/30 hover:bg-emerald-500/20 hover:text-emerald-400 hover:border-emerald-500/30' :
+                  (!ep.file_path && !ep.air_date) || (ep.air_date && new Date(ep.air_date) > new Date()) ? 'bg-slate-800/80 text-slate-500 border-white/5' :
+                  'bg-emerald-500/10 text-emerald-400 border-emerald-500/20 hover:bg-rose-500/20 hover:text-rose-400 hover:border-rose-500/30'
+                }`}
+              title={
+                ep.status === 'downloading' ? "Click to reset if stuck" :
+                (!ep.file_path && !ep.air_date) ? "Season has not started airing yet" :
+                (ep.air_date && new Date(ep.air_date) > new Date()) ? `Airs on ${new Date(ep.air_date).toLocaleDateString()}` :
+                "Click to toggle monitor status"
+              }
+            >
+              {ep.status === 'downloading' ? 'Downloading' : ep.status === 'downloaded' ? 'Downloaded' : !ep.monitored ? 'Unmonitored' : (!ep.file_path && !ep.air_date) || (ep.air_date && new Date(ep.air_date) > new Date()) ? 'Not released' : 'Monitored'}
+            </button>
+          );
+        }}
+        renderSubtitles={() => {
+          const ep = detailsModalEpisode;
+          if (!ep || !ep.file_path) return <span className="text-[10px] text-slate-600">—</span>;
+          const subsData = (() => { const raw = ep.subtitles; if (!raw) return []; if (Array.isArray(raw)) return raw; try { return JSON.parse(raw); } catch { return []; } })(); 
+          const existingCodes = subsData.map(s => typeof s === 'string' ? s : s.lang).filter(Boolean);
+          const hasExistingSub = subsData.length > 0;
+          const subKey = `${ep.id}`;
+          return providerLangs.map(code => (
+            <SubtitleLanguageBadge
+              key={code}
+              code={code}
+              exists={existingCodes.includes(code)}
+              hasExistingSub={hasExistingSub}
+              isOpen={openLangMenu === `${subKey}-${code}`}
+              downloading={downloadingSubs[`${subKey}-${code}`]}
+              onOpenMenu={() => setOpenLangMenu(openLangMenu === `${subKey}-${code}` ? null : `${subKey}-${code}`)}
+              onAutoSearch={async () => {
+                setOpenLangMenu(null);
+                setDownloadingSubs(prev => ({ ...prev, [`${subKey}-${code}`]: true }));
+                try {
+                  const res = await api.post(`/library/episodes/${ep.id}/download-subs`, { langCode: code });
+                  customAlert(res.data.message);
+                  fetchShowData();
+                  setDetailsModalEpisode(prev => {
+                     const newSubs = Array.isArray(prev.subtitles) ? [...prev.subtitles, code] : (prev.subtitles ? JSON.parse(prev.subtitles).concat(code) : [code]);
+                     return {...prev, subtitles: JSON.stringify(newSubs)};
+                  });
+                } catch (err) {
+                  customAlert(err.response?.data?.message || 'Auto search failed', 'error');
+                } finally {
+                  setDownloadingSubs(prev => ({ ...prev, [`${subKey}-${code}`]: false }));
+                }
+              }}
+              onManualSearch={() => {
+                setOpenLangMenu(null);
+                setSubSearchModal({ open: true, code, label: LANG_NAME[code] || code, episodeId: ep.id });
+                setSubSearchResults([]);
+                setSubSearched(false);
+              }}
+              onAutoTranslate={async () => {
+                setOpenLangMenu(null);
+                customAlert(`Translating to ${LANG_NAME[code]}...`, 'info');
+                try {
+                  const res = await api.post(`/library/episodes/${ep.id}/translate-subs`, { targetLang: LANG_NAME[code] });
+                  if (res.data.status === 'success') {
+                    customAlert(res.data.message);
+                    fetchShowData();
+                    setDetailsModalEpisode(prev => {
+                       const newSubs = Array.isArray(prev.subtitles) ? [...prev.subtitles, code] : (prev.subtitles ? JSON.parse(prev.subtitles).concat(code) : [code]);
+                       return {...prev, subtitles: JSON.stringify(newSubs)};
+                    });
+                  } else {
+                    customAlert('Translation failed or no subs to translate', 'error');
+                  }
+                } catch (err) {
+                  console.error(err);
+                  customAlert(err.response?.data?.message || 'Translation failed', 'error');
+                }
+              }}
+              onDelete={async () => {
+                setOpenLangMenu(null);
+                const confirm = await customConfirm(`Delete ${LANG_NAME[code] || code} subtitle?`);
+                if (!confirm) return;
+                try {
+                  const res = await api.delete(`/library/episodes/${ep.id}/subs/${code}`);
+                  customAlert(res.data.message || 'Subtitle deleted');
+                  fetchShowData();
+                  setDetailsModalEpisode(prev => {
+                     const subs = Array.isArray(prev.subtitles) ? prev.subtitles : (prev.subtitles ? JSON.parse(prev.subtitles) : []);
+                     const newSubs = subs.filter(s => (typeof s === 'string' ? s : s.lang) !== code);
+                     return {...prev, subtitles: JSON.stringify(newSubs)};
+                  });
+                } catch (err) {
+                  console.error(err);
+                  customAlert(err.response?.data?.message || 'Failed to delete subtitle', 'error');
+                }
+              }}
+            />
+          ));
         }}
       />
       

@@ -116,7 +116,7 @@ const runSearchCycle = async () => {
       LEFT JOIN quality_profiles qp ON s.quality_profile_id = qp.id
       WHERE (e.status = 'monitored' OR (e.status = 'downloaded' AND qp.upgrade_allowed = 1))
         AND e.monitored = 1
-        AND (e.air_date IS NULL OR date(e.air_date) < date('now'))
+        AND (e.air_date IS NULL OR date(e.air_date) <= date('now'))
         AND (e.last_searched_at IS NULL OR e.last_searched_at < datetime('now', '-23 hours'))
       ORDER BY e.last_searched_at ASC NULLS FIRST
       LIMIT 50

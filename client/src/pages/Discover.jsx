@@ -89,16 +89,20 @@ export default function Discover() {
         setLoading(false);
       }
 
-      // Fire both in parallel and wait for ALL to complete before showing rows
+      // Fire requests concurrently. Don't block the UI for the slowest request.
       const loadInitialData = async () => {
         const hasCache = !!cacheRef.current[mode];
         if (!hasCache) {
           setLoading(true);
         }
         
-        await Promise.all([fetchAllData(), fetchLibrary()]);
+        const libraryPromise = fetchLibrary();
+        const allDataPromise = fetchAllData();
         
         if (!hasCache) {
+          // Wait for both library and external TMDB data to load before hiding the overlay
+          // This prevents the spinner from flashing and hiding too early.
+          await Promise.all([libraryPromise, allDataPromise]);
           setLoading(false);
         }
       };
@@ -448,8 +452,8 @@ export default function Discover() {
       {isDiscovering && !error && (
         <div className="mt-2 relative min-h-[calc(100vh-200px)]">
           {loading && (
-            <div className="absolute inset-0 z-50 bg-slate-50 dark:bg-slate-950 text-slate-400">
-              <div className="sticky top-[40vh] flex flex-col items-center justify-center gap-4">
+            <div className="absolute inset-[-1rem] sm:inset-[-1.5rem] z-50 bg-slate-50 dark:bg-slate-950 text-slate-400 flex flex-col">
+              <div className="sticky top-[40vh] flex flex-col items-center justify-center gap-4 text-slate-400">
                 <div className="w-8 h-8 border-2 border-cyan-500/50 border-t-cyan-400 rounded-full animate-spin" />
                 <p className="text-sm font-medium">Loading data...</p>
               </div>

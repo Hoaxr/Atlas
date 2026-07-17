@@ -28,8 +28,8 @@ export const sortItems = (items, sort) => {
       case 'missing_episodes_asc':    return (a.missing_episodes || 0) - (b.missing_episodes || 0);
       case 'resolution_asc':
       case 'resolution_desc': {
-        const resA = RESOLUTION_ORDER[parseResolution(a.scene_name || a.sample_episode_path || a.file_path)] || 0;
-        const resB = RESOLUTION_ORDER[parseResolution(b.scene_name || b.sample_episode_path || b.file_path)] || 0;
+        const resA = RESOLUTION_ORDER[a.resolution || parseResolution(a.scene_name || a.sample_episode_path || a.file_path)] || 0;
+        const resB = RESOLUTION_ORDER[b.resolution || parseResolution(b.scene_name || b.sample_episode_path || b.file_path)] || 0;
         return sort === 'resolution_asc' ? resA - resB : resB - resA;
       }
       case 'codec_asc':

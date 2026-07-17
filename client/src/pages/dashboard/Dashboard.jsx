@@ -346,7 +346,7 @@ export default function Dashboard() {
 
   // Unique resolutions from ALL items
   const allResolutions = useMemo(() => [...new Set(
-    sourceData.map(item => parseResolution(item.scene_name || item.sample_episode_path || item.file_path)).filter(r => r !== 'Unknown')
+    sourceData.map(item => item.resolution || parseResolution(item.scene_name || item.sample_episode_path || item.file_path)).filter(r => r !== 'Unknown')
   )].sort((a, b) => {
     const order = { '2160p': 4, '1080p': 3, '720p': 2, 'SD': 1, 'Unknown': 0 };
     return (order[b] || 0) - (order[a] || 0);
@@ -417,7 +417,7 @@ export default function Dashboard() {
 
     // Resolution filter
     if (resolutionFilter !== 'all') {
-      items = items.filter(item => parseResolution(item.scene_name || item.sample_episode_path || item.file_path) === resolutionFilter);
+      items = items.filter(item => (item.resolution || parseResolution(item.scene_name || item.sample_episode_path || item.file_path)) === resolutionFilter);
     }
 
     // Codec filter
@@ -898,7 +898,7 @@ export default function Dashboard() {
               <VirtuosoGrid
                 customScrollParent={scrollElement}
                 overscan={3000}
-                initialItemCount={40}
+                initialItemCount={Math.min(40, displayItems.length)}
                 data={displayItems}
                 components={{
                 List: forwardRef(({ style, children, ...props }, ref) => (
@@ -913,7 +913,9 @@ export default function Dashboard() {
                 )),
                 Item: ({ children, ...props }) => <div {...props} className="flex">{children}</div>
               }}
-              itemContent={(index, item) => (
+              itemContent={(index, item) => {
+                if (!item) return <div key={`empty-${index}`} />;
+                return (
                 <div 
                   key={item.id}
                   role="button"
@@ -1071,7 +1073,8 @@ export default function Dashboard() {
                     </div>
                   </div>
                 </div>
-              )}
+                );
+              }}
             />
             ) : null
           ) : viewStyle === 'list' ? (

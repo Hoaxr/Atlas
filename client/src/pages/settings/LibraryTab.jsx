@@ -8,6 +8,8 @@ import CustomSelect from '../../components/shared/CustomSelect';
 
 const SCAN_MODES = [
   { value: 'full',      label: 'Full Scan',       desc: 'Everything — new files, metadata, subtitles' },
+  { value: 'movies',    label: 'Movies Only',     desc: 'Scan only the movies root folders' },
+  { value: 'shows',     label: 'TV Shows Only',   desc: 'Scan only the TV shows root folders' },
   { value: 'new',       label: 'New Files Only',   desc: 'Only detect and add new media files' },
   { value: 'refresh',   label: 'Refresh Metadata', desc: 'Re-scan resolutions, codecs, ratings & sizes' },
   { value: 'rematch',   label: 'Re-match Files',   desc: 'Re-match existing files to TMDB (fix bad matches)' },

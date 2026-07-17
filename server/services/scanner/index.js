@@ -45,14 +45,28 @@ const stopScan = () => {
 const doScan = async (mode = 'full') => {
   const allPaths = db.prepare('SELECT * FROM library_paths').all();
   // Only scan movies and tv paths — skip downloads
-  const paths = allPaths.filter(p => p.type !== 'downloads');
+  let paths = allPaths.filter(p => p.type !== 'downloads');
+  
+  if (mode === 'movies') {
+    paths = paths.filter(p => p.type === 'movies');
+  } else if (mode === 'shows') {
+    paths = paths.filter(p => p.type === 'tv');
+  }
+
   if (!paths || paths.length === 0) {
     scanProgress.isScanning = false;
+    scanProgress.currentFile = 'Finished';
+    scanProgress.currentPhase = 'Finished';
+    const eventBus = require('../eventBus');
+    eventBus.info('Scan complete: no paths found for selected mode');
+    try { require('../../routes/library/system').invalidateStatsCache(); } catch { /* ignore */ }
     return;
   }
 
   const MODE_STAGES = {
     full:      5,
+    movies:    5,
+    shows:     5,
     new:       2,
     refresh:   1,
     rematch:   2,
@@ -70,11 +84,11 @@ const doScan = async (mode = 'full') => {
   };
 
   try {
-    const gatherFiles = ['full', 'new', 'rematch'].includes(mode);
-    const processFiles = ['full', 'new', 'rematch'].includes(mode);
-    const updateMetadata = ['full', 'refresh'].includes(mode);
-    const syncTrakt = mode === 'full';
-    const scanSubtitles = ['full', 'subtitles'].includes(mode);
+    const gatherFiles = ['full', 'movies', 'shows', 'new', 'rematch'].includes(mode);
+    const processFiles = ['full', 'movies', 'shows', 'new', 'rematch'].includes(mode);
+    const updateMetadata = ['full', 'movies', 'shows', 'refresh'].includes(mode);
+    const syncTrakt = ['full', 'movies', 'shows'].includes(mode);
+    const scanSubtitles = ['full', 'movies', 'shows', 'subtitles'].includes(mode);
 
     let allFiles = []; // Scoped outside the if-blocks so processFiles can access it
 
@@ -94,42 +108,65 @@ const doScan = async (mode = 'full') => {
 
     // Clean up orphaned items — movies/shows whose files were manually deleted
     scanProgress.currentPhase = 'Checking for removed files...';
-    const existingMovies = db.prepare("SELECT id, title, file_path FROM movies WHERE file_path IS NOT NULL").all();
-    const existingShows = db.prepare("SELECT id, title, folder_path FROM shows WHERE folder_path IS NOT NULL").all();
     let removedCount = 0;
 
-    for (const m of existingMovies) {
-      if (scanProgress.cancelled) throw new Error('Scan cancelled by user');
-      if (filesOnDisk.has(m.file_path)) continue;
-      // Not in gathered files — check if it still exists on disk (maybe in an unscanned path)
-      try { await fs.access(m.file_path); continue; } catch { /* file gone */ }
-      // File is gone — check if the parent folder still exists
-      const parentDir = path.dirname(m.file_path);
-      try { await fs.access(parentDir); } catch {
-        // Folder is also gone — remove the movie entirely
-        db.prepare('DELETE FROM movies WHERE id = ?').run(m.id);
-        console.log(`[Scanner] Removed movie (folder deleted): ${m.title} (${parentDir})`);
+    if (mode !== 'shows') {
+      const existingMovies = db.prepare("SELECT id, title, file_path FROM movies WHERE file_path IS NOT NULL").all();
+      const moviesToDelete = [];
+      const moviesToUpdate = [];
+      for (const m of existingMovies) {
+        if (scanProgress.cancelled) throw new Error('Scan cancelled by user');
+        if (filesOnDisk.has(m.file_path)) continue;
+        try { await fs.access(m.file_path); continue; } catch { /* file gone */ }
+        const parentDir = path.dirname(m.file_path);
+        try { await fs.access(parentDir); } catch {
+          moviesToDelete.push({ id: m.id, title: m.title, parentDir });
+          removedCount++;
+          continue;
+        }
+        moviesToUpdate.push({ id: m.id, title: m.title });
         removedCount++;
-        continue;
       }
-      // Folder exists but file is gone — set to monitored for re-download
-      db.prepare("UPDATE movies SET status = 'monitored', file_path = NULL, file_size = 0, scene_name = NULL, resolution = NULL, codec = NULL WHERE id = ?").run(m.id);
-      console.log(`[Scanner] Movie file missing, set to monitored: ${m.title}`);
-      removedCount++;
+      
+      if (moviesToDelete.length > 0 || moviesToUpdate.length > 0) {
+        db.transaction(() => {
+          const delStmt = db.prepare('DELETE FROM movies WHERE id = ?');
+          for (const m of moviesToDelete) {
+            delStmt.run(m.id);
+            console.log(`[Scanner] Removed movie (folder deleted): ${m.title} (${m.parentDir})`);
+          }
+          const upStmt = db.prepare("UPDATE movies SET status = 'monitored', file_path = NULL, file_size = 0, scene_name = NULL, resolution = NULL, codec = NULL WHERE id = ?");
+          for (const m of moviesToUpdate) {
+            upStmt.run(m.id);
+            console.log(`[Scanner] Movie file missing, set to monitored: ${m.title}`);
+          }
+        })();
+      }
     }
 
-    for (const s of existingShows) {
-      if (scanProgress.cancelled) throw new Error('Scan cancelled by user');
-      // Check if any gathered file lives under this show's folder
-      const stillExists = allFiles.some(f => f.path.startsWith(s.folder_path + path.sep));
-      if (stillExists) continue;
-      // Not in gathered files — check if folder still exists on disk
-      try { await fs.access(s.folder_path); continue; } catch { /* gone */ }
-      // Folder is gone — remove show and all episodes
-      db.prepare('DELETE FROM episodes WHERE show_id = ?').run(s.id);
-      db.prepare('DELETE FROM shows WHERE id = ?').run(s.id);
-      console.log(`[Scanner] Removed show (folder deleted): ${s.title} (${s.folder_path})`);
-      removedCount++;
+    if (mode !== 'movies') {
+      const existingShows = db.prepare("SELECT id, title, folder_path FROM shows WHERE folder_path IS NOT NULL").all();
+      const showsToDelete = [];
+      for (const s of existingShows) {
+        if (scanProgress.cancelled) throw new Error('Scan cancelled by user');
+        const stillExists = allFiles.some(f => f.path.startsWith(s.folder_path + path.sep));
+        if (stillExists) continue;
+        try { await fs.access(s.folder_path); continue; } catch { /* gone */ }
+        showsToDelete.push({ id: s.id, title: s.title, folder_path: s.folder_path });
+        removedCount++;
+      }
+      
+      if (showsToDelete.length > 0) {
+        db.transaction(() => {
+          const delEpStmt = db.prepare('DELETE FROM episodes WHERE show_id = ?');
+          const delShowStmt = db.prepare('DELETE FROM shows WHERE id = ?');
+          for (const s of showsToDelete) {
+            delEpStmt.run(s.id);
+            delShowStmt.run(s.id);
+            console.log(`[Scanner] Removed show (folder deleted): ${s.title} (${s.folder_path})`);
+          }
+        })();
+      }
     }
 
     if (removedCount > 0) {
@@ -150,7 +187,7 @@ const doScan = async (mode = 'full') => {
     // Stage: Update sizes & ratings (metadata refresh)
     // ════════════════════════════════════════════
     if (updateMetadata) {
-      await updateLibraryMetadata(scanProgress, nextStage);
+      await updateLibraryMetadata(scanProgress, nextStage, mode);
     }
 
     // ════════════════════════════════════════════
@@ -173,7 +210,7 @@ const doScan = async (mode = 'full') => {
     // Stage: Scan subtitles
     // ════════════════════════════════════════════
     if (scanSubtitles) {
-      await scanLibrarySubtitles(scanProgress, nextStage);
+      await scanLibrarySubtitles(scanProgress, nextStage, mode);
     }
   } catch (error) {
     const isCancelled = error?.message === 'Scan cancelled by user';
