@@ -213,6 +213,45 @@ router.post('/trakt/disconnect', (req, res) => {
 
 
 // Plex Auth endpoint
+
+// Generate Plex Pin (proxy to avoid client-side adblockers/CORS)
+router.post('/plex/pin', async (req, res) => {
+  try {
+    const clientId = 'Atlas-' + Math.random().toString(36).substring(2, 15);
+    const pinRes = await axios.post('https://plex.tv/api/v2/pins?strong=true', null, {
+      headers: {
+        'Accept': 'application/json',
+        'X-Plex-Client-Identifier': clientId,
+        'X-Plex-Product': 'Atlas'
+      }
+    });
+    res.json({ status: 'success', data: { ...pinRes.data, clientId } });
+  } catch (err) {
+    console.error('[Plex Pin] Failed:', err.response?.data || err.message);
+    res.status(500).json({ status: 'error', message: 'Failed to generate Plex pin' });
+  }
+});
+
+// Poll Plex Pin (proxy)
+router.get('/plex/pin/:id', async (req, res) => {
+  const { id } = req.params;
+  const { clientId } = req.query;
+  if (!clientId) return res.status(400).json({ status: 'error', message: 'clientId required' });
+  
+  try {
+    const pollRes = await axios.get(`https://plex.tv/api/v2/pins/${id}`, {
+      headers: {
+        'Accept': 'application/json',
+        'X-Plex-Client-Identifier': clientId
+      }
+    });
+    res.json({ status: 'success', data: pollRes.data });
+  } catch (err) {
+    console.error('[Plex Pin Poll] Failed:', err.response?.data || err.message);
+    res.status(500).json({ status: 'error', message: 'Failed to poll Plex pin' });
+  }
+});
+
 router.post('/plex/login', loginLimiter, async (req, res) => {
   const { authToken } = req.body;
   const { getSetting } = require('../utils/settings');

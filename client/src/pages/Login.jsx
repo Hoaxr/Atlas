@@ -106,16 +106,11 @@ export default function Login() {
     setLoading(true);
     setLoadingMethod('plex');
     try {
-      const clientId = 'Atlas-' + Math.random().toString(36).substring(2, 15);
-      const pinRes = await fetch('https://plex.tv/api/v2/pins?strong=true', {
-        method: 'POST',
-        headers: {
-          'Accept': 'application/json',
-          'X-Plex-Client-Identifier': clientId,
-          'X-Plex-Product': 'Atlas'
-        }
-      });
-      const pinData = await pinRes.json();
+      const pinRes = await api.post('/auth/plex/pin');
+      if (pinRes.data.status !== 'success') throw new Error('Failed to get pin from backend');
+      
+      const pinData = pinRes.data.data;
+      const clientId = pinData.clientId;
       
       const authUrl = `https://app.plex.tv/auth/#!?clientID=${clientId}&code=${pinData.code}&context[device][product]=Atlas`;
       
@@ -133,19 +128,13 @@ export default function Login() {
         }
         
         try {
-          const pollRes = await fetch(`https://plex.tv/api/v2/pins/${pinData.id}`, {
-            headers: {
-              'Accept': 'application/json',
-              'X-Plex-Client-Identifier': clientId
-            }
-          });
-          const pollData = await pollRes.json();
-          if (pollData.authToken) {
+          const pollRes = await api.get(`/auth/plex/pin/${pinData.id}?clientId=${clientId}`);
+          if (pollRes.data.status === 'success' && pollRes.data.data.authToken) {
             clearInterval(pollIntervalRef.current);
             if (!popup?.closed) popup.close();
             
             // Send token to Atlas
-            const atlasRes = await api.post('/auth/plex/login', { authToken: pollData.authToken });
+            const atlasRes = await api.post('/auth/plex/login', { authToken: pollRes.data.data.authToken });
             if (atlasRes.data.status === 'success') {
               handleSuccessfulLogin(atlasRes);
             } else {
