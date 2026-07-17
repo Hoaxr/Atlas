@@ -16,6 +16,7 @@ export default function Login() {
   
   // Jellyfin Quick Connect State
   const [qcModalOpen, setQcModalOpen] = useState(false);
+  const [showAtlasLogin, setShowAtlasLogin] = useState(false);
   const [qcCode, setQcCode] = useState('');
   const [qcSecret, setQcSecret] = useState('');
   
@@ -234,89 +235,23 @@ export default function Login() {
           </div>
 
           <form onSubmit={handleAtlasLogin} className="space-y-6">
-            <div className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">
-                  Username
-                </label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                    <User className="w-5 h-5 text-slate-500" />
-                  </div>
-                  <input
-                    type="text"
-                    required
-                    value={username}
-                    onChange={e => setUsername(e.target.value)}
-                    className="w-full bg-slate-950/40 border border-slate-800 rounded-xl pl-11 pr-4 py-3 text-slate-200 focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500/50 transition-all placeholder:text-slate-650 shadow-inner text-sm"
-                    placeholder="Enter username"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">
-                  Password
-                </label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                    <Lock className="w-5 h-5 text-slate-500" />
-                  </div>
-                  <PasswordInput
-                    required
-                    value={password}
-                    onChange={e => setPassword(e.target.value)}
-                    className="w-full bg-slate-950/40 border border-slate-800 rounded-xl pl-11 pr-4 py-3 text-slate-200 focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500/50 transition-all placeholder:text-slate-650 shadow-inner text-sm"
-                    placeholder="••••••••"
-                  />
-                </div>
-              </div>
-            </div>
-
-            <div className="flex flex-col gap-3 pt-2">
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full py-3 px-4 font-bold rounded-xl shadow-lg flex items-center justify-center gap-2 transition-all hover:scale-[1.01] hover:brightness-105 active:scale-[0.99] disabled:opacity-50 group bg-gradient-to-r from-cyan-500 via-sky-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white shadow-cyan-500/20"
-              >
-                {loadingMethod === 'atlas' ? (
-                  <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                ) : (
-                  <>
-                    Sign In to Atlas
-                    <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
-                  </>
-                )}
-              </button>
-
+            <div className="flex flex-col gap-3">
               {authOptions.jellyfinConfigured && (
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={handleJellyfinLogin}
-                    disabled={loading}
-                    className="flex-1 py-3 px-4 font-bold rounded-xl shadow-lg flex items-center justify-center gap-2 transition-all hover:scale-[1.01] hover:brightness-105 active:scale-[0.99] disabled:opacity-50 group bg-gradient-to-r from-[#00a4dc] to-[#0085b2] text-white shadow-[#00a4dc]/20"
-                  >
-                    {loadingMethod === 'jellyfin' ? (
-                      <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    ) : (
-                      <>
-                        <Server className="w-5 h-5" />
-                        Sign In with Jellyfin
-                      </>
-                    )}
-                  </button>
-                  
-                  <button
-                    type="button"
-                    onClick={handleJellyfinQCInit}
-                    disabled={loading}
-                    title="Jellyfin Quick Connect"
-                    className="py-3 px-4 font-bold rounded-xl shadow-lg flex items-center justify-center gap-2 transition-all hover:scale-[1.01] hover:brightness-105 active:scale-[0.99] disabled:opacity-50 group bg-slate-800 hover:bg-slate-700 text-white shadow-slate-900/20 border border-slate-700"
-                  >
-                    <Smartphone className="w-5 h-5 text-[#00a4dc]" />
-                  </button>
-                </div>
+                <button
+                  type="button"
+                  onClick={handleJellyfinQCInit}
+                  disabled={loading}
+                  className="w-full py-3 px-4 font-bold rounded-xl shadow-lg flex items-center justify-center gap-2 transition-all hover:scale-[1.01] hover:brightness-105 active:scale-[0.99] disabled:opacity-50 group bg-gradient-to-r from-[#00a4dc] to-[#0085b2] text-white shadow-[#00a4dc]/20"
+                >
+                  {loadingMethod === 'jellyfin' ? (
+                    <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  ) : (
+                    <>
+                      <Smartphone className="w-5 h-5" />
+                      Sign In with Jellyfin
+                    </>
+                  )}
+                </button>
               )}
 
               {authOptions.plexConfigured && (
@@ -335,6 +270,81 @@ export default function Login() {
                     </>
                   )}
                 </button>
+              )}
+
+              {(authOptions.jellyfinConfigured || authOptions.plexConfigured) && (
+                <div className="flex items-center gap-4 my-2">
+                  <div className="h-px bg-slate-800 flex-1"></div>
+                  <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">OR</span>
+                  <div className="h-px bg-slate-800 flex-1"></div>
+                </div>
+              )}
+
+              {!showAtlasLogin ? (
+                <button
+                  type="button"
+                  onClick={() => setShowAtlasLogin(true)}
+                  className="w-full py-3 px-4 font-bold rounded-xl shadow-lg flex items-center justify-center gap-2 transition-all hover:bg-slate-800 text-slate-300 border border-slate-700 bg-slate-900/50 hover:text-white"
+                >
+                  <Shield className="w-5 h-5" />
+                  Sign In with Atlas Account
+                </button>
+              ) : (
+                <div className="space-y-6 animate-fade-in">
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">
+                        Username
+                      </label>
+                      <div className="relative">
+                        <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                          <User className="w-5 h-5 text-slate-500" />
+                        </div>
+                        <input
+                          type="text"
+                          required
+                          value={username}
+                          onChange={e => setUsername(e.target.value)}
+                          className="w-full bg-slate-950/40 border border-slate-800 rounded-xl pl-11 pr-4 py-3 text-slate-200 focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500/50 transition-all placeholder:text-slate-650 shadow-inner text-sm"
+                          placeholder="Enter username"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">
+                        Password
+                      </label>
+                      <div className="relative">
+                        <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                          <Lock className="w-5 h-5 text-slate-500" />
+                        </div>
+                        <PasswordInput
+                          required
+                          value={password}
+                          onChange={e => setPassword(e.target.value)}
+                          className="w-full bg-slate-950/40 border border-slate-800 rounded-xl pl-11 pr-4 py-3 text-slate-200 focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500/50 transition-all placeholder:text-slate-650 shadow-inner text-sm"
+                          placeholder="••••••••"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="w-full py-3 px-4 font-bold rounded-xl shadow-lg flex items-center justify-center gap-2 transition-all hover:scale-[1.01] hover:brightness-105 active:scale-[0.99] disabled:opacity-50 group bg-gradient-to-r from-cyan-500 via-sky-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white shadow-cyan-500/20"
+                  >
+                    {loadingMethod === 'atlas' ? (
+                      <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    ) : (
+                      <>
+                        Sign In to Atlas
+                        <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+                      </>
+                    )}
+                  </button>
+                </div>
               )}
             </div>
           </form>
