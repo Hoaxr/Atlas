@@ -348,27 +348,35 @@ export default function MediaDetailsModal({ isOpen, onClose, mediaId, mediaType,
                       );
                     }
 
-                    // in library or has a request status: show status badge (never "In Library" text in details mode)
                     if (isInLibrary || requestStatus) {
                       const showStatus = (mode === 'details' && requestStatus) ? requestStatus : isInLibrary ? 'approved' : requestStatus;
                       const isApproved = showStatus === 'approved';
                       const isDenied = showStatus === 'denied';
+                      const isPending = showStatus === 'pending';
                       return (
-                        <button
-                          onClick={() => {
-                            if (mode === 'details' && onRequest && !isInLibrary) onRequest(details);
-                          }}
-                          className={`border font-bold py-2 px-4 rounded-lg flex items-center justify-center gap-2 text-sm capitalize cursor-default
-                            ${isApproved ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' :
-                              isDenied   ? 'bg-rose-500/10 text-rose-400 border-rose-500/20' :
-                                           'bg-amber-500/10 text-amber-400 border-amber-500/20'}
-                          `}
-                        >
-                          {showStatus}
-                          {isApproved ? <CheckCircle2 className="w-4 h-4 text-emerald-400" /> :
-                           isDenied    ? <XCircle className="w-4 h-4 text-rose-400" /> :
-                                         <Clock className="w-4 h-4 text-amber-400" />}
-                        </button>
+                        <div className="flex items-center gap-3">
+                          <button
+                            className={`border font-bold py-2 px-4 rounded-lg flex items-center justify-center gap-2 text-sm capitalize cursor-default
+                              ${isApproved ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' :
+                                isDenied   ? 'bg-rose-500/10 text-rose-400 border-rose-500/20' :
+                                             'bg-amber-500/10 text-amber-400 border-amber-500/20'}
+                            `}
+                          >
+                            {showStatus}
+                            {isApproved ? <CheckCircle2 className="w-4 h-4 text-emerald-400" /> :
+                             isDenied    ? <XCircle className="w-4 h-4 text-rose-400" /> :
+                                           <Clock className="w-4 h-4 text-amber-400" />}
+                          </button>
+                          {isPending && mode === 'details' && onRequest && !isInLibrary && (
+                            <button
+                              onClick={() => onRequest(details)}
+                              className="border border-rose-500/30 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 font-bold py-2 px-4 rounded-lg flex items-center justify-center gap-2 text-sm transition-colors cursor-pointer"
+                            >
+                              <XCircle className="w-4 h-4 text-rose-400" />
+                              Cancel Request
+                            </button>
+                          )}
+                        </div>
                       );
                     }
 
