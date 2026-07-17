@@ -40,8 +40,7 @@ jobs:
     - name: Build iOS App (Archive)
       working-directory: ./client/ios/App
       run: |
-        # Build an unsigned xcarchive so it can be downloaded and signed locally, 
-        # or pushed to a device if developer certificate handling is added.
+        # Build an unsigned xcarchive
         xcodebuild -project App.xcodeproj \
                    -scheme App \
                    -sdk iphoneos \
@@ -51,8 +50,15 @@ jobs:
                    CODE_SIGNING_REQUIRED=NO \
                    CODE_SIGNING_ALLOWED=NO
 
+    - name: Create Unsigned IPA
+      working-directory: ./client/ios/App/build
+      run: |
+        mkdir -p Payload
+        cp -r App.xcarchive/Products/Applications/App.app Payload/
+        zip -r App.ipa Payload
+
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: iOS-App-Archive
-        path: client/ios/App/build/App.xcarchive
+        name: iOS-App-IPA
+        path: client/ios/App/build/App.ipa
