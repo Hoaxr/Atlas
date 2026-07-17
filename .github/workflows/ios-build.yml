@@ -42,7 +42,7 @@ jobs:
       run: |
         # Build an unsigned xcarchive so it can be downloaded and signed locally, 
         # or pushed to a device if developer certificate handling is added.
-        xcodebuild -workspace App.xcworkspace \
+        xcodebuild -project App.xcodeproj \
                    -scheme App \
                    -sdk iphoneos \
                    -configuration Release \
