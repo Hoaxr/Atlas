@@ -65,7 +65,8 @@ export default function ConnectionsTab({
           pushoverUserKey: data.pushoverUserKey || '',
           notifyOnGrab: data.notifyOnGrab === 'true',
           notifyOnDownload: data.notifyOnDownload === 'true',
-          notifyOnPlaybackStart: data.notifyOnPlaybackStart === 'true'
+          notifyOnPlaybackStart: data.notifyOnPlaybackStart === 'true',
+          notifyOnRequest: data.notifyOnRequest === 'true'
         });
         
         // Auto test configured media servers
@@ -166,7 +167,8 @@ export default function ConnectionsTab({
               ...updatedSettings,
               notifyOnGrab: updatedSettings.notifyOnGrab.toString(),
               notifyOnDownload: updatedSettings.notifyOnDownload.toString(),
-              notifyOnPlaybackStart: updatedSettings.notifyOnPlaybackStart.toString()
+              notifyOnPlaybackStart: updatedSettings.notifyOnPlaybackStart.toString(),
+              notifyOnRequest: updatedSettings.notifyOnRequest.toString()
             });
           } catch (saveErr) {
             console.error('Auto-save after OAuth failed:', saveErr);
@@ -181,7 +183,8 @@ export default function ConnectionsTab({
               ...updatedSettings,
               notifyOnGrab: updatedSettings.notifyOnGrab.toString(),
               notifyOnDownload: updatedSettings.notifyOnDownload.toString(),
-              notifyOnPlaybackStart: updatedSettings.notifyOnPlaybackStart.toString()
+              notifyOnPlaybackStart: updatedSettings.notifyOnPlaybackStart.toString(),
+              notifyOnRequest: updatedSettings.notifyOnRequest.toString()
             });
           } catch (saveErr) {
             console.error('Auto-save after OAuth failed:', saveErr);
@@ -224,7 +227,8 @@ export default function ConnectionsTab({
         ...localSettings,
         notifyOnGrab: localSettings.notifyOnGrab.toString(),
         notifyOnDownload: localSettings.notifyOnDownload.toString(),
-        notifyOnPlaybackStart: localSettings.notifyOnPlaybackStart.toString()
+        notifyOnPlaybackStart: localSettings.notifyOnPlaybackStart.toString(),
+        notifyOnRequest: localSettings.notifyOnRequest.toString()
       });
       // Also save parent API settings (TMDB key, Trakt keys, etc.)
       await api.post('/settings', {
@@ -651,8 +655,10 @@ export default function ConnectionsTab({
           </div>
         </div>
 
-        <div className="mt-6 space-y-3 p-4 bg-slate-800/30 rounded-xl border border-slate-700/50">
-          <label className="flex items-start gap-3 cursor-pointer p-4 rounded-xl bg-slate-900/50 border border-white/5 hover:border-amber-500/30 transition-colors group">
+        <div className="mt-6 space-y-3 p-5 bg-slate-900/50 rounded-xl border border-slate-700/50">
+          <h3 className="text-sm font-semibold text-slate-300">Events</h3>
+          
+          <label className="flex items-start gap-3 cursor-pointer p-4 rounded-xl bg-slate-800/50 border border-white/5 hover:border-amber-500/30 transition-colors group">
             <div className="mt-0.5">
               <input
                 type="checkbox"
@@ -668,7 +674,8 @@ export default function ConnectionsTab({
               <p className="text-xs text-slate-400 mt-1">Send notification when a release is sent to download client</p>
             </div>
           </label>
-          <label className="flex items-start gap-3 cursor-pointer p-4 rounded-xl bg-slate-900/50 border border-white/5 hover:border-amber-500/30 transition-colors group">
+
+          <label className="flex items-start gap-3 cursor-pointer p-4 rounded-xl bg-slate-800/50 border border-white/5 hover:border-amber-500/30 transition-colors group">
             <div className="mt-0.5">
               <input
                 type="checkbox"
@@ -684,7 +691,8 @@ export default function ConnectionsTab({
               <p className="text-xs text-slate-400 mt-1">Send notification when client finishes downloading and Atlas imports</p>
             </div>
           </label>
-          <label className="flex items-start gap-3 cursor-pointer p-4 rounded-xl bg-slate-900/50 border border-white/5 hover:border-amber-500/30 transition-colors group">
+
+          <label className="flex items-start gap-3 cursor-pointer p-4 rounded-xl bg-slate-800/50 border border-white/5 hover:border-amber-500/30 transition-colors group">
             <div className="mt-0.5">
               <input
                 type="checkbox"
@@ -698,6 +706,23 @@ export default function ConnectionsTab({
             <div>
               <p className="text-sm font-bold text-slate-200 group-hover:text-amber-400 transition-colors">Notify on Playback Start</p>
               <p className="text-xs text-slate-400 mt-1">Send notification when a user starts watching media on a connected server</p>
+            </div>
+          </label>
+
+          <label className="flex items-start gap-3 cursor-pointer p-4 rounded-xl bg-slate-800/50 border border-white/5 hover:border-amber-500/30 transition-colors group">
+            <div className="mt-0.5">
+              <input
+                type="checkbox"
+                name="notifyOnRequest"
+                checked={localSettings.notifyOnRequest}
+                onChange={handleChange}
+                className="sr-only"
+              />
+              {localSettings.notifyOnRequest ? <CheckSquare className="w-5 h-5 text-amber-500" /> : <Square className="w-5 h-5 text-slate-500" />}
+            </div>
+            <div>
+              <p className="text-sm font-bold text-slate-200 group-hover:text-amber-400 transition-colors">Notify on Request</p>
+              <p className="text-xs text-slate-400 mt-1">Send notification when a user requests a movie or show</p>
             </div>
           </label>
         </div>

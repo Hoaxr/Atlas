@@ -63,6 +63,7 @@ class NotificationService {
     if (title === 'Download Complete') embedColor = 3066993; // Green
     else if (title === 'Media Grabbed') embedColor = 15105570; // Orange
     else if (title === 'Playback Started') embedColor = 5814783; // Purple-ish
+    else if (title === 'New Request') embedColor = 15277667; // Pink
 
     if (discordUrl) {
       try {

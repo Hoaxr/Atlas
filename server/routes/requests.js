@@ -2,6 +2,8 @@ const express = require('express');
 const router = express.Router();
 const db = require('../config/database');
 const requireAdmin = require('../middleware/requireAdmin');
+const notificationService = require('../services/notificationService');
+const { getSetting } = require('../utils/settings');
 
 // GET /api/requests/pending-count
 router.get('/pending-count', (req, res) => {
@@ -84,6 +86,18 @@ router.post('/', (req, res) => {
     const result = db.prepare('INSERT INTO requests (user_id, tmdb_id, type, title, status, release_date, poster_path) VALUES (?, ?, ?, ?, \'pending\', ?, ?)').run(
       user_id, tmdb_id, type, title, release_date || null, poster_path || null
     );
+
+    // Send notification if enabled
+    const notifyOnRequest = getSetting('notifyOnRequest') === 'true';
+    if (notifyOnRequest) {
+      const user = db.prepare('SELECT username FROM users WHERE id = ?').get(user_id);
+      const username = user ? user.username : 'A user';
+      notificationService.sendNotification(
+        'New Request', 
+        `${username} requested ${title}`, 
+        { title, type, poster: poster_path }
+      ).catch(err => console.error('[NotificationService] Request notification failed:', err.message));
+    }
 
     res.json({ status: 'success', message: 'Request submitted successfully', data: { id: result.lastInsertRowid } });
   } catch (err) {
