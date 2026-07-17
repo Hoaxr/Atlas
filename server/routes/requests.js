@@ -95,7 +95,7 @@ router.post('/', (req, res) => {
       notificationService.sendNotification(
         'New Request', 
         `${username} requested ${title}`, 
-        { title, type, poster: poster_path }
+        { type, poster: poster_path }
       ).catch(err => console.error('[NotificationService] Request notification failed:', err.message));
     }
 
