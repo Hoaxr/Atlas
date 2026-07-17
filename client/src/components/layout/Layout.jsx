@@ -9,7 +9,6 @@ import useWebSocket from '../../lib/useWebSocket';
 import { setCachedMovies, setCachedShows } from '../../lib/libraryCache';
 import useKeyboardShortcuts from '../../lib/useKeyboardShortcuts';
 import ShortcutsModal from '../shared/ShortcutsModal';
-import ChangePasswordModal from '../ChangePasswordModal';
 
 const navSections = [
   {
@@ -61,7 +60,7 @@ export default function Layout() {
   const [pendingRequests, setPendingRequests] = useState(0);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
-  const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
+
   const [watcherCount, setWatcherCount] = useState(0);
 
   const handleLogout = () => {
@@ -475,10 +474,7 @@ export default function Layout() {
         </div>
       </main>
 
-      <ChangePasswordModal
-        isOpen={isPasswordModalOpen}
-        onClose={() => setIsPasswordModalOpen(false)}
-      />
+
     </div>
   );
 }

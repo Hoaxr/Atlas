@@ -39,7 +39,7 @@ router.get('/', (req, res) => {
     } else {
       // Non-admins only see their own requests (no other user's username exposed)
       requests = db.prepare(`
-        SELECT r.id, r.tmdb_id, r.type, r.title, r.status, r.created_at, r.release_date,
+        SELECT r.id, r.user_id, r.tmdb_id, r.type, r.title, r.status, r.created_at, r.release_date,
           COALESCE(r.poster_path, m.poster_path, s.poster_path) as poster_path
         FROM requests r
         LEFT JOIN movies m ON r.tmdb_id = m.tmdb_id AND r.type = 'movie'

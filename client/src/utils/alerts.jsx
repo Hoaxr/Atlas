@@ -71,15 +71,19 @@ export const customConfirm = (message, opts = {}) => {
   return new Promise((resolve) => {
     const hasThird = !!opts.thirdOptionText;
     toast.custom((t) => (
-      <div className={`${t.visible ? 'translate-y-0 opacity-100 scale-100' : 'translate-y-4 opacity-0 scale-95'} transform transition-all duration-300 pointer-events-auto`}>
-        <div className="bg-slate-850/98 backdrop-blur-xl border border-slate-700/50 rounded-2xl shadow-2xl shadow-black/50 w-[400px] overflow-hidden">
+      <div className={`${t.visible ? 'translate-y-0 opacity-100 scale-100' : 'translate-y-4 opacity-0 scale-95'} transform transition-all duration-300 pointer-events-auto mt-[20vh]`}>
+        <div className="bg-slate-900/95 backdrop-blur-xl border border-slate-700/50 rounded-2xl shadow-2xl shadow-black/50 w-[400px] overflow-hidden">
           {/* Header with close */}
           <div className="flex items-start justify-between px-5 pt-5 pb-2">
             <div className="flex items-center gap-3">
-              <div className="p-2.5 rounded-xl bg-red-500/10 text-red-400 shrink-0">
-                <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+              <div className={`p-2.5 rounded-xl shrink-0 ${opts.type === 'warning' ? 'bg-amber-500/10 text-amber-400' : 'bg-red-500/10 text-red-400'}`}>
+                {opts.type === 'warning' ? (
+                  <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                ) : (
+                  <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+                )}
               </div>
-              <h3 className="text-lg font-bold text-white">Remove from Library</h3>
+              <h3 className="text-lg font-bold text-white">{opts.title || 'Remove from Library'}</h3>
             </div>
             {hasThird && (
               <button
@@ -93,7 +97,7 @@ export const customConfirm = (message, opts = {}) => {
 
           {/* Message */}
           <div className="px-5 pb-4">
-            <p className="text-sm text-slate-300 leading-relaxed whitespace-pre-wrap">{message}</p>
+            <p className="text-sm text-slate-200 leading-relaxed whitespace-pre-wrap">{message}</p>
           </div>
 
           {/* Divider */}
@@ -109,7 +113,7 @@ export const customConfirm = (message, opts = {}) => {
             </button>
             <button
               onClick={() => { toast.dismiss(t.id); resolve(true); }}
-              className="flex-1 py-2.5 text-sm font-semibold rounded-xl bg-red-500 hover:bg-red-400 text-white transition-colors shadow-lg shadow-red-500/20"
+              className={`flex-1 py-2.5 text-sm font-semibold rounded-xl text-white transition-colors shadow-lg ${opts.type === 'warning' ? 'bg-amber-500 hover:bg-amber-400 shadow-amber-500/20' : 'bg-red-500 hover:bg-red-400 shadow-red-500/20'}`}
             >
               {opts.confirmText || 'Confirm'}
             </button>
