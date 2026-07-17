@@ -105,6 +105,18 @@ export default function Login() {
   const handlePlexLogin = async () => {
     setLoading(true);
     setLoadingMethod('plex');
+    
+    // Open popup immediately to bypass popup blockers, then update URL later
+    const width = 600;
+    const height = 700;
+    const left = window.screenX + (window.outerWidth - width) / 2;
+    const top = window.screenY + (window.outerHeight - height) / 2;
+    const popup = window.open('', 'PlexAuth', `width=${width},height=${height},left=${left},top=${top}`);
+    
+    if (popup) {
+      popup.document.body.innerHTML = '<div style="font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; background: #0f172a; color: #fff;">Loading Plex...</div>';
+    }
+
     try {
       const pinRes = await api.post('/auth/plex/pin');
       if (pinRes.data.status !== 'success') throw new Error('Failed to get pin from backend');
@@ -114,11 +126,12 @@ export default function Login() {
       
       const authUrl = `https://app.plex.tv/auth/#!?clientID=${clientId}&code=${pinData.code}&context[device][product]=Atlas`;
       
-      const width = 600;
-      const height = 700;
-      const left = window.screenX + (window.outerWidth - width) / 2;
-      const top = window.screenY + (window.outerHeight - height) / 2;
-      const popup = window.open(authUrl, 'PlexAuth', `width=${width},height=${height},left=${left},top=${top}`);
+      if (popup) {
+        popup.location.href = authUrl;
+      } else {
+        // If popup was blocked entirely, we can't proceed
+        throw new Error('Popup was blocked by the browser');
+      }
       
       pollIntervalRef.current = setInterval(async () => {
         if (popup?.closed) {
