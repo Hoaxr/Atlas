@@ -10,6 +10,8 @@ import { StatsSkeleton } from '../components/shared/Skeleton';
 import EmptyState from '../components/shared/EmptyState';
 import StickyBar from '../components/shared/StickyBar';
 import MediaDetailsModal from '../components/MediaDetailsModal';
+import ModalShell from '../components/shared/ModalShell';
+import Spinner from '../components/shared/Spinner';
 import { useStickyBar } from '../lib/useStickyBar';
 
 const formatDuration = (totalMinutes) => {
@@ -511,7 +513,59 @@ export default function Statistics() {
             </div>
           </button>
         </div>
+        </div>
       </div>
+
+      <ModalShell open={missingSubsModal} onClose={() => setMissingSubsModal(false)} title="Missing Subtitles" width="max-w-2xl">
+        {missingSubsLoading ? (
+          <div className="py-12 flex justify-center"><Spinner /></div>
+        ) : !missingSubsData ? (
+          <div className="py-12 text-center text-slate-500">Failed to load data.</div>
+        ) : (
+          <div className="space-y-6 text-sm">
+            {missingSubsData.movies?.length > 0 && (
+              <div>
+                <h3 className="font-bold text-slate-300 mb-3 text-lg flex items-center gap-2">
+                  <Film className="w-5 h-5 text-cyan-400" />
+                  Movies without Subtitles
+                </h3>
+                <div className="bg-slate-900/50 rounded-xl border border-white/5 overflow-hidden divide-y divide-slate-800/50">
+                  {missingSubsData.movies.map(m => (
+                    <div key={`m-${m.id}`} className="p-3 hover:bg-slate-800/30 transition-colors flex items-center justify-between group">
+                      <span className="font-medium text-slate-300 group-hover:text-cyan-400 transition-colors cursor-pointer" onClick={() => { setMissingSubsModal(false); navigate(`/movies/${m.id}`); }}>{m.title} {m.year ? `(${m.year})` : ''}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            
+            {missingSubsData.shows?.length > 0 && (
+              <div>
+                <h3 className="font-bold text-slate-300 mb-3 text-lg flex items-center gap-2">
+                  <Tv className="w-5 h-5 text-cyan-400" />
+                  Shows with Missing Subtitles
+                </h3>
+                <div className="bg-slate-900/50 rounded-xl border border-white/5 overflow-hidden divide-y divide-slate-800/50">
+                  {missingSubsData.shows.map(s => (
+                    <div key={`s-${s.id}`} className="p-3 hover:bg-slate-800/30 transition-colors flex items-center justify-between group">
+                      <span className="font-medium text-slate-300 group-hover:text-cyan-400 transition-colors cursor-pointer" onClick={() => { setMissingSubsModal(false); navigate(`/shows/${s.id}`); }}>{s.title}</span>
+                      <span className="text-xs bg-slate-800 text-slate-400 px-2 py-1 rounded border border-white/5 shrink-0">
+                        {s.missing_episode_count} {s.missing_episode_count === 1 ? 'ep' : 'eps'}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {missingSubsData.movies?.length === 0 && missingSubsData.shows?.length === 0 && (
+              <div className="py-8 text-center text-slate-500">
+                All downloaded files have subtitles!
+              </div>
+            )}
+          </div>
+        )}
+      </ModalShell>
     </div>
   );
 }
