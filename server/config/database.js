@@ -422,9 +422,6 @@ const MIGRATIONS = [
       if (!hasColumn('movies', 'watched_at')) {
         db.exec("ALTER TABLE movies ADD COLUMN watched_at DATETIME;");
       }
-      if (!hasColumn('movies', 'ignore_cleanup')) {
-        db.exec("ALTER TABLE movies ADD COLUMN ignore_cleanup INTEGER DEFAULT 0;");
-      }
       if (!hasColumn('episodes', 'watched_at')) {
         db.exec("ALTER TABLE episodes ADD COLUMN watched_at DATETIME;");
       }
@@ -566,6 +563,15 @@ const MIGRATIONS = [
     run: (db) => {
       if (!hasColumn('users', 'jwt_version')) {
         db.exec('ALTER TABLE users ADD COLUMN jwt_version INTEGER DEFAULT 1;');
+      }
+    }
+  },
+  {
+    id: 16,
+    name: 'Add ignore_cleanup column',
+    run: (db) => {
+      if (!hasColumn('movies', 'ignore_cleanup')) {
+        db.exec('ALTER TABLE movies ADD COLUMN ignore_cleanup INTEGER DEFAULT 0;');
       }
     }
   }
