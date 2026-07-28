@@ -321,8 +321,9 @@ const scanLibrarySubtitles = async (scanProgress, nextStage, mode = 'full') => {
 
         const langs = [...new Set(
           matchingSubs.map(f => {
-            const name = path.basename(f, path.extname(f));
-            const m = name.match(/[._-]([a-z]{2,3})(?:\.[a-z0-9]+)?$/i);
+            let name = path.basename(f, path.extname(f));
+            name = name.replace(/[._-](?:forced|sdh|hi|cc|\d+)$/i, '');
+            const m = name.match(/[._-]([a-z]{2,3})$/i);
             if (m) {
               const code = m[1].toLowerCase();
               if (VALID_LANGUAGES.has(code)) return code;

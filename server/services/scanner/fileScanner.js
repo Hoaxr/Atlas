@@ -31,8 +31,11 @@ const scanSubtitleLangs = async (filePath) => {
       items
         .filter(item => SUBTITLE_EXTS.includes(path.extname(item).toLowerCase()))
         .map(item => {
-          const name = path.basename(item, path.extname(item));
-          const match = name.match(/[._-]([a-z]{2,3})(?:\.[a-z0-9]+)?$/i);
+          // Strip extension, then strip trailing numeric index or qualifiers
+          // e.g. "Movie.en.0" → "Movie.en", "Movie.en.forced" → "Movie.en"
+          let name = path.basename(item, path.extname(item));
+          name = name.replace(/[._-](?:forced|sdh|hi|cc|\d+)$/i, '');
+          const match = name.match(/[._-]([a-z]{2,3})$/i);
           if (match) {
             const code = match[1].toLowerCase();
             if (VALID_LANGUAGES.has(code)) return code;
