@@ -12,6 +12,8 @@ const imageService = require('./imageService');
 const { getSetting } = require('../utils/settings');
 const { isVideoFile } = require('../utils/fileUtils');
 const { getMediaMetadata, parseAudioFromFileName } = require('../utils/videoUtils');
+const subtitleService = require('./subtitles');
+
 
 const getNamingConfig = () => {
   return {
@@ -391,6 +393,25 @@ const importMovie = async (torrent, movie) => {
     console.log(`[MediaManagement] Movie ${movie.title} marked as downloaded.`);
     eventBus.success('Download complete', { title: movie.title, type: 'movie', destinationPath: destFile });
 
+    // Immediately search for subtitles without waiting for the scheduler
+    try {
+      const providerLangs = (() => {
+        try {
+          const row = db.prepare("SELECT value FROM settings WHERE key = 'providerLangs'").get();
+          return row ? JSON.parse(row.value) : ['en'];
+        } catch { return ['en']; }
+      })();
+      const freshMovie = db.prepare('SELECT * FROM movies WHERE id = ?').get(movie.id);
+      for (const langCode of providerLangs) {
+        subtitleService.downloadSubtitlesForMovie(freshMovie, langCode).catch(e =>
+          console.log(`[MediaManagement] Subtitle fetch (${langCode}) for ${movie.title}: ${e.message}`)
+        );
+      }
+    } catch (subErr) {
+      console.error(`[MediaManagement] Failed to trigger subtitle search for ${movie.title}:`, subErr.message);
+    }
+
+
     // Auto-refresh: detect resolution, codec & audio and update TMDB metadata
     try {
       let sceneName = torrent.name;
@@ -577,6 +598,26 @@ const importEpisode = async (torrent, episode) => {
     console.log(`[MediaManagement] Episode marked as downloaded.`);
     const formattedSE = `S${String(episode.season_number).padStart(2, '0')}E${String(episode.episode_number).padStart(2, '0')}`;
     eventBus.success('Download complete', { title: `${episode.show_title} ${formattedSE}`, type: 'episode', destinationPath: destFile });
+
+    // Immediately search for subtitles without waiting for the scheduler
+    try {
+      const providerLangs = (() => {
+        try {
+          const row = db.prepare("SELECT value FROM settings WHERE key = 'providerLangs'").get();
+          return row ? JSON.parse(row.value) : ['en'];
+        } catch { return ['en']; }
+      })();
+      const freshEpisode = db.prepare('SELECT * FROM episodes WHERE id = ?').get(episode.id);
+      const show = db.prepare('SELECT * FROM shows WHERE id = ?').get(episode.show_id);
+      for (const langCode of providerLangs) {
+        subtitleService.downloadSubtitlesForEpisode(freshEpisode, show, langCode).catch(e =>
+          console.log(`[MediaManagement] Subtitle fetch (${langCode}) for ${episode.show_title} ${formattedSE}: ${e.message}`)
+        );
+      }
+    } catch (subErr) {
+      console.error(`[MediaManagement] Failed to trigger subtitle search for ${episode.show_title}:`, subErr.message);
+    }
+
 
     // Auto-refresh: detect resolution, codec & audio and update TMDB metadata
     try {
