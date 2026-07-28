@@ -344,7 +344,7 @@ export default function Statistics() {
               <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
                 <div
                   className="h-full bg-gradient-to-r from-cyan-600 to-cyan-400 rounded-full transition-all duration-700"
-                  style={{ width: `${stats.moviesWithFiles > 0 ? (stats.moviesWithSubtitles / stats.moviesWithFiles) * 100 : 0}%` }}
+                  style={{ width: `${((stats.moviesWithFiles ?? 0) + (stats.episodesWithFiles ?? 0)) > 0 ? (((stats.moviesWithSubtitles ?? 0) + (stats.episodesWithSubtitles ?? 0)) / ((stats.moviesWithFiles ?? 0) + (stats.episodesWithFiles ?? 0))) * 100 : 0}%` }}
                 />
               </div>
             </div>
@@ -352,12 +352,12 @@ export default function Statistics() {
             {/* Stats cards */}
             <div className="grid grid-cols-3 gap-3 mb-4">
               <div className="bg-cyan-500/10 rounded-xl p-3 border border-cyan-500/20">
-                <p className="text-lg font-black text-cyan-400">{stats.moviesWithSubtitles ?? 0}</p>
+                <p className="text-lg font-black text-cyan-400">{(stats.moviesWithSubtitles ?? 0) + (stats.episodesWithSubtitles ?? 0)}</p>
                 <p className="text-[10px] text-cyan-300/70">With subtitles</p>
               </div>
-              <div className="bg-slate-800/50 rounded-xl p-3 border border-white/5">
-                <p className="text-lg font-black text-slate-200">{stats.moviesWithFiles ?? 0}</p>
-                <p className="text-[10px] text-slate-500">Total files</p>
+              <div className="bg-cyan-500/10 rounded-xl p-3 border border-cyan-500/20">
+                <p className="text-lg font-black text-cyan-400">{(stats.moviesWithFiles ?? 0) + (stats.episodesWithFiles ?? 0)}</p>
+                <p className="text-[10px] text-cyan-300/70">Total files</p>
               </div>
               <button
                 onClick={openMissingSubs}

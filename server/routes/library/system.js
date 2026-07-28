@@ -233,7 +233,9 @@ router.get('/stats', (req, res, next) => {
       SELECT
         COUNT(*) as total,
         COALESCE(SUM(COALESCE(file_size, 0)), 0) as totalSize,
-        COUNT(CASE WHEN file_path IS NOT NULL AND (subtitles IS NULL OR subtitles = '[]') THEN 1 END) as missingSubs
+        COUNT(CASE WHEN file_path IS NOT NULL AND file_path != '' THEN 1 END) as withFiles,
+        COUNT(CASE WHEN file_path IS NOT NULL AND file_path != '' AND subtitles IS NOT NULL AND subtitles != '[]' THEN 1 END) as withSubs,
+        COUNT(CASE WHEN file_path IS NOT NULL AND file_path != '' AND (subtitles IS NULL OR subtitles = '[]') THEN 1 END) as missingSubs
       FROM episodes
     `).get();
 
@@ -345,6 +347,8 @@ router.get('/stats', (req, res, next) => {
       moviesWithSubtitles: movieAgg.withSubs,
       moviesMissingSubtitles: movieAgg.withFiles - movieAgg.withSubs,
       showsMissingSubtitles: showsMissingSubs,
+      episodesWithFiles: epAgg.withFiles,
+      episodesWithSubtitles: epAgg.withSubs,
       episodesMissingSubtitles: epAgg.missingSubs,
       topSubLanguages,
     };
