@@ -19,6 +19,8 @@ const shouldSkipDir = (dirName) => {
   return false;
 };
 
+const { VALID_LANGUAGES } = require('../../utils/languages');
+
 const SUBTITLE_EXTS = [...SUBTITLE_EXTENSIONS];
 
 const scanSubtitleLangs = async (filePath) => {
@@ -31,7 +33,11 @@ const scanSubtitleLangs = async (filePath) => {
         .map(item => {
           const name = path.basename(item, path.extname(item));
           const match = name.match(/[._-]([a-z]{2,3})(?:\.[a-z0-9]+)?$/i);
-          return match ? match[1].toLowerCase() : null;
+          if (match) {
+            const code = match[1].toLowerCase();
+            if (VALID_LANGUAGES.has(code)) return code;
+          }
+          return null;
         })
         .filter(Boolean)
     )];

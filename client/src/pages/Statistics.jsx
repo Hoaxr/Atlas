@@ -327,9 +327,6 @@ export default function Statistics() {
                 <Languages className="w-4 h-4 text-cyan-400" />
               </div>
               <h4 className="text-sm font-bold text-slate-200">Subtitles</h4>
-              <span className="ml-auto text-[10px] font-bold text-slate-500">
-                {totalFiles} files
-              </span>
             </div>
 
             {/* Coverage bar */}

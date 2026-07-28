@@ -5,6 +5,7 @@ const tmdbService = require('../tmdbService');
 const { getMediaMetadata, parseAudioFromFileName } = require('../../utils/videoUtils');
 const { isVideoFile } = require('../../utils/fileUtils');
 const { scanSubtitleLangs, SUBTITLE_EXTS } = require('./fileScanner');
+const { VALID_LANGUAGES } = require('../../utils/languages');
 
 const updateLibraryMetadata = async (scanProgress, nextStage, mode = 'full') => {
   nextStage('Updating metadata...');
@@ -322,7 +323,11 @@ const scanLibrarySubtitles = async (scanProgress, nextStage, mode = 'full') => {
           matchingSubs.map(f => {
             const name = path.basename(f, path.extname(f));
             const m = name.match(/[._-]([a-z]{2,3})(?:\.[a-z0-9]+)?$/i);
-            return m ? m[1].toLowerCase() : null;
+            if (m) {
+              const code = m[1].toLowerCase();
+              if (VALID_LANGUAGES.has(code)) return code;
+            }
+            return null;
           }).filter(Boolean)
         )];
 
