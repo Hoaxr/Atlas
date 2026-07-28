@@ -32,10 +32,10 @@ router.post('/login', loginLimiter, async (req, res) => {
     return res.json({ status: 'success', message: 'Authentication is disabled' });
   }
 
-  const user = db.prepare('SELECT id, username, password, role, origin FROM users WHERE username = ?').get(username);
+  const user = db.prepare('SELECT id, username, password, role, origin, jwt_version FROM users WHERE username = ?').get(username);
   
   if (user && await bcrypt.compare(password, user.password)) {
-    const token = jwt.sign({ id: user.id, username: user.username, role: user.role }, JWT_SECRET, { expiresIn: '7d' });
+    const token = jwt.sign({ id: user.id, username: user.username, role: user.role, jwt_version: user.jwt_version }, JWT_SECRET, { expiresIn: '7d' });
     db.prepare('UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = ?').run(user.id);
     res.json({ status: 'success', data: { token, user: { id: user.id, username: user.username, role: user.role, origin: user.origin } } });
   } else {
@@ -70,14 +70,25 @@ router.put('/password', authMiddleware, async (req, res) => {
     }
     
     const hashed = await bcrypt.hash(newPassword, 12);
-    db.prepare('UPDATE users SET password = ? WHERE id = ?').run(hashed, req.user.id);
-    res.json({ status: 'success', message: 'Password updated successfully' });
+    db.prepare('UPDATE users SET password = ?, jwt_version = jwt_version + 1 WHERE id = ?').run(hashed, req.user.id);
+    res.json({ status: 'success', message: 'Password updated successfully. Other sessions have been logged out.' });
   } catch (err) {
     res.status(500).json({ status: 'error', message: err.message });
   }
 });
 
-
+// Logout endpoint (invalidates tokens server-side by incrementing jwt_version)
+router.post('/logout', authMiddleware, (req, res) => {
+  try {
+    if (!req.user || !req.user.id) {
+      return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+    }
+    db.prepare('UPDATE users SET jwt_version = jwt_version + 1 WHERE id = ?').run(req.user.id);
+    res.json({ status: 'success', message: 'Logged out successfully' });
+  } catch (err) {
+    res.status(500).json({ status: 'error', message: err.message });
+  }
+});
 
 // Step 1: Request a device code from Trakt
 router.post('/trakt/device-code', async (req, res) => {

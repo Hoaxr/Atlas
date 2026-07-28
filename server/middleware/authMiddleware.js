@@ -24,11 +24,14 @@ const getAdminUser = () => {
 const invalidateAuthCache = () => {
   _cachedAdmin = null;
   _cacheExpiry = 0;
+  if (typeof getCachedSetting.clearCache === 'function') {
+    getCachedSetting.clearCache();
+  }
 };
 
 const getCachedSetting = (() => {
   const cache = {};
-  return (key) => {
+  const fn = (key) => {
     const now = Date.now();
     const entry = cache[key];
     if (entry && now < entry.expiry) return entry.value;
@@ -37,6 +40,10 @@ const getCachedSetting = (() => {
     cache[key] = { value, expiry: now + CACHE_TTL };
     return value;
   };
+  fn.clearCache = () => {
+    for (const k in cache) delete cache[k];
+  };
+  return fn;
 })();
 
 const authMiddleware = (req, res, next) => {
@@ -53,12 +60,16 @@ const authMiddleware = (req, res, next) => {
       const decoded = jwt.verify(token, JWT_SECRET);
       req.user = decoded;
       
-      // Ensure we have the most up-to-date role from the database
+      // Ensure we have the most up-to-date role and check jwt_version from the database
       if (req.user && req.user.id) {
-        const dbUser = db.prepare('SELECT role FROM users WHERE id = ?').get(req.user.id);
-        if (dbUser) {
-          req.user.role = dbUser.role;
+        const dbUser = db.prepare('SELECT role, jwt_version FROM users WHERE id = ?').get(req.user.id);
+        if (!dbUser) {
+          return res.status(401).json({ status: 'error', message: 'User not found or deleted' });
         }
+        if (dbUser.jwt_version !== req.user.jwt_version) {
+          return res.status(401).json({ status: 'error', message: 'Session invalidated' });
+        }
+        req.user.role = dbUser.role;
       }
       
       return next();

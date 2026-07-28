@@ -24,7 +24,9 @@ router.post('/:id/run', async (req, res) => {
   try {
     const taskId = req.params.id;
     // We run it asynchronously and immediately respond
-    taskRegistry.executeTask(taskId).catch(err => console.error(err));
+    Promise.resolve(taskRegistry.executeTask(taskId)).catch(err => {
+      console.error(`[Tasks] Unhandled error during manual task run (${taskId}):`, err.message);
+    });
     res.json({ status: 'success', message: 'Task triggered' });
   } catch (err) {
     res.status(500).json({ status: 'error', message: err.message });

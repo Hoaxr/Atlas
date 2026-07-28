@@ -9,6 +9,8 @@ const downloadClientService = require('../../services/downloadClientService');
 const tmdbService = require('../../services/tmdbService');
 const concurrency = require('../../utils/concurrency');
 const { deleteFolderRecursive } = require('../../utils/fileUtils');
+const { parseResolution } = require('../../utils/mediaParsing');
+const cleanupWorker = require('../../services/cleanupWorker');
 
 // ── Stats cache — avoids 20+ DB queries on every dashboard load ──
 let _statsCache = null;
@@ -17,6 +19,180 @@ const STATS_CACHE_TTL = 60_000; // 60 seconds
 
 // Called by scan/import/delete handlers to invalidate
 const invalidateStatsCache = () => { _statsCache = null; _statsCacheTimestamp = 0; };
+
+router.get('/health', (req, res, next) => {
+  try {
+    const movies = db.prepare(`
+      SELECT m.id, m.title, m.status, m.scene_name, m.file_path, qp.cutoff, qp.qualities
+      FROM movies m
+      LEFT JOIN quality_profiles qp ON m.quality_profile_id = qp.id
+      WHERE m.status IN ('monitored', 'downloaded') AND m.monitored = 1
+      AND m.release_date IS NOT NULL AND m.release_date <= date('now')
+    `).all();
+
+    let missingMovies = [];
+    let cutoffUnmetMovies = [];
+    let cutoffMetMovies = [];
+
+    for (const m of movies) {
+      const item = { id: m.id, title: m.title, status: m.status, scene_name: m.scene_name, file_path: m.file_path, cutoff: m.cutoff, currentQuality: null };
+      if (!m.file_path || m.status !== 'downloaded') {
+        missingMovies.push(item);
+        continue;
+      }
+
+      const currentQuality = parseResolution(m.scene_name);
+      item.currentQuality = currentQuality;
+
+      if (!m.scene_name || !m.cutoff || !m.qualities) {
+        cutoffUnmetMovies.push(item);
+        continue;
+      }
+
+      let qualities = [];
+      try { qualities = JSON.parse(m.qualities); } catch { }
+      const currentIdx = qualities.indexOf(currentQuality);
+      const cutoffIdx = qualities.indexOf(m.cutoff);
+
+      if (currentIdx !== -1 && cutoffIdx !== -1 && currentIdx <= cutoffIdx) {
+        cutoffMetMovies.push(item);
+      } else {
+        cutoffUnmetMovies.push(item);
+      }
+    }
+
+    const eps = db.prepare(`
+      SELECT e.id, s.id as show_id, s.title || ' - S' || printf('%02d', e.season_number) || 'E' || printf('%02d', e.episode_number) as title, e.status, e.scene_name, e.file_path, qp.cutoff, qp.qualities
+      FROM episodes e
+      JOIN shows s ON e.show_id = s.id
+      LEFT JOIN quality_profiles qp ON s.quality_profile_id = qp.id
+      WHERE e.status IN ('monitored', 'downloaded') AND e.monitored = 1 AND s.monitored = 1
+      AND e.air_date IS NOT NULL AND e.air_date <= date('now')
+    `).all();
+
+    let missingEps = [];
+    let cutoffUnmetEps = [];
+    let cutoffMetEps = [];
+
+    for (const e of eps) {
+      const item = { id: e.id, show_id: e.show_id, title: e.title, status: e.status, scene_name: e.scene_name, file_path: e.file_path, cutoff: e.cutoff, currentQuality: null };
+      if (!e.file_path || e.status !== 'downloaded') {
+        missingEps.push(item);
+        continue;
+      }
+      
+      const currentQuality = parseResolution(e.scene_name);
+      item.currentQuality = currentQuality;
+
+      if (!e.scene_name || !e.cutoff || !e.qualities) {
+        cutoffUnmetEps.push(item);
+        continue;
+      }
+
+      let qualities = [];
+      try { qualities = JSON.parse(e.qualities); } catch { }
+      const currentIdx = qualities.indexOf(currentQuality);
+      const cutoffIdx = qualities.indexOf(e.cutoff);
+
+      if (currentIdx !== -1 && cutoffIdx !== -1 && currentIdx <= cutoffIdx) {
+        cutoffMetEps.push(item);
+      } else {
+        cutoffUnmetEps.push(item);
+      }
+    }
+
+    res.json({
+      status: 'success',
+      data: {
+        movies: { missing: missingMovies, cutoffMet: cutoffMetMovies, cutoffUnmet: cutoffUnmetMovies },
+        episodes: { missing: missingEps, cutoffMet: cutoffMetEps, cutoffUnmet: cutoffUnmetEps }
+      }
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get('/cleanup-candidates', async (req, res, next) => {
+  try {
+    const data = cleanupWorker.getCandidates();
+    if (!data) {
+      return res.json({ status: 'success', data: { all: [], highPriority: [], mediumPriority: [], lowPriority: [], total: 0 } });
+    }
+    res.json({
+      status: 'success',
+      data
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/cleanup-candidates/:id/ignore', async (req, res, next) => {
+  try {
+    const movieId = req.params.id;
+    db.prepare('UPDATE movies SET ignore_cleanup = 1 WHERE id = ?').run(movieId);
+    cleanupWorker.removeItem(movieId);
+    res.json({ status: 'success' });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/cleanup-candidates/unignore-all', async (req, res, next) => {
+  try {
+    db.prepare('UPDATE movies SET ignore_cleanup = 0 WHERE ignore_cleanup = 1').run();
+    await cleanupWorker.calculateDeletable();
+    const data = cleanupWorker.getCandidates();
+    res.json({ status: 'success', data });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/cleanup-candidates', async (req, res, next) => {
+  try {
+    const { items } = req.body; 
+    let freedSpace = 0;
+    
+    for (const item of items) {
+      if (item.type === 'movie') {
+        const movie = db.prepare('SELECT id, file_path, file_size FROM movies WHERE id = ?').get(item.id);
+        if (movie && movie.file_path) {
+          try {
+            await fsp.unlink(movie.file_path);
+          } catch (e) {
+            console.error(`Failed to delete file ${movie.file_path}`, e);
+          }
+          db.prepare("UPDATE movies SET status = 'unmonitored', file_path = NULL, file_size = 0, search_state = 'PENDING' WHERE id = ?").run(item.id);
+          freedSpace += movie.file_size || 0;
+          cleanupWorker.removeItem(item.id);
+        }
+      } else if (item.type === 'episode') {
+        const ep = db.prepare('SELECT id, file_path, file_size FROM episodes WHERE id = ?').get(item.id);
+        if (ep && ep.file_path) {
+          try {
+            await fsp.unlink(ep.file_path);
+          } catch (e) {
+            console.error(`Failed to delete file ${ep.file_path}`, e);
+          }
+          db.prepare("UPDATE episodes SET status = 'unmonitored', file_path = NULL, file_size = 0, search_state = 'PENDING' WHERE id = ?").run(item.id);
+          freedSpace += ep.file_size || 0;
+        }
+      }
+    }
+    
+    invalidateStatsCache();
+    
+    res.json({
+      status: 'success',
+      message: `Cleaned up ${items.length} items.`,
+      freedSpace
+    });
+  } catch (err) {
+    next(err);
+  }
+});
 
 router.get('/stats', (req, res, next) => {
   try {
@@ -499,7 +675,7 @@ router.post('/duplicates/delete', (req, res, next) => {
 });
 
 
-router.get('/health', async (req, res, next) => {
+router.get('/system-health', async (req, res, next) => {
   try {
     const fs = require('fs/promises');
     const path = require('path');
@@ -655,224 +831,7 @@ router.delete('/collections/:id', (req, res, next) => {
 });
 
 // Get deletable movies (movies not part of any TMDB collection/franchise)
-router.get('/deletable', async (req, res, next) => {
-  try {
-    const now = Date.now();
-    const DAY = 86400000;
-    const useTmdb = req.query.tmdb === 'true';
 
-    const movies = db.prepare(`
-      SELECT id, tmdb_id, title, year, file_size, added_at, file_path, watched, rating as db_rating
-      FROM movies WHERE status = 'downloaded' AND tmdb_id IS NOT NULL
-      ORDER BY added_at DESC
-    `).all();
-
-    // ── Detect franchises: title-based grouping (instant, no API calls) ──
-    const stripSequels = (title) => {
-      let base = title
-        .replace(/\s*\(\d{4}\)\s*/g, '')
-        .replace(/\bPart\s+(?:II|III|IV|V|VI|VII|VIII|IX|X|[2-9])\b/gi, '')
-        .replace(/\b(?:II|III|IV|V|VI|VII|VIII|IX|X)\b/g, '')
-        .replace(/\s+\d+\s*$/, '')
-        .replace(/\s*:\s*[^:]+$/, '')
-        .replace(/\s+/g, ' ')
-        .trim()
-        .toLowerCase();
-      if (base.length < 3) base = title.replace(/\s*\(\d{4}\)\s*/g, '').trim().toLowerCase();
-      return base;
-    };
-
-    // Generate candidate base titles by removing leading words (for suffix matching)
-    // e.g. "Dawn of the Planet of the Apes" -> ["dawn of the planet of the apes", "of the planet of the apes", "the planet of the apes", "planet of the apes"]
-    const getBaseCandidates = (title) => {
-      const base = stripSequels(title);
-      const words = base.split(/\s+/);
-      const candidates = [];
-      // Generate suffixes by stripping up to N leading words, keep at least 2 words
-      const maxStrip = Math.max(0, words.length - 2);
-      for (let i = 0; i <= maxStrip; i++) {
-        const suffix = words.slice(i).join(' ');
-        if (suffix.length >= 3) candidates.push(suffix);
-      }
-      return candidates;
-    };
-
-    // Group by each candidate and merge overlapping groups
-    const candidateMap = new Map(); // candidate_base -> Set of movie IDs
-    for (const m of movies) {
-      for (const cand of getBaseCandidates(m.title)) {
-        if (!candidateMap.has(cand)) candidateMap.set(cand, new Set());
-        candidateMap.get(cand).add(m.id);
-      }
-    }
-
-    // Union-find: movies that share ANY candidate base are in the same franchise
-    const parent = new Map();
-    const find = (id) => {
-      if (!parent.has(id)) parent.set(id, id);
-      if (parent.get(id) !== id) parent.set(id, find(parent.get(id)));
-      return parent.get(id);
-    };
-    const union = (a, b) => { parent.set(find(a), find(b)); };
-
-    for (const [, ids] of candidateMap) {
-      if (ids.size > 1) {
-        const arr = [...ids];
-        for (let i = 1; i < arr.length; i++) union(arr[0], arr[i]);
-      }
-    }
-
-    // Build franchise groups from union-find
-    const franchiseGroups = new Map(); // root -> Set of movie IDs
-    for (const m of movies) {
-      const root = find(m.id);
-      if (!franchiseGroups.has(root)) franchiseGroups.set(root, new Set());
-      franchiseGroups.get(root).add(m.id);
-    }
-
-    const franchiseIds = new Set();
-    const franchiseNames = new Map();
-
-    for (const [, ids] of franchiseGroups) {
-      if (ids.size > 1) {
-        for (const id of ids) {
-          franchiseIds.add(id);
-          const others = movies.filter(m => ids.has(m.id) && m.id !== id).map(m => m.title);
-          franchiseNames.set(id, others);
-        }
-      }
-    }
-
-    // ── Optional: TMDB enrichment (ratings + collection-based grouping) ──
-    const tmdbCache = new Map();
-
-    if (useTmdb) {
-      await concurrency.runWithConcurrency(movies, 10, async (movie) => {
-        try {
-          const data = await tmdbService.getMovieById(movie.tmdb_id);
-          if (data) {
-            tmdbCache.set(movie.tmdb_id, {
-              rating: data.vote_average ? Math.round(data.vote_average * 10) / 10 : null,
-              collectionId: data.belongs_to_collection?.id || null,
-              collectionName: data.belongs_to_collection?.name || null
-            });
-          }
-        } catch { /* skip */ }
-      });
-
-      // TMDB collection-based grouping
-      const collectionGroups = new Map();
-      for (const m of movies) {
-        const cached = tmdbCache.get(m.tmdb_id);
-        if (cached?.collectionId) {
-          if (!collectionGroups.has(cached.collectionId)) collectionGroups.set(cached.collectionId, []);
-          collectionGroups.get(cached.collectionId).push(m.id);
-        }
-      }
-
-      for (const [, ids] of collectionGroups) {
-        if (ids.length > 1) {
-          for (const id of ids) {
-            franchiseIds.add(id);
-            const others = movies.filter(m => ids.includes(m.id) && m.id !== id).map(m => m.title);
-            franchiseNames.set(id, [...(franchiseNames.get(id) || []), ...others]);
-          }
-        }
-      }
-    }
-
-    // ── Score each movie ──
-    const scored = [];
-
-    for (const movie of movies) {
-      const cached = tmdbCache.get(movie.tmdb_id);
-      const tmdbRating = cached?.rating || null;
-      const ageDays = (now - new Date(movie.added_at + 'Z').getTime()) / DAY;
-      const isWatched = movie.watched === 1;
-      const fileSizeGB = (movie.file_size || 0) / (1024 * 1024 * 1024);
-      const hasSequelsInLibrary = franchiseIds.has(movie.id);
-
-      let score = 0;
-      const reasons = [];
-
-      if (hasSequelsInLibrary) {
-        // Skip franchise movies — user likely wants to keep the collection intact
-        continue;
-      }
-
-      score += 15;
-      reasons.push('Standalone (no sequels in library)');
-
-      // Skip highly rated movies (if TMDB data available)
-      if (tmdbRating !== null && tmdbRating >= 6.5) {
-        continue;
-      }
-
-      if (tmdbRating !== null && tmdbRating < 5) {
-        score += 25;
-        reasons.push(`Low TMDB rating (${tmdbRating}/10)`);
-      } else if (tmdbRating !== null && tmdbRating < 6) {
-        score += 15;
-        reasons.push(`Mediocre TMDB rating (${tmdbRating}/10)`);
-      }
-
-      if (!isWatched) {
-        score += 15;
-        reasons.push('Unwatched');
-
-        if (ageDays > 90) {
-          score += 20;
-          reasons.push('Added 90+ days ago, still unwatched');
-        } else if (ageDays > 30) {
-          score += 10;
-          reasons.push('Added 30+ days ago, still unwatched');
-        }
-      }
-
-      if (fileSizeGB > 10) {
-        score += 10;
-        reasons.push(`Large file (${fileSizeGB.toFixed(1)} GB)`);
-      }
-
-      scored.push({
-        id: movie.id,
-        tmdb_id: movie.tmdb_id,
-        title: movie.title,
-        year: movie.year,
-        file_size: movie.file_size,
-        added_at: movie.added_at,
-        watched: isWatched,
-        db_rating: movie.db_rating,
-        tmdb_rating: tmdbRating,
-        has_sequels_in_library: hasSequelsInLibrary,
-        sequel_titles: [...new Set(franchiseNames.get(movie.id) || [])],
-        score: Math.max(0, score),
-        reasons
-      });
-    }
-
-    // Sort by score descending (most deletable first)
-    scored.sort((a, b) => b.score - a.score);
-
-    const highPriority = scored.filter(m => m.score >= 35);
-    const mediumPriority = scored.filter(m => m.score >= 15 && m.score < 35);
-    const lowPriority = scored.filter(m => m.score < 15);
-
-    res.json({
-      status: 'success',
-      data: {
-        all: scored,
-        highPriority,
-        mediumPriority,
-        lowPriority,
-        total: scored.length,
-        franchiseCount: franchiseIds.size
-      }
-    });
-  } catch (err) {
-    next(err);
-  }
-});
 
 // ─── Junk File Cleanup ───────────────────────────────────────────────────────
 // Walks all configured library paths and removes any file that is not a

@@ -82,15 +82,17 @@ router.delete('/:id', requireAdmin, (req, res) => {
       return res.status(404).json({ status: 'error', message: 'User not found' });
     }
 
-    // Optional: Prevent deleting the last admin
-    if (user.role === 'admin') {
-      const adminCount = db.prepare("SELECT COUNT(*) as count FROM users WHERE role = 'admin'").get().count;
-      if (adminCount <= 1) {
-        return res.status(400).json({ status: 'error', message: 'Cannot delete the only remaining admin' });
+    db.transaction(() => {
+      if (user.role === 'admin') {
+        const adminCount = db.prepare("SELECT COUNT(*) as count FROM users WHERE role = 'admin'").get().count;
+        if (adminCount <= 1) {
+          throw new Error('Cannot delete the only remaining admin');
+        }
       }
-    }
+      // Also delete orphaned requests automatically by foreign key CASCADE, but just to be sure we do the user delete here
+      db.prepare('DELETE FROM users WHERE id = ?').run(id);
+    })();
 
-    db.prepare('DELETE FROM users WHERE id = ?').run(id);
     res.json({ status: 'success', message: 'User deleted' });
   } catch (err) {
     res.status(500).json({ status: 'error', message: err.message });
@@ -118,26 +120,37 @@ router.put('/:id', requireAdmin, async (req, res) => {
       return res.status(400).json({ status: 'error', message: 'Username already taken' });
     }
 
-    // Prevent changing role if it's the last admin
-    if (user.role === 'admin' && role !== 'admin') {
-      const adminCount = db.prepare("SELECT COUNT(*) as count FROM users WHERE role = 'admin'").get().count;
-      if (adminCount <= 1) {
-        return res.status(400).json({ status: 'error', message: 'Cannot demote the only remaining admin' });
+    try {
+      let hashed = null;
+      if (password) {
+        if (password.length < 8) {
+          return res.status(400).json({ status: 'error', message: 'Password must be at least 8 characters' });
+        }
+        hashed = await bcrypt.hash(password, 12);
       }
-    }
 
-    if (password) {
-      if (password.length < 8) {
-        return res.status(400).json({ status: 'error', message: 'Password must be at least 8 characters' });
-      }
-      const hashed = await hashPassword(password);
-      db.prepare('UPDATE users SET username = ?, password = ?, email = ?, role = ? WHERE id = ?').run(
-        username, hashed, email || null, role || 'user', id
-      );
-    } else {
-      db.prepare('UPDATE users SET username = ?, email = ?, role = ? WHERE id = ?').run(
-        username, email || null, role || 'user', id
-      );
+      db.transaction(() => {
+        // Prevent changing role if it's the last admin
+        if (user.role === 'admin' && role !== 'admin') {
+          const adminCount = db.prepare("SELECT COUNT(*) as count FROM users WHERE role = 'admin'").get().count;
+          if (adminCount <= 1) {
+            throw new Error('Cannot demote the only remaining admin');
+          }
+        }
+
+        if (password && hashed) {
+          // If password is changed, invalidate tokens by incrementing jwt_version
+          db.prepare('UPDATE users SET username = ?, password = ?, email = ?, role = ?, jwt_version = jwt_version + 1 WHERE id = ?').run(
+            username, hashed, email || null, role || 'user', id
+          );
+        } else {
+          db.prepare('UPDATE users SET username = ?, email = ?, role = ? WHERE id = ?').run(
+            username, email || null, role || 'user', id
+          );
+        }
+      })();
+    } catch (txErr) {
+      return res.status(400).json({ status: 'error', message: txErr.message });
     }
 
     res.json({ status: 'success', message: 'User updated successfully' });

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Search, Settings as SettingsIcon, Film, Activity, Tv as TvIcon, DownloadCloud, ArrowDown, ArrowUp, Heart, Menu, Calendar as CalendarIcon, BarChart3, Keyboard, Key, LogOut, Eye, X } from 'lucide-react';
+import { Search, Settings as SettingsIcon, Film, Activity, Tv as TvIcon, DownloadCloud, ArrowDown, ArrowUp, Heart, Menu, Calendar as CalendarIcon, BarChart3, Keyboard, Key, LogOut, Eye, X, HeartPulse } from 'lucide-react';
 import Logo from './Logo';
 import clsx from 'clsx';
 import api from '../../lib/api';
@@ -63,7 +63,12 @@ export default function Layout() {
 
   const [watcherCount, setWatcherCount] = useState(0);
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    try {
+      await api.post('/auth/logout');
+    } catch (e) {
+      // Ignore network errors on logout
+    }
     localStorage.removeItem('atlas_token');
     localStorage.removeItem('atlas_user');
     navigate('/login');

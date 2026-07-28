@@ -13,6 +13,7 @@ const { runWithConcurrency } = require('../utils/concurrency');
 const { registerJob } = require('../utils/cronRegistry');
 const { isVideoFile } = require('../utils/fileUtils');
 const { isRootLibraryPath } = require('../utils/fileUtils');
+const { calculateNextSearchAt, calculatePriority } = require('./schedulerLogic');
 
 const DEFAULT_SCHEDULES = {
   search_cycle:       '0 * * * *',
@@ -50,77 +51,101 @@ const runSearchCycle = async () => {
     const activeTorrents = await downloadClientService.getTorrents().catch(() => []);
     const activeTitles = new Set(activeTorrents.map(t => t.name?.toLowerCase().trim()).filter(Boolean));
 
-    const monitoredMovies = db.prepare(`
+    let monitoredMovies = db.prepare(`
       SELECT m.* FROM movies m
       LEFT JOIN quality_profiles qp ON m.quality_profile_id = qp.id
       WHERE (m.status = 'monitored' OR (m.status = 'downloaded' AND qp.upgrade_allowed = 1))
-        AND (m.release_date IS NULL OR date(m.release_date) <= date('now'))
-        AND (m.last_searched_at IS NULL OR m.last_searched_at < datetime('now', '-23 hours'))
-      ORDER BY m.last_searched_at ASC NULLS FIRST
-      LIMIT 20
+        AND (m.next_search_at IS NULL OR m.next_search_at <= datetime('now'))
     `).all();
     
+    // Sort by priority, highest first
+    monitoredMovies.forEach(m => m.priority = calculatePriority(m, 'movie'));
+    monitoredMovies.sort((a, b) => b.priority - a.priority);
+    // Limit to top 20
+    monitoredMovies = monitoredMovies.slice(0, 20);
+
     let movieFailures = 0;
     const processMovie = async (movie) => {
       if (movie.scene_name && activeTitles.has(movie.scene_name.toLowerCase().trim())) return;
       
       try {
-        // Quick local check before searching: if folder exists and has video files, skip search.
-        if (movie.folder_path && fs.existsSync(movie.folder_path)) {
-          const files = await fsp.readdir(movie.folder_path);
-          if (files.some(isVideoFile)) {
-            // A video file exists but Atlas hasn't fully scanned it yet. Skip search.
-            db.prepare("UPDATE movies SET last_searched_at = datetime('now') WHERE id = ?").run(movie.id);
-            return;
-          }
-        }
         const profile = getProfile(movie.quality_profile_id);
         if (!profile) return;
 
+        let hasFile = false;
+        if (movie.folder_path && fs.existsSync(movie.folder_path)) {
+          const files = await fsp.readdir(movie.folder_path);
+          if (files.some(isVideoFile)) hasFile = true;
+        }
+
+        let isCutoffMet = false;
         let currentQuality = null;
-        if (movie.status === 'downloaded') {
-          if (!profile.upgrade_allowed) return;
+
+        if (movie.status === 'downloaded' || hasFile) {
+          if (!profile.upgrade_allowed) {
+            const next = calculateNextSearchAt(movie, 'movie', { isDownloaded: true, isCutoffMet: true });
+            db.prepare("UPDATE movies SET last_searched_at = datetime('now'), search_state = ?, next_search_at = ? WHERE id = ?").run(next.state, next.nextSearch ? next.nextSearch.toISOString() : null, movie.id);
+            return;
+          }
+          
           currentQuality = indexerService.parseQuality(movie.scene_name || '');
-          if (currentQuality === profile.cutoff) return;
-          
-          let qualities = [];
-          try { qualities = JSON.parse(profile.qualities); } catch { qualities = []; }
-          
-          const currentIdx = qualities.indexOf(currentQuality);
-          const cutoffIdx = qualities.indexOf(profile.cutoff);
-          if (currentIdx !== -1 && cutoffIdx !== -1 && currentIdx <= cutoffIdx) return;
+          if (currentQuality === profile.cutoff) {
+            isCutoffMet = true;
+          } else {
+            let qualities = [];
+            try { qualities = JSON.parse(profile.qualities); } catch { qualities = []; }
+            const currentIdx = qualities.indexOf(currentQuality);
+            const cutoffIdx = qualities.indexOf(profile.cutoff);
+            if (currentIdx !== -1 && cutoffIdx !== -1 && currentIdx <= cutoffIdx) {
+              isCutoffMet = true;
+            }
+          }
+
+          if (isCutoffMet) {
+            const next = calculateNextSearchAt(movie, 'movie', { isDownloaded: true, isCutoffMet: true });
+            db.prepare("UPDATE movies SET last_searched_at = datetime('now'), search_state = ?, next_search_at = ? WHERE id = ?").run(next.state, next.nextSearch ? next.nextSearch.toISOString() : null, movie.id);
+            return;
+          }
         }
 
         const results = await indexerService.searchMovie(movie.title, movie.year, profile, currentQuality, false, movie.tmdb_id);
         
-        db.prepare("UPDATE movies SET last_searched_at = datetime('now') WHERE id = ?").run(movie.id);
-
         if (results.length > 0) {
           const bestRelease = results[0]; 
           await downloadClientService.addTorrent(bestRelease.link);
-          db.prepare("UPDATE movies SET status = 'downloading', scene_name = ? WHERE id = ?").run(bestRelease.title, movie.id);
+          db.prepare("UPDATE movies SET status = 'downloading', scene_name = ?, search_state = 'COMPLETED', retry_count = 0, last_success_at = datetime('now'), next_search_at = NULL WHERE id = ?").run(bestRelease.title, movie.id);
           eventBus.info('Download started', { title: movie.title, type: 'movie', release: bestRelease.title });
+        } else {
+          movie.retry_count = (movie.retry_count || 0) + 1;
+          const next = calculateNextSearchAt(movie, 'movie', { isDownloaded: (movie.status === 'downloaded' || hasFile), isCutoffMet });
+          db.prepare("UPDATE movies SET last_searched_at = datetime('now'), search_state = ?, next_search_at = ?, retry_count = ?, last_failure_at = datetime('now') WHERE id = ?")
+            .run(next.state, next.nextSearch ? next.nextSearch.toISOString() : null, movie.retry_count, movie.id);
         }
       } catch (err) {
         movieFailures++;
         console.error(`[Automation] Failed to process ${movie.title}:`, err.message);
+        movie.retry_count = (movie.retry_count || 0) + 1;
+        const next = calculateNextSearchAt(movie, 'movie', { isDownloaded: (movie.status === 'downloaded'), isCutoffMet: false });
+        db.prepare("UPDATE movies SET last_searched_at = datetime('now'), search_state = ?, next_search_at = ?, retry_count = ?, last_provider_response = ?, last_failure_at = datetime('now') WHERE id = ?")
+          .run(next.state, next.nextSearch ? next.nextSearch.toISOString() : null, movie.retry_count, err.message, movie.id);
       }
     };
     
     await runWithConcurrency(monitoredMovies, 3, processMovie);
 
-    const monitoredEpisodes = db.prepare(`
+    let monitoredEpisodes = db.prepare(`
       SELECT e.*, s.title as show_title, s.quality_profile_id, s.tmdb_id as show_tmdb_id
       FROM episodes e 
       JOIN shows s ON e.show_id = s.id
       LEFT JOIN quality_profiles qp ON s.quality_profile_id = qp.id
       WHERE (e.status = 'monitored' OR (e.status = 'downloaded' AND qp.upgrade_allowed = 1))
         AND e.monitored = 1
-        AND (e.air_date IS NULL OR date(e.air_date) <= date('now'))
-        AND (e.last_searched_at IS NULL OR e.last_searched_at < datetime('now', '-23 hours'))
-      ORDER BY e.last_searched_at ASC NULLS FIRST
-      LIMIT 50
+        AND (e.next_search_at IS NULL OR e.next_search_at <= datetime('now'))
     `).all();
+
+    monitoredEpisodes.forEach(e => e.priority = calculatePriority(e, 'episode'));
+    monitoredEpisodes.sort((a, b) => b.priority - a.priority);
+    monitoredEpisodes = monitoredEpisodes.slice(0, 50);
 
     let episodeFailures = 0;
     const processEpisode = async (ep) => {
@@ -129,64 +154,81 @@ const runSearchCycle = async () => {
 
       try {
         const showRow = db.prepare("SELECT folder_path FROM shows WHERE id = ?").get(ep.show_id);
+        const profile = getProfile(ep.quality_profile_id);
+        if (!profile) return;
+
+        let hasFile = false;
         if (showRow && showRow.folder_path && fs.existsSync(showRow.folder_path)) {
-          // Quick recursive check for SxxExx
           const s = String(ep.season_number).padStart(2,'0');
           const eStr = String(ep.episode_number).padStart(2,'0');
           const epRegex = new RegExp(`s${s}e${eStr}`, 'i');
           
-          let found = false;
           const checkDir = async (dir) => {
-            if (found) return;
+            if (hasFile) return;
             const entries = await fsp.readdir(dir, { withFileTypes: true });
             for (const entry of entries) {
               const fullPath = path.join(dir, entry.name);
               if (entry.isDirectory()) {
                 await checkDir(fullPath);
               } else if (isVideoFile(entry.name) && epRegex.test(entry.name)) {
-                found = true;
+                hasFile = true;
                 break;
               }
             }
           };
           await checkDir(showRow.folder_path);
-          if (found) {
-             // File exists but Atlas hasn't fully scanned it yet
-             db.prepare("UPDATE episodes SET last_searched_at = datetime('now') WHERE id = ?").run(ep.id);
-             return;
-          }
         }
 
-        const profile = getProfile(ep.quality_profile_id);
-        if (!profile) return;
-
+        let isCutoffMet = false;
         let currentQuality = null;
-        if (ep.status === 'downloaded') {
-          if (!profile.upgrade_allowed) return;
+
+        if (ep.status === 'downloaded' || hasFile) {
+          if (!profile.upgrade_allowed) {
+            const next = calculateNextSearchAt(ep, 'episode', { isDownloaded: true, isCutoffMet: true });
+            db.prepare("UPDATE episodes SET last_searched_at = datetime('now'), search_state = ?, next_search_at = ? WHERE id = ?").run(next.state, next.nextSearch ? next.nextSearch.toISOString() : null, ep.id);
+            return;
+          }
+          
           currentQuality = indexerService.parseQuality(ep.scene_name || '');
-          if (currentQuality === profile.cutoff) return;
-          
-          let qualities = [];
-          try { qualities = JSON.parse(profile.qualities); } catch { qualities = []; }
-          
-          const currentIdx = qualities.indexOf(currentQuality);
-          const cutoffIdx = qualities.indexOf(profile.cutoff);
-          if (currentIdx !== -1 && cutoffIdx !== -1 && currentIdx <= cutoffIdx) return;
+          if (currentQuality === profile.cutoff) {
+            isCutoffMet = true;
+          } else {
+            let qualities = [];
+            try { qualities = JSON.parse(profile.qualities); } catch { qualities = []; }
+            const currentIdx = qualities.indexOf(currentQuality);
+            const cutoffIdx = qualities.indexOf(profile.cutoff);
+            if (currentIdx !== -1 && cutoffIdx !== -1 && currentIdx <= cutoffIdx) {
+              isCutoffMet = true;
+            }
+          }
+
+          if (isCutoffMet) {
+            const next = calculateNextSearchAt(ep, 'episode', { isDownloaded: true, isCutoffMet: true });
+            db.prepare("UPDATE episodes SET last_searched_at = datetime('now'), search_state = ?, next_search_at = ? WHERE id = ?").run(next.state, next.nextSearch ? next.nextSearch.toISOString() : null, ep.id);
+            return;
+          }
         }
 
         const results = await indexerService.searchEpisode(ep.show_title, ep.season_number, ep.episode_number, profile, currentQuality, false, ep.show_tmdb_id);
         
-        db.prepare("UPDATE episodes SET last_searched_at = datetime('now') WHERE id = ?").run(ep.id);
-
         if (results.length > 0) {
           const bestRelease = results[0];
           await downloadClientService.addTorrent(bestRelease.link);
-          db.prepare("UPDATE episodes SET status = 'downloading', scene_name = ? WHERE id = ?").run(bestRelease.title, ep.id);
+          db.prepare("UPDATE episodes SET status = 'downloading', scene_name = ?, search_state = 'COMPLETED', retry_count = 0, last_success_at = datetime('now'), next_search_at = NULL WHERE id = ?").run(bestRelease.title, ep.id);
           eventBus.info('Download started', { title: epLabel, type: 'episode', release: bestRelease.title });
+        } else {
+          ep.retry_count = (ep.retry_count || 0) + 1;
+          const next = calculateNextSearchAt(ep, 'episode', { isDownloaded: (ep.status === 'downloaded' || hasFile), isCutoffMet });
+          db.prepare("UPDATE episodes SET last_searched_at = datetime('now'), search_state = ?, next_search_at = ?, retry_count = ?, last_failure_at = datetime('now') WHERE id = ?")
+            .run(next.state, next.nextSearch ? next.nextSearch.toISOString() : null, ep.retry_count, ep.id);
         }
       } catch (err) {
         episodeFailures++;
         console.error(`[Automation] Failed to process ${epLabel}:`, err.message);
+        ep.retry_count = (ep.retry_count || 0) + 1;
+        const next = calculateNextSearchAt(ep, 'episode', { isDownloaded: (ep.status === 'downloaded'), isCutoffMet: false });
+        db.prepare("UPDATE episodes SET last_searched_at = datetime('now'), search_state = ?, next_search_at = ?, retry_count = ?, last_provider_response = ?, last_failure_at = datetime('now') WHERE id = ?")
+          .run(next.state, next.nextSearch ? next.nextSearch.toISOString() : null, ep.retry_count, err.message, ep.id);
       }
     };
     

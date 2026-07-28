@@ -51,7 +51,8 @@ db.exec(`
     email TEXT,
     role TEXT DEFAULT 'user',
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    last_login DATETIME
+    last_login DATETIME,
+    jwt_version INTEGER DEFAULT 1
   );
 
   CREATE TABLE IF NOT EXISTS requests (
@@ -79,7 +80,8 @@ db.exec(`
     scene_name TEXT,
     quality_profile_id INTEGER,
     release_date TEXT,
-    added_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    added_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    ignore_cleanup INTEGER DEFAULT 0
   );
 
   CREATE TABLE IF NOT EXISTS library_paths (
@@ -184,6 +186,7 @@ db.exec(`
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
   CREATE INDEX IF NOT EXISTS idx_play_history_type ON play_history(type);
+  CREATE INDEX IF NOT EXISTS idx_play_history_type_title ON play_history(type, title);
   CREATE INDEX IF NOT EXISTS idx_play_history_user ON play_history(user);
   CREATE INDEX IF NOT EXISTS idx_play_history_created ON play_history(created_at);
   CREATE INDEX IF NOT EXISTS idx_movies_file_path ON movies(file_path);
@@ -248,7 +251,8 @@ const MIGRATIONS = [
         ['shows', 'tmdb_status', "TEXT DEFAULT ''"],
         ['requests', 'release_date', 'TEXT'],
         ['requests', 'poster_path', 'TEXT'],
-        ['users', 'last_login', 'DATETIME']
+        ['users', 'last_login', 'DATETIME'],
+        ['users', 'jwt_version', 'INTEGER DEFAULT 1']
       ];
       
       for (const [table, col, def] of alters) {
@@ -418,6 +422,9 @@ const MIGRATIONS = [
       if (!hasColumn('movies', 'watched_at')) {
         db.exec("ALTER TABLE movies ADD COLUMN watched_at DATETIME;");
       }
+      if (!hasColumn('movies', 'ignore_cleanup')) {
+        db.exec("ALTER TABLE movies ADD COLUMN ignore_cleanup INTEGER DEFAULT 0;");
+      }
       if (!hasColumn('episodes', 'watched_at')) {
         db.exec("ALTER TABLE episodes ADD COLUMN watched_at DATETIME;");
       }
@@ -480,6 +487,86 @@ const MIGRATIONS = [
       db.exec(`
         ALTER TABLE shows ADD COLUMN episodes_syncing INTEGER NOT NULL DEFAULT 0;
       `);
+    }
+  },
+  {
+    id: 13,
+    name: 'smart_scheduler_tracking',
+    run: (db) => {
+      const alters = [
+        ['movies', 'next_search_at', 'DATETIME'],
+        ['movies', 'search_state', "TEXT DEFAULT 'PENDING'"],
+        ['movies', 'retry_count', 'INTEGER DEFAULT 0'],
+        ['movies', 'priority', 'INTEGER DEFAULT 0'],
+        ['movies', 'last_provider_response', 'TEXT'],
+        ['movies', 'first_seen_at', 'DATETIME'],
+        ['movies', 'last_success_at', 'DATETIME'],
+        ['movies', 'last_failure_at', 'DATETIME'],
+        
+        ['episodes', 'next_search_at', 'DATETIME'],
+        ['episodes', 'search_state', "TEXT DEFAULT 'PENDING'"],
+        ['episodes', 'retry_count', 'INTEGER DEFAULT 0'],
+        ['episodes', 'priority', 'INTEGER DEFAULT 0'],
+        ['episodes', 'last_provider_response', 'TEXT'],
+        ['episodes', 'first_seen_at', 'DATETIME'],
+        ['episodes', 'last_success_at', 'DATETIME'],
+        ['episodes', 'last_failure_at', 'DATETIME']
+      ];
+      
+      for (const [table, col, def] of alters) {
+        if (!hasColumn(table, col)) {
+          db.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${def};`);
+        }
+      }
+      
+      // Initialize next_search_at and first_seen_at for existing monitored items
+      db.exec(`
+        UPDATE movies 
+        SET next_search_at = datetime('now'), 
+            first_seen_at = added_at,
+            search_state = 'PENDING'
+        WHERE next_search_at IS NULL AND status = 'monitored';
+        
+        UPDATE episodes 
+        SET next_search_at = datetime('now'), 
+            first_seen_at = added_at,
+            search_state = 'PENDING'
+        WHERE next_search_at IS NULL AND status = 'monitored';
+      `);
+      
+      db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_movies_next_search ON movies(next_search_at);
+        CREATE INDEX IF NOT EXISTS idx_episodes_next_search ON episodes(next_search_at);
+      `);
+    }
+  },
+  {
+    id: 14,
+    name: 'Add indexer_stats table',
+    run: (db) => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS indexer_stats (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          indexer_name TEXT,
+          media_type TEXT,
+          response_time_ms INTEGER,
+          success BOOLEAN,
+          results_count INTEGER,
+          error_message TEXT,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_indexer_stats_name ON indexer_stats(indexer_name);
+        CREATE INDEX IF NOT EXISTS idx_indexer_stats_date ON indexer_stats(created_at);
+      `);
+    }
+  },
+  {
+    id: 15,
+    name: 'Add jwt_version column',
+    run: (db) => {
+      if (!hasColumn('users', 'jwt_version')) {
+        db.exec('ALTER TABLE users ADD COLUMN jwt_version INTEGER DEFAULT 1;');
+      }
     }
   }
 ];

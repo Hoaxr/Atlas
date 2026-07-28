@@ -167,7 +167,12 @@ export default function UserPortal() {
     }
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    try {
+      await api.post('/auth/logout');
+    } catch (e) {
+      // Ignore network errors on logout
+    }
     localStorage.removeItem('atlas_token');
     localStorage.removeItem('atlas_user');
     navigate('/login');

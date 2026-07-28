@@ -26,40 +26,37 @@ const formatDuration = (totalMinutes) => {
 };
 
 const STATUS_CONFIG = {
-  downloaded: { color: '#10b981', label: 'Downloaded', bg: 'bg-emerald-500' },
-  downloading: { color: '#06b6d4', label: 'Downloading', bg: 'bg-cyan-500' },
-  monitored:   { color: '#f59e0b', label: 'Monitored',   bg: 'bg-amber-500' },
+  downloaded: { color: '#06b6d4', label: 'Downloaded', bg: 'bg-cyan-500' },
+  downloading: { color: '#0ea5e9', label: 'Downloading', bg: 'bg-sky-500' },
+  monitored:   { color: '#3b82f6', label: 'Monitored',   bg: 'bg-blue-500' },
   unmonitored: { color: '#64748b', label: 'Unmonitored', bg: 'bg-slate-500' },
 };
 
 const GENRE_COLORS = [
-  'from-cyan-500 to-blue-500',
-  'from-purple-500 to-pink-500',
-  'from-emerald-500 to-teal-500',
-  'from-amber-500 to-orange-500',
-  'from-rose-500 to-pink-500',
-  'from-indigo-500 to-purple-500',
-  'from-lime-500 to-emerald-500',
-  'from-sky-500 to-cyan-500',
-  'from-violet-500 to-indigo-500',
-  'from-fuchsia-500 to-purple-500',
+  'from-cyan-600 to-cyan-400',
+  'from-cyan-600 to-cyan-400',
+  'from-cyan-600 to-cyan-400',
+  'from-cyan-600 to-cyan-400',
+  'from-cyan-600 to-cyan-400',
+  'from-cyan-600 to-cyan-400',
+  'from-cyan-600 to-cyan-400',
+  'from-cyan-600 to-cyan-400',
+  'from-cyan-600 to-cyan-400',
+  'from-cyan-600 to-cyan-400',
 ];
 
 const RATING_CONFIG = [
-  { range: '1', color: '#ef4444' },
-  { range: '2', color: '#f97316' },
-  { range: '3', color: '#f59e0b' },
-  { range: '4', color: '#eab308' },
-  { range: '5', color: '#84cc16' },
-  { range: '6', color: '#22c55e' },
-  { range: '7', color: '#10b981' },
-  { range: '8', color: '#14b8a6' },
+  { range: '1', color: '#164e63' },
+  { range: '2', color: '#164e63' },
+  { range: '3', color: '#155e75' },
+  { range: '4', color: '#155e75' },
+  { range: '5', color: '#0e7490' },
+  { range: '6', color: '#0e7490' },
+  { range: '7', color: '#0891b2' },
+  { range: '8', color: '#0891b2' },
   { range: '9', color: '#06b6d4' },
-  { range: '10', color: '#3b82f6' },
+  { range: '10', color: '#22d3ee' },
 ];
-
-
-
 export default function Statistics() {
   const navigate = useNavigate();
   const { headerRef, stickyVisible } = useStickyBar();
@@ -172,22 +169,21 @@ export default function Statistics() {
       {/* ── Hero stat cards ── */}
       <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
         <HeroCard icon={Film}         label="Movies"    value={stats.totalMovies}                   gradient="from-cyan-600/20 to-cyan-500/5"   iconColor="text-cyan-400"   iconBg="bg-cyan-500/15" />
-        <HeroCard icon={Tv}           label="TV Shows"  value={stats.totalShows}                    gradient="from-purple-600/20 to-purple-500/5" iconColor="text-purple-400" iconBg="bg-purple-500/15" />
-        <HeroCard icon={Hash}         label="Episodes"  value={stats.totalEpisodes.toLocaleString()} gradient="from-indigo-600/20 to-indigo-500/5" iconColor="text-indigo-400" iconBg="bg-indigo-500/15" />
-        <HeroCard icon={CheckCircle2} label="Downloaded" value={`${stats.downloadPct}%`}            gradient="from-emerald-600/20 to-emerald-500/5" iconColor="text-emerald-400" iconBg="bg-emerald-500/15" />
-        <HeroCard icon={HardDrive}    label="Storage"   value={formatSize(stats.totalFileSize)}     gradient="from-amber-600/20 to-amber-500/5"  iconColor="text-amber-400"  iconBg="bg-amber-500/15" />
-        <HeroCard icon={Star}         label="Avg Rating" value={stats.averageRating}                gradient="from-yellow-600/20 to-yellow-500/5" iconColor="text-yellow-400" iconBg="bg-yellow-500/15" />
+        <HeroCard icon={Tv}           label="TV Shows"  value={stats.totalShows}                    gradient="from-cyan-600/20 to-cyan-500/5" iconColor="text-cyan-400" iconBg="bg-cyan-500/15" />
+        <HeroCard icon={Hash}         label="Episodes"  value={stats.totalEpisodes.toLocaleString()} gradient="from-cyan-600/20 to-cyan-500/5" iconColor="text-cyan-400" iconBg="bg-cyan-500/15" />
+        <HeroCard icon={CheckCircle2} label="Downloaded" value={`${stats.downloadPct}%`}            gradient="from-cyan-600/20 to-cyan-500/5" iconColor="text-cyan-400" iconBg="bg-cyan-500/15" />
+        <HeroCard icon={HardDrive}    label="Storage"   value={formatSize(stats.totalFileSize)}     gradient="from-cyan-600/20 to-cyan-500/5"  iconColor="text-cyan-400"  iconBg="bg-cyan-500/15" />
+        <HeroCard icon={Star}         label="Avg Rating" value={stats.averageRating}                gradient="from-cyan-600/20 to-cyan-500/5" iconColor="text-cyan-400" iconBg="bg-cyan-500/15" />
       </div>
 
       {/* ── Trakt watch stats ── */}
       {traktStats && !traktStats.error && (
-        <div className="glass-panel rounded-2xl p-6 bg-gradient-to-br from-rose-900/20 to-pink-900/10 border border-rose-500/20">
+        <div className="glass-panel rounded-2xl p-6 bg-gradient-to-br from-cyan-900/20 to-blue-900/10 border border-cyan-500/20">
           <div className="flex items-center gap-2 mb-5">
-            <div className="p-1.5 rounded-lg bg-rose-500/20">
-              <TrendingUp className="w-4 h-4 text-rose-400" />
+            <div className="p-1.5 rounded-lg bg-cyan-500/20">
+              <TrendingUp className="w-4 h-4 text-cyan-400" />
             </div>
             <h2 className="text-base font-bold text-slate-200">Trakt Watch History</h2>
-            <span className="ml-auto text-[10px] font-semibold uppercase tracking-wider text-rose-400 bg-rose-500/15 px-2 py-0.5 rounded-full">Connected</span>
           </div>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <TraktCard icon={Film}  label="Movies Watched"   value={traktStats.movies?.watched?.toLocaleString() ?? '–'} />
@@ -199,7 +195,7 @@ export default function Statistics() {
       )}
 
       {traktStats?.error && (
-        <div className="glass-panel rounded-2xl p-4 bg-amber-500/5 border border-amber-500/20 text-amber-400 text-sm flex items-center gap-2">
+        <div className="glass-panel rounded-2xl p-4 bg-cyan-500/5 border border-cyan-500/20 text-cyan-400 text-sm flex items-center gap-2">
           <TrendingUp className="w-4 h-4 shrink-0" /> {traktStats.error}
         </div>
       )}
@@ -222,20 +218,20 @@ export default function Statistics() {
             </div>
             <div className="w-px h-4 sm:h-6 bg-slate-700 shrink-0" />
             <div className="flex items-center gap-1.5 sm:gap-2">
-              <Tv className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-purple-400 shrink-0" />
+              <Tv className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-cyan-400 shrink-0" />
               <span className="text-xs sm:text-sm font-bold text-slate-200">{stats.totalShows}</span>
               <span className="text-[10px] text-slate-500 hidden sm:inline">shows</span>
             </div>
             <div className="w-px h-4 sm:h-6 bg-slate-700 shrink-0" />
             <div className="flex items-center gap-1.5 sm:gap-2">
-              <Hash className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-indigo-400 shrink-0" />
+              <Hash className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-cyan-400 shrink-0" />
               <span className="text-xs sm:text-sm font-bold text-slate-200">{stats.totalEpisodes?.toLocaleString() ?? 0}</span>
               <span className="text-[10px] text-slate-500 hidden sm:inline">episodes</span>
             </div>
             <div className="w-px h-4 sm:h-6 bg-slate-700 shrink-0" />
             <div className="flex items-center gap-1.5 sm:gap-2">
-              <CheckCircle2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-400 shrink-0" />
-              <span className="text-xs sm:text-sm font-bold text-emerald-400">{stats.downloadPct}%</span>
+              <CheckCircle2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-cyan-400 shrink-0" />
+              <span className="text-xs sm:text-sm font-bold text-cyan-400">{stats.downloadPct}%</span>
               <span className="text-[10px] text-slate-500 hidden sm:inline">downloaded</span>
             </div>
           </div>
@@ -282,8 +278,8 @@ export default function Statistics() {
             {/* Shows */}
             <div className="bg-slate-800/20 rounded-xl p-4 border border-white/5">
               <div className="flex items-center gap-3 mb-4">
-                <div className="p-1.5 rounded-lg bg-purple-500/15">
-                  <Tv className="w-4 h-4 text-purple-400" />
+                <div className="p-1.5 rounded-lg bg-cyan-500/15">
+                  <Tv className="w-4 h-4 text-cyan-400" />
                 </div>
                 <div>
                   <p className="text-sm font-bold text-slate-200">TV Shows</p>
@@ -333,7 +329,7 @@ export default function Statistics() {
             <div className="mb-4">
               <div className="flex items-center justify-between mb-1.5">
                 <span className="text-xs text-slate-400">Coverage</span>
-                <span className="text-xs font-bold text-emerald-400">
+                <span className="text-xs font-bold text-cyan-400">
                   {stats.moviesWithSubtitles ?? 0}/{stats.moviesWithFiles ?? 0}
                   {stats.moviesWithFiles > 0 && (
                     <span className="text-slate-500 font-normal ml-1">
@@ -344,7 +340,7 @@ export default function Statistics() {
               </div>
               <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
                 <div
-                  className="h-full bg-gradient-to-r from-emerald-500 to-emerald-400 rounded-full transition-all duration-700"
+                  className="h-full bg-gradient-to-r from-cyan-600 to-cyan-400 rounded-full transition-all duration-700"
                   style={{ width: `${stats.moviesWithFiles > 0 ? (stats.moviesWithSubtitles / stats.moviesWithFiles) * 100 : 0}%` }}
                 />
               </div>
@@ -352,9 +348,9 @@ export default function Statistics() {
 
             {/* Stats cards */}
             <div className="grid grid-cols-3 gap-3 mb-4">
-              <div className="bg-emerald-500/10 rounded-xl p-3 border border-emerald-500/20">
-                <p className="text-lg font-black text-emerald-400">{stats.moviesWithSubtitles ?? 0}</p>
-                <p className="text-[10px] text-emerald-300/70">With subtitles</p>
+              <div className="bg-cyan-500/10 rounded-xl p-3 border border-cyan-500/20">
+                <p className="text-lg font-black text-cyan-400">{stats.moviesWithSubtitles ?? 0}</p>
+                <p className="text-[10px] text-cyan-300/70">With subtitles</p>
               </div>
               <div className="bg-slate-800/50 rounded-xl p-3 border border-white/5">
                 <p className="text-lg font-black text-slate-200">{stats.moviesWithFiles ?? 0}</p>
@@ -362,9 +358,9 @@ export default function Statistics() {
               </div>
               <button
                 onClick={openMissingSubs}
-                className={`rounded-xl p-3 border text-left w-full transition-colors hover:brightness-125 ${((stats.moviesMissingSubtitles ?? 0) + (stats.episodesMissingSubtitles ?? 0)) > 0 ? 'bg-amber-500/10 border-amber-500/20 cursor-pointer' : 'bg-emerald-500/10 border-emerald-500/20 cursor-pointer'}`}
+                className={`rounded-xl p-3 border text-left w-full transition-colors hover:brightness-125 ${((stats.moviesMissingSubtitles ?? 0) + (stats.episodesMissingSubtitles ?? 0)) > 0 ? 'bg-amber-500/10 border-amber-500/20 cursor-pointer' : 'bg-cyan-500/10 border-cyan-500/20 cursor-pointer'}`}
               >
-                <p className={`text-lg font-black ${((stats.moviesMissingSubtitles ?? 0) + (stats.episodesMissingSubtitles ?? 0)) > 0 ? 'text-amber-400' : 'text-emerald-400'}`}>{(stats.moviesMissingSubtitles ?? 0) + (stats.episodesMissingSubtitles ?? 0)}</p>
+                <p className={`text-lg font-black ${((stats.moviesMissingSubtitles ?? 0) + (stats.episodesMissingSubtitles ?? 0)) > 0 ? 'text-amber-400' : 'text-cyan-400'}`}>{(stats.moviesMissingSubtitles ?? 0) + (stats.episodesMissingSubtitles ?? 0)}</p>
                 <p className="text-[10px] text-slate-500">Missing subs</p>
               </button>
             </div>
@@ -381,7 +377,7 @@ export default function Statistics() {
                         <span className="text-xs font-bold text-slate-300 w-8 uppercase">{lang}</span>
                         <div className="flex-1 h-2 bg-slate-800 rounded-full overflow-hidden">
                           <div
-                            className="h-full bg-gradient-to-r from-cyan-500 to-blue-400 rounded-full transition-all duration-500"
+                            className="h-full bg-gradient-to-r from-cyan-600 to-cyan-400 rounded-full transition-all duration-500"
                             style={{ width: `${(count / maxLangCount) * 100}%` }}
                           />
                         </div>
@@ -398,7 +394,7 @@ export default function Statistics() {
         {/* Top Genres */}
         <div className="glass-panel rounded-2xl p-6">
           <h3 className="text-base font-bold text-slate-200 mb-5 flex items-center gap-2">
-            <Zap className="w-4 h-4 text-purple-400" /> Top 10 Genres
+            <Zap className="w-4 h-4 text-cyan-400" /> Top 10 Genres
           </h3>
           {stats.topGenres.length > 0 ? (
             <div className="space-y-2.5">
@@ -430,7 +426,7 @@ export default function Statistics() {
 
           {/* Ratings — vertical bar chart */}
           <h3 className="text-base font-bold text-slate-200 mb-6 flex items-center gap-2">
-            <Star className="w-4 h-4 text-yellow-400" /> Rating Distribution
+            <Star className="w-4 h-4 text-cyan-400" /> Rating Distribution
           </h3>
           <div className="flex items-end gap-3 h-40 mb-3">
             {RATING_CONFIG.map(({ range, color }) => {
@@ -471,7 +467,7 @@ export default function Statistics() {
       {stats.recentItems.length > 0 && (
         <div className="glass-panel rounded-2xl p-6">
           <h3 className="text-base font-bold text-slate-200 mb-5 flex items-center gap-2">
-            <PlayCircle className="w-4 h-4 text-emerald-400" /> Recently Added
+            <PlayCircle className="w-4 h-4 text-cyan-400" /> Recently Added
           </h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {stats.recentItems.map(item => (
@@ -483,205 +479,39 @@ export default function Statistics() {
         </div>
       )}
 
-      {/* ── Deletable Movies ── */}
-      {deletableData && (
-        <div className="glass-panel rounded-2xl p-6">
-          <h3 className="text-base font-bold text-slate-200 mb-2 flex items-center gap-2">
-            <Trash2 className="w-4 h-4 text-rose-400" /> Cleanup Candidates
-          </h3>
-          <p className="text-xs text-slate-500 mb-3">
-            Movies scored by how safe they are to delete. Higher score = better candidate.<br />
-            Factors: franchise status, watch status, age, file size. TMDB enrichment adds ratings & auto-excludes highly rated (6.5+).
-          </p>
+      {/* ── Advanced Actions ── */}
+      <div className="glass-panel rounded-2xl p-6">
+        <h3 className="text-base font-bold text-slate-200 mb-5 flex items-center gap-2">
+          <FolderOpen className="w-4 h-4 text-cyan-400" /> Library Management
+        </h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <button
-            onClick={() => fetchDeletable(true)}
-            disabled={deletableLoading}
-            className="text-xs font-bold px-4 py-2 rounded-xl bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 hover:bg-cyan-500/20 transition-colors disabled:opacity-50 flex items-center gap-2 mb-6"
+            onClick={() => navigate('/stats/health')}
+            className="flex items-center gap-4 p-4 rounded-xl bg-slate-800/30 border border-white/5 hover:bg-slate-800/60 hover:border-cyan-500/30 transition-all group text-left"
           >
-            {deletableLoading && <Loader2 className="w-3 h-3 animate-spin" />}
-            {deletableLoading ? 'Checking...' : 'Check'}
+            <div className="p-3 rounded-lg bg-cyan-500/10 text-cyan-400 group-hover:scale-110 transition-transform">
+              <Activity className="w-6 h-6" />
+            </div>
+            <div>
+              <h4 className="text-sm font-bold text-slate-200">Media Health Dashboard</h4>
+              <p className="text-xs text-slate-400 mt-1">Check missing episodes, files, and upgradeable content.</p>
+            </div>
           </button>
-
-          {deletableLoading ? (
-            <div className="flex items-center justify-center py-12">
-              <Loader2 className="w-5 h-5 animate-spin text-cyan-400" />
-            </div>
-          ) : (deletableData.highPriority?.length > 0 || deletableData.mediumPriority?.length > 0 || deletableData.lowPriority?.length > 0) ? (
-            <div className="space-y-4">
-              {/* High priority */}
-              {deletableData.highPriority?.length > 0 && (
-              <div>
-                <div className="flex items-center gap-2 mb-3">
-                  <span className="w-2 h-2 rounded-full bg-rose-500" />
-                  <h4 className="text-sm font-bold text-rose-400">High Priority</h4>
-                  <span className="text-[10px] text-slate-500">({deletableData.highPriority.length})</span>
-                </div>
-                <div className="space-y-1.5">
-                  {deletableData.highPriority.map(m => (
-                    <DeletableCard key={m.id} movie={m} onDetails={() => setDetailsModal({ open: true, mediaId: m.tmdb_id, mediaType: 'movie', libraryId: m.id })} onDeleted={() => handleItemDeleted(m.id)} />
-                  ))}
-                </div>
-              </div>
-              )}
-
-              {/* Medium priority */}
-              {deletableData.mediumPriority?.length > 0 && (
-                <div>
-                  <div className="flex items-center gap-2 mb-3">
-                    <span className="w-2 h-2 rounded-full bg-amber-500" />
-                    <h4 className="text-sm font-bold text-amber-400">Medium Priority</h4>
-                    <span className="text-[10px] text-slate-500">({deletableData.mediumPriority.length})</span>
-                  </div>
-                  <div className="space-y-1.5">
-                    {deletableData.mediumPriority.map(m => (
-                      <DeletableCard key={m.id} movie={m} onDetails={() => setDetailsModal({ open: true, mediaId: m.tmdb_id, mediaType: 'movie', libraryId: m.id })} onDeleted={() => handleItemDeleted(m.id)} />
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Low priority */}
-              {deletableData.lowPriority?.length > 0 && (
-                <div>
-                  <div className="flex items-center gap-2 mb-3">
-                    <span className="w-2 h-2 rounded-full bg-slate-500" />
-                    <h4 className="text-sm font-bold text-slate-400">Low Priority</h4>
-                    <span className="text-[10px] text-slate-500">({deletableData.lowPriority.length})</span>
-                  </div>
-                  <div className="space-y-1.5">
-                    {deletableData.lowPriority.map(m => (
-                      <DeletableCard key={m.id} movie={m} onDetails={() => setDetailsModal({ open: true, mediaId: m.tmdb_id, mediaType: 'movie', libraryId: m.id })} onDeleted={() => handleItemDeleted(m.id)} />
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          ) : deletableData.total > 0 ? (
-            <div className="text-center py-8">
-              <FolderOpen className="w-10 h-10 text-emerald-400 mx-auto mb-3" />
-              <p className="text-slate-300 font-medium">Nothing worth deleting!</p>
-              <p className="text-xs text-slate-500 mt-1">All movies are in collections or highly rated.</p>
-              <p className="text-slate-300 font-medium">Nothing worth deleting!</p>
-              <p className="text-xs text-slate-500 mt-1">All movies are in collections or highly rated.</p>
-            </div>
-          ) : (
-            <div className="text-center py-8">
-              <FolderOpen className="w-10 h-10 text-slate-600 mx-auto mb-3" />
-              <p className="text-slate-500">No downloaded movies found.</p>
-            </div>
-          )}
-        </div>
-      )}
-
-      <MediaDetailsModal
-        isOpen={detailsModal.open}
-        onClose={() => setDetailsModal({ open: false, mediaId: null, mediaType: 'movie', libraryId: null })}
-        mediaId={detailsModal.mediaId}
-        mediaType={detailsModal.mediaType}
-        mode="info"
-        onDelete={async (deleteFiles) => {
-          await api.delete(`/library/movies/${detailsModal.libraryId}${deleteFiles ? '?deleteFiles=true' : ''}`);
-          handleItemDeleted(detailsModal.libraryId);
-        }}
-      />
-
-      {/* ── Missing Subtitles Modal ── */}
-      {missingSubsModal && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4"
-          onClick={() => setMissingSubsModal(false)}
-        >
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
-          <div
-            className="relative z-10 bg-slate-900 border border-white/10 rounded-2xl shadow-2xl w-full max-w-2xl max-h-[80vh] flex flex-col"
-            onClick={(e) => e.stopPropagation()}
+          
+          <button
+            onClick={() => navigate('/stats/cleanup')}
+            className="flex items-center gap-4 p-4 rounded-xl bg-slate-800/30 border border-white/5 hover:bg-slate-800/60 hover:border-cyan-500/30 transition-all group text-left"
           >
-            {/* Header */}
-            <div className="flex items-center justify-between p-5 border-b border-white/10">
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-xl bg-amber-500/10 text-amber-400">
-                  <Languages className="w-5 h-5" />
-                </div>
-                <div>
-                  <h2 className="text-lg font-bold text-white">Missing Subtitles</h2>
-                  <p className="text-xs text-slate-400">{stats.moviesMissingSubtitles ?? 0} movies &bull; {stats.episodesMissingSubtitles ?? 0} episodes</p>
-                </div>
-              </div>
-              <button
-                onClick={() => setMissingSubsModal(false)}
-                className="text-slate-400 hover:text-white transition-colors p-1"
-              >
-                <X className="w-5 h-5" />
-              </button>
+            <div className="p-3 rounded-lg bg-cyan-500/10 text-cyan-400 group-hover:scale-110 transition-transform">
+              <Trash2 className="w-6 h-6" />
             </div>
-
-            {/* Content */}
-            <div className="flex-1 overflow-y-auto p-5 space-y-5 custom-scrollbar">
-              {missingSubsLoading ? (
-                <div className="flex items-center justify-center py-12">
-                  <Loader2 className="w-6 h-6 animate-spin text-cyan-400" />
-                </div>
-              ) : missingSubsData ? (
-                <>
-                  {/* Movies */}
-                  {missingSubsData.movies?.length > 0 && (
-                    <div>
-                      <div className="flex items-center gap-2 mb-3">
-                        <Film className="w-4 h-4 text-cyan-400" />
-                        <h3 className="text-sm font-bold text-slate-200">Movies ({missingSubsData.movies.length})</h3>
-                      </div>
-                      <div className="space-y-1">
-                        {missingSubsData.movies.map(m => (
-                          <button
-                            key={m.id}
-                            onClick={() => { setMissingSubsModal(false); navigate(`/movies/${m.id}`); }}
-                            className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-slate-800/50 transition-colors text-left group"
-                          >
-                            <Film className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
-                            <span className="text-sm text-slate-300 group-hover:text-white transition-colors truncate">{m.title}</span>
-                            {m.year && <span className="text-xs text-slate-600 shrink-0">({m.year})</span>}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Shows */}
-                  {missingSubsData.shows?.length > 0 && (
-                    <div>
-                      <div className="flex items-center gap-2 mb-3">
-                        <Tv className="w-4 h-4 text-purple-400" />
-                        <h3 className="text-sm font-bold text-slate-200">TV Shows ({missingSubsData.shows.length})</h3>
-                      </div>
-                      <div className="space-y-1">
-                        {missingSubsData.shows.map(s => (
-                          <button
-                            key={s.id}
-                            onClick={() => { setMissingSubsModal(false); navigate(`/shows/${s.id}`); }}
-                            className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-slate-800/50 transition-colors text-left group"
-                          >
-                            <Tv className="w-3.5 h-3.5 text-purple-400 shrink-0" />
-                            <span className="text-sm text-slate-300 group-hover:text-white transition-colors truncate flex-1">{s.title}</span>
-                            <span className="text-xs text-amber-400 shrink-0">{s.missing_episode_count} ep{s.missing_episode_count !== 1 ? 's' : ''}</span>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {(!missingSubsData.movies?.length && !missingSubsData.shows?.length) && (
-                    <div className="text-center py-12">
-                      <CheckCircle2 className="w-10 h-10 text-emerald-400 mx-auto mb-3" />
-                      <p className="text-slate-300 font-medium">Nothing missing!</p>
-                      <p className="text-xs text-slate-500 mt-1">All your media files have subtitles.</p>
-                    </div>
-                  )}
-                </>
-              ) : null}
+            <div>
+              <h4 className="text-sm font-bold text-slate-200">Cleanup Candidates</h4>
+              <p className="text-xs text-slate-400 mt-1">Find safe-to-delete movies to free up drive space.</p>
             </div>
-          </div>
+          </button>
         </div>
-      )}
+      </div>
     </div>
   );
 }
@@ -695,7 +525,7 @@ function PageHeader({ headerRef, stickyVisible }) {
     <>
       <div ref={headerRef}>
         <h1 className="text-xl sm:text-3xl font-black text-slate-800 dark:text-slate-100 flex items-center gap-2 sm:gap-3 !mb-0">
-          <BarChart3 className="w-6 h-6 sm:w-8 sm:h-8 text-purple-400 shrink-0" /> <span className="truncate">Statistics</span>
+          <BarChart3 className="w-6 h-6 sm:w-8 sm:h-8 text-cyan-400 shrink-0" /> <span className="truncate">Statistics</span>
         </h1>
         <p className="text-xs sm:text-base text-slate-400 mt-0.5 sm:mt-1 hidden sm:block">Library analytics and insights.</p>
       </div>
@@ -718,17 +548,17 @@ function HeroCard({ icon: Icon, label, value, gradient, iconColor, iconBg }) {
 
 function TraktCard({ icon: Icon, label, value }) {
   return (
-    <div className="bg-rose-500/10 rounded-xl p-4 border border-rose-500/20">
-      <Icon className="w-4 h-4 text-rose-400 mb-2" />
+    <div className="bg-cyan-500/10 rounded-xl p-4 border border-cyan-500/20">
+      <Icon className="w-4 h-4 text-cyan-400 mb-2" />
       <p className="text-xl font-black text-slate-100">{value}</p>
-      <p className="text-xs text-rose-300/70 mt-0.5">{label}</p>
+      <p className="text-xs text-cyan-300/70 mt-0.5">{label}</p>
     </div>
   );
 }
 
 function RecentCard({ item, onClick }) {
   const isMovie = item.mediaType === 'movie';
-  const borderColor = isMovie ? '#06b6d4' : '#a855f7';
+  const borderColor = isMovie ? '#06b6d4' : '#0ea5e9';
   const StatusDot = ({ status }) => {
     const cfg = STATUS_CONFIG[status];
     if (!cfg) return null;

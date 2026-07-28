@@ -70,6 +70,7 @@ const searchProwlarr = async (query, type = 'search') => {
     throw new Error('No indexers are configured. Please configure Prowlarr in Settings.');
   }
 
+  const startMs = Date.now();
   try {
     const baseUrl = prowlarrUrl.replace(/\/$/, '');
     const params = new URLSearchParams({
@@ -85,12 +86,17 @@ const searchProwlarr = async (query, type = 'search') => {
         'User-Agent': 'Atlas/1.0' 
       },
     });
+    const elapsed = Date.now() - startMs;
 
     recordSuccess();
 
     if (!Array.isArray(res.data)) return [];
 
-    return res.data.map(item => {
+    const indexerCounts = {};
+    const parsed = res.data.map(item => {
+      if (item.indexer) {
+        indexerCounts[item.indexer] = (indexerCounts[item.indexer] || 0) + 1;
+      }
       let link = item.magnetUrl;
       if (!link && item.downloadUrl) {
         link = item.downloadUrl;
@@ -111,8 +117,32 @@ const searchProwlarr = async (query, type = 'search') => {
         indexer: item.indexer,
       };
     });
+
+    // Log stats asynchronously
+    setImmediate(() => {
+      try {
+        const stmt = db.prepare('INSERT INTO indexer_stats (indexer_name, media_type, response_time_ms, success, results_count) VALUES (?, ?, ?, ?, ?)');
+        db.transaction(() => {
+          stmt.run('Prowlarr (Aggregated)', type, elapsed, 1, parsed.length);
+          for (const [idxName, count] of Object.entries(indexerCounts)) {
+            stmt.run(idxName, type, elapsed, 1, count);
+          }
+        })();
+      } catch (err) {
+        console.error('[IndexerService] Failed to log indexer_stats:', err.message);
+      }
+    });
+
+    return parsed;
   } catch (err) {
+    const elapsed = Date.now() - startMs;
     recordFailure();
+    try {
+      db.prepare('INSERT INTO indexer_stats (indexer_name, media_type, response_time_ms, success, results_count, error_message) VALUES (?, ?, ?, ?, ?, ?)')
+        .run('Prowlarr (Aggregated)', type, elapsed, 0, 0, err.message);
+    } catch (e) {
+      // ignore db error
+    }
     console.error(`[IndexerService] Prowlarr search failed:`, err.message);
     throw new Error(`Prowlarr search failed: ${err.message}`, { cause: err });
   }

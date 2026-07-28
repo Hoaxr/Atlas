@@ -77,18 +77,27 @@ router.get('/image', async (req, res, next) => {
     const headers = {};
 
     if (server === 'plex') {
+      if (!path || typeof path !== 'string' || !path.startsWith('/') || path.includes('..')) {
+        return res.status(400).send('Invalid path');
+      }
       const plexUrl = getSetting('plexUrl')?.replace(/\/$/, '');
       const plexToken = getSetting('plexToken');
       if (!plexUrl || !plexToken) return res.status(404).send('Not configured');
       url = `${plexUrl}${path}`;
       headers['X-Plex-Token'] = plexToken;
     } else if (server === 'jellyfin') {
+      if (!id || typeof id !== 'string' || !/^[a-zA-Z0-9-]+$/.test(id)) {
+        return res.status(400).send('Invalid ID');
+      }
       const jfUrl = getSetting('jellyfinUrl')?.replace(/\/$/, '');
       const jfToken = getSetting('jellyfinApiKey');
       if (!jfUrl || !jfToken) return res.status(404).send('Not configured');
       url = `${jfUrl}/Items/${id}/Images/Primary`;
       headers['X-Emby-Token'] = jfToken;
     } else if (server === 'emby') {
+      if (!id || typeof id !== 'string' || !/^[a-zA-Z0-9-]+$/.test(id)) {
+        return res.status(400).send('Invalid ID');
+      }
       const embyUrl = getSetting('embyUrl')?.replace(/\/$/, '');
       const embyToken = getSetting('embyApiKey');
       if (!embyUrl || !embyToken) return res.status(404).send('Not configured');

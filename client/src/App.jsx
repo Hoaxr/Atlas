@@ -16,6 +16,8 @@ const Downloads = lazy(() => import('./pages/Downloads'));
 const Status = lazy(() => import('./pages/Status'));
 const Calendar = lazy(() => import('./pages/Calendar'));
 const Statistics = lazy(() => import('./pages/Statistics'));
+const MediaHealth = lazy(() => import('./pages/MediaHealth'));
+const CleanupCandidates = lazy(() => import('./pages/CleanupCandidates'));
 const PersonDetails = lazy(() => import('./pages/PersonDetails'));
 const Login = lazy(() => import('./pages/Login'));
 const UserPortal = lazy(() => import('./pages/UserPortal'));
@@ -65,6 +67,8 @@ function App() {
                 <Route path="status" element={<LazyPage><Status /></LazyPage>} />
                 <Route path="calendar" element={<LazyPage><Calendar /></LazyPage>} />
                 <Route path="stats" element={<LazyPage><Statistics /></LazyPage>} />
+                <Route path="stats/health" element={<LazyPage><MediaHealth /></LazyPage>} />
+                <Route path="stats/cleanup" element={<LazyPage><CleanupCandidates /></LazyPage>} />
                 <Route path="requests" element={<LazyPage><Requests /></LazyPage>} />
                 <Route path="watcher" element={<LazyPage><Watcher /></LazyPage>} />
                 <Route path="person/:id" element={<LazyPage><PersonDetails /></LazyPage>} />

@@ -333,11 +333,16 @@ export default function Dashboard() {
   [sourceData]);
 
   // Unique genres from ALL items (stored as comma-separated)
-  const allGenres = useMemo(() => [...new Set(
-    sourceData.flatMap(item =>
-      item.genres ? item.genres.split(',').map(g => g.trim()).filter(Boolean) : []
-    )
-  )].sort(), [sourceData]);
+  const allGenres = useMemo(() => {
+    const genreSet = new Set();
+    sourceData.forEach(item => {
+      if (item.genres) {
+        if (!item._parsedGenres) item._parsedGenres = item.genres.split(',').map(g => g.trim()).filter(Boolean);
+        item._parsedGenres.forEach(g => genreSet.add(g));
+      }
+    });
+    return [...genreSet].sort();
+  }, [sourceData]);
 
   // Unique quality profiles from ALL items
   const allQualities = useMemo(() => [...new Set(
@@ -405,8 +410,8 @@ export default function Dashboard() {
     if (genreFilter.length > 0) {
       items = items.filter(item => {
         if (!item.genres) return false;
-        const itemGenres = item.genres.split(',').map(g => g.trim());
-        return genreFilter.some(g => itemGenres.includes(g));
+        if (!item._parsedGenres) item._parsedGenres = item.genres.split(',').map(g => g.trim());
+        return genreFilter.some(g => item._parsedGenres.includes(g));
       });
     }
 
@@ -1245,15 +1250,39 @@ export default function Dashboard() {
         ) : !loading ? (
           <div className="flex flex-col items-center justify-center h-[300px] text-slate-500 rounded-xl">
             {viewMode === 'movies' ? <Film className="w-12 h-12 mb-4 opacity-50" /> : <Tv className="w-12 h-12 mb-4 opacity-50" />}
-            <p>No {viewMode === 'movies' ? 'movies' : 'TV shows'} in your library yet.</p>
-            <p className="text-sm mt-1 mb-5">Add them from the Discover page or scan your NAS in Settings.</p>
-            <button
-              onClick={() => navigate('/discover')}
-              className="flex items-center gap-2 px-5 py-2.5 bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 rounded-xl text-sm font-bold transition-all hover:scale-105"
-            >
-              <Search className="w-4 h-4" />
-              Browse Discover
-            </button>
+            {(viewMode === 'movies' ? movies : shows).length > 0 ? (
+              <>
+                <p>No {viewMode === 'movies' ? 'movies' : 'TV shows'} match your current filters.</p>
+                <button
+                  onClick={() => {
+                    setStatusFilter('all');
+                    setWatchedFilter('all');
+                    setGenreFilter([]);
+                    setQualityFilter('all');
+                    setResolutionFilter('all');
+                    setCodecFilter('all');
+                    setYearFilter('all');
+                    setRatingFilter('all');
+                    setSearchQuery('');
+                  }}
+                  className="mt-5 px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-sm font-medium transition-all flex items-center gap-2"
+                >
+                  <RotateCcw className="w-4 h-4" /> Clear Filters
+                </button>
+              </>
+            ) : (
+              <>
+                <p>No {viewMode === 'movies' ? 'movies' : 'TV shows'} in your library yet.</p>
+                <p className="text-sm mt-1 mb-5">Add them from the Discover page or scan your NAS in Settings.</p>
+                <button
+                  onClick={() => navigate('/discover')}
+                  className="flex items-center gap-2 px-5 py-2.5 bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 rounded-xl text-sm font-bold transition-all hover:scale-105"
+                >
+                  <Search className="w-4 h-4" />
+                  Browse Discover
+                </button>
+              </>
+            )}
           </div>
         ) : null}
         

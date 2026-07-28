@@ -10,7 +10,10 @@ const getDb = () => {
 class AppEventBus extends EventEmitter {
   log(level, message, metadata = {}) {
     try {
-      const payload = JSON.stringify({ level, message, ...metadata });
+      let payload = JSON.stringify({ level, message, ...metadata });
+      if (payload.length > 5000) {
+        payload = payload.substring(0, 5000) + '... [TRUNCATED]';
+      }
       getDb().prepare('INSERT INTO logs (message) VALUES (?)').run(payload);
     } catch { /* ignore */ }
 

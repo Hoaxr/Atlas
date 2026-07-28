@@ -821,6 +821,17 @@ export default function MovieDetails() {
                                 if (res.data.status === 'success') {
                                   customAlert('File deleted', 'success');
                                   setMovieFiles(movieFiles.filter(f => f.name !== file.name));
+                                  const ext = file.name.split('.').pop().toLowerCase();
+                                  if (['srt', 'vtt', 'sub', 'ass'].includes(ext)) {
+                                    const parts = file.name.split('.');
+                                    const lang = parts.length >= 3 ? parts[parts.length - 2] : null;
+                                    if (lang && movie.subtitles) {
+                                      let currentSubs = [];
+                                      try { currentSubs = JSON.parse(movie.subtitles); } catch {}
+                                      const newSubs = currentSubs.filter(l => l !== lang);
+                                      setMovie({ ...movie, subtitles: JSON.stringify(newSubs) });
+                                    }
+                                  }
                                   fetchMovieData();
                                 }
                               } catch (err) {

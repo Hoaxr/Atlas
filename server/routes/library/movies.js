@@ -6,6 +6,7 @@ const path = require('path');
 const axios = require('axios');
 const db = require('../../config/database');
 const libraryService = require('../../services/libraryService');
+const cleanupWorker = require('../../services/cleanupWorker');
 const indexerService = require('../../services/indexerService');
 const downloadClientService = require('../../services/downloadClientService');
 const eventBus = require('../../services/eventBus');
@@ -149,20 +150,33 @@ router.get('/:id/files', async (req, res, next) => {
 
 router.delete('/:id/files/:filename', async (req, res, next) => {
   try {
-    const movie = db.prepare('SELECT file_path FROM movies WHERE id = ?').get(req.params.id);
+    const movie = db.prepare('SELECT file_path, folder_path FROM movies WHERE id = ?').get(req.params.id);
 
-    const dir = movie?.file_path ? path.dirname(movie.file_path) : null;
+    const dir = movie?.folder_path || (movie?.file_path ? path.dirname(movie.file_path) : null);
     if (!dir) return res.status(404).json({ status: 'error', message: 'Movie folder not found' });
 
     // Prevent path traversal
     const safeFilename = path.basename(req.params.filename);
     const targetPath = path.join(dir, safeFilename);
+    dirCache.delete(dir);
 
     try {
-      await fsp.unlink(targetPath);
+      try {
+        await fsp.unlink(targetPath);
+      } catch (e) {
+        if (e.code !== 'ENOENT') throw e;
+      }
       // Update database — clear the file reference only if the deleted file is the primary movie file
       if (movie.file_path && path.basename(movie.file_path) === safeFilename) {
         db.prepare("UPDATE movies SET file_path = NULL, file_size = 0, status = 'monitored' WHERE id = ?").run(req.params.id);
+      } else if (movie.file_path) {
+        try {
+          const { scanSubtitleLangs } = require('../../services/scanner/fileScanner');
+          const langs = await scanSubtitleLangs(movie.file_path);
+          db.prepare('UPDATE movies SET subtitles = ? WHERE id = ?').run(JSON.stringify(langs), req.params.id);
+        } catch (e) {
+          console.warn('[MoviesRoute] Failed to rescan subtitles on file delete:', e.message);
+        }
       }
       res.json({ status: 'success' });
     } catch (e) {
@@ -577,6 +591,7 @@ router.delete('/:id', async (req, res, next) => {
     }
 
     db.prepare('DELETE FROM movies WHERE id = ?').run(req.params.id);
+    cleanupWorker.removeItem(movie.id);
     res.json({ status: 'success', message: 'Movie removed from library' });
   } catch (error) {
     next(error);
@@ -669,7 +684,7 @@ router.get('/:id/browse', async (req, res, next) => {
     const resolved = path.resolve(dirPath);
     // Prevent traversal outside library paths
     const libraryPaths = db.prepare('SELECT path FROM library_paths').all().map(p => path.resolve(p.path));
-    const isAllowed = libraryPaths.some(lp => resolved.startsWith(lp));
+    const isAllowed = libraryPaths.some(lp => resolved === lp || resolved.startsWith(lp + path.sep));
     if (!isAllowed) {
       return res.status(403).json({ status: 'error', message: 'Access denied' });
     }

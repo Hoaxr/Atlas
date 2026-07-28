@@ -26,6 +26,7 @@ const authRoutes = require('./routes/auth');
 const releaseProfilesRoutes = require('./routes/releaseProfiles');
 const usersRoutes = require('./routes/users');
 const requestsRoutes = require('./routes/requests');
+const webhooksRoutes = require('./routes/webhooks');
 const watcherRoutes = require('./routes/watcher');
 const watcherService = require('./services/watcherService');
 const { stopAll: stopAllCronJobs } = require('./utils/cronRegistry');
@@ -43,6 +44,8 @@ const subtitleService = require('./services/subtitles');
 const aiTranslationWorker = require('./services/aiTranslationWorker');
 const notificationService = require('./services/notificationService');
 const imageService = require('./services/imageService');
+const healthService = require('./services/healthService');
+const cleanupWorker = require('./services/cleanupWorker');
 
 
 
@@ -78,15 +81,13 @@ wss.on('connection', (ws, req) => {
   };
 
   try {
-    const db = require('./config/database');
-    const authEnabledRow = db.prepare('SELECT value FROM settings WHERE key = ?').get('authEnabled');
-    const authEnabled = authEnabledRow ? authEnabledRow.value === 'true' : true;
+    const { getSetting } = require('./utils/settings');
+    const authEnabled = getSetting('authEnabled') !== 'false';
     
     let isBypassed = !authEnabled;
     
     if (authEnabled) {
-      const bypassRow = db.prepare('SELECT value FROM settings WHERE key = ?').get('authBypassLocalhost');
-      const bypassLocalhost = bypassRow ? bypassRow.value !== 'false' : true;
+      const bypassLocalhost = getSetting('authBypassLocalhost') !== 'false';
       
       if (bypassLocalhost) {
         const ip = (req.socket?.remoteAddress || req.connection?.remoteAddress || '').replace(/^::ffff:/, '');
@@ -135,6 +136,7 @@ wss.on('connection', (ws, req) => {
 // Init background jobs
 automationService.init();
 mediaManagementService.init();
+healthService.init();
 subtitleService.init();
 aiTranslationWorker.init();
 // Notification and Media Server services auto-init in constructor
@@ -260,17 +262,39 @@ app.use('/api', (req, res, next) => {
 });
 
 app.use('/api', apiRoutes);
-app.use('/api/settings', settingsRoutes);
-app.use('/api/tmdb', tmdbRoutes);
+const requireAdmin = require('./middleware/requireAdmin');
+
+// Safe routes wrapper for settings (only GET /api/settings is safe)
+const settingsAdminWrapper = (req, res, next) => {
+  if (req.method === 'GET' && req.path === '/') return next();
+  return requireAdmin(req, res, next);
+};
+
+// Safe routes wrapper for library (only GET is safe for users)
+const libraryAdminWrapper = (req, res, next) => {
+  if (req.method === 'GET') return next();
+  return requireAdmin(req, res, next);
+};
+
+// Safe routes wrapper for watcher (only /image is safe, but it's handled above; others are admin)
+// Wait, /stats and /sessions are admin only.
+const watcherAdminWrapper = (req, res, next) => {
+  if (req.path.startsWith('/image')) return next();
+  return requireAdmin(req, res, next);
+};
+
+app.use('/api/settings', settingsAdminWrapper, settingsRoutes);
+app.use('/api/tmdb', tmdbRoutes); // TMDB search/details can be used by any user
 app.use('/api/trakt', traktRoutes);
-app.use('/api/library', libraryRoutes);
-app.use('/api/tasks', tasksRoutes);
-app.use('/api/clients', clientsRoutes);
+app.use('/api/library', libraryAdminWrapper, libraryRoutes);
+app.use('/api/tasks', requireAdmin, tasksRoutes);
+app.use('/api/clients', requireAdmin, clientsRoutes);
 app.use('/api/auth', authRoutes);
-app.use('/api/release-profiles', releaseProfilesRoutes);
-app.use('/api/users', usersRoutes);
-app.use('/api/requests', requestsRoutes);
-app.use('/api/watcher', watcherRoutes);
+app.use('/api/release-profiles', requireAdmin, releaseProfilesRoutes);
+app.use('/api/users', usersRoutes); // internally protected
+app.use('/api/webhooks', webhooksRoutes);
+app.use('/api/requests', requestsRoutes); // internally protected
+app.use('/api/watcher', watcherAdminWrapper, watcherRoutes);
 
 // ── Image cache — served without auth (public static-like endpoint) ──────────
 // GET /api/images/:type/:tmdbId/poster
@@ -326,6 +350,7 @@ const shutdown = (signal) => {
   
   // Stop the watcher polling
   watcherService.stopPolling();
+  cleanupWorker.stop();
   
   // Close HTTP server (stops accepting new connections)
   server.close(() => {
@@ -352,5 +377,6 @@ process.on('SIGINT', () => shutdown('SIGINT'));
 
 server.listen(PORT, () => {
   console.log(`[Backend] Server op poort ${PORT}`);
+  cleanupWorker.start();
   notificationService.sendNotification('Atlas', 'Atlas Media Manager has started successfully.', { title: '' });
 });
