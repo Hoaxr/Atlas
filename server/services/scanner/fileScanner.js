@@ -25,11 +25,16 @@ const SUBTITLE_EXTS = [...SUBTITLE_EXTENSIONS];
 
 const scanSubtitleLangs = async (filePath) => {
   const dir = path.dirname(filePath);
+  const videoBase = path.basename(filePath, path.extname(filePath)).toLowerCase();
   try {
     const items = await fs.readdir(dir);
     return [...new Set(
       items
-        .filter(item => SUBTITLE_EXTS.includes(path.extname(item).toLowerCase()))
+        .filter(item => {
+          if (!SUBTITLE_EXTS.includes(path.extname(item).toLowerCase())) return false;
+          // Only consider subtitle files that belong to this video file
+          return item.toLowerCase().startsWith(videoBase);
+        })
         .map(item => {
           // Strip extension, then strip trailing numeric index or qualifiers
           // e.g. "Movie.en.0" → "Movie.en", "Movie.en.forced" → "Movie.en"
