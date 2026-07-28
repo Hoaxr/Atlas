@@ -358,9 +358,9 @@ export default function Statistics() {
               </div>
               <button
                 onClick={openMissingSubs}
-                className={`rounded-xl p-3 border text-left w-full transition-colors hover:brightness-125 ${((stats.moviesMissingSubtitles ?? 0) + (stats.episodesMissingSubtitles ?? 0)) > 0 ? 'bg-amber-500/10 border-amber-500/20 cursor-pointer' : 'bg-cyan-500/10 border-cyan-500/20 cursor-pointer'}`}
+                className="rounded-xl p-3 border text-left w-full transition-colors hover:brightness-125 bg-cyan-500/10 border-cyan-500/20 cursor-pointer"
               >
-                <p className={`text-lg font-black ${((stats.moviesMissingSubtitles ?? 0) + (stats.episodesMissingSubtitles ?? 0)) > 0 ? 'text-amber-400' : 'text-cyan-400'}`}>{(stats.moviesMissingSubtitles ?? 0) + (stats.episodesMissingSubtitles ?? 0)}</p>
+                <p className="text-lg font-black text-cyan-400">{(stats.moviesMissingSubtitles ?? 0) + (stats.episodesMissingSubtitles ?? 0)}</p>
                 <p className="text-[10px] text-slate-500">Missing subs</p>
               </button>
             </div>

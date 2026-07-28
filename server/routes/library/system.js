@@ -41,10 +41,13 @@ router.get('/health', (req, res, next) => {
         continue;
       }
 
-      const currentQuality = parseResolution(m.scene_name);
+      let currentQuality = parseResolution(m.scene_name);
+      if (currentQuality === 'Unknown' && m.file_path) {
+        currentQuality = parseResolution(m.file_path);
+      }
       item.currentQuality = currentQuality;
 
-      if (!m.scene_name || !m.cutoff || !m.qualities) {
+      if (!m.cutoff || !m.qualities) {
         cutoffUnmetMovies.push(item);
         continue;
       }
@@ -81,10 +84,13 @@ router.get('/health', (req, res, next) => {
         continue;
       }
       
-      const currentQuality = parseResolution(e.scene_name);
+      let currentQuality = parseResolution(e.scene_name);
+      if (currentQuality === 'Unknown' && e.file_path) {
+        currentQuality = parseResolution(e.file_path);
+      }
       item.currentQuality = currentQuality;
 
-      if (!e.scene_name || !e.cutoff || !e.qualities) {
+      if (!e.cutoff || !e.qualities) {
         cutoffUnmetEps.push(item);
         continue;
       }
