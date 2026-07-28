@@ -139,6 +139,8 @@ const runMediaManagement = async () => {
 
   console.log('[MediaManagement] Starting post-processing check...');
   
+  let importedAnything = false;
+
   try {
     const torrentList = await downloadClientService.getTorrents() || [];
     
@@ -160,7 +162,8 @@ const runMediaManagement = async () => {
       for (const movie of pendingMovies) {
         const movieTitle = movie.title.toLowerCase().replace(/[^a-z0-9]/g, ' ').replace(/\s+/g, ' ').trim();
         if (torrentName.includes(movieTitle)) {
-          await importMovie(torrent, movie);
+          const success = await importMovie(torrent, movie);
+          if (success) importedAnything = true;
         }
       }
 
@@ -173,7 +176,8 @@ const runMediaManagement = async () => {
         const epString2 = `${s}x${e}`; 
 
         if (torrentName.includes(showTitle) && (torrentName.includes(epString1) || torrentName.includes(epString2))) {
-          await importEpisode(torrent, ep);
+          const success = await importEpisode(torrent, ep);
+          if (success) importedAnything = true;
         }
       }
 
@@ -187,7 +191,8 @@ const runMediaManagement = async () => {
           for (const ep of pendingEpisodes) {
             const showTitle = ep.show_title.toLowerCase().replace(/[^a-z0-9]/g, ' ').replace(/\s+/g, ' ').trim();
             if (torrentName.includes(showTitle) && ep.season_number === seasonNum) {
-              await importSeasonPack(torrent, { showId: ep.show_id, showTitle: ep.show_title, seasonNumber: seasonNum });
+              const success = await importSeasonPack(torrent, { showId: ep.show_id, showTitle: ep.show_title, seasonNumber: seasonNum });
+              if (success) importedAnything = true;
               break; // One import per torrent
             }
           }
@@ -251,6 +256,11 @@ const runMediaManagement = async () => {
         db.prepare("UPDATE shows SET status = ? WHERE id = ?").run(newStatus, show.id);
         console.log(`[MediaManagement] Show ID ${show.id} all downloads finished. Status updated to ${newStatus}.`);
       }
+    }
+
+    if (importedAnything) {
+      console.log('[MediaManagement] New media imported. Triggering subtitle downloader task immediately.');
+      taskRegistry.executeTask('subtitle_downloader').catch(e => console.error('[MediaManagement] Failed to trigger subtitle_downloader', e.message));
     }
 
   } catch (err) {
@@ -436,9 +446,12 @@ const importMovie = async (torrent, movie) => {
     } catch (metaErr) {
       console.error(`[MediaManagement] Failed to cache poster for movie ${movie.title}:`, metaErr.message);
     }
+    
+    return true;
 
   } catch (err) {
     console.error(`[MediaManagement] Failed to import movie ${movie.title}:`, err);
+    return false;
   }
 };
 
@@ -645,9 +658,12 @@ const importEpisode = async (torrent, episode) => {
     } catch (metaErr) {
       console.error(`[MediaManagement] Failed to calculate folder size for episode:`, metaErr.message);
     }
+    
+    return true;
 
   } catch (err) {
     console.error(`[MediaManagement] Failed to import episode:`, err);
+    return false;
   }
 };
 
@@ -728,8 +744,11 @@ const importSeasonPack = async (torrent, { showId, showTitle, seasonNumber }) =>
         }
       }
     }
+    
+    return importedCount > 0;
   } catch (err) {
     console.error(`[MediaManagement] Failed to import season pack for ${showTitle}:`, err);
+    return false;
   }
 };
 
