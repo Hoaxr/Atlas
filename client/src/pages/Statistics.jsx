@@ -164,6 +164,10 @@ export default function Statistics() {
     value, color: STATUS_CONFIG[status]?.color || '#64748b', label: STATUS_CONFIG[status]?.label || status,
   }));
 
+  const totalFiles = (stats.moviesWithFiles ?? 0) + (stats.episodesWithFiles ?? 0);
+  const totalWithSubs = (stats.moviesWithSubtitles ?? 0) + (stats.episodesWithSubtitles ?? 0);
+  const totalMissingSubs = (stats.moviesMissingSubtitles ?? 0) + (stats.episodesMissingSubtitles ?? 0);
+
   return (
     <>
       <div className="space-y-3">
@@ -324,7 +328,7 @@ export default function Statistics() {
               </div>
               <h4 className="text-sm font-bold text-slate-200">Subtitles</h4>
               <span className="ml-auto text-[10px] font-bold text-slate-500">
-                {stats.moviesWithFiles ?? 0} files
+                {totalFiles} files
               </span>
             </div>
 
@@ -333,10 +337,10 @@ export default function Statistics() {
               <div className="flex items-center justify-between mb-1.5">
                 <span className="text-xs text-slate-400">Coverage</span>
                 <span className="text-xs font-bold text-cyan-400">
-                  {stats.moviesWithSubtitles ?? 0}/{stats.moviesWithFiles ?? 0}
-                  {stats.moviesWithFiles > 0 && (
+                  {totalWithSubs}/{totalFiles}
+                  {totalFiles > 0 && (
                     <span className="text-slate-500 font-normal ml-1">
-                      ({((stats.moviesWithSubtitles / stats.moviesWithFiles) * 100).toFixed(0)}%)
+                      {`(${((totalWithSubs / totalFiles) * 100).toFixed(0)}%)`}
                     </span>
                   )}
                 </span>
@@ -344,7 +348,7 @@ export default function Statistics() {
               <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
                 <div
                   className="h-full bg-gradient-to-r from-cyan-600 to-cyan-400 rounded-full transition-all duration-700"
-                  style={{ width: `${((stats.moviesWithFiles ?? 0) + (stats.episodesWithFiles ?? 0)) > 0 ? (((stats.moviesWithSubtitles ?? 0) + (stats.episodesWithSubtitles ?? 0)) / ((stats.moviesWithFiles ?? 0) + (stats.episodesWithFiles ?? 0))) * 100 : 0}%` }}
+                  style={{ width: `${totalFiles > 0 ? (totalWithSubs / totalFiles) * 100 : 0}%` }}
                 />
               </div>
             </div>
@@ -352,18 +356,18 @@ export default function Statistics() {
             {/* Stats cards */}
             <div className="grid grid-cols-3 gap-3 mb-4">
               <div className="bg-cyan-500/10 rounded-xl p-3 border border-cyan-500/20">
-                <p className="text-lg font-black text-cyan-400">{(stats.moviesWithSubtitles ?? 0) + (stats.episodesWithSubtitles ?? 0)}</p>
+                <p className="text-lg font-black text-cyan-400">{totalWithSubs}</p>
                 <p className="text-[10px] text-cyan-300/70">With subtitles</p>
               </div>
               <div className="bg-cyan-500/10 rounded-xl p-3 border border-cyan-500/20">
-                <p className="text-lg font-black text-cyan-400">{(stats.moviesWithFiles ?? 0) + (stats.episodesWithFiles ?? 0)}</p>
+                <p className="text-lg font-black text-cyan-400">{totalFiles}</p>
                 <p className="text-[10px] text-cyan-300/70">Total files</p>
               </div>
               <button
                 onClick={openMissingSubs}
                 className="rounded-xl p-3 border text-left w-full transition-colors hover:brightness-125 bg-cyan-500/10 border-cyan-500/20 cursor-pointer"
               >
-                <p className="text-lg font-black text-cyan-400">{(stats.moviesMissingSubtitles ?? 0) + (stats.episodesMissingSubtitles ?? 0)}</p>
+                <p className="text-lg font-black text-cyan-400">{totalMissingSubs}</p>
                 <p className="text-[10px] text-slate-500">Missing subs</p>
               </button>
             </div>

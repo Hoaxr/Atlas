@@ -296,7 +296,11 @@ router.get('/stats', (req, res, next) => {
     `).get().count;
 
     // Subtitle languages
-    const subLangRows = db.prepare("SELECT subtitles FROM movies WHERE file_path IS NOT NULL AND subtitles IS NOT NULL AND subtitles != '[]'").all();
+    const subLangRows = db.prepare(`
+      SELECT subtitles FROM movies WHERE file_path IS NOT NULL AND subtitles IS NOT NULL AND subtitles != '[]'
+      UNION ALL
+      SELECT subtitles FROM episodes WHERE file_path IS NOT NULL AND subtitles IS NOT NULL AND subtitles != '[]'
+    `).all();
     const subLangCount = {};
     for (const row of subLangRows) {
       try {
