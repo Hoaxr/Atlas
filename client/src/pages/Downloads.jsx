@@ -131,7 +131,7 @@ export default function Downloads() {
                         if (await customConfirm('Delete this download?')) {
                           try {
                             await api.delete(`/clients/torrents/${t.hash}?deleteFiles=true`);
-                            fetchClientData();
+                            setDownloads(prev => prev.filter(d => d.hash !== t.hash));
                             customAlert('Download cancelled');
                           } catch (e) {
                             console.error('Failed to delete download', e);
