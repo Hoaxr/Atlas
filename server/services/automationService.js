@@ -8,6 +8,7 @@ const downloadClientService = require('./downloadClientService');
 const taskRegistry = require('./taskRegistry');
 const tmdbService = require('./tmdbService');
 const traktService = require('./traktService');
+const imageService = require('./imageService');
 const eventBus = require('./eventBus');
 const { runWithConcurrency } = require('../utils/concurrency');
 const { registerJob } = require('../utils/cronRegistry');
@@ -22,6 +23,10 @@ const DEFAULT_SCHEDULES = {
   missing_files_check:'0 * * * *',  // Hourly fast check for deleted files
   database_backup:    '0 4 * * *',  // Daily at 4 AM
   auto_delete_watched:'0 5 * * *',  // Daily at 5 AM
+  poster_cache_warmer:'0 2 * * *',  // Daily at 2 AM
+  orphaned_files:     '0 3 * * *',  // Daily at 3 AM
+  deep_metadata:      '0 4 * * 0',  // Weekly on Sunday at 4 AM
+  release_monitor:    '0 1 * * *',  // Daily at 1 AM
 };
 
 const getSchedule = (taskId) => {
@@ -585,6 +590,211 @@ const runAutoDeleteWatched = async () => {
   }
 };
 
+const runPosterCacheWarmer = async () => {
+  console.log('[Automation] Running Poster Cache Warmer...');
+  let downloadedCount = 0;
+  
+  const processItem = async (item, type) => {
+    if (item.tmdb_id && item.poster_path) {
+      const existing = imageService.posterPath(type, item.tmdb_id);
+      if (!fs.existsSync(existing)) {
+        try {
+          await imageService.ensurePoster(type, item.tmdb_id, item.poster_path);
+          downloadedCount++;
+        } catch (err) {
+          console.error(`[Automation] Poster Cache Warmer failed for ${type} ${item.tmdb_id}: ${err.message}`);
+        }
+      }
+    }
+  };
+
+  const movies = db.prepare("SELECT tmdb_id, poster_path FROM movies WHERE tmdb_id IS NOT NULL AND poster_path IS NOT NULL").all();
+  await runWithConcurrency(movies, 5, m => processItem(m, 'movies'));
+
+  const shows = db.prepare("SELECT tmdb_id, poster_path FROM shows WHERE tmdb_id IS NOT NULL AND poster_path IS NOT NULL").all();
+  await runWithConcurrency(shows, 5, s => processItem(s, 'shows'));
+
+  console.log(`[Automation] Poster Cache Warmer complete. Downloaded ${downloadedCount} missing posters.`);
+};
+
+const runOrphanedFileDetector = async () => {
+  console.log('[Automation] Running Orphaned File Detector...');
+  
+  const pathsResult = db.prepare('SELECT path FROM library_paths').all();
+  const validRootPaths = [];
+  
+  for (const row of pathsResult) {
+    if (fs.existsSync(row.path)) {
+      validRootPaths.push(row.path);
+    }
+  }
+
+  if (validRootPaths.length === 0) {
+    console.log('[Automation] No valid library paths accessible. Aborting Orphaned File Detector.');
+    return;
+  }
+
+  const allDiskFiles = new Set();
+  
+  const walkDir = async (dir) => {
+    try {
+      const entries = await fsp.readdir(dir, { withFileTypes: true });
+      for (const entry of entries) {
+        const fullPath = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+          await walkDir(fullPath);
+        } else if (isVideoFile(entry.name)) {
+          allDiskFiles.add(fullPath);
+        }
+      }
+    } catch {
+      // ignore access errors
+    }
+  };
+
+  for (const rootPath of validRootPaths) {
+    await walkDir(rootPath);
+  }
+
+  const dbMovies = db.prepare("SELECT file_path FROM movies WHERE file_path IS NOT NULL").all();
+  const dbEpisodes = db.prepare("SELECT file_path FROM episodes WHERE file_path IS NOT NULL").all();
+  
+  const dbFiles = new Set();
+  for (const m of dbMovies) dbFiles.add(m.file_path);
+  for (const e of dbEpisodes) dbFiles.add(e.file_path);
+  
+  // Find orphaned (on disk but not in DB)
+  const orphaned = [];
+  for (const diskFile of allDiskFiles) {
+    if (!dbFiles.has(diskFile)) {
+      orphaned.push(diskFile);
+    }
+  }
+  
+  // Get existing unmanaged files in DB
+  let existingOrphanedRows = [];
+  try {
+    existingOrphanedRows = db.prepare("SELECT id, file_path FROM unmanaged_files").all();
+  } catch {
+    // Unmanaged files table might not exist yet if migration hasn't run
+  }
+  const existingOrphanedSet = new Set(existingOrphanedRows.map(r => r.file_path));
+  
+  let newOrphanCount = 0;
+  let resolvedOrphanCount = 0;
+
+  try {
+    db.transaction(() => {
+      const insertStmt = db.prepare("INSERT INTO unmanaged_files (file_path, library_path, size) VALUES (?, ?, ?)");
+      const deleteStmt = db.prepare("DELETE FROM unmanaged_files WHERE file_path = ?");
+      
+      // Insert new ones
+      for (const orphan of orphaned) {
+        if (!existingOrphanedSet.has(orphan)) {
+          try {
+            const stat = fs.statSync(orphan);
+            const libPath = validRootPaths.find(p => orphan.startsWith(p)) || '';
+            insertStmt.run(orphan, libPath, stat.size);
+            newOrphanCount++;
+          } catch { /* ignore */ }
+        }
+      }
+      
+      // Delete resolved ones (no longer on disk or now tracked)
+      const currentOrphanedSet = new Set(orphaned);
+      for (const existingRow of existingOrphanedRows) {
+        if (!currentOrphanedSet.has(existingRow.file_path)) {
+          deleteStmt.run(existingRow.file_path);
+          resolvedOrphanCount++;
+        }
+      }
+    })();
+  } catch (err) {
+    console.error('[Automation] Orphaned File Detector DB transaction failed:', err.message);
+  }
+  
+  console.log(`[Automation] Orphaned File Detector complete. Found ${newOrphanCount} new orphans, resolved ${resolvedOrphanCount}.`);
+};
+
+const runDeepMetadataRefresh = async () => {
+  console.log('[Automation] Running Stale Metadata Refresh...');
+  
+  const cutoffDate = new Date(Date.now() - 30 * 86_400_000).toISOString().slice(0, 19);
+  
+  const movies = db.prepare(`
+    SELECT id, tmdb_id, title 
+    FROM movies 
+    WHERE status != 'unmonitored' AND added_at <= ? 
+      AND (last_refreshed_at IS NULL OR last_refreshed_at <= ?)
+  `).all(cutoffDate, cutoffDate);
+  
+  let moviesUpdated = 0;
+
+  await runWithConcurrency(movies, 3, async (movie) => {
+    try {
+      const tmdbData = await tmdbService.getMovieById(movie.tmdb_id);
+      if (tmdbData) {
+        db.prepare('UPDATE movies SET rating = ?, poster_path = ?, overview = ?, last_refreshed_at = datetime("now") WHERE id = ?')
+          .run(tmdbData.vote_average || 0, tmdbData.poster_path, tmdbData.overview, movie.id);
+        moviesUpdated++;
+      } else {
+        db.prepare('UPDATE movies SET last_refreshed_at = datetime("now") WHERE id = ?').run(movie.id);
+      }
+    } catch (err) {
+      console.error(`[Automation] Failed to deep refresh metadata for movie ${movie.title}: ${err.message}`);
+    }
+  });
+
+  const shows = db.prepare(`
+    SELECT id, tmdb_id, title 
+    FROM shows 
+    WHERE status != 'unmonitored' AND added_at <= ? 
+      AND (last_refreshed_at IS NULL OR last_refreshed_at <= ?)
+  `).all(cutoffDate, cutoffDate);
+  
+  let showsUpdated = 0;
+
+  await runWithConcurrency(shows, 3, async (show) => {
+    try {
+      const data = await tmdbService.getShowById(show.tmdb_id);
+      if (data) {
+        db.prepare('UPDATE shows SET rating = ?, poster_path = ?, overview = ?, tmdb_status = ?, last_refreshed_at = datetime("now") WHERE id = ?')
+          .run(data.vote_average || 0, data.poster_path, data.overview, data.status || '', show.id);
+        showsUpdated++;
+      } else {
+        db.prepare('UPDATE shows SET last_refreshed_at = datetime("now") WHERE id = ?').run(show.id);
+      }
+    } catch (err) {
+      console.error(`[Automation] Failed to deep refresh metadata for show ${show.title}: ${err.message}`);
+    }
+  });
+
+  console.log(`[Automation] Stale Metadata Refresh complete. Refreshed ${moviesUpdated} movies and ${showsUpdated} shows.`);
+};
+
+const runReleaseMonitoring = async () => {
+  console.log('[Automation] Running Release Monitoring...');
+  
+  const moviesRes = db.prepare(`
+    UPDATE movies 
+    SET next_search_at = datetime('now'), search_state = 'PENDING'
+    WHERE status = 'monitored' 
+      AND release_date IS NOT NULL 
+      AND release_date <= date('now')
+      AND (last_searched_at IS NULL OR last_searched_at < datetime(release_date))
+  `).run();
+
+  const episodesRes = db.prepare(`
+    UPDATE episodes 
+    SET next_search_at = datetime('now'), search_state = 'PENDING'
+    WHERE status = 'monitored' 
+      AND air_date IS NOT NULL 
+      AND air_date <= date('now')
+      AND (last_searched_at IS NULL OR last_searched_at < datetime(air_date))
+  `).run();
+
+  console.log(`[Automation] Release Monitoring complete. Scheduled search for ${moviesRes.changes} movies and ${episodesRes.changes} episodes.`);
+};
 
 const init = () => {
   const tasks = [
@@ -594,6 +804,10 @@ const init = () => {
     { id: 'missing_files_check',name: 'Missing Files Check',       desc: 'Quickly checks library folders and removes items that have been deleted from disk.',       fn: runMissingFilesCheck },
     { id: 'database_backup',    name: 'Database Backup',           desc: 'Creates a compressed backup of the SQLite database to prevent data loss.',                 fn: runDatabaseBackup },
     { id: 'auto_delete_watched',name: 'Auto-Delete Watched',       desc: 'Automatically deletes media a configured number of days after watching.',                  fn: runAutoDeleteWatched },
+    { id: 'poster_cache_warmer',name: 'Poster Cache Warmer',       desc: 'Proactively downloads missing poster images for all media.',                                fn: runPosterCacheWarmer },
+    { id: 'orphaned_files',     name: 'Orphaned File Detector',    desc: 'Scans library folders for unmanaged video files not tracked in the database.',              fn: runOrphanedFileDetector },
+    { id: 'deep_metadata',      name: 'Stale Metadata Refresh',    desc: 'Periodically checks and updates TMDB metadata for items added more than 30 days ago.',      fn: runDeepMetadataRefresh },
+    { id: 'release_monitor',    name: 'Release Monitoring',        desc: 'Triggers an immediate search for monitored media that has just passed its release date.',   fn: runReleaseMonitoring },
   ];
 
   for (const task of tasks) {

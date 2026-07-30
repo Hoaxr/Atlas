@@ -574,6 +574,21 @@ const MIGRATIONS = [
         db.exec('ALTER TABLE movies ADD COLUMN ignore_cleanup INTEGER DEFAULT 0;');
       }
     }
+  },
+  {
+    id: 17,
+    name: 'Add unmanaged_files table',
+    run: (db) => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS unmanaged_files (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          file_path TEXT UNIQUE,
+          library_path TEXT,
+          size INTEGER,
+          detected_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
+    }
   }
 ];
 

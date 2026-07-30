@@ -43,6 +43,7 @@ const mediaManagementService = require('./services/mediaManagementService');
 const subtitleService = require('./services/subtitles');
 const aiTranslationWorker = require('./services/aiTranslationWorker');
 const notificationService = require('./services/notificationService');
+const telegramBotService = require('./services/telegramBotService');
 const imageService = require('./services/imageService');
 const healthService = require('./services/healthService');
 const cleanupWorker = require('./services/cleanupWorker');
@@ -139,6 +140,7 @@ mediaManagementService.init();
 healthService.init();
 subtitleService.init();
 aiTranslationWorker.init();
+telegramBotService.init();
 // Notification and Media Server services auto-init in constructor
 
 // ── Layout push broadcast — replaces client-side 3s polling ──
