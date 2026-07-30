@@ -71,7 +71,7 @@ class TelegramBotService {
         const year = (item.release_date || item.first_air_date || '').split('-')[0] || 'Unknown';
         const title = item.title || item.name;
         
-        let text = `*${title}* (${year})\n${type} ⭐️ ${item.vote_average || 'N/A'}\n\n`;
+        let text = `*${title}* (${year})\n${type} ⭐️ ${item.vote_average ? item.vote_average.toFixed(1) : 'N/A'}\n\n`;
         text += item.overview ? `${item.overview.substring(0, 200)}...` : 'No overview available.';
 
         const keyboard = {
