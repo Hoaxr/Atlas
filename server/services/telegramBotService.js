@@ -114,8 +114,20 @@ class TelegramBotService {
       try {
         if (type === 'movie') {
           await libraryService.addMovie(tmdbId);
+          setTimeout(() => {
+            require('./automationService').runSearchCycle().catch(err => console.error('[TelegramBot] Auto-search failed:', err));
+          }, 1000);
         } else {
-          await libraryService.addShow(tmdbId);
+          const res = await libraryService.addShow(tmdbId);
+          const eventBus = require('./eventBus');
+          const onEvent = (event) => {
+            if (event.message === 'Episodes synced' && event.metadata?.showId === res.id) {
+              require('./automationService').runSearchCycle().catch(err => console.error('[TelegramBot] Auto-search failed:', err));
+              eventBus.off('event', onEvent);
+            }
+          };
+          eventBus.on('event', onEvent);
+          setTimeout(() => eventBus.off('event', onEvent), 60000); // 1 minute fallback cleanup
         }
 
         // Edit the message to remove the button and confirm
