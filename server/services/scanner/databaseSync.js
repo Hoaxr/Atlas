@@ -41,7 +41,9 @@ const updateLibraryMetadata = async (scanProgress, nextStage, mode = 'full') => 
   scanProgress.totalFiles = stage3Total;
 
   const movieUpdates = [];
-  for (const m of existingMovies) {
+  for (let i = 0; i < existingMovies.length; i++) {
+    const m = existingMovies[i];
+    if (i % 50 === 0) await new Promise(resolve => setImmediate(resolve));
     if (scanProgress.cancelled) throw new Error('Scan cancelled by user');
     scanProgress.currentFile = m.title;
     try {
@@ -119,7 +121,9 @@ const updateLibraryMetadata = async (scanProgress, nextStage, mode = 'full') => 
 
   scanProgress.currentPhase = 'Updating episode resolutions...';
   const epUpdates = [];
-  for (const ep of existingEpisodes) {
+  for (let i = 0; i < existingEpisodes.length; i++) {
+    const ep = existingEpisodes[i];
+    if (i % 50 === 0) await new Promise(resolve => setImmediate(resolve));
     if (scanProgress.cancelled) throw new Error('Scan cancelled by user');
     try {
       let fileSize = ep.file_size;

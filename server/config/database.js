@@ -14,6 +14,9 @@ db.transaction = function (fn) {
     db.exec('BEGIN TRANSACTION;');
     try {
       const result = fn.apply(this, args);
+      if (result instanceof Promise) {
+        throw new Error('Async transactions are not supported by the synchronous wrapper. Transaction rolled back immediately.');
+      }
       db.exec('COMMIT;');
       return result;
     } catch (err) {

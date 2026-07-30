@@ -134,6 +134,7 @@ const gatherFilesFromPaths = async (paths, scanProgress) => {
           });
           if (allFiles.length % 50 === 0) {
             scanProgress.currentFile = `Gathering files... (Found ${allFiles.length})`;
+            await new Promise(resolve => setImmediate(resolve));
           }
         }
       }

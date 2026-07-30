@@ -208,8 +208,16 @@ const broadcastTorrentsUpdate = async () => {
   } catch { /* ignore */ }
 };
 
-setInterval(broadcastLayoutUpdate, LAYOUT_PUSH_INTERVAL);
-setInterval(broadcastTorrentsUpdate, TORRENTS_PUSH_INTERVAL);
+const startPolling = (fn, interval) => {
+  const poll = async () => {
+    try { await fn(); } catch { /* ignore */ }
+    setTimeout(poll, interval);
+  };
+  setTimeout(poll, interval);
+};
+
+startPolling(broadcastLayoutUpdate, LAYOUT_PUSH_INTERVAL);
+startPolling(broadcastTorrentsUpdate, TORRENTS_PUSH_INTERVAL);
 setTimeout(broadcastTorrentsUpdate, 1000);
 
 app.use(compression());
@@ -250,7 +258,7 @@ app.use(cors({
   origin: process.env.CORS_ORIGIN || 'http://localhost:3001',
   credentials: true
 }));
-app.use(express.json({ limit: '5mb' }));
+app.use(express.json({ limit: '500kb' }));
 
 const authMiddleware = require('./middleware/authMiddleware');
 
