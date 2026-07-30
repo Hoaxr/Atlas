@@ -2,7 +2,7 @@
  * Shared config for subtitle provider display colors and labels.
  * Used across SubSearchModal, MovieDetails, and ShowDetails.
  */
-export const PROVIDER_STYLES = {
+const PROVIDER_STYLES = {
   OpenSubtitles: { label: 'OpenSubtitles', color: 'text-cyan-400', border: 'border-cyan-500/30', bg: 'bg-cyan-500/10' },
   SubDL:         { label: 'SubDL',         color: 'text-amber-400', border: 'border-amber-500/30', bg: 'bg-amber-500/10' },
   SubSource:     { label: 'SubSource',     color: 'text-purple-400', border: 'border-purple-500/30', bg: 'bg-purple-500/10' },

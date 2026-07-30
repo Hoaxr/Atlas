@@ -83,6 +83,16 @@ const runSearchCycle = async () => {
           if (files.some(isVideoFile)) hasFile = true;
         }
 
+        // Prevent premature searches on newly added movies
+        if (!movie.next_search_at) {
+          const next = calculateNextSearchAt(movie, 'movie', { isDownloaded: (movie.status === 'downloaded' || hasFile), isCutoffMet: false });
+          if (next.state === 'PENDING') {
+            db.prepare("UPDATE movies SET next_search_at = ?, search_state = 'PENDING' WHERE id = ?")
+              .run(next.nextSearch ? next.nextSearch.toISOString() : null, movie.id);
+            return;
+          }
+        }
+
         let isCutoffMet = false;
         let currentQuality = null;
 
@@ -182,6 +192,16 @@ const runSearchCycle = async () => {
             }
           };
           await checkDir(showRow.folder_path);
+        }
+
+        // Prevent premature searches on newly added episodes
+        if (!ep.next_search_at) {
+          const next = calculateNextSearchAt(ep, 'episode', { isDownloaded: (ep.status === 'downloaded' || hasFile), isCutoffMet: false });
+          if (next.state === 'PENDING') {
+            db.prepare("UPDATE episodes SET next_search_at = ?, search_state = 'PENDING' WHERE id = ?")
+              .run(next.nextSearch ? next.nextSearch.toISOString() : null, ep.id);
+            return;
+          }
         }
 
         let isCutoffMet = false;
@@ -789,7 +809,7 @@ const runReleaseMonitoring = async () => {
     SET next_search_at = datetime('now'), search_state = 'PENDING'
     WHERE status = 'monitored' 
       AND air_date IS NOT NULL 
-      AND air_date <= date('now')
+      AND air_date <= date('now', '-1 day')
       AND (last_searched_at IS NULL OR last_searched_at < datetime(air_date))
   `).run();
 

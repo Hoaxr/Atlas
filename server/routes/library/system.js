@@ -404,7 +404,6 @@ router.get('/paths', (req, res, next) => {
 
 router.get('/downloads', async (req, res, next) => {
   try {
-    const downloadClientService = require('../services/downloadClientService');
     const torrents = await downloadClientService.getTorrents();
     res.json({ status: 'success', data: torrents });
   } catch (error) {

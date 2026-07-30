@@ -10,17 +10,6 @@ export function formatSize(bytes) {
 }
 
 /**
- * Format speed in bytes/sec to human-readable string.
- */
-export function formatSpeed(bytesPerSec) {
-  if (!bytesPerSec || bytesPerSec === 0) return '0 B/s';
-  const k = 1024;
-  const sizes = ['B/s', 'KB/s', 'MB/s', 'GB/s'];
-  const i = Math.floor(Math.log(bytesPerSec) / Math.log(k));
-  return parseFloat((bytesPerSec / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
-}
-
-/**
  * Extract resolution from a release title or filename.
  */
 export function parseResolution(title) {

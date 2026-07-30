@@ -490,7 +490,7 @@ const MIGRATIONS = [
     }
   },
   {
-    id: 13,
+    id: 18,
     name: 'smart_scheduler_tracking',
     run: (db) => {
       const alters = [

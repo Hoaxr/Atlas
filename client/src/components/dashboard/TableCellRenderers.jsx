@@ -3,13 +3,13 @@ import { formatSize, parseResolution, parseCodec, parseAudio } from '../../lib/f
 
 /* ─── Individual cell renderers for Dashboard table columns ─────────── */
 
-export const YearCell = ({ item }) => (
+const YearCell = ({ item }) => (
   <td className="py-2.5 px-4 text-slate-300 text-sm">
     {item.year || <span className="text-slate-600">—</span>}
   </td>
 );
 
-export const RatingCell = ({ item }) => (
+const RatingCell = ({ item }) => (
   <td className="py-2.5 px-4 text-slate-300 text-sm font-medium">
     {item.rating > 0 ? (
       <div className="flex items-center gap-1.5 w-fit bg-slate-950/50 px-2.5 py-0.5 rounded-lg border border-white/5 shadow-inner">
@@ -20,7 +20,7 @@ export const RatingCell = ({ item }) => (
   </td>
 );
 
-export const ResolutionCell = ({ item }) => {
+const ResolutionCell = ({ item }) => {
   const resVal = item.resolution || parseResolution(item.scene_name || item.sample_episode_path || item.file_path);
   return (
     <td className="py-2.5 px-4 text-slate-300">
@@ -33,7 +33,7 @@ export const ResolutionCell = ({ item }) => {
   );
 };
 
-export const CodecCell = ({ item }) => {
+const CodecCell = ({ item }) => {
   const codecVal = item.codec || parseCodec(item.scene_name || item.sample_episode_path || item.file_path);
   return (
     <td className="py-2.5 px-4 text-slate-300">
@@ -46,7 +46,7 @@ export const CodecCell = ({ item }) => {
   );
 };
 
-export const AudioCell = ({ item }) => {
+const AudioCell = ({ item }) => {
   const audioVal = item.audio || parseAudio(item.scene_name || item.sample_episode_path || item.file_path);
   return (
     <td className="py-2.5 px-4 text-slate-300">
@@ -59,13 +59,13 @@ export const AudioCell = ({ item }) => {
   );
 };
 
-export const SizeCell = ({ item }) => (
+const SizeCell = ({ item }) => (
   <td className="py-2.5 px-4 text-slate-400 text-sm">
     {formatSize(item.file_size || item.folder_size || 0)}
   </td>
 );
 
-export const SubtitlesCell = ({ item, providerLangs }) => {
+const SubtitlesCell = ({ item, providerLangs }) => {
   const subsList = Array.isArray(item.subtitles)
     ? item.subtitles
     : (() => { try { return JSON.parse(item.subtitles || '[]'); } catch { return []; } })();
@@ -103,11 +103,11 @@ export const SubtitlesCell = ({ item, providerLangs }) => {
   );
 };
 
-export const SeasonsCell = ({ item }) => (
+const SeasonsCell = ({ item }) => (
   <td className="py-2.5 px-4 text-slate-300 text-sm font-medium">{item.season_count || 0}</td>
 );
 
-export const EpisodesCell = ({ item }) => {
+const EpisodesCell = ({ item }) => {
   const total = item.episode_count || 0;
   const missing = item.missing_episodes || 0;
   return (
@@ -118,7 +118,7 @@ export const EpisodesCell = ({ item }) => {
   );
 };
 
-export const StatusCell = ({ item }) => {
+const StatusCell = ({ item }) => {
   const isNotReleased = item.release_date && new Date(item.release_date) > new Date();
   const label = (item.status === 'monitored' && isNotReleased) ? 'not released' : item.status;
   const color = (item.status === 'monitored' && isNotReleased)
