@@ -158,11 +158,11 @@ const runMediaManagement = async () => {
     `).all();
 
     for (const torrent of finishedTorrents) {
-      const torrentName = torrent.name.toLowerCase().replace(/[^a-z0-9]/g, ' ').replace(/\s+/g, ' ').trim();
+      const torrentName = torrent.name.toLowerCase().replace(/'/g, '').replace(/[^a-z0-9]/g, ' ').replace(/\s+/g, ' ').trim();
       
       // Match movies
       for (const movie of pendingMovies) {
-        const movieTitle = movie.title.toLowerCase().replace(/[^a-z0-9]/g, ' ').replace(/\s+/g, ' ').trim();
+        const movieTitle = movie.title.toLowerCase().replace(/'/g, '').replace(/[^a-z0-9]/g, ' ').replace(/\s+/g, ' ').trim();
         if (torrentName.includes(movieTitle)) {
           const success = await importMovie(torrent, movie);
           if (success) importedAnything = true;
@@ -171,7 +171,7 @@ const runMediaManagement = async () => {
 
       // Match episodes (individual)
       for (const ep of pendingEpisodes) {
-        const showTitle = ep.show_title.toLowerCase().replace(/[^a-z0-9]/g, ' ').replace(/\s+/g, ' ').trim();
+        const showTitle = ep.show_title.toLowerCase().replace(/'/g, '').replace(/[^a-z0-9]/g, ' ').replace(/\s+/g, ' ').trim();
         const s = ep.season_number.toString().padStart(2, '0');
         const e = ep.episode_number.toString().padStart(2, '0');
         const epString1 = `s${s}e${e}`;
@@ -191,7 +191,7 @@ const runMediaManagement = async () => {
           const seasonNum = parseInt(seasonPackMatch[1], 10);
           // Find shows whose title is in the torrent name
           for (const ep of pendingEpisodes) {
-            const showTitle = ep.show_title.toLowerCase().replace(/[^a-z0-9]/g, ' ').replace(/\s+/g, ' ').trim();
+            const showTitle = ep.show_title.toLowerCase().replace(/'/g, '').replace(/[^a-z0-9]/g, ' ').replace(/\s+/g, ' ').trim();
             if (torrentName.includes(showTitle) && ep.season_number === seasonNum) {
               const success = await importSeasonPack(torrent, { showId: ep.show_id, showTitle: ep.show_title, seasonNumber: seasonNum });
               if (success) importedAnything = true;
@@ -213,9 +213,9 @@ const runMediaManagement = async () => {
 
     // Reset items that are missing from the torrent client
     for (const movie of downloadingMovies) {
-      const movieTitle = movie.title.toLowerCase().replace(/[^a-z0-9]/g, ' ').replace(/\s+/g, ' ').trim();
+      const movieTitle = movie.title.toLowerCase().replace(/'/g, '').replace(/[^a-z0-9]/g, ' ').replace(/\s+/g, ' ').trim();
       const isStillInQueue = torrentList.some(t => {
-        const tName = t.name.toLowerCase().replace(/[^a-z0-9]/g, ' ').replace(/\s+/g, ' ').trim();
+        const tName = t.name.toLowerCase().replace(/'/g, '').replace(/[^a-z0-9]/g, ' ').replace(/\s+/g, ' ').trim();
         return tName.includes(movieTitle);
       });
       if (!isStillInQueue) {
@@ -225,7 +225,7 @@ const runMediaManagement = async () => {
     }
 
     for (const ep of downloadingEpisodes) {
-      const showTitle = ep.show_title.toLowerCase().replace(/[^a-z0-9]/g, ' ').replace(/\s+/g, ' ').trim();
+      const showTitle = ep.show_title.toLowerCase().replace(/'/g, '').replace(/[^a-z0-9]/g, ' ').replace(/\s+/g, ' ').trim();
       const s = ep.season_number.toString().padStart(2, '0');
       const e = ep.episode_number.toString().padStart(2, '0');
       const epString1 = `s${s}e${e}`;
@@ -233,7 +233,7 @@ const runMediaManagement = async () => {
       const seasonStr = `s${s}`; 
 
       const isStillInQueue = torrentList.some(t => {
-        const tName = t.name.toLowerCase().replace(/[^a-z0-9]/g, ' ').replace(/\s+/g, ' ').trim();
+        const tName = t.name.toLowerCase().replace(/'/g, '').replace(/[^a-z0-9]/g, ' ').replace(/\s+/g, ' ').trim();
         // Match individual episode (S01E01) or season pack (S01 without episode IDs)
         const hasShow = tName.includes(showTitle);
         const hasEpisode = tName.includes(epString1) || tName.includes(epString2);
