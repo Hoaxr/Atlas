@@ -230,10 +230,33 @@ const pushWatchedToSimkl = async () => {
   try {
     const movies = db.prepare('SELECT tmdb_id FROM movies WHERE watched = 1 AND tmdb_id IS NOT NULL').all();
     const shows = db.prepare('SELECT tmdb_id FROM shows WHERE watched = 1 AND tmdb_id IS NOT NULL').all();
+    const watchedEps = db.prepare(`
+      SELECT s.tmdb_id, e.season_number, e.episode_number
+      FROM episodes e
+      JOIN shows s ON e.show_id = s.id
+      WHERE e.watched = 1 AND s.tmdb_id IS NOT NULL AND s.watched = 0
+    `).all();
+
+    // Group episode watched items by show
+    const showEpMap = {};
+    for (const ep of watchedEps) {
+      if (!showEpMap[ep.tmdb_id]) showEpMap[ep.tmdb_id] = {};
+      if (!showEpMap[ep.tmdb_id][ep.season_number]) showEpMap[ep.tmdb_id][ep.season_number] = [];
+      showEpMap[ep.tmdb_id][ep.season_number].push({ number: ep.episode_number });
+    }
+
+    const showPayloads = shows.map(s => ({ ids: { tmdb: s.tmdb_id } }));
+    for (const [tmdbId, seasonsObj] of Object.entries(showEpMap)) {
+      const seasons = Object.entries(seasonsObj).map(([seasonNum, eps]) => ({
+        number: Number(seasonNum),
+        episodes: eps
+      }));
+      showPayloads.push({ ids: { tmdb: Number(tmdbId) }, seasons });
+    }
 
     const payload = {
       movies: movies.map(m => ({ ids: { tmdb: m.tmdb_id } })),
-      shows: shows.map(s => ({ ids: { tmdb: s.tmdb_id } }))
+      shows: showPayloads
     };
 
     if (payload.movies.length === 0 && payload.shows.length === 0) {
@@ -242,7 +265,7 @@ const pushWatchedToSimkl = async () => {
     }
 
     await simklApi.post('/sync/history', payload);
-    console.log(`[SimklSync] Pushed ${payload.movies.length} movies and ${payload.shows.length} shows to Simkl`);
+    console.log(`[SimklSync] Pushed ${payload.movies.length} movies and ${payload.shows.length} shows/episodes to Simkl`);
     return { moviesPushed: payload.movies.length, showsPushed: payload.shows.length };
   } catch (error) {
     console.error('[SimklSync] Failed to push watched items to Simkl:', error.message);
