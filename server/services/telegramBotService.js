@@ -10,6 +10,14 @@ class TelegramBotService {
   }
 
   init() {
+    // Stop any existing polling bot instance first
+    if (this.bot) {
+      try {
+        this.bot.stopPolling();
+      } catch { /* ignore */ }
+      this.bot = null;
+    }
+
     const token = getSetting('telegramBotToken');
     const chatId = getSetting('telegramChatId');
 
