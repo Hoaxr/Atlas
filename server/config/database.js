@@ -235,6 +235,7 @@ const MIGRATIONS = [
         ['episodes', 'file_size', 'INTEGER DEFAULT 0'],
         ['movies', 'watched', 'INTEGER DEFAULT 0'],
         ['shows', 'watched', 'INTEGER DEFAULT 0'],
+        ['episodes', 'watched', 'INTEGER DEFAULT 0'],
         ['movies', 'subtitles', "TEXT DEFAULT '[]'"],
         ['episodes', 'subtitles', "TEXT DEFAULT '[]'"],
         ['library_paths', 'type', "TEXT DEFAULT 'movies'"],
@@ -591,6 +592,16 @@ const MIGRATIONS = [
           detected_at DATETIME DEFAULT CURRENT_TIMESTAMP
         );
       `);
+    }
+  },
+  {
+    id: 18,
+    name: 'Add episodes watched column and index',
+    run: (db) => {
+      if (!hasColumn('episodes', 'watched')) {
+        db.exec('ALTER TABLE episodes ADD COLUMN watched INTEGER DEFAULT 0;');
+      }
+      db.exec('CREATE INDEX IF NOT EXISTS idx_episodes_watched ON episodes(watched);');
     }
   }
 ];

@@ -107,28 +107,51 @@ const syncWatchedMovies = async () => {
 
 const syncWatchedShows = async () => {
   try {
-    const response = await simklApi.get('/sync/all-items/shows/completed?extended=full');
+    const response = await simklApi.get('/sync/all-items/shows?extended=full');
     const showsList = response.data.shows || [];
 
     const count = db.transaction((list) => {
       let localCount = 0;
       const insertWatched = db.prepare('INSERT OR REPLACE INTO watched_tmdb (tmdb_id, type) VALUES (?, ?)');
       const getShowByTmdb = db.prepare('SELECT id FROM shows WHERE tmdb_id = ?');
+      const updateShowWatched = db.prepare('UPDATE shows SET watched = 1 WHERE id = ?');
+      const updateEpWatched = db.prepare('UPDATE episodes SET watched = 1, watched_at = COALESCE(watched_at, CURRENT_TIMESTAMP) WHERE show_id = ? AND season_number = ? AND episode_number = ?');
+      const updateAllEpsWatched = db.prepare('UPDATE episodes SET watched = 1, watched_at = COALESCE(watched_at, CURRENT_TIMESTAMP) WHERE show_id = ?');
 
       for (const item of list) {
         const tmdbId = item.ids?.tmdb || item.show?.ids?.tmdb;
         if (!tmdbId) continue;
-        insertWatched.run(tmdbId, 'show');
+        
+        // If show status is completed or watched
+        if (item.status === 'completed' || item.watched_at) {
+          insertWatched.run(tmdbId, 'show');
+        }
+
         const show = getShowByTmdb.get(tmdbId);
         if (show) {
-          db.prepare('UPDATE shows SET watched = 1 WHERE id = ?').run(show.id);
+          if (item.status === 'completed') {
+            updateShowWatched.run(show.id);
+            updateAllEpsWatched.run(show.id);
+          }
+          
+          if (Array.isArray(item.seasons)) {
+            for (const season of item.seasons) {
+              const seasonNum = season.number;
+              if (Array.isArray(season.episodes)) {
+                for (const ep of season.episodes) {
+                  const epNum = ep.number;
+                  updateEpWatched.run(show.id, seasonNum, epNum);
+                }
+              }
+            }
+          }
           localCount++;
         }
       }
       return localCount;
     })(showsList);
 
-    console.log(`[SimklSync] Synced ${count} watched shows (${showsList.length} items returned from Simkl)`);
+    console.log(`[SimklSync] Synced ${count} watched shows and episode watched states (${showsList.length} shows returned from Simkl)`);
     return count;
   } catch (error) {
     if (error.response?.status === 401) {

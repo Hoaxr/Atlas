@@ -20,12 +20,14 @@ const simklService = require('../../services/simklService');
 router.post('/shows/:id/watched', async (req, res, next) => {
   try {
     const { watched } = req.body;
-    db.prepare('UPDATE shows SET watched = ?, watched_at = CURRENT_TIMESTAMP WHERE id = ?').run(watched ? 1 : 0, req.params.id);
+    const isWatched = !!watched;
+    db.prepare('UPDATE shows SET watched = ?, watched_at = CURRENT_TIMESTAMP WHERE id = ?').run(isWatched ? 1 : 0, req.params.id);
+    db.prepare('UPDATE episodes SET watched = ?, watched_at = CURRENT_TIMESTAMP WHERE show_id = ?').run(isWatched ? 1 : 0, req.params.id);
     const show = db.prepare('SELECT tmdb_id FROM shows WHERE id = ?').get(req.params.id);
     if (show?.tmdb_id) {
-      simklService.pushToSimklOnWatched(show.tmdb_id, 'show', !!watched).catch(e => console.error('[SimklSync] Direct push error:', e.message));
+      simklService.pushToSimklOnWatched(show.tmdb_id, 'show', isWatched).catch(e => console.error('[SimklSync] Direct push error:', e.message));
     }
-    res.json({ status: 'success', message: watched ? 'Marked as watched' : 'Marked as unwatched' });
+    res.json({ status: 'success', message: isWatched ? 'Marked as watched' : 'Marked as unwatched' });
   } catch (err) {
     next(err);
   }
@@ -806,13 +808,40 @@ router.post('/shows/:id/wanted', (req, res, next) => {
 });
 
 
-router.post('/shows/:id/seasons/:season/watched', (req, res, next) => {
+router.post('/shows/:id/seasons/:season/watched', async (req, res, next) => {
   try {
     const { watched = 1 } = req.body;
+    const isWatched = !!watched;
     const result = db.prepare(
       'UPDATE episodes SET watched = ?, watched_at = CURRENT_TIMESTAMP WHERE show_id = ? AND season_number = ?'
-    ).run(watched ? 1 : 0, req.params.id, req.params.season);
+    ).run(isWatched ? 1 : 0, req.params.id, req.params.season);
+
+    const show = db.prepare('SELECT tmdb_id FROM shows WHERE id = ?').get(req.params.id);
+    if (show?.tmdb_id) {
+      const episodes = db.prepare('SELECT episode_number FROM episodes WHERE show_id = ? AND season_number = ?').all(req.params.id, req.params.season);
+      for (const ep of episodes) {
+        simklService.pushToSimklOnWatched(show.tmdb_id, 'show', isWatched, Number(req.params.season), ep.episode_number).catch(e => console.error('[SimklSync] Direct push error:', e.message));
+      }
+    }
+
     res.json({ status: 'success', message: `${result.changes} episodes updated`, changes: result.changes });
+  } catch (err) { next(err); }
+});
+
+router.post('/episodes/:id/watched', async (req, res, next) => {
+  try {
+    const { watched = 1 } = req.body;
+    const isWatched = !!watched;
+    const ep = db.prepare('SELECT e.*, s.tmdb_id as show_tmdb_id FROM episodes e JOIN shows s ON e.show_id = s.id WHERE e.id = ?').get(req.params.id);
+    if (!ep) return res.status(404).json({ status: 'error', message: 'Episode not found' });
+
+    db.prepare('UPDATE episodes SET watched = ?, watched_at = CURRENT_TIMESTAMP WHERE id = ?').run(isWatched ? 1 : 0, req.params.id);
+
+    if (ep.show_tmdb_id) {
+      simklService.pushToSimklOnWatched(ep.show_tmdb_id, 'show', isWatched, ep.season_number, ep.episode_number).catch(e => console.error('[SimklSync] Direct push error:', e.message));
+    }
+
+    res.json({ status: 'success', message: isWatched ? 'Marked as watched' : 'Marked as unwatched' });
   } catch (err) { next(err); }
 });
 
