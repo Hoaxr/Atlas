@@ -124,19 +124,21 @@ const scheduleEpisode = (retryCount, diffHours, config, currentDate, isDownloade
   let state;
   let nextMs = currentDate.getTime();
 
-  // Give a 1-day buffer for TV episodes because TMDB usually gives local broadcast dates
-  // which might be tomorrow in UTC time
-  const effectiveDiffHours = diffHours - 24; 
+  // Start searching 24 hours BEFORE the official TMDB air date
+  // This accounts for timezone differences, early streaming drops (e.g. AMC+, Max), and early web-rips
+  const preReleaseHours = -24; 
 
-  if (effectiveDiffHours < 0) {
-    // Not aired yet
+  if (diffHours < preReleaseHours) {
+    // Not aired yet and not in early-drop window
     state = 'PENDING';
-    nextMs += Math.abs(effectiveDiffHours) * 3600000;
-  } else if (effectiveDiffHours >= 0 && effectiveDiffHours <= 72) {
+    nextMs += Math.abs(diffHours - preReleaseHours) * 3600000;
+  } else if (diffHours >= preReleaseHours && diffHours <= 72) {
+    // RELEASE WINDOW (1 day early -> 3 days after)
     state = isDownloaded ? 'UPGRADING' : 'RELEASE_WINDOW';
     const mins = Math.min(30 * Math.pow(config.backoffMultiplier, retryCount), isDownloaded ? 720 : 240);
     nextMs += mins * 60000;
-  } else if (effectiveDiffHours > 72 && effectiveDiffHours <= (config.expirationDays * 24)) {
+  } else if (diffHours > 72 && diffHours <= (config.expirationDays * 24)) {
+    // Post-release, active
     state = isDownloaded ? 'UPGRADING' : 'SEARCHING';
     const hrs = Math.min(6 * Math.pow(config.backoffMultiplier, retryCount), isDownloaded ? 48 : 48);
     nextMs += hrs * 3600000;
