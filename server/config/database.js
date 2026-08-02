@@ -611,7 +611,7 @@ const MIGRATIONS = [
     }
   },
   {
-    id: 18,
+    id: 22,
     name: 'Add episodes watched column and index',
     run: (db) => {
       if (!hasColumn('episodes', 'watched')) {
@@ -621,7 +621,7 @@ const MIGRATIONS = [
     }
   },
   {
-    id: 19,
+    id: 23,
     name: 'Create watch_history table',
     run: (db) => {
       db.exec(`
@@ -653,7 +653,7 @@ const MIGRATIONS = [
     }
   },
   {
-    id: 20,
+    id: 24,
     name: 'Add runtime column',
     run: (db) => {
       if (!hasColumn('movies', 'runtime')) {
@@ -671,7 +671,7 @@ const MIGRATIONS = [
     }
   },
   {
-    id: 21,
+    id: 25,
     name: 'Add watch_progress column',
     run: (db) => {
       if (!hasColumn('movies', 'watch_progress')) {
