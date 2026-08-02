@@ -71,7 +71,7 @@ const pollDeviceToken = async (userCode) => {
  */
 const syncWatchedMovies = async () => {
   try {
-    const response = await simklApi.get('/sync/all-items/movies/completed?extended=full');
+    const response = await simklApi.get('/sync/all-items/movies?extended=full');
     const moviesList = response.data.movies || [];
 
     const count = db.transaction((list) => {
@@ -82,10 +82,14 @@ const syncWatchedMovies = async () => {
       for (const item of list) {
         const tmdbId = item.ids?.tmdb || item.movie?.ids?.tmdb;
         if (!tmdbId) continue;
-        insertWatched.run(tmdbId, 'movie');
+
+        if (item.status === 'completed' || item.watched_at) {
+          insertWatched.run(tmdbId, 'movie');
+        }
+
         const movie = getMovieByTmdb.get(tmdbId);
-        if (movie) {
-          db.prepare('UPDATE movies SET watched = 1 WHERE id = ?').run(movie.id);
+        if (movie && (item.status === 'completed' || item.watched_at)) {
+          db.prepare('UPDATE movies SET watched = 1, watched_at = COALESCE(watched_at, CURRENT_TIMESTAMP) WHERE id = ?').run(movie.id);
           localCount++;
         }
       }
