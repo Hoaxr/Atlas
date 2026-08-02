@@ -37,6 +37,9 @@ router.get('/', (req, res, next) => {
     const traktWatchedSync = getSetting('traktWatchedSync') === 'true';
     const traktAccessToken = getSetting('traktAccessToken');
     const traktClientSecret = getSetting('traktClientSecret');
+    const simklClientId = getSetting('simklClientId');
+    const simklWatchedSync = getSetting('simklWatchedSync') === 'true';
+    const simklAccessToken = getSetting('simklAccessToken');
     
     // Naming config
     const renameMovies = getSetting('renameMovies') !== 'false'; // default true
@@ -85,6 +88,9 @@ router.get('/', (req, res, next) => {
         traktWatchedSync,
         traktAccessToken: mask(traktAccessToken),
         traktClientSecret: mask(traktClientSecret),
+        simklClientId: mask(simklClientId),
+        simklWatchedSync,
+        simklAccessToken: mask(simklAccessToken),
         renameMovies,
         replaceIllegalCharacters,
         colonReplacement,
@@ -149,6 +155,9 @@ const SETTING_SCHEMA = {
   traktWatchedSync:         { type: 'boolean' },
   traktAccessToken:         { type: 'apiKey' },
   traktClientSecret:        { type: 'apiKey' },
+  simklClientId:            { type: 'apiKey' },
+  simklWatchedSync:         { type: 'boolean' },
+  simklAccessToken:         { type: 'apiKey' },
   renameMovies:             { type: 'boolean' },
   replaceIllegalCharacters: { type: 'boolean' },
   colonReplacement:         { type: 'string' },
@@ -693,27 +702,27 @@ router.get('/issues', async (req, res) => {
       });
     }
 
-    // Check Trakt Auth
-    const traktWatchedSync = getSetting('traktWatchedSync') === 'true';
-    const traktToken = getSetting('traktAccessToken');
-    const traktClientId = getSetting('traktClientId');
-    if (traktWatchedSync && !traktToken) {
+    // Check Simkl Auth
+    const simklWatchedSync = getSetting('simklWatchedSync') === 'true';
+    const simklToken = getSetting('simklAccessToken');
+    const simklClientId = getSetting('simklClientId');
+    if (simklWatchedSync && (!simklToken || !simklClientId)) {
       issues.push({
-        id: 'trakt_token_missing',
+        id: 'simkl_token_missing',
         type: 'warning',
-        message: 'Trakt Watched Sync is enabled but no account is connected.',
-        actionText: 'Connect Trakt',
+        message: 'Simkl Watched Sync is enabled but no Client ID or account is connected.',
+        actionText: 'Connect Simkl',
         actionLink: '/settings'
       });
-    } else if (traktWatchedSync && traktToken && traktClientId) {
-      const traktService = require('../services/traktService');
-      const stats = await traktService.getUserStats();
+    } else if (simklWatchedSync && simklToken && simklClientId) {
+      const simklService = require('../services/simklService');
+      const stats = await simklService.getUserStats();
       if (stats.error) {
         issues.push({
-          id: 'trakt_token_expired',
+          id: 'simkl_token_expired',
           type: 'error',
-          message: 'Trakt authentication expired or invalid. Watched sync will fail.',
-          actionText: 'Reconnect Trakt',
+          message: 'Simkl authentication expired or invalid. Watched sync will fail.',
+          actionText: 'Reconnect Simkl',
           actionLink: '/settings'
         });
       }
@@ -1089,7 +1098,7 @@ const DEFAULT_SCHEDULES = {
   search_cycle:      '0 * * * *',     // Every hour
   update_ratings:    '0 0 * * *',     // Daily midnight
   update_air_dates:  '0 1 * * *',     // Daily 1 AM
-  trakt_watched_sync:'0 */6 * * *',   // Every 6 hours
+  simkl_watched_sync:'0 */6 * * *',   // Every 6 hours
   library_scan:      '0 3 * * *',     // Daily 3 AM
 };
 

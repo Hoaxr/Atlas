@@ -13,7 +13,7 @@ import Spinner from '../components/shared/Spinner';
 
 const statusIcons = {
   tmdb: Database,
-  trakt: Activity,
+  simkl: Activity,
   opensubtitles: BookOpen,
   subdl: DownloadCloud,
   subsource: Cloud,
@@ -24,7 +24,7 @@ const statusIcons = {
 
 const statusLabels = {
   tmdb: 'TMDB',
-  trakt: 'Trakt',
+  simkl: 'Simkl',
   opensubtitles: 'OpenSubtitles',
   subdl: 'SubDL',
   subsource: 'SubSource',
@@ -144,7 +144,7 @@ export default function Status() {
   }
 
   const services = statusData?.services || {};
-  const apiKeys = ['tmdb', 'trakt', 'opensubtitles', 'subdl', 'subsource'];
+  const apiKeys = ['tmdb', 'simkl', 'opensubtitles', 'subdl', 'subsource'];
   const aiServices = ['gemini', 'deepseek', 'claude'];
   const downloadClients = services.downloadClients || [];
   const mounts = services.mounts || {};

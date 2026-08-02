@@ -203,8 +203,6 @@ class NotificationService {
     const PORT = process.env.PORT || 3000;
     const BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
     
-    // SSRF Protection: Validate posterUrl
-    let url = '';
     if (posterUrl.startsWith('http')) {
       const allowedDomains = ['image.tmdb.org'];
       try {
@@ -212,17 +210,20 @@ class NotificationService {
         if (!allowedDomains.includes(parsedUrl.hostname)) {
           throw new Error('Domain not allowed');
         }
-        url = posterUrl;
+        return await this.fetchBuffer(posterUrl);
       } catch (err) {
-        throw new Error('Invalid poster URL');
+        throw new Error('Invalid poster URL', { cause: err });
       }
     } else {
       if (!posterUrl.startsWith('/api/watcher/image') && !posterUrl.startsWith('/api/images')) {
         throw new Error('Invalid relative poster path');
       }
-      url = `${BASE_URL}${posterUrl}`;
+      const url = `${BASE_URL}${posterUrl}`;
+      return await this.fetchBuffer(url);
     }
+  }
 
+  async fetchBuffer(url) {
     const response = await axios.get(url, { responseType: 'arraybuffer', timeout: 5000 });
     return Buffer.from(response.data);
   }

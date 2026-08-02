@@ -245,6 +245,9 @@ export default function Settings() {
           traktWatchedSync: res.data.data.traktWatchedSync || false,
           traktAccessToken: res.data.data.traktAccessToken || '',
           traktClientSecret: res.data.data.traktClientSecret || '',
+          simklClientId: res.data.data.simklClientId || '',
+          simklWatchedSync: res.data.data.simklWatchedSync || false,
+          simklAccessToken: res.data.data.simklAccessToken || '',
           renameMovies: res.data.data.renameMovies ?? true,
           replaceIllegalCharacters: res.data.data.replaceIllegalCharacters ?? true,
           colonReplacement: res.data.data.colonReplacement || 'dash',
@@ -423,6 +426,61 @@ export default function Settings() {
     } catch { /* ignore */ }
   };
 
+  // Simkl helpers
+  const pollSimkl = (userCode, interval) => {
+    let attempts = 0;
+    const poll = async () => {
+      attempts++;
+      try {
+        const res = await api.post('/auth/simkl/device-token', { userCode });
+        if (res.data.status === 'success') {
+          setTraktPolling(false);
+          setTraktDeviceCode(null);
+          customAlert('Simkl account linked successfully!');
+          fetchSettings();
+          return;
+        }
+        if (res.data.status === 'pending' && attempts < 60) {
+          setTimeout(poll, (interval || 5) * 1000);
+          return;
+        }
+        if (res.data.status === 'error') {
+          customAlert(res.data.message || 'Simkl authorization failed', 'error');
+        }
+      } catch (err) {
+        const msg = err.response?.data?.message || err.message || 'Connection failed';
+        customAlert(`Simkl error: ${msg}`, 'error');
+      }
+      setTraktPolling(false);
+      setTraktDeviceCode(null);
+    };
+    setTimeout(poll, (interval || 5) * 1000);
+  };
+
+  const connectSimkl = async () => {
+    try {
+      const res = await api.post('/settings', settings);
+      if (res.data.status === 'error') {
+        customAlert('Failed to save settings: ' + (res.data.message || ''), 'error');
+        return;
+      }
+      const dcRes = await api.post('/auth/simkl/device-code');
+      if (dcRes.data.status !== 'success') {
+        customAlert(dcRes.data.message || 'Failed to get Simkl PIN', 'error');
+        return;
+      }
+      const { user_code, verification_url, interval } = dcRes.data.data;
+      setTraktDeviceCode(user_code);
+      setTraktUserCode(user_code);
+      setTraktVerificationUrl(verification_url || 'https://simkl.com/pin');
+      setTraktPolling(true);
+      pollSimkl(user_code, interval || 5);
+    } catch (err) {
+      const msg = err.response?.data?.message || err.message || 'Failed to start Simkl authorization';
+      customAlert(msg, 'error');
+    }
+  };
+
   // Trakt helpers
   const pollTrakt = (deviceCode, interval) => {
     let attempts = 0;
@@ -577,7 +635,7 @@ export default function Settings() {
               traktUserCode={traktUserCode}
               traktVerificationUrl={traktVerificationUrl}
               traktPolling={traktPolling}
-              connectTrakt={connectTrakt}
+              connectSimkl={connectSimkl}
               fetchSettings={fetchSettings}
               keyStatuses={keyStatuses}
             />

@@ -18,7 +18,7 @@ const db = require('./config/database');
 const apiRoutes = require('./routes/api');
 const settingsRoutes = require('./routes/settings');
 const tmdbRoutes = require('./routes/tmdb');
-const traktRoutes = require('./routes/trakt');
+const simklRoutes = require('./routes/simkl');
 const libraryRoutes = require('./routes/library/index');
 const tasksRoutes = require('./routes/tasks');
 const clientsRoutes = require('./routes/clients');
@@ -295,7 +295,7 @@ const watcherAdminWrapper = (req, res, next) => {
 
 app.use('/api/settings', settingsAdminWrapper, settingsRoutes);
 app.use('/api/tmdb', tmdbRoutes); // TMDB search/details can be used by any user
-app.use('/api/trakt', traktRoutes);
+app.use('/api/simkl', simklRoutes);
 app.use('/api/library', libraryAdminWrapper, libraryRoutes);
 app.use('/api/tasks', requireAdmin, tasksRoutes);
 app.use('/api/clients', requireAdmin, clientsRoutes);

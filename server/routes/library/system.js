@@ -30,9 +30,9 @@ router.get('/health', (req, res, next) => {
       AND m.release_date IS NOT NULL AND m.release_date <= date('now')
     `).all();
 
-    let missingMovies = [];
-    let cutoffUnmetMovies = [];
-    let cutoffMetMovies = [];
+    const missingMovies = [];
+    const cutoffUnmetMovies = [];
+    const cutoffMetMovies = [];
 
     for (const m of movies) {
       const item = { id: m.id, title: m.title, status: m.status, scene_name: m.scene_name, file_path: m.file_path, cutoff: m.cutoff, currentQuality: null };
@@ -53,7 +53,7 @@ router.get('/health', (req, res, next) => {
       }
 
       let qualities = [];
-      try { qualities = JSON.parse(m.qualities); } catch { }
+      try { qualities = JSON.parse(m.qualities); } catch (_) { /* ignore parse error */ }
       const currentIdx = qualities.indexOf(currentQuality);
       const cutoffIdx = qualities.indexOf(m.cutoff);
 
@@ -73,9 +73,9 @@ router.get('/health', (req, res, next) => {
       AND e.air_date IS NOT NULL AND e.air_date <= date('now')
     `).all();
 
-    let missingEps = [];
-    let cutoffUnmetEps = [];
-    let cutoffMetEps = [];
+    const missingEps = [];
+    const cutoffUnmetEps = [];
+    const cutoffMetEps = [];
 
     for (const e of eps) {
       const item = { id: e.id, show_id: e.show_id, title: e.title, status: e.status, scene_name: e.scene_name, file_path: e.file_path, cutoff: e.cutoff, currentQuality: null };
@@ -96,7 +96,7 @@ router.get('/health', (req, res, next) => {
       }
 
       let qualities = [];
-      try { qualities = JSON.parse(e.qualities); } catch { }
+      try { qualities = JSON.parse(e.qualities); } catch (_) { /* ignore parse error */ }
       const currentIdx = qualities.indexOf(currentQuality);
       const cutoffIdx = qualities.indexOf(e.cutoff);
 

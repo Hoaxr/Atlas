@@ -90,73 +90,44 @@ router.post('/logout', authMiddleware, (req, res) => {
   }
 });
 
-// Step 1: Request a device code from Trakt
-router.post('/trakt/device-code', async (req, res) => {
-  const clientId = getSetting('traktClientId');
-  if (!clientId) {
-    return res.status(400).json({ status: 'error', message: 'Trakt Client ID not configured' });
-  }
-
+// Simkl PIN Auth
+router.post('/simkl/device-code', async (req, res) => {
+  const simklService = require('../services/simklService');
   try {
-    const response = await axios.post('https://api.trakt.tv/oauth/device/code', {
-      client_id: clientId
-    });
-    // response.data: { device_code, user_code, verification_url, expires_in, interval }
-    res.json({ status: 'success', data: response.data });
+    const data = await simklService.getDeviceCode();
+    res.json({ status: 'success', data });
   } catch (err) {
-    console.error('[Trakt Device Auth] Failed to get device code:', err.response?.data || err.message);
-    res.status(500).json({ status: 'error', message: 'Failed to get device code from Trakt' });
+    console.error('[Simkl Auth] Failed to get PIN:', err.message);
+    res.status(500).json({ status: 'error', message: err.message || 'Failed to get PIN from Simkl' });
   }
 });
 
-// Step 2: Poll for the token using the device code
-router.post('/trakt/device-token', async (req, res) => {
-  const { deviceCode } = req.body;
-  if (!deviceCode) {
-    return res.status(400).json({ status: 'error', message: 'Device code is required' });
+router.post('/simkl/device-token', async (req, res) => {
+  const { userCode } = req.body;
+  if (!userCode) {
+    return res.status(400).json({ status: 'error', message: 'User code is required' });
   }
-
-  const clientId = getSetting('traktClientId');
-  const clientSecret = getSetting('traktClientSecret');
-
-  if (!clientId || !clientSecret) {
-    return res.status(400).json({ status: 'error', message: 'Trakt Client ID and Client Secret must be configured first' });
-  }
-
+  const simklService = require('../services/simklService');
   try {
-    const response = await axios.post('https://api.trakt.tv/oauth/device/token', {
-      code: deviceCode,
-      client_id: clientId,
-      client_secret: clientSecret
-    });
-    // response.data: { access_token, refresh_token, created_at, expires_in }
-    const { access_token, refresh_token, created_at, expires_in } = response.data;
-    setSetting('traktAccessToken', access_token);
-    if (refresh_token) setSetting('traktRefreshToken', refresh_token);
-    setSetting('traktTokenExpiresAt', String(Number(created_at) + Number(expires_in)));
-    res.json({ status: 'success', message: 'Trakt account linked successfully!' });
+    const data = await simklService.pollDeviceToken(userCode);
+    if (data.result === 'OK' && data.access_token) {
+      setSetting('simklAccessToken', data.access_token);
+      return res.json({ status: 'success', message: 'Simkl account linked successfully!' });
+    }
+    return res.json({ status: 'pending' });
   } catch (err) {
-    const status = err.response?.status;
-    const body = err.response?.data;
-    // Trakt returns 400 while waiting — body can be "authorization_pending" (string) or { error: "authorization_pending" } (JSON)
-    if (status === 400) {
-      const errorStr = typeof body === 'string' ? body : body?.error || '';
-      // Empty or pending body = still waiting for user to authorize
-      if (!errorStr || errorStr === 'authorization_pending' || errorStr === 'slow_down') {
-        return res.json({ status: 'pending' });
-      }
-      if (errorStr === 'denied') {
-        return res.status(400).json({ status: 'error', message: 'Authorization denied by user.' });
-      }
-      console.error('[Trakt Device Auth] Unexpected 400:', JSON.stringify(body));
-      return res.status(400).json({ status: 'error', message: `Trakt error: ${errorStr}` });
+    if (err.response?.status === 400 || err.response?.status === 404) {
+      return res.json({ status: 'pending' });
     }
-    if (status === 404) {
-      return res.status(404).json({ status: 'error', message: 'Device code expired. Please start over.' });
-    }
-    console.error('[Trakt Device Auth] Token poll failed:', err.response?.data || err.message);
-    res.status(500).json({ status: 'error', message: 'Failed to get token from Trakt' });
+    console.error('[Simkl Auth] Token poll error:', err.message);
+    res.status(500).json({ status: 'error', message: 'Failed to verify Simkl PIN' });
   }
+});
+
+router.post('/simkl/disconnect', (req, res) => {
+  setSetting('simklAccessToken', '');
+  setSetting('simklWatchedSync', 'false');
+  res.json({ status: 'success', message: 'Simkl account disconnected.' });
 });
 
 // Check if authentication is enabled and whether the current request is bypassed

@@ -259,6 +259,30 @@ const getSeasonEpisodes = async (tmdbId, seasonNumber) => {
   }
 };
 
+const getTrendingMovies = async () => {
+  return withCache('trending_movies', async () => {
+    try {
+      const response = await tmdbApi.get('/trending/movie/day');
+      return response.data.results.map(r => ({ ...r, media_type: 'movie' }));
+    } catch (error) {
+      console.error('TMDB Trending Movies Error:', error.message);
+      return [];
+    }
+  });
+};
+
+const getTrendingShows = async () => {
+  return withCache('trending_shows', async () => {
+    try {
+      const response = await tmdbApi.get('/trending/tv/day');
+      return response.data.results.map(r => ({ ...r, media_type: 'tv' }));
+    } catch (error) {
+      console.error('TMDB Trending Shows Error:', error.message);
+      return [];
+    }
+  });
+};
+
 const getRecentMovies = async () => {
   return withCache('recent_movies', async () => {
     try {
@@ -278,6 +302,18 @@ const getUpcomingMovies = async () => {
       return response.data.results.map(r => ({ ...r, media_type: 'movie' }));
     } catch (error) {
       console.error('TMDB Upcoming Movies Error:', error.message);
+      return [];
+    }
+  });
+};
+
+const getUpcomingShows = async () => {
+  return withCache('upcoming_shows', async () => {
+    try {
+      const response = await tmdbApi.get('/tv/on_the_air');
+      return response.data.results.map(r => ({ ...r, media_type: 'tv' }));
+    } catch (error) {
+      console.error('TMDB Upcoming Shows Error:', error.message);
       return [];
     }
   });
@@ -388,8 +424,11 @@ module.exports = {
   getSeasonById,
   getShowSeasons,
   getSeasonEpisodes,
+  getTrendingMovies,
+  getTrendingShows,
   getRecentMovies,
   getUpcomingMovies,
+  getUpcomingShows,
   getRecentShows,
   getRecommendationsForMovies,
   getRecommendationsForShows,

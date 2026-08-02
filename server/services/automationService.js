@@ -19,7 +19,7 @@ const { calculateNextSearchAt, calculatePriority } = require('./schedulerLogic')
 const DEFAULT_SCHEDULES = {
   search_cycle:       '0 * * * *',
   refresh_metadata:   '0 3 * * *',  // Daily at 3 AM
-  trakt_watched_sync: '0 */6 * * *',
+  simkl_watched_sync: '0 */6 * * *',
   missing_files_check:'0 * * * *',  // Hourly fast check for deleted files
   database_backup:    '0 4 * * *',  // Daily at 4 AM
   auto_delete_watched:'0 5 * * *',  // Daily at 5 AM
@@ -356,8 +356,10 @@ const runRefreshMetadata = async () => {
   console.log(`[Automation] Metadata trickle-refresh complete. Refreshed ${moviesUpdated} movies and ${showsUpdated} shows.`);
 };
 
-const runTraktWatchedSync = async () => {
-  await traktService.syncWatched();
+const simklService = require('./simklService');
+
+const runSimklWatchedSync = async () => {
+  await simklService.syncWatched();
 };
 
 const runMissingFilesCheck = async () => {
@@ -820,7 +822,7 @@ const init = () => {
   const tasks = [
     { id: 'search_cycle',       name: 'Torrent Search Cycle',      desc: 'Searches for missing monitored movies and episodes and sends them to the download client.', fn: runSearchCycle },
     { id: 'refresh_metadata',   name: 'Refresh Metadata',          desc: 'Nightly trickle-refresh of metadata to keep posters, overviews, ratings and seasons up to date.', fn: runRefreshMetadata },
-    { id: 'trakt_watched_sync', name: 'Trakt Watched Sync',        desc: 'Syncs watched status from your Trakt account to your local library.',                     fn: runTraktWatchedSync },
+    { id: 'simkl_watched_sync', name: 'Simkl Watched Sync',        desc: 'Syncs watched status from your Simkl account to your local library.',                     fn: runSimklWatchedSync },
     { id: 'missing_files_check',name: 'Missing Files Check',       desc: 'Quickly checks library folders and removes items that have been deleted from disk.',       fn: runMissingFilesCheck },
     { id: 'database_backup',    name: 'Database Backup',           desc: 'Creates a compressed backup of the SQLite database to prevent data loss.',                 fn: runDatabaseBackup },
     { id: 'auto_delete_watched',name: 'Auto-Delete Watched',       desc: 'Automatically deletes media a configured number of days after watching.',                  fn: runAutoDeleteWatched },

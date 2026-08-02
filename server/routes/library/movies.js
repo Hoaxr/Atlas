@@ -535,10 +535,16 @@ router.post('/:id/download-subs', async (req, res, next) => {
   }
 });
 
-router.post('/:id/watched', (req, res, next) => {
+const simklService = require('../../services/simklService');
+
+router.post('/:id/watched', async (req, res, next) => {
   try {
     const { watched } = req.body;
     db.prepare('UPDATE movies SET watched = ?, watched_at = CURRENT_TIMESTAMP WHERE id = ?').run(watched ? 1 : 0, req.params.id);
+    const movie = db.prepare('SELECT tmdb_id FROM movies WHERE id = ?').get(req.params.id);
+    if (movie?.tmdb_id) {
+      simklService.pushToSimklOnWatched(movie.tmdb_id, 'movie', !!watched).catch(e => console.error('[SimklSync] Direct push error:', e.message));
+    }
     res.json({ status: 'success', message: watched ? 'Marked as watched' : 'Marked as unwatched' });
   } catch (err) {
     next(err);

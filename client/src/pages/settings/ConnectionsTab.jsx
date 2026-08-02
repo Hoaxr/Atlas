@@ -7,7 +7,7 @@ import PasswordInput from '../../components/shared/PasswordInput';
 export default function ConnectionsTab({
   settings: parentSettings, setSettings: setParentSettings, handleSave: parentHandleSave,
   traktDeviceCode, traktUserCode, traktVerificationUrl, traktPolling,
-  connectTrakt, fetchSettings, keyStatuses
+  connectSimkl, fetchSettings, keyStatuses
 }) {
   const [localSettings, setLocalSettings] = useState({
     plexUrl: '',
@@ -318,25 +318,23 @@ export default function ConnectionsTab({
             </div>
           </div>
 
-          {/* Trakt */}
+          {/* Simkl */}
           <div className="p-4 bg-slate-800/30 rounded-xl border border-slate-700/50 space-y-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <h3 className="text-sm font-bold text-green-400">Trakt</h3>
-                {!parentSettings?.traktAccessToken ? (
+                <h3 className="text-sm font-bold text-cyan-400">Simkl</h3>
+                {!parentSettings?.simklAccessToken ? (
                   <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-700/50 text-slate-400 border border-slate-600/50">Not configured</span>
-                ) : keyStatuses?.trakt?.status === 'error' ? (
-                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-500/20 text-rose-400 border border-rose-500/30">Auth Expired</span>
                 ) : (
                   <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">Connected</span>
                 )}
               </div>
-              {parentSettings?.traktAccessToken && (
+              {parentSettings?.simklAccessToken && (
                 <button
                   onClick={async () => {
-                    if (await customConfirm('Disconnect from Trakt? You can reconnect later.')) {
-                      await api.post('/auth/trakt/disconnect');
-                      customAlert('Disconnected from Trakt');
+                    if (await customConfirm('Disconnect from Simkl? You can reconnect later.')) {
+                      await api.post('/auth/simkl/disconnect');
+                      customAlert('Disconnected from Simkl');
                       fetchSettings();
                     }
                   }}
@@ -346,52 +344,48 @@ export default function ConnectionsTab({
                 </button>
               )}
             </div>
-            <p className="text-xs text-slate-500">Trakt provides trending lists and can sync your watched status.</p>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <p className="text-xs text-slate-500">Simkl syncs your watched status and movie/show completion history.</p>
+            <div className="grid grid-cols-1 gap-4">
               <div>
                 <label className="flex items-center gap-2 text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">
-                  <span>Client ID</span>
-                  <a href="https://trakt.tv/oauth/applications" target="_blank" rel="noopener noreferrer" className="text-[10px] text-green-400 hover:text-green-300 underline normal-case font-medium">Get keys</a>
+                  <span>Simkl Client ID / API Key</span>
+                  <a href="https://simkl.com/settings/developer/new/" target="_blank" rel="noopener noreferrer" className="text-[10px] text-cyan-400 hover:text-cyan-300 underline normal-case font-medium">Create API App</a>
                 </label>
-                <PasswordInput placeholder="Enter your Trakt Client ID" className="w-full bg-slate-800/50 border border-slate-700 rounded-xl px-4 py-2.5 text-slate-200 focus:outline-none focus:ring-2 focus:ring-green-500/50 focus:border-green-500/50 transition-all" value={parentSettings?.traktClientId || ''} onChange={(e) => setParentSettings({ ...parentSettings, traktClientId: e.target.value })} />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Client Secret</label>
-                <PasswordInput placeholder="Enter your Trakt Client Secret" className="w-full bg-slate-800/50 border border-slate-700 rounded-xl px-4 py-2.5 text-slate-200 focus:outline-none focus:ring-2 focus:ring-green-500/50 focus:border-green-500/50 transition-all" value={parentSettings?.traktClientSecret || ''} onChange={(e) => setParentSettings({ ...parentSettings, traktClientSecret: e.target.value })} />
+                <PasswordInput placeholder="Enter your Simkl Client ID" className="w-full bg-slate-800/50 border border-slate-700 rounded-xl px-4 py-2.5 text-slate-200 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500/50 transition-all" value={parentSettings?.simklClientId || ''} onChange={(e) => setParentSettings({ ...parentSettings, simklClientId: e.target.value })} />
               </div>
             </div>
 
             <div className="flex items-center gap-3">
-              {!parentSettings?.traktAccessToken && !traktDeviceCode && (
+              {!parentSettings?.simklAccessToken && !traktDeviceCode && (
                 <button
-                  onClick={connectTrakt}
-                  disabled={!parentSettings?.traktClientId || !parentSettings?.traktClientSecret}
-                  className="bg-green-500 hover:bg-green-400 text-slate-950 font-bold py-2 px-4 rounded-lg text-xs transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  onClick={connectSimkl}
+                  disabled={!parentSettings?.simklClientId}
+                  className="bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold py-2 px-4 rounded-lg text-xs transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  Connect with Trakt
+                  Connect with Simkl
                 </button>
               )}
               <div
                 className="flex items-center gap-2 cursor-pointer select-none transition-colors hover:bg-slate-700/30 rounded-lg px-3 py-2"
-                onClick={() => setParentSettings(prev => ({ ...prev, traktWatchedSync: !prev.traktWatchedSync }))}
+                onClick={() => setParentSettings(prev => ({ ...prev, simklWatchedSync: !prev.simklWatchedSync }))}
               >
-                {parentSettings?.traktWatchedSync ? <CheckSquare className="w-4 h-4 text-green-400" /> : <Square className="w-4 h-4 text-slate-500" />}
+                {parentSettings?.simklWatchedSync ? <CheckSquare className="w-4 h-4 text-cyan-400" /> : <Square className="w-4 h-4 text-slate-500" />}
                 <div>
                   <span className="text-xs text-slate-300">Watched sync</span>
-                  <p className="text-[10px] text-slate-500">Automatically sync watched status between Atlas and Trakt</p>
+                  <p className="text-[10px] text-slate-500">Automatically sync watched status between Atlas and Simkl</p>
                 </div>
               </div>
             </div>
 
             {traktDeviceCode && (
-              <div className="bg-slate-900/80 border border-green-500/30 rounded-xl p-5 space-y-3">
-                <p className="text-xs text-slate-300 font-medium">Trakt Authorization</p>
+              <div className="bg-slate-900/80 border border-cyan-500/30 rounded-xl p-5 space-y-3">
+                <p className="text-xs text-slate-300 font-medium">Simkl Authorization</p>
                 <p className="text-[10px] text-slate-400">Go to the following URL and enter this PIN:</p>
-                <a href={traktVerificationUrl} target="_blank" rel="noopener noreferrer" className="text-sm font-bold text-green-400 hover:text-green-300 underline block">{traktVerificationUrl}</a>
-                <div className="text-2xl font-black tracking-widest bg-slate-950 px-6 py-3 rounded-xl border border-green-500/30 text-green-300 select-all inline-block">{traktUserCode}</div>
+                <a href={traktVerificationUrl} target="_blank" rel="noopener noreferrer" className="text-sm font-bold text-cyan-400 hover:text-cyan-300 underline block">{traktVerificationUrl}</a>
+                <div className="text-2xl font-black tracking-widest bg-slate-950 px-6 py-3 rounded-xl border border-cyan-500/30 text-cyan-300 select-all inline-block">{traktUserCode}</div>
                 {traktPolling ? (
-                  <div className="flex items-center gap-2 text-xs text-emerald-400">
-                    <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-emerald-500" />
+                  <div className="flex items-center gap-2 text-xs text-cyan-400">
+                    <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-cyan-500" />
                     Waiting for authorization...
                   </div>
                 ) : (

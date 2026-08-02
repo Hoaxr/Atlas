@@ -84,7 +84,7 @@ const fallbackSchedule = (retryCount, config, currentDate) => {
 };
 
 const scheduleMovie = (retryCount, diffHours, config, currentDate, isDownloaded = false) => {
-  let state = 'PENDING';
+  let state;
   let nextMs = currentDate.getTime();
   const preReleaseHours = config.moviePreReleaseDays * -24;
 
@@ -121,7 +121,7 @@ const scheduleMovie = (retryCount, diffHours, config, currentDate, isDownloaded 
 };
 
 const scheduleEpisode = (retryCount, diffHours, config, currentDate, isDownloaded = false) => {
-  let state = 'PENDING';
+  let state;
   let nextMs = currentDate.getTime();
 
   // Give a 1-day buffer for TV episodes because TMDB usually gives local broadcast dates

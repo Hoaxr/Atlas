@@ -176,8 +176,9 @@ export default function Discover() {
   const fetchAllData = async (isBackgroundRefresh = false) => {
     if (!isBackgroundRefresh) setError('');
     
-    const trendingEnd = mode === 'movies' ? '/trakt/trending/movies' : '/trakt/trending/shows';
+    const trendingEnd = mode === 'movies' ? '/tmdb/trending/movies' : '/tmdb/trending/shows';
     const recEnd = mode === 'movies' ? '/tmdb/recommended/movies' : '/tmdb/recommended/shows';
+    const upcomingEnd = mode === 'movies' ? '/tmdb/movies/upcoming' : '/tmdb/shows/upcoming';
 
     // Fire all requests — each updates state independently as it resolves
     const setters = [
@@ -189,10 +190,10 @@ export default function Discover() {
         if (res.data?.status === 'success') setRecommendedResults(res.data.data);
         return res;
       }),
-      mode === 'movies' ? api.get('/tmdb/movies/upcoming').then(res => {
+      api.get(upcomingEnd).then(res => {
         if (res.data?.status === 'success') setUpcomingResults(res.data.data);
         return res;
-      }) : Promise.resolve(null),
+      }),
     ];
 
     try {
@@ -468,8 +469,8 @@ export default function Discover() {
             }}
           >
             {visibleRows.recent && <MediaRow title="Recently Added" items={recentResults} badgeText="From your library" renderMediaCard={renderMediaCard} />}
-            {visibleRows.trending && <MediaRow title="Trending Right Now" items={trendingResults} badgeText="Powered by Trakt.tv" isTrending={true} renderMediaCard={renderMediaCard} />}
-            {visibleRows.upcoming && <MediaRow title="In Cinemas & Upcoming" items={upcomingResults} badgeText="Powered by TMDB" renderMediaCard={renderMediaCard} />}
+            {visibleRows.trending && <MediaRow title="Trending Right Now" items={trendingResults} badgeText="Powered by TMDB" isTrending={true} renderMediaCard={renderMediaCard} />}
+            {visibleRows.upcoming && <MediaRow title={mode === 'movies' ? "In Cinemas & Upcoming" : "Upcoming Shows"} items={upcomingResults} badgeText="Powered by TMDB" renderMediaCard={renderMediaCard} />}
             {visibleRows.recommended && <MediaRow title="Recommended For You" items={recommendedResults} badgeText="Powered by TMDB" renderMediaCard={renderMediaCard} />}
           </div>
         </div>

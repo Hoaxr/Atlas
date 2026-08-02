@@ -36,8 +36,8 @@ export default function UserPortal() {
         api.get('/requests'),
         api.get('/library/movies'),
         api.get('/library/shows'),
-        api.get('/trakt/trending/movies'),
-        api.get('/trakt/trending/shows')
+        api.get('/tmdb/trending/movies'),
+        api.get('/tmdb/trending/shows')
       ]);
       let reqs = reqsRes.data?.data || [];
 

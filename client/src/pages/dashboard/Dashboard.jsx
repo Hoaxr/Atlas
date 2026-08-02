@@ -294,7 +294,7 @@ export default function Dashboard() {
             const minLoadTime = new Promise(resolve => setTimeout(resolve, 600));
             const imagePreloads = Promise.all(topItems.map(item => {
               return new Promise(resolve => {
-                const img = new Image();
+                const img = new window.Image();
                 img.src = posterUrl(mode, item.tmdb_id);
                 if (img.decode) {
                   img.decode().then(resolve).catch(resolve);

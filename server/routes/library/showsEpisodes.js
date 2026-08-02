@@ -15,11 +15,16 @@ const tmdbService = require('../../services/tmdbService');
 const subtitleService = require('../../services/subtitles');
 const { getMediaMetadata, parseAudioFromFileName } = require('../../utils/videoUtils');
 const { isWatchedSyncEnabled, getSubtitlesInDir, extractLang, translateSrt, LANG_CODE } = require('./helpers');
+const simklService = require('../../services/simklService');
 
-router.post('/shows/:id/watched', (req, res, next) => {
+router.post('/shows/:id/watched', async (req, res, next) => {
   try {
     const { watched } = req.body;
     db.prepare('UPDATE shows SET watched = ?, watched_at = CURRENT_TIMESTAMP WHERE id = ?').run(watched ? 1 : 0, req.params.id);
+    const show = db.prepare('SELECT tmdb_id FROM shows WHERE id = ?').get(req.params.id);
+    if (show?.tmdb_id) {
+      simklService.pushToSimklOnWatched(show.tmdb_id, 'show', !!watched).catch(e => console.error('[SimklSync] Direct push error:', e.message));
+    }
     res.json({ status: 'success', message: watched ? 'Marked as watched' : 'Marked as unwatched' });
   } catch (err) {
     next(err);

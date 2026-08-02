@@ -121,17 +121,17 @@ export default function Statistics() {
 
   const fetchStats = async () => {
     try {
-      const [libRes, traktRes] = await Promise.all([
+      const [libRes, simklRes] = await Promise.all([
         api.get('/library/stats'),
-        api.get('/trakt/stats').catch(() => ({ data: {} }))
+        api.get('/simkl/stats').catch(() => ({ data: {} }))
       ]);
 
       if (libRes.data.status === 'success') {
         setStats(libRes.data.data);
       }
 
-      if (traktRes.data?.status === 'success') setTraktStats(traktRes.data.data);
-      else if (traktRes.data?.error) setTraktStats({ error: traktRes.data.error });
+      if (simklRes.data?.status === 'success') setTraktStats(simklRes.data.data);
+      else if (simklRes.data?.error) setTraktStats({ error: simklRes.data.error });
     } catch (err) {
       console.error('Failed to fetch stats', err);
     } finally {
@@ -183,14 +183,14 @@ export default function Statistics() {
         <HeroCard icon={Star}         label="Avg Rating" value={stats.averageRating}                gradient="from-cyan-600/20 to-cyan-500/5" iconColor="text-cyan-400" iconBg="bg-cyan-500/15" />
       </div>
 
-      {/* ── Trakt watch stats ── */}
+      {/* ── Simkl watch stats ── */}
       {traktStats && !traktStats.error && (
         <div className="glass-panel rounded-2xl p-6 bg-gradient-to-br from-cyan-900/20 to-blue-900/10 border border-cyan-500/20">
           <div className="flex items-center gap-2 mb-5">
             <div className="p-1.5 rounded-lg bg-cyan-500/20">
               <TrendingUp className="w-4 h-4 text-cyan-400" />
             </div>
-            <h2 className="text-base font-bold text-slate-200">Trakt Watch History</h2>
+            <h2 className="text-base font-bold text-slate-200">Simkl Watch History</h2>
           </div>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <TraktCard icon={Film}  label="Movies Watched"   value={traktStats.movies?.watched?.toLocaleString() ?? '–'} />

@@ -54,7 +54,7 @@ router.get('/logs', requireAdmin, (req, res, next) => {
 
     const logs = db.prepare(query).all(...params);
 
-    let parsed = logs.map(log => {
+    const parsed = logs.map(log => {
       try {
         const data = JSON.parse(log.message);
         return { id: log.id, ...data, created_at: log.created_at };

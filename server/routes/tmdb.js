@@ -2,8 +2,21 @@ const express = require('express');
 const router = express.Router();
 const axios = require('axios');
 const tmdbService = require('../services/tmdbService');
-const traktService = require('../services/traktService');
 const db = require('../config/database');
+
+router.get('/trending/movies', async (req, res, next) => {
+  try {
+    const movies = await tmdbService.getTrendingMovies();
+    res.json({ status: 'success', data: movies });
+  } catch (e) { next(e); }
+});
+
+router.get('/trending/shows', async (req, res, next) => {
+  try {
+    const shows = await tmdbService.getTrendingShows();
+    res.json({ status: 'success', data: shows });
+  } catch (e) { next(e); }
+});
 
 router.get('/movies/now-playing', async (req, res, next) => {
   try {
@@ -16,6 +29,13 @@ router.get('/movies/upcoming', async (req, res, next) => {
   try {
     const movies = await tmdbService.getUpcomingMovies();
     res.json({ status: 'success', data: movies });
+  } catch (e) { next(e); }
+});
+
+router.get('/shows/upcoming', async (req, res, next) => {
+  try {
+    const shows = await tmdbService.getUpcomingShows();
+    res.json({ status: 'success', data: shows });
   } catch (e) { next(e); }
 });
 
@@ -101,16 +121,16 @@ router.get('/recommended/:type', async (req, res, next) => {
     }
     let results = type === 'shows' ? await tmdbService.getRecommendationsForShows(libraryIds) : await tmdbService.getRecommendationsForMovies(libraryIds);
 
-    // Exclude already-watched items by checking Trakt API directly
-    const traktSync = db.prepare("SELECT value FROM settings WHERE key = 'traktWatchedSync'").get();
-    if (traktSync && traktSync.value === 'true') {
+    // Exclude already-watched items by checking watched_tmdb table
+    const simklSync = db.prepare("SELECT value FROM settings WHERE key = 'simklWatchedSync'").get();
+    if (simklSync && simklSync.value === 'true') {
       try {
-        const traktType = type === 'shows' ? 'show' : 'movie';
-        const rows = db.prepare('SELECT tmdb_id FROM watched_tmdb WHERE type = ?').all(traktType);
+        const itemType = type === 'shows' ? 'show' : 'movie';
+        const rows = db.prepare('SELECT tmdb_id FROM watched_tmdb WHERE type = ?').all(itemType);
         const watchedSet = new Set(rows.map(r => Number(r.tmdb_id)));
         results = results.filter(item => !watchedSet.has(Number(item.id)));
       } catch (err) {
-        console.error('[Recommendations] Failed to check Trakt watched status:', err.message);
+        console.error('[Recommendations] Failed to check watched status:', err.message);
       }
     }
 
