@@ -36,12 +36,15 @@ const resolvePoster = (title, type) => {
   return result;
 };
 
+const simklService = require('./simklService');
+
 class WatcherService {
   constructor() {
     // Ensure player column exists (self-healing migration)
     try { db.exec("ALTER TABLE play_history ADD COLUMN player TEXT;"); } catch { /* ignore */ }
     
     this.activeSessions = new Set();
+    this.autoWatchedSet = new Set(); // Track sessions already auto-marked to avoid duplicate calls
     this.pollInterval = null;
     this.startPolling();
   }
@@ -325,6 +328,49 @@ class WatcherService {
         } catch (err) {
           console.error('[WatcherService] Failed to record play history:', err.message);
         }
+      }
+
+      // Auto-mark watched at 80% progress
+      if (session.progress >= 80 && !this.autoWatchedSet.has(session.id)) {
+        this.autoWatchedSet.add(session.id);
+        try {
+          if (session.type === 'movie') {
+            const movie = db.prepare('SELECT id, tmdb_id FROM movies WHERE title = ? COLLATE NOCASE').get(session.title);
+            if (movie) {
+              db.prepare('UPDATE movies SET watched = 1, watched_at = CURRENT_TIMESTAMP WHERE id = ?').run(movie.id);
+              console.log(`[WatcherService] Auto-marked movie "${session.title}" as watched at ${Math.round(session.progress)}% for ${session.user}`);
+              if (movie.tmdb_id) {
+                simklService.pushToSimklOnWatched(movie.tmdb_id, 'movie', true).catch(() => {});
+              }
+            }
+          } else if (session.type === 'episode') {
+            // Match show title and SxxExx
+            const match = session.title.match(/^(.*?) - S(\d+)E(\d+)$/i);
+            if (match) {
+              const [, showTitle, seasonNumStr, epNumStr] = match;
+              const seasonNum = parseInt(seasonNumStr, 10);
+              const epNum = parseInt(epNumStr, 10);
+
+              const show = db.prepare('SELECT id, tmdb_id FROM shows WHERE title = ? COLLATE NOCASE').get(showTitle);
+              if (show) {
+                db.prepare('UPDATE episodes SET watched = 1, watched_at = CURRENT_TIMESTAMP WHERE show_id = ? AND season_number = ? AND episode_number = ?').run(show.id, seasonNum, epNum);
+                console.log(`[WatcherService] Auto-marked episode "${session.title}" as watched at ${Math.round(session.progress)}% for ${session.user}`);
+                if (show.tmdb_id) {
+                  simklService.pushToSimklOnWatched(show.tmdb_id, 'show', true).catch(() => {});
+                }
+              }
+            }
+          }
+        } catch (err) {
+          console.error('[WatcherService] Failed to auto-mark item as watched:', err.message);
+        }
+      }
+    }
+
+    // Clean up stale session keys from autoWatchedSet
+    for (const id of this.autoWatchedSet) {
+      if (!currentSessionIds.has(id)) {
+        this.autoWatchedSet.delete(id);
       }
     }
 
