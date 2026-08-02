@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../lib/api';
-import { Activity, ShieldCheck, ArrowLeft, ChevronDown, ChevronUp, AlertTriangle, XCircle, Search } from 'lucide-react';
+import { Activity, ShieldCheck, ArrowLeft, ChevronDown, ChevronUp, Search } from 'lucide-react';
 import { useStickyBar } from '../lib/useStickyBar';
 import StickyBar from '../components/shared/StickyBar';
 

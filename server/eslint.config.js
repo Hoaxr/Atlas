@@ -20,4 +20,10 @@ module.exports = [
   {
     ignores: ['node_modules/**'],
   },
+  {
+    files: ['tests/**'],
+    languageOptions: {
+      sourceType: 'module',
+    },
+  },
 ];

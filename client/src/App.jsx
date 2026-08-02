@@ -24,6 +24,8 @@ const UserPortal = lazy(() => import('./pages/UserPortal'));
 const Requests = lazy(() => import('./pages/Requests'));
 const Watcher = lazy(() => import('./pages/Watcher'));
 
+import ProtectedRoute from './components/layout/ProtectedRoute';
+
 function PageFallback() {
   return (
     <div className="flex items-center justify-center h-96">
@@ -54,26 +56,28 @@ function App() {
           <BrowserRouter>
             <Routes>
               <Route path="/login" element={<LazyPage><Login /></LazyPage>} />
-              <Route path="/" element={<Layout />}>
-                <Route index element={<Navigate to="/discover" replace />} />
-                <Route path="movies" element={<Dashboard key="movies-view" />} />
-                <Route path="shows" element={<Dashboard key="shows-view" />} />
-                <Route path="movies/:id" element={<MovieDetails />} />
-                <Route path="shows/:id" element={<ShowDetails />} />
-                <Route path="downloads" element={<LazyPage><Downloads /></LazyPage>} />
-                <Route path="discover" element={<Discover />} />
-                <Route path="tasks" element={<LazyPage><SystemTasks /></LazyPage>} />
-                <Route path="settings" element={<LazyPage><Settings /></LazyPage>} />
-                <Route path="status" element={<LazyPage><Status /></LazyPage>} />
-                <Route path="calendar" element={<LazyPage><Calendar /></LazyPage>} />
-                <Route path="stats" element={<LazyPage><Statistics /></LazyPage>} />
-                <Route path="stats/health" element={<LazyPage><MediaHealth /></LazyPage>} />
-                <Route path="stats/cleanup" element={<LazyPage><CleanupCandidates /></LazyPage>} />
-                <Route path="requests" element={<LazyPage><Requests /></LazyPage>} />
-                <Route path="watcher" element={<LazyPage><Watcher /></LazyPage>} />
-                <Route path="person/:id" element={<LazyPage><PersonDetails /></LazyPage>} />
+              <Route element={<ProtectedRoute />}>
+                <Route path="/" element={<Layout />}>
+                  <Route index element={<Navigate to="/discover" replace />} />
+                  <Route path="movies" element={<Dashboard key="movies-view" />} />
+                  <Route path="shows" element={<Dashboard key="shows-view" />} />
+                  <Route path="movies/:id" element={<MovieDetails />} />
+                  <Route path="shows/:id" element={<ShowDetails />} />
+                  <Route path="downloads" element={<LazyPage><Downloads /></LazyPage>} />
+                  <Route path="discover" element={<Discover />} />
+                  <Route path="tasks" element={<LazyPage><SystemTasks /></LazyPage>} />
+                  <Route path="settings" element={<LazyPage><Settings /></LazyPage>} />
+                  <Route path="status" element={<LazyPage><Status /></LazyPage>} />
+                  <Route path="calendar" element={<LazyPage><Calendar /></LazyPage>} />
+                  <Route path="stats" element={<LazyPage><Statistics /></LazyPage>} />
+                  <Route path="stats/health" element={<LazyPage><MediaHealth /></LazyPage>} />
+                  <Route path="stats/cleanup" element={<LazyPage><CleanupCandidates /></LazyPage>} />
+                  <Route path="requests" element={<LazyPage><Requests /></LazyPage>} />
+                  <Route path="watcher" element={<LazyPage><Watcher /></LazyPage>} />
+                  <Route path="person/:id" element={<LazyPage><PersonDetails /></LazyPage>} />
+                </Route>
+                <Route path="/portal" element={<LazyPage><UserPortal /></LazyPage>} />
               </Route>
-              <Route path="/portal" element={<LazyPage><UserPortal /></LazyPage>} />
             </Routes>
           </BrowserRouter>
         </ThemeProvider>

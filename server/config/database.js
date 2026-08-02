@@ -624,7 +624,7 @@ try {
   db.exec('COMMIT;');
 } catch (err) {
   db.exec('ROLLBACK;');
-  console.error('[DB] Migrations failed. Halting startup.');
+  console.error('[DB] Migrations failed. Halting startup:', err.message);
   process.exit(1);
 }
 
