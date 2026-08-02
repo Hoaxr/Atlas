@@ -356,7 +356,7 @@ class WatcherService {
                 db.prepare('UPDATE episodes SET watched = 1, watched_at = CURRENT_TIMESTAMP WHERE show_id = ? AND season_number = ? AND episode_number = ?').run(show.id, seasonNum, epNum);
                 console.log(`[WatcherService] Auto-marked episode "${session.title}" as watched at ${Math.round(session.progress)}% for ${session.user}`);
                 if (show.tmdb_id) {
-                  simklService.pushToSimklOnWatched(show.tmdb_id, 'show', true).catch(() => {});
+                  simklService.pushToSimklOnWatched(show.tmdb_id, 'show', true, seasonNum, epNum).catch(() => {});
                 }
               }
             }

@@ -144,21 +144,36 @@ const syncWatchedShows = async () => {
 /**
  * Instantly push single item watch status update to Simkl
  */
-const pushToSimklOnWatched = async (tmdbId, type, watched) => {
+const pushToSimklOnWatched = async (tmdbId, type, watched, seasonNumber, episodeNumber) => {
   try {
     const enabled = db.prepare("SELECT value FROM settings WHERE key = 'simklWatchedSync'").get();
     if (!enabled || enabled.value !== 'true') return;
     if (!tmdbId) return;
 
-    const key = type === 'movie' ? 'movies' : 'shows';
     const endpoint = watched ? '/sync/history' : '/sync/history/remove';
+    let payload = {};
 
-    const payload = {
-      [key]: [{ ids: { tmdb: tmdbId } }]
-    };
+    if (type === 'movie') {
+      payload = { movies: [{ ids: { tmdb: tmdbId } }] };
+    } else if (type === 'show') {
+      if (seasonNumber !== undefined && episodeNumber !== undefined) {
+        payload = {
+          shows: [{
+            ids: { tmdb: tmdbId },
+            seasons: [{
+              number: seasonNumber,
+              episodes: [{ number: episodeNumber }]
+            }]
+          }]
+        };
+      } else {
+        payload = { shows: [{ ids: { tmdb: tmdbId } }] };
+      }
+    }
 
     await simklApi.post(endpoint, payload);
-    console.log(`[SimklSync] ${watched ? 'Pushed watched' : 'Removed watched'} for ${type} (TMDB ${tmdbId}) to Simkl`);
+    const detail = type === 'show' && seasonNumber !== undefined ? `S${seasonNumber}E${episodeNumber}` : type;
+    console.log(`[SimklSync] ${watched ? 'Pushed watched' : 'Removed watched'} for ${detail} (TMDB ${tmdbId}) to Simkl`);
   } catch (error) {
     console.error(`[SimklSync] Failed to ${watched ? 'push watched' : 'remove watched'} to Simkl:`, error.message);
   }
