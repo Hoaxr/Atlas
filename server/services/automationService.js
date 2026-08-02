@@ -7,7 +7,6 @@ const indexerService = require('./indexerService');
 const downloadClientService = require('./downloadClientService');
 const taskRegistry = require('./taskRegistry');
 const tmdbService = require('./tmdbService');
-const traktService = require('./traktService');
 const imageService = require('./imageService');
 const eventBus = require('./eventBus');
 const { runWithConcurrency } = require('../utils/concurrency');
