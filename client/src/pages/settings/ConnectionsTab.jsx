@@ -230,14 +230,15 @@ export default function ConnectionsTab({
         notifyOnPlaybackStart: localSettings.notifyOnPlaybackStart.toString(),
         notifyOnRequest: localSettings.notifyOnRequest.toString()
       });
-      // Also save parent API settings (TMDB key, Trakt keys, etc.)
+      // Also save parent API settings (TMDB key, Simkl keys, etc.)
       await api.post('/settings', {
         tmdbApiKey: typeof parentSettings?.tmdbApiKey === 'string' && parentSettings.tmdbApiKey.startsWith('***')
           ? undefined
           : parentSettings?.tmdbApiKey,
-        traktClientId: parentSettings?.traktClientId,
-        traktClientSecret: parentSettings?.traktClientSecret,
-        traktWatchedSync: parentSettings?.traktWatchedSync,
+        simklClientId: typeof parentSettings?.simklClientId === 'string' && parentSettings.simklClientId.startsWith('***')
+          ? undefined
+          : parentSettings?.simklClientId,
+        simklWatchedSync: parentSettings?.simklWatchedSync,
       });
       customAlert('Connection settings saved');
     } catch (err) {
