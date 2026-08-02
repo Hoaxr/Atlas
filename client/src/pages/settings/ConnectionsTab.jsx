@@ -6,7 +6,7 @@ import PasswordInput from '../../components/shared/PasswordInput';
 
 export default function ConnectionsTab({
   settings: parentSettings, setSettings: setParentSettings, handleSave: parentHandleSave,
-  traktDeviceCode, traktUserCode, traktVerificationUrl, traktPolling,
+  simklDeviceCode, simklUserCode, simklVerificationUrl, simklPolling,
   connectSimkl, fetchSettings, keyStatuses
 }) {
   const [localSettings, setLocalSettings] = useState({
@@ -357,7 +357,7 @@ export default function ConnectionsTab({
             </div>
 
             <div className="flex items-center gap-3">
-              {!parentSettings?.simklAccessToken && !traktDeviceCode && (
+              {!parentSettings?.simklAccessToken && !simklDeviceCode && (
                 <button
                   onClick={connectSimkl}
                   disabled={!parentSettings?.simklClientId}
@@ -378,13 +378,13 @@ export default function ConnectionsTab({
               </div>
             </div>
 
-            {traktDeviceCode && (
+            {simklDeviceCode && (
               <div className="bg-slate-900/80 border border-cyan-500/30 rounded-xl p-5 space-y-3">
                 <p className="text-xs text-slate-300 font-medium">Simkl Authorization</p>
                 <p className="text-[10px] text-slate-400">Go to the following URL and enter this PIN:</p>
-                <a href={traktVerificationUrl} target="_blank" rel="noopener noreferrer" className="text-sm font-bold text-cyan-400 hover:text-cyan-300 underline block">{traktVerificationUrl}</a>
-                <div className="text-2xl font-black tracking-widest bg-slate-950 px-6 py-3 rounded-xl border border-cyan-500/30 text-cyan-300 select-all inline-block">{traktUserCode}</div>
-                {traktPolling ? (
+                <a href={simklVerificationUrl} target="_blank" rel="noopener noreferrer" className="text-sm font-bold text-cyan-400 hover:text-cyan-300 underline block">{simklVerificationUrl}</a>
+                <div className="text-2xl font-black tracking-widest bg-slate-950 px-6 py-3 rounded-xl border border-cyan-500/30 text-cyan-300 select-all inline-block">{simklUserCode}</div>
+                {simklPolling ? (
                   <div className="flex items-center gap-2 text-xs text-cyan-400">
                     <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-cyan-500" />
                     Waiting for authorization...

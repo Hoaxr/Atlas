@@ -74,10 +74,10 @@ export default function Settings() {
   const [clientStatuses, setClientStatuses] = useState({});
   const [keyStatuses, setKeyStatuses] = useState({});
   const [checkingKeys, setCheckingKeys] = useState(false);
-  const [traktDeviceCode, setTraktDeviceCode] = useState(null);
-  const [traktUserCode, setTraktUserCode] = useState('');
-  const [traktVerificationUrl, setTraktVerificationUrl] = useState('');
-  const [traktPolling, setTraktPolling] = useState(false);
+  const [simklDeviceCode, setSimklDeviceCode] = useState(null);
+  const [simklUserCode, setSimklUserCode] = useState('');
+  const [simklVerificationUrl, setSimklVerificationUrl] = useState('');
+  const [simklPolling, setSimklPolling] = useState(false);
 
   useEffect(() => {
     fetchSettings();
@@ -434,8 +434,8 @@ export default function Settings() {
       try {
         const res = await api.post('/auth/simkl/device-token', { userCode });
         if (res.data.status === 'success') {
-          setTraktPolling(false);
-          setTraktDeviceCode(null);
+          setSimklPolling(false);
+          setSimklDeviceCode(null);
           customAlert('Simkl account linked successfully!');
           fetchSettings();
           return;
@@ -451,8 +451,8 @@ export default function Settings() {
         const msg = err.response?.data?.message || err.message || 'Connection failed';
         customAlert(`Simkl error: ${msg}`, 'error');
       }
-      setTraktPolling(false);
-      setTraktDeviceCode(null);
+      setSimklPolling(false);
+      setSimklDeviceCode(null);
     };
     setTimeout(poll, (interval || 5) * 1000);
   };
@@ -470,10 +470,10 @@ export default function Settings() {
         return;
       }
       const { user_code, verification_url, interval } = dcRes.data.data;
-      setTraktDeviceCode(user_code);
-      setTraktUserCode(user_code);
-      setTraktVerificationUrl(verification_url || 'https://simkl.com/pin');
-      setTraktPolling(true);
+      setSimklDeviceCode(user_code);
+      setSimklUserCode(user_code);
+      setSimklVerificationUrl(verification_url || 'https://simkl.com/pin');
+      setSimklPolling(true);
       pollSimkl(user_code, interval || 5);
     } catch (err) {
       const msg = err.response?.data?.message || err.message || 'Failed to start Simkl authorization';
@@ -631,10 +631,10 @@ export default function Settings() {
               settings={settings}
               setSettings={setSettings}
               handleSave={handleSave}
-              traktDeviceCode={traktDeviceCode}
-              traktUserCode={traktUserCode}
-              traktVerificationUrl={traktVerificationUrl}
-              traktPolling={traktPolling}
+              simklDeviceCode={simklDeviceCode}
+              simklUserCode={simklUserCode}
+              simklVerificationUrl={simklVerificationUrl}
+              simklPolling={simklPolling}
               connectSimkl={connectSimkl}
               fetchSettings={fetchSettings}
               keyStatuses={keyStatuses}
