@@ -163,8 +163,8 @@ export default function Watcher() {
                     </div>
                   </div>
                   <div className="flex-1 min-w-0">
-                    {session.tmdb_id ? (
-                      <Link to={session.type === 'movie' ? `/movies/${session.tmdb_id}` : `/shows/${session.tmdb_id}`}>
+                    {session.media_id ? (
+                      <Link to={session.type === 'movie' ? `/movies/${session.media_id}` : `/shows/${session.media_id}`}>
                         <h3 className="font-bold text-lg text-slate-100 line-clamp-2 leading-tight hover:text-cyan-400 hover:underline transition-colors">
                           {session.title}
                         </h3>

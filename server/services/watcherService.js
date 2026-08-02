@@ -13,23 +13,26 @@ const MAX_POSTER_CACHE = 500;
 const resolvePoster = (title, type) => {
   const key = `${type}:${title}`;
   const cached = posterCache.get(key);
-  if (cached && Date.now() - cached.t < POSTER_CACHE_TTL) return { url: cached.url, tmdb_id: cached.tmdb_id };
+  if (cached && Date.now() - cached.t < POSTER_CACHE_TTL) return { url: cached.url, tmdb_id: cached.tmdb_id, media_id: cached.media_id };
 
   let url = null;
   let tmdb_id = null;
+  let media_id = null;
   try {
     if (type === 'episode' || type === 'tv') {
       const showName = title.split(' - S')[0] || title;
-      const show = db.prepare('SELECT tmdb_id FROM shows WHERE title = ? COLLATE NOCASE').get(showName);
+      const show = db.prepare('SELECT id, tmdb_id FROM shows WHERE title = ? COLLATE NOCASE').get(showName);
       if (show?.tmdb_id) {
         url = `/api/images/shows/${show.tmdb_id}/poster`;
         tmdb_id = show.tmdb_id;
+        media_id = show.id;
       }
     } else if (type === 'movie') {
-      const movie = db.prepare('SELECT tmdb_id FROM movies WHERE title = ? COLLATE NOCASE').get(title);
+      const movie = db.prepare('SELECT id, tmdb_id FROM movies WHERE title = ? COLLATE NOCASE').get(title);
       if (movie?.tmdb_id) {
         url = `/api/images/movies/${movie.tmdb_id}/poster`;
         tmdb_id = movie.tmdb_id;
+        media_id = movie.id;
       }
     }
   } catch { /* ignore */ }
@@ -39,8 +42,8 @@ const resolvePoster = (title, type) => {
     const oldest = posterCache.keys().next().value;
     posterCache.delete(oldest);
   }
-  posterCache.set(key, { url, tmdb_id, t: Date.now() });
-  return { url, tmdb_id };
+  posterCache.set(key, { url, tmdb_id, media_id, t: Date.now() });
+  return { url, tmdb_id, media_id };
 };
 
 const simklService = require('./simklService');
@@ -153,6 +156,7 @@ class WatcherService {
           server: 'Plex',
           poster: posterUrl,
           tmdb_id: dbInfo.tmdb_id,
+          media_id: dbInfo.media_id,
           // Stream details
           quality,
           videoDecision: decisionLabel(videoStream.decision),
@@ -255,6 +259,7 @@ class WatcherService {
           server: serverLabel,
           poster: posterUrl,
           tmdb_id: dbInfo.tmdb_id,
+          media_id: dbInfo.media_id,
           quality,
           videoDecision: playMethodLabel,
           audioDecision: playMethodLabel,
