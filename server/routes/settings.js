@@ -860,18 +860,17 @@ router.get('/status', async (req, res) => {
     services.tmdb = { status: 'unconfigured' };
   }
 
-  // Trakt
-  const traktId = getSetting('traktClientId');
-  const traktToken = getSetting('traktAccessToken');
-  if (traktId) {
-    await test('trakt', 'Trakt', async () => {
-      if (traktToken) {
+  // Simkl
+  const simklId = getSetting('simklClientId');
+  const simklToken = getSetting('simklAccessToken');
+  if (simklId) {
+    await test('simkl', 'Simkl', async () => {
+      if (simklToken) {
         try {
-          const r = await axios.get('https://api.trakt.tv/users/me/stats', {
-            headers: { 
-              'trakt-api-version': '2', 
-              'trakt-api-key': traktId,
-              'Authorization': `Bearer ${traktToken}`
+          const r = await axios.get('https://api.simkl.com/users/settings', {
+            headers: {
+              'simkl-api-key': simklId,
+              'Authorization': `Bearer ${simklToken}`
             },
             timeout: 5000
           });
@@ -883,15 +882,14 @@ router.get('/status', async (req, res) => {
           throw e;
         }
       } else {
-        const r = await axios.get('https://api.trakt.tv/movies/trending', {
-          headers: { 'trakt-api-version': '2', 'trakt-api-key': traktId },
+        const r = await axios.get(`https://api.simkl.com/oauth/pin?client_id=${simklId}`, {
           timeout: 5000
         });
         return { status: r.status === 200 ? 'connected' : 'error' };
       }
     });
   } else {
-    services.trakt = { status: 'unconfigured' };
+    services.simkl = { status: 'unconfigured' };
   }
 
   // OpenSubtitles
