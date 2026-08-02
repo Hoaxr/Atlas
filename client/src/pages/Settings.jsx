@@ -368,8 +368,8 @@ export default function Settings() {
       await api.post('/settings', settings);
       invalidateSettingsCache();
       customAlert('Settings saved!', 'success');
-      if (settings.traktWatchedSync && settings.traktAccessToken) {
-        api.post('/tasks/trakt_watched_sync/run').catch(() => {});
+      if (settings.simklWatchedSync && settings.simklAccessToken) {
+        api.post('/tasks/simkl_watched_sync/run').catch(() => {});
       }
     } catch (err) {
       customAlert('Failed to save settings.', 'error');
