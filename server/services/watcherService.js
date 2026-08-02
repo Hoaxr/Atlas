@@ -315,7 +315,7 @@ class WatcherService {
         }
       }
 
-      if (session.progress >= 50) {
+      if (session.progress >= 80) {
         try {
           db.prepare('INSERT OR IGNORE INTO play_history (session_id, user, title, type, server, player) VALUES (?, ?, ?, ?, ?, ?)').run(
             session.id,
