@@ -681,6 +681,44 @@ const MIGRATIONS = [
         db.exec('ALTER TABLE episodes ADD COLUMN watch_progress INTEGER DEFAULT 0;');
       }
     }
+  },
+  {
+    id: 26,
+    name: 'Deduplicate watch_history and fix constraints',
+    run: (db) => {
+      db.exec(`
+        -- Create a temporary table to hold the deduplicated data
+        CREATE TABLE watch_history_new (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          tmdb_id INTEGER NOT NULL,
+          type TEXT NOT NULL,
+          season_number INTEGER,
+          episode_number INTEGER,
+          watched_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          runtime INTEGER
+        );
+
+        -- Insert deduplicated data into the new table
+        -- We group by the unique identifiers and keep the most recent watched_at date
+        INSERT INTO watch_history_new (id, tmdb_id, type, season_number, episode_number, watched_at, runtime)
+        SELECT MIN(id), tmdb_id, type, season_number, episode_number, MAX(watched_at), runtime
+        FROM watch_history
+        GROUP BY tmdb_id, type, IFNULL(season_number, -1), IFNULL(episode_number, -1);
+
+        -- Drop the old table and rename the new one
+        DROP TABLE watch_history;
+        ALTER TABLE watch_history_new RENAME TO watch_history;
+
+        -- Create partial unique indexes to enforce uniqueness properly with NULLs
+        CREATE UNIQUE INDEX idx_watch_history_movies ON watch_history(tmdb_id, type) WHERE type = 'movie';
+        CREATE UNIQUE INDEX idx_watch_history_shows ON watch_history(tmdb_id, type) WHERE type = 'show';
+        CREATE UNIQUE INDEX idx_watch_history_episodes ON watch_history(tmdb_id, type, season_number, episode_number) WHERE type = 'episode';
+
+        -- Recreate regular indexes
+        CREATE INDEX idx_watch_history_tmdb_id ON watch_history(tmdb_id);
+        CREATE INDEX idx_watch_history_type ON watch_history(type);
+      `);
+    }
   }
 ];
 

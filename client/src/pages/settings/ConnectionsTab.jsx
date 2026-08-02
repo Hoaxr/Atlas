@@ -27,6 +27,7 @@ export default function ConnectionsTab({
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [simklPulling, setSimklPulling] = useState(false);
   const [testStatuses, setTestStatuses] = useState({ plex: null, jellyfin: null, emby: null });
   const [testingMedia, setTestingMedia] = useState({ plex: false, jellyfin: false, emby: false });
   const [traktImporting, setTraktImporting] = useState(false);
@@ -210,6 +211,23 @@ export default function ConnectionsTab({
   const handlePlexOAuthCancel = () => {
     setPlexOAuth({ loading: false, pinId: null, code: null, authUrl: null, polling: false });
     customAlert('Plex authentication cancelled', 'info');
+  };
+
+  const handleSimklPull = async () => {
+    if (simklPulling) return;
+    setSimklPulling(true);
+    try {
+      const res = await api.post('/simkl/pull');
+      if (res.data.status === 'success') {
+        customAlert(res.data.message);
+      } else {
+        customAlert('Failed to pull from Simkl');
+      }
+    } catch (e) {
+      customAlert('Failed to pull from Simkl: ' + (e.response?.data?.error || e.message));
+    } finally {
+      setSimklPulling(false);
+    }
   };
 
   const handleTraktImport = async (e) => {
@@ -398,6 +416,17 @@ export default function ConnectionsTab({
                   className="bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold py-2 px-4 rounded-lg text-xs transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Connect with Simkl
+                </button>
+              )}
+              {parentSettings?.simklAccessToken && (
+                <button
+                  onClick={handleSimklPull}
+                  disabled={simklPulling}
+                  className="bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-400 font-bold py-2 px-4 rounded-lg text-xs transition-all flex items-center gap-2"
+                >
+                  {simklPulling ? (
+                    <><div className="animate-spin rounded-full h-3 w-3 border-b-2 border-cyan-500" /> Pulling...</>
+                  ) : 'Pull from Simkl'}
                 </button>
               )}
               <div

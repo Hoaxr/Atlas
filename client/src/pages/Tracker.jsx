@@ -21,6 +21,86 @@ const formatTotalTime = (minutes) => {
   return `${m}m`;
 };
 
+const HistoryItem = ({ item, index, handleMarkUnwatched, handleDeleteHistory }) => {
+  const isMovie = item.type === 'movie';
+  const [localTitle, setLocalTitle] = useState(isMovie ? item.movie_title : item.show_title);
+  const [localPoster, setLocalPoster] = useState(isMovie ? item.movie_poster : item.show_poster);
+
+  useEffect(() => {
+    if (!localTitle && item.tmdb_id) {
+      const fetchTmdb = async () => {
+        try {
+          const res = await api.get(`/tmdb/${isMovie ? 'movie' : 'show'}/${item.tmdb_id}`);
+          if (res.data && res.data.data) {
+            setLocalTitle(isMovie ? res.data.data.title : res.data.data.name);
+            setLocalPoster(res.data.data.poster_path);
+          }
+        } catch (e) {
+          console.error('Failed to fetch tmdb data for history item', e);
+        }
+      };
+      fetchTmdb();
+    }
+  }, [item.tmdb_id, isMovie, localTitle]);
+
+  const title = localTitle || `${isMovie ? 'Movie' : 'Show'} (TMDB: ${item.tmdb_id})`;
+  const poster = localPoster;
+  
+  return (
+    <div key={item.history_id || index} className="p-4 flex items-center gap-4 hover:bg-slate-700/20 transition-colors group">
+      {/* Tiny Poster */}
+      <div className="w-12 h-16 bg-slate-800 rounded overflow-hidden flex-shrink-0">
+        {poster ? (
+          <img src={tmdbImgUrl(poster, 'w200')} alt={title} className="w-full h-full object-cover" />
+        ) : (
+          <div className="w-full h-full flex justify-center items-center">
+            {isMovie ? <Film className="w-5 h-5 text-slate-500" /> : <Tv className="w-5 h-5 text-slate-500" />}
+          </div>
+        )}
+      </div>
+      
+      {/* Info */}
+      <div className="flex-grow min-w-0">
+        <div className="flex items-center gap-2">
+          <span className={`text-xs px-2 py-0.5 rounded-full font-medium flex-shrink-0 ${isMovie ? 'bg-purple-500/20 text-purple-400' : 'bg-emerald-500/20 text-emerald-400'}`}>
+            {isMovie ? 'Movie' : 'Episode'}
+          </span>
+          <span className="text-sm text-slate-400">
+            {new Date(item.watched_at).toLocaleDateString()} {new Date(item.watched_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+          </span>
+        </div>
+        <h4 className="text-slate-100 font-medium text-lg mt-1 truncate">
+          {title}
+        </h4>
+        {!isMovie && item.season_number != null && item.episode_number != null && (
+          <p className="text-sm text-slate-400">
+            S{String(item.season_number).padStart(2, '0')} E{String(item.episode_number).padStart(2, '0')} 
+            {item.episode_title ? ` - ${item.episode_title}` : ''}
+          </p>
+        )}
+      </div>
+
+      {/* Action buttons */}
+      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all flex-shrink-0">
+        <button
+          onClick={() => handleMarkUnwatched(item)}
+          className="p-2 rounded-lg hover:bg-amber-500/10 text-slate-500 hover:text-amber-400 transition-all"
+          title="Mark unwatched"
+        >
+          <Undo2 className="w-4 h-4" />
+        </button>
+        <button
+          onClick={() => handleDeleteHistory(item.history_id)}
+          className="p-2 rounded-lg hover:bg-red-500/10 text-slate-500 hover:text-red-400 transition-all"
+          title="Remove from history"
+        >
+          <Trash2 className="w-4 h-4" />
+        </button>
+      </div>
+    </div>
+  );
+};
+
 const Tracker = () => {
   const navigate = useNavigate();
   const [stats, setStats] = useState(null);
@@ -435,65 +515,15 @@ const Tracker = () => {
         ) : (
           <div className="bg-slate-800/40 rounded-2xl border border-slate-700/50 overflow-hidden">
             <div className="divide-y divide-slate-700/50">
-              {history.map((item, index) => {
-                const isMovie = item.type === 'movie';
-                const title = isMovie ? item.movie_title || `Movie (TMDB: ${item.tmdb_id})` : item.show_title || `Show (TMDB: ${item.tmdb_id})`;
-                const poster = isMovie ? item.movie_poster : item.show_poster;
-                
-                return (
-                  <div key={item.history_id || index} className="p-4 flex items-center gap-4 hover:bg-slate-700/20 transition-colors group">
-                    {/* Tiny Poster */}
-                    <div className="w-12 h-16 bg-slate-800 rounded overflow-hidden flex-shrink-0">
-                      {poster ? (
-                        <img src={tmdbImgUrl(poster, 'w200')} alt={title} className="w-full h-full object-cover" />
-                      ) : (
-                        <div className="w-full h-full flex justify-center items-center">
-                          {isMovie ? <Film className="w-5 h-5 text-slate-500" /> : <Tv className="w-5 h-5 text-slate-500" />}
-                        </div>
-                      )}
-                    </div>
-                    
-                    {/* Info */}
-                    <div className="flex-grow min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium flex-shrink-0 ${isMovie ? 'bg-purple-500/20 text-purple-400' : 'bg-emerald-500/20 text-emerald-400'}`}>
-                          {isMovie ? 'Movie' : 'Episode'}
-                        </span>
-                        <span className="text-sm text-slate-400">
-                          {new Date(item.watched_at).toLocaleDateString()} {new Date(item.watched_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
-                        </span>
-                      </div>
-                      <h4 className="text-slate-100 font-medium text-lg mt-1 truncate">
-                        {title}
-                      </h4>
-                      {!isMovie && (
-                        <p className="text-sm text-slate-400">
-                          S{String(item.season_number).padStart(2, '0')} E{String(item.episode_number).padStart(2, '0')} 
-                          {item.episode_title ? ` - ${item.episode_title}` : ''}
-                        </p>
-                      )}
-                    </div>
-
-                    {/* Action buttons */}
-                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all flex-shrink-0">
-                      <button
-                        onClick={() => handleMarkUnwatched(item)}
-                        className="p-2 rounded-lg hover:bg-amber-500/10 text-slate-500 hover:text-amber-400 transition-all"
-                        title="Mark unwatched"
-                      >
-                        <Undo2 className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => handleDeleteHistory(item.history_id)}
-                        className="p-2 rounded-lg hover:bg-red-500/10 text-slate-500 hover:text-red-400 transition-all"
-                        title="Remove from history"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
+              {history.map((item, index) => (
+                <HistoryItem 
+                  key={item.history_id || index} 
+                  item={item} 
+                  index={index} 
+                  handleMarkUnwatched={handleMarkUnwatched} 
+                  handleDeleteHistory={handleDeleteHistory} 
+                />
+              ))}
             </div>
           </div>
         )}

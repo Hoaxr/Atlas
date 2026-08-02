@@ -58,21 +58,39 @@ const importTraktJson = async (jsonData) => {
             importedMovies++;
           } else if (type === 'episode' || type === 'episodes' || type === 'show' || type === 'shows') {
              // For episodes, we need season and episode number
-             let season = item.season_number !== undefined ? item.season_number : (item.season !== undefined ? item.season : (item.episode?.season));
-             let episode = item.episode_number !== undefined ? item.episode_number : (item.episode !== undefined && typeof item.episode === 'number' ? item.episode : (item.episode?.number));
-
-             if (season !== undefined && episode !== undefined) {
-               insertHistory.run(tmdbId, 'episode', season, episode, watchedAt);
-               
+             if (item.seasons && Array.isArray(item.seasons)) {
                const show = getShow.get(tmdbId);
-               if (show) {
-                 updateEpisode.run(watchedAt, show.id, season, episode);
+               for (const s of item.seasons) {
+                 const seasonNum = s.number;
+                 if (s.episodes && Array.isArray(s.episodes)) {
+                   for (const ep of s.episodes) {
+                     const episodeNum = ep.number;
+                     const epWatchedAt = ep.last_watched_at || ep.watched_at || watchedAt;
+                     insertHistory.run(tmdbId, 'episode', seasonNum, episodeNum, epWatchedAt);
+                     if (show) {
+                       updateEpisode.run(epWatchedAt, show.id, seasonNum, episodeNum);
+                     }
+                     importedEpisodes++;
+                   }
+                 }
                }
-               importedEpisodes++;
-             } else if (type === 'show' || type === 'shows') {
-                // It's just a show watched status, but Trakt usually tracks episodes
-                // We could insert it as show, but Atlas watch_history primarily cares about episode and movie
-                insertHistory.run(tmdbId, 'show', null, null, watchedAt);
+             } else {
+               let season = item.season_number !== undefined ? item.season_number : (item.season !== undefined ? item.season : (item.episode?.season));
+               let episode = item.episode_number !== undefined ? item.episode_number : (item.episode !== undefined && typeof item.episode === 'number' ? item.episode : (item.episode?.number));
+  
+               if (season !== undefined && episode !== undefined) {
+                 insertHistory.run(tmdbId, 'episode', season, episode, watchedAt);
+                 
+                 const show = getShow.get(tmdbId);
+                 if (show) {
+                   updateEpisode.run(watchedAt, show.id, season, episode);
+                 }
+                 importedEpisodes++;
+               } else if (type === 'show' || type === 'shows') {
+                  // It's just a show watched status, but Trakt usually tracks episodes
+                  // We could insert it as show, but Atlas watch_history primarily cares about episode and movie
+                  insertHistory.run(tmdbId, 'show', null, null, watchedAt);
+               }
              }
           }
         }

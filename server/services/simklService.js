@@ -77,19 +77,23 @@ const syncWatchedMovies = async () => {
     const count = db.transaction((list) => {
       let localCount = 0;
       const insertWatched = db.prepare('INSERT OR REPLACE INTO watched_tmdb (tmdb_id, type) VALUES (?, ?)');
+      const insertHistory = db.prepare('INSERT OR IGNORE INTO watch_history (tmdb_id, type, season_number, episode_number, watched_at) VALUES (?, ?, ?, ?, ?)');
       const getMovieByTmdb = db.prepare('SELECT id FROM movies WHERE tmdb_id = ?');
 
       for (const item of list) {
         const tmdbId = item.ids?.tmdb || item.movie?.ids?.tmdb;
         if (!tmdbId) continue;
 
-        if (item.status === 'completed' || item.watched_at) {
+        const watchedAt = item.last_watched_at || item.watched_at || new Date().toISOString();
+
+        if (item.status === 'completed' || item.watched_at || item.last_watched_at) {
           insertWatched.run(tmdbId, 'movie');
+          insertHistory.run(tmdbId, 'movie', null, null, watchedAt);
         }
 
         const movie = getMovieByTmdb.get(tmdbId);
-        if (movie && (item.status === 'completed' || item.watched_at)) {
-          db.prepare('UPDATE movies SET watched = 1, watched_at = COALESCE(watched_at, CURRENT_TIMESTAMP) WHERE id = ?').run(movie.id);
+        if (movie && (item.status === 'completed' || item.watched_at || item.last_watched_at)) {
+          db.prepare('UPDATE movies SET watched = 1, watched_at = COALESCE(watched_at, ?) WHERE id = ?').run(watchedAt, movie.id);
           localCount++;
         }
       }
@@ -117,17 +121,20 @@ const syncWatchedShows = async () => {
     const count = db.transaction((list) => {
       let localCount = 0;
       const insertWatched = db.prepare('INSERT OR REPLACE INTO watched_tmdb (tmdb_id, type) VALUES (?, ?)');
+      const insertHistory = db.prepare('INSERT OR IGNORE INTO watch_history (tmdb_id, type, season_number, episode_number, watched_at) VALUES (?, ?, ?, ?, ?)');
       const getShowByTmdb = db.prepare('SELECT id FROM shows WHERE tmdb_id = ?');
       const updateShowWatched = db.prepare('UPDATE shows SET watched = 1 WHERE id = ?');
-      const updateEpWatched = db.prepare('UPDATE episodes SET watched = 1, watched_at = COALESCE(watched_at, CURRENT_TIMESTAMP) WHERE show_id = ? AND season_number = ? AND episode_number = ?');
-      const updateAllEpsWatched = db.prepare('UPDATE episodes SET watched = 1, watched_at = COALESCE(watched_at, CURRENT_TIMESTAMP) WHERE show_id = ?');
+      const updateEpWatched = db.prepare('UPDATE episodes SET watched = 1, watched_at = COALESCE(watched_at, ?) WHERE show_id = ? AND season_number = ? AND episode_number = ?');
+      const updateAllEpsWatched = db.prepare('UPDATE episodes SET watched = 1, watched_at = COALESCE(watched_at, ?) WHERE show_id = ?');
 
       for (const item of list) {
         const tmdbId = item.ids?.tmdb || item.show?.ids?.tmdb;
         if (!tmdbId) continue;
         
+        const showWatchedAt = item.last_watched_at || item.watched_at || new Date().toISOString();
+
         // If show status is completed or watched
-        if (item.status === 'completed' || item.watched_at) {
+        if (item.status === 'completed' || item.watched_at || item.last_watched_at) {
           insertWatched.run(tmdbId, 'show');
         }
 
@@ -135,22 +142,30 @@ const syncWatchedShows = async () => {
         if (show) {
           if (item.status === 'completed') {
             updateShowWatched.run(show.id);
-            updateAllEpsWatched.run(show.id);
+            updateAllEpsWatched.run(showWatchedAt, show.id);
           }
+        }
           
-          if (Array.isArray(item.seasons)) {
-            for (const season of item.seasons) {
-              const seasonNum = season.number;
-              if (Array.isArray(season.episodes)) {
-                for (const ep of season.episodes) {
-                  const epNum = ep.number;
-                  updateEpWatched.run(show.id, seasonNum, epNum);
+        if (Array.isArray(item.seasons)) {
+          for (const season of item.seasons) {
+            const seasonNum = season.number;
+            if (Array.isArray(season.episodes)) {
+              for (const ep of season.episodes) {
+                const epNum = ep.number;
+                const epWatchedAt = ep.last_watched_at || ep.watched_at || showWatchedAt;
+                insertHistory.run(tmdbId, 'episode', seasonNum, epNum, epWatchedAt);
+                
+                if (show) {
+                  updateEpWatched.run(epWatchedAt, show.id, seasonNum, epNum);
                 }
               }
             }
           }
-          localCount++;
+        } else if (item.status === 'completed') {
+           insertHistory.run(tmdbId, 'show', null, null, showWatchedAt);
         }
+        
+        if (show) localCount++;
       }
       return localCount;
     })(showsList);
@@ -324,6 +339,8 @@ module.exports = {
   getDeviceCode,
   pollDeviceToken,
   syncWatched,
+  syncWatchedMovies,
+  syncWatchedShows,
   pushWatchedToSimkl,
   pushDryRun,
   pushToSimklOnWatched,
