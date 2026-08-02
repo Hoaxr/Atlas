@@ -719,6 +719,38 @@ const MIGRATIONS = [
         CREATE INDEX idx_watch_history_type ON watch_history(type);
       `);
     }
+  },
+  {
+    id: 27,
+    name: 'Clean up invalid subtitle languages from database',
+    run: (db) => {
+      const { VALID_LANGUAGES } = require('../utils/languages');
+      
+      const cleanSubtitles = (tableName) => {
+        let updated = 0;
+        const rows = db.prepare(`SELECT id, subtitles FROM ${tableName} WHERE subtitles IS NOT NULL AND subtitles != '[]'`).all();
+        
+        const updateStmt = db.prepare(`UPDATE ${tableName} SET subtitles = ? WHERE id = ?`);
+        
+        for (const row of rows) {
+          try {
+            const subs = JSON.parse(row.subtitles);
+            if (!Array.isArray(subs)) continue;
+            
+            const cleanSubs = subs.filter(s => VALID_LANGUAGES.has(s.toLowerCase()));
+            
+            if (cleanSubs.length !== subs.length) {
+              updateStmt.run(JSON.stringify(cleanSubs), row.id);
+              updated++;
+            }
+          } catch(e) {}
+        }
+        console.log(`[DB] Cleaned ${updated} rows in ${tableName} subtitle languages`);
+      };
+
+      cleanSubtitles('movies');
+      cleanSubtitles('episodes');
+    }
   }
 ];
 
