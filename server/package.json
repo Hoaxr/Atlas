@@ -23,6 +23,7 @@
     "helmet": "^7.1.0",
     "jsonwebtoken": "^9.0.3",
     "morgan": "^1.10.0",
+    "multer": "^2.2.0",
     "node-cron": "^4.5.0",
     "node-telegram-bot-api": "^1.2.0",
     "ws": "^8.21.0"

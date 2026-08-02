@@ -13,17 +13,24 @@ const MAX_POSTER_CACHE = 500;
 const resolvePoster = (title, type) => {
   const key = `${type}:${title}`;
   const cached = posterCache.get(key);
-  if (cached && Date.now() - cached.t < POSTER_CACHE_TTL) return cached.url;
+  if (cached && Date.now() - cached.t < POSTER_CACHE_TTL) return { url: cached.url, tmdb_id: cached.tmdb_id };
 
-  let result = null;
+  let url = null;
+  let tmdb_id = null;
   try {
     if (type === 'episode' || type === 'tv') {
       const showName = title.split(' - S')[0] || title;
       const show = db.prepare('SELECT tmdb_id FROM shows WHERE title = ? COLLATE NOCASE').get(showName);
-      if (show?.tmdb_id) result = `/api/images/shows/${show.tmdb_id}/poster`;
+      if (show?.tmdb_id) {
+        url = `/api/images/shows/${show.tmdb_id}/poster`;
+        tmdb_id = show.tmdb_id;
+      }
     } else if (type === 'movie') {
       const movie = db.prepare('SELECT tmdb_id FROM movies WHERE title = ? COLLATE NOCASE').get(title);
-      if (movie?.tmdb_id) result = `/api/images/movies/${movie.tmdb_id}/poster`;
+      if (movie?.tmdb_id) {
+        url = `/api/images/movies/${movie.tmdb_id}/poster`;
+        tmdb_id = movie.tmdb_id;
+      }
     }
   } catch { /* ignore */ }
 
@@ -32,8 +39,8 @@ const resolvePoster = (title, type) => {
     const oldest = posterCache.keys().next().value;
     posterCache.delete(oldest);
   }
-  posterCache.set(key, { url: result, t: Date.now() });
-  return result;
+  posterCache.set(key, { url, tmdb_id, t: Date.now() });
+  return { url, tmdb_id };
 };
 
 const simklService = require('./simklService');
@@ -123,11 +130,11 @@ class WatcherService {
         const etaStr = etaTime ? etaTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : null;
 
         // Build poster URL: try DB lookup first (English titles), fall back to Plex thumb
-        const dbPoster = resolvePoster(s.type === 'episode' ? s.grandparentTitle : s.title, s.type);
+        const dbInfo = resolvePoster(s.type === 'episode' ? s.grandparentTitle : s.title, s.type);
         const plexThumb = s.type === 'episode' 
           ? (s.grandparentThumb || s.thumb) 
           : s.thumb;
-        const posterUrl = dbPoster 
+        const posterUrl = dbInfo.url 
           || (plexThumb ? `/api/watcher/image?server=plex&path=${encodeURIComponent(plexThumb)}` : null);
 
         return {
@@ -145,6 +152,7 @@ class WatcherService {
           state: s.Player?.state || 'playing',
           server: 'Plex',
           poster: posterUrl,
+          tmdb_id: dbInfo.tmdb_id,
           // Stream details
           quality,
           videoDecision: decisionLabel(videoStream.decision),
@@ -227,6 +235,10 @@ class WatcherService {
             ? `${item.SeriesName} - S${String(item.ParentIndexNumber).padStart(2, '0')}E${String(item.IndexNumber).padStart(2, '0')}` 
             : item.Name;
 
+        const dbInfo = resolvePoster(item.Type === 'Episode' ? item.SeriesName : item.Name, item.Type === 'Episode' ? 'episode' : 'movie');
+        const posterUrl = dbInfo.url 
+          || `/api/watcher/image?server=${serverLabel.toLowerCase()}&id=${item.Id}`;
+
         return {
           id: `${serverLabel.toLowerCase()}_${s.Id}`,
           user: s.UserName || 'Unknown',
@@ -235,13 +247,14 @@ class WatcherService {
           player: s.Client || serverLabel,
           product: s.Client || null,
           platform: s.DeviceName || null,
-          playerDevice: null,
+          playerDevice: s.DeviceId || null,
           progress: posTicks && totalTicks ? (posTicks / totalTicks) * 100 : 0,
           timeOffset: posTicks ? Math.floor(posTicks / 10000) : 0,
           timeTotal: totalTicks ? Math.floor(totalTicks / 10000) : 0,
           state: s.PlayState?.IsPaused ? 'paused' : 'playing',
           server: serverLabel,
-          poster: resolvePoster(title, type),
+          poster: posterUrl,
+          tmdb_id: dbInfo.tmdb_id,
           quality,
           videoDecision: playMethodLabel,
           audioDecision: playMethodLabel,
@@ -330,40 +343,58 @@ class WatcherService {
         }
       }
 
-      // Auto-mark watched at 80% progress
-      if (session.progress >= 80 && !this.autoWatchedSet.has(session.id)) {
-        this.autoWatchedSet.add(session.id);
-        try {
-          if (session.type === 'movie') {
-            const movie = db.prepare('SELECT id, tmdb_id FROM movies WHERE title = ? COLLATE NOCASE').get(session.title);
-            if (movie) {
-              db.prepare('UPDATE movies SET watched = 1, watched_at = CURRENT_TIMESTAMP WHERE id = ?').run(movie.id);
+      // Update watch_progress and auto-mark watched at 80% progress
+      try {
+        let matchedMovieId = null;
+        let matchedShowId = null;
+        let seasonNum = null;
+        let epNum = null;
+
+        if (session.type === 'movie') {
+          const movie = db.prepare('SELECT id, tmdb_id FROM movies WHERE title = ? COLLATE NOCASE').get(session.title);
+          if (movie) {
+            matchedMovieId = movie.id;
+            // Only update progress if it is not marked as watched
+            db.prepare('UPDATE movies SET watch_progress = ? WHERE id = ? AND watched = 0').run(Math.round(session.progress), movie.id);
+
+            if (session.progress >= 80 && !this.autoWatchedSet.has(session.id)) {
+              this.autoWatchedSet.add(session.id);
+              db.prepare('UPDATE movies SET watched = 1, watched_at = CURRENT_TIMESTAMP, watch_progress = 0 WHERE id = ?').run(movie.id);
               console.log(`[WatcherService] Auto-marked movie "${session.title}" as watched at ${Math.round(session.progress)}% for ${session.user}`);
               if (movie.tmdb_id) {
                 simklService.pushToSimklOnWatched(movie.tmdb_id, 'movie', true).catch(() => {});
               }
             }
-          } else if (session.type === 'episode') {
-            // Match show title and SxxExx
-            const match = session.title.match(/^(.*?) - S(\d+)E(\d+)$/i);
-            if (match) {
-              const [, showTitle, seasonNumStr, epNumStr] = match;
-              const seasonNum = parseInt(seasonNumStr, 10);
-              const epNum = parseInt(epNumStr, 10);
+          }
+        } else if (session.type === 'episode') {
+          const match = session.title.match(/^(.*?) - S(\d+)E(\d+)$/i);
+          if (match) {
+            const [, showTitle, seasonStr, epStr] = match;
+            seasonNum = parseInt(seasonStr, 10);
+            epNum = parseInt(epStr, 10);
 
-              const show = db.prepare('SELECT id, tmdb_id FROM shows WHERE title = ? COLLATE NOCASE').get(showTitle);
-              if (show) {
-                db.prepare('UPDATE episodes SET watched = 1, watched_at = CURRENT_TIMESTAMP WHERE show_id = ? AND season_number = ? AND episode_number = ?').run(show.id, seasonNum, epNum);
-                console.log(`[WatcherService] Auto-marked episode "${session.title}" as watched at ${Math.round(session.progress)}% for ${session.user}`);
-                if (show.tmdb_id) {
-                  simklService.pushToSimklOnWatched(show.tmdb_id, 'show', true, seasonNum, epNum).catch(() => {});
+            const show = db.prepare('SELECT id, tmdb_id FROM shows WHERE title = ? COLLATE NOCASE').get(showTitle);
+            if (show) {
+              matchedShowId = show.id;
+              const episode = db.prepare('SELECT id FROM episodes WHERE show_id = ? AND season_number = ? AND episode_number = ?').get(show.id, seasonNum, epNum);
+              if (episode) {
+                // Only update progress if it is not marked as watched
+                db.prepare('UPDATE episodes SET watch_progress = ? WHERE id = ? AND watched = 0').run(Math.round(session.progress), episode.id);
+
+                if (session.progress >= 80 && !this.autoWatchedSet.has(session.id)) {
+                  this.autoWatchedSet.add(session.id);
+                  db.prepare('UPDATE episodes SET watched = 1, watched_at = CURRENT_TIMESTAMP, watch_progress = 0 WHERE id = ?').run(episode.id);
+                  console.log(`[WatcherService] Auto-marked episode "${session.title}" as watched at ${Math.round(session.progress)}% for ${session.user}`);
+                  if (show.tmdb_id) {
+                    simklService.pushToSimklOnWatched(show.tmdb_id, 'show', true, seasonNum, epNum).catch(() => {});
+                  }
                 }
               }
             }
           }
-        } catch (err) {
-          console.error('[WatcherService] Failed to auto-mark item as watched:', err.message);
         }
+      } catch (err) {
+        console.error('[WatcherService] Failed to auto-mark or update progress:', err.message);
       }
     }
 

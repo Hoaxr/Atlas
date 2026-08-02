@@ -591,8 +591,12 @@ export default function ShowDetails() {
                     <Eye className="w-4 h-4 sm:w-5 sm:h-5 text-purple-400 shrink-0" />
                     <div className="min-w-0 flex-1">
                       <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-widest text-slate-500 block truncate">Watched</span>
-                      <span className={`text-xs sm:text-sm font-semibold block truncate ${show.watched ? 'text-emerald-400' : 'text-slate-500'}`}>
-                        {show.watched ? 'Yes' : 'No'}
+                      <span className={`text-xs sm:text-sm font-semibold block truncate ${
+                        episodes.length > 0 && episodes.every(e => e.watched) ? 'text-emerald-400' : 'text-slate-400'
+                      }`}>
+                        {episodes.length > 0
+                          ? `${episodes.filter(e => e.watched).length}/${episodes.length}`
+                          : '—'}
                       </span>
                     </div>
                   </div>
@@ -770,15 +774,57 @@ export default function ShowDetails() {
                       <tbody className="divide-y divide-white/5">
                         {(() => {
                           const seasonHasDownloads = seasons[season].some(e => e.file_path || e.status === 'downloaded');
+                          const maxEpNumber = Math.max(...seasons[season].map(e => e.episode_number));
                           return seasons[season].map(ep => (
-                          <tr 
-                            key={ep.id} 
+                          <tr
+                            key={ep.id}
                             className="hover:bg-slate-800/50 transition-colors group cursor-pointer"
                             onClick={() => setDetailsModalEpisode(ep)}
                           >
-                            <td className="px-6 py-4 font-mono text-slate-500">{ep.episode_number}</td>
                             <td className="px-6 py-4">
-                              <p className="font-bold text-slate-700 dark:text-slate-200 group-hover:text-purple-400 transition-colors">{ep.title}</p>
+                              <div className="flex items-center gap-3">
+                                <span className="font-mono text-slate-500">{ep.episode_number}</span>
+                                <button
+                                  onClick={async (e) => {
+                                    e.stopPropagation(); e.preventDefault();
+                                    try {
+                                      const newWatched = ep.watched ? 0 : 1;
+                                      await api.post(`/library/episodes/${ep.id}/watched`, { watched: newWatched });
+                                      fetchShowData();
+                                    } catch (err) {
+                                      console.error(err);
+                                    }
+                                  }}
+                                  className={`p-1 rounded-md transition-all flex items-center justify-center ${
+                                    ep.watched
+                                      ? 'text-emerald-400 bg-emerald-500/10 hover:bg-slate-700 hover:text-white'
+                                      : 'text-slate-500 hover:bg-emerald-500/10 hover:text-emerald-400'
+                                  }`}
+                                  title={ep.watched ? 'Mark unwatched' : 'Mark watched'}
+                                >
+                                  <CheckSquare className="w-4 h-4" />
+                                </button>
+                              </div>
+                            </td>
+                            <td className="px-6 py-4">
+                              <div className="flex items-center gap-2">
+                                <p className="font-bold text-slate-700 dark:text-slate-200 group-hover:text-purple-400 transition-colors">{ep.title}</p>
+                                {ep.episode_number === 1 && (
+                                  <span className="px-1.5 py-0.5 rounded text-[9px] uppercase font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 whitespace-nowrap">
+                                    Season Premiere
+                                  </span>
+                                )}
+                                {ep.episode_number === maxEpNumber && maxEpNumber > 1 && (
+                                  <span className="px-1.5 py-0.5 rounded text-[9px] uppercase font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30 whitespace-nowrap">
+                                    Season Finale
+                                  </span>
+                                )}
+                              </div>
+                              {ep.watch_progress > 0 && !ep.watched && (
+                                <div className="w-full max-w-[200px] h-1 bg-slate-800 rounded-full mt-1.5 overflow-hidden">
+                                  <div className="h-full bg-purple-500 rounded-full" style={{ width: `${ep.watch_progress}%` }}></div>
+                                </div>
+                              )}
                               {ep.overview && <p className="text-xs text-slate-500 line-clamp-1 mt-1 max-w-xl">{ep.overview}</p>}
                             </td>
                             <td className="px-6 py-4 text-center">
@@ -926,16 +972,51 @@ export default function ShowDetails() {
                     <div className="md:hidden">
                       {(() => {
                         const seasonHasDownloads = seasons[season].some(e => e.file_path || e.status === 'downloaded');
+                        const maxEpNumber = Math.max(...seasons[season].map(e => e.episode_number));
                         return seasons[season].map(ep => (
                           <div
                             key={ep.id}
                             className="flex items-start gap-3 px-4 py-3.5 border-b border-white/5 last:border-b-0 hover:bg-slate-800/30 transition-colors cursor-pointer"
                             onClick={() => setDetailsModalEpisode(ep)}
                           >
-                            <span className="font-mono text-xs text-slate-500 shrink-0 mt-1 w-5 text-right">{ep.episode_number}</span>
+                            <div className="flex flex-col items-center gap-1 shrink-0 mt-1 w-6">
+                              <span className="font-mono text-xs text-slate-500 text-center">{ep.episode_number}</span>
+                              <button
+                                onClick={async (e) => {
+                                  e.stopPropagation(); e.preventDefault();
+                                  try {
+                                    const newWatched = ep.watched ? 0 : 1;
+                                    await api.post(`/library/episodes/${ep.id}/watched`, { watched: newWatched });
+                                    fetchShowData();
+                                  } catch (err) {
+                                    console.error(err);
+                                  }
+                                }}
+                                className={`p-1 rounded transition-colors flex items-center justify-center ${
+                                  ep.watched
+                                    ? 'text-emerald-400 bg-emerald-500/10'
+                                    : 'text-slate-500 hover:text-emerald-400 hover:bg-emerald-500/10'
+                                }`}
+                                title={ep.watched ? 'Mark unwatched' : 'Mark watched'}
+                              >
+                                <CheckSquare className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
                             <div className="min-w-0 flex-1">
                               <div className="flex items-center justify-between gap-2">
-                                <p className="text-sm font-bold text-slate-200 truncate pr-2">{ep.title}</p>
+                                <div className="flex items-center gap-2 truncate pr-2">
+                                  <p className="text-sm font-bold text-slate-200 truncate">{ep.title}</p>
+                                  {ep.episode_number === 1 && (
+                                    <span className="shrink-0 px-1.5 py-0.5 rounded text-[8px] uppercase font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                                      Premiere
+                                    </span>
+                                  )}
+                                  {ep.episode_number === maxEpNumber && maxEpNumber > 1 && (
+                                    <span className="shrink-0 px-1.5 py-0.5 rounded text-[8px] uppercase font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                                      Finale
+                                    </span>
+                                  )}
+                                </div>
                                 <button
                                   onClick={async (e) => {
                                     e.stopPropagation(); e.preventDefault();
@@ -969,6 +1050,11 @@ export default function ShowDetails() {
                                   {ep.status === 'downloading' ? 'Downloading' : ep.status === 'downloaded' ? 'Downloaded' : !ep.monitored ? 'Unmonitored' : (!ep.file_path && !ep.air_date && !seasonHasDownloads) || (ep.air_date && new Date(ep.air_date) > new Date()) ? 'Not released' : 'Monitored'}
                                 </button>
                               </div>
+                              {ep.watch_progress > 0 && !ep.watched && (
+                                <div className="w-full h-1 bg-slate-800 rounded-full mt-2 overflow-hidden">
+                                  <div className="h-full bg-purple-500 rounded-full" style={{ width: `${ep.watch_progress}%` }}></div>
+                                </div>
+                              )}
                               <div className="flex items-center gap-2 mt-1.5">
                                 <div className="flex items-center gap-1 flex-wrap min-w-0 flex-1">
                                   {!ep.file_path ? (

@@ -306,12 +306,13 @@ const runRefreshMetadata = async () => {
 
         const seasons = await tmdbService.getShowSeasons(show.tmdb_id);
         const insertEp = db.prepare(`
-          INSERT INTO episodes (show_id, season_number, episode_number, title, overview, status, air_date)
-          VALUES (?, ?, ?, ?, ?, 'monitored', ?)
+          INSERT INTO episodes (show_id, season_number, episode_number, title, overview, status, air_date, runtime)
+          VALUES (?, ?, ?, ?, ?, 'monitored', ?, ?)
           ON CONFLICT(show_id, season_number, episode_number) DO UPDATE SET
             title = excluded.title,
             overview = excluded.overview,
-            air_date = excluded.air_date
+            air_date = excluded.air_date,
+            runtime = excluded.runtime
         `);
         
         const tmdbEpisodeKeys = new Set();
@@ -321,7 +322,7 @@ const runRefreshMetadata = async () => {
           for (const ep of episodes) {
             const key = `${ep.season_number}|${ep.episode_number}`;
             tmdbEpisodeKeys.add(key);
-            insertEp.run(show.id, ep.season_number, ep.episode_number, ep.name, ep.overview, ep.air_date);
+            insertEp.run(show.id, ep.season_number, ep.episode_number, ep.name, ep.overview, ep.air_date, ep.runtime || null);
           }
         }
 

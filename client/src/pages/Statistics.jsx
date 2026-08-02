@@ -183,29 +183,7 @@ export default function Statistics() {
         <HeroCard icon={Star}         label="Avg Rating" value={stats.averageRating}                gradient="from-cyan-600/20 to-cyan-500/5" iconColor="text-cyan-400" iconBg="bg-cyan-500/15" />
       </div>
 
-      {/* ── Simkl watch stats ── */}
-      {traktStats && !traktStats.error && (
-        <div className="glass-panel rounded-2xl p-6 bg-gradient-to-br from-cyan-900/20 to-blue-900/10 border border-cyan-500/20">
-          <div className="flex items-center gap-2 mb-5">
-            <div className="p-1.5 rounded-lg bg-cyan-500/20">
-              <TrendingUp className="w-4 h-4 text-cyan-400" />
-            </div>
-            <h2 className="text-base font-bold text-slate-200">Simkl Watch History</h2>
-          </div>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <TraktCard icon={Film}  label="Movies Watched"   value={traktStats.movies?.watched?.toLocaleString() ?? '–'} />
-            <TraktCard icon={Eye}   label="Shows Watched"    value={traktStats.shows?.watched?.toLocaleString()  ?? '–'} />
-            <TraktCard icon={Tv}    label="Episodes Watched" value={traktStats.episodes?.watched?.toLocaleString() ?? '–'} />
-            <TraktCard icon={Clock} label="Watch Time"       value={formatDuration(traktStats.totalMinutes)} />
-          </div>
-        </div>
-      )}
 
-      {traktStats?.error && (
-        <div className="glass-panel rounded-2xl p-4 bg-cyan-500/5 border border-cyan-500/20 text-cyan-400 text-sm flex items-center gap-2">
-          <TrendingUp className="w-4 h-4 shrink-0" /> {traktStats.error}
-        </div>
-      )}
 
       {/* ── Status donuts + Genres ── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

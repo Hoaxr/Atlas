@@ -540,8 +540,13 @@ const simklService = require('../../services/simklService');
 router.post('/:id/watched', async (req, res, next) => {
   try {
     const { watched } = req.body;
-    db.prepare('UPDATE movies SET watched = ?, watched_at = CURRENT_TIMESTAMP WHERE id = ?').run(watched ? 1 : 0, req.params.id);
+    db.prepare(`UPDATE movies SET watched = ?, watched_at = CURRENT_TIMESTAMP${watched ? ', watch_progress = 0' : ''} WHERE id = ?`).run(watched ? 1 : 0, req.params.id);
     const movie = db.prepare('SELECT tmdb_id FROM movies WHERE id = ?').get(req.params.id);
+    
+    if (!watched && movie?.tmdb_id) {
+      db.prepare('DELETE FROM watch_history WHERE tmdb_id = ? AND type = "movie"').run(movie.tmdb_id);
+    }
+
     if (movie?.tmdb_id) {
       simklService.pushToSimklOnWatched(movie.tmdb_id, 'movie', !!watched).catch(e => console.error('[SimklSync] Direct push error:', e.message));
     }

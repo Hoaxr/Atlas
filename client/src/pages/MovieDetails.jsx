@@ -602,11 +602,19 @@ export default function MovieDetails() {
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2.5 sm:gap-3 bg-slate-800/30 dark:bg-slate-900/35 border border-slate-700/30 dark:border-white/5 rounded-xl p-2.5 sm:p-3">
-                    <Eye className="w-4 h-4 sm:w-5 sm:h-5 text-cyan-400 shrink-0" />
+                  <div 
+                    onClick={() => {
+                      const newWatched = movie.watched ? 0 : 1;
+                      api.post(`/library/movies/${movie.id}/watched`, { watched: newWatched })
+                        .then(() => fetchMovieData(true))
+                        .catch(() => customAlert('Failed to toggle watched status', 'error'));
+                    }}
+                    className="flex items-center gap-2.5 sm:gap-3 bg-slate-800/30 dark:bg-slate-900/35 border border-slate-700/30 dark:border-white/5 rounded-xl p-2.5 sm:p-3 cursor-pointer hover:border-emerald-500/30 transition-colors group/watched"
+                  >
+                    <Eye className="w-4 h-4 sm:w-5 sm:h-5 text-cyan-400 shrink-0 group-hover/watched:text-emerald-400 transition-colors" />
                     <div className="min-w-0 flex-1">
                       <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-widest text-slate-500 block truncate">Watched</span>
-                      <span className={`text-xs sm:text-sm font-semibold block truncate ${movie.watched ? 'text-emerald-400' : 'text-slate-500'}`}>
+                      <span className={`text-xs sm:text-sm font-semibold block truncate transition-colors ${movie.watched ? 'text-emerald-400' : 'text-slate-500 group-hover/watched:text-emerald-400'}`}>
                         {movie.watched ? 'Yes' : 'No'}
                       </span>
                     </div>

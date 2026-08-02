@@ -4,38 +4,59 @@ const axios = require('axios');
 const tmdbService = require('../services/tmdbService');
 const db = require('../config/database');
 
+const enrichWithWatchedStatus = (results, db) => {
+  if (!results || !Array.isArray(results) || results.length === 0) return results;
+
+  const tmdbIds = results.map(r => r.id).filter(id => id);
+  if (tmdbIds.length === 0) return results;
+
+  const placeholders = tmdbIds.map(() => '?').join(',');
+  const watchedRows = db.prepare(`SELECT DISTINCT tmdb_id FROM watch_history WHERE tmdb_id IN (${placeholders})`).all(...tmdbIds);
+  const watchedSet = new Set(watchedRows.map(r => Number(r.tmdb_id)));
+
+  return results.map(item => ({
+    ...item,
+    watched: watchedSet.has(Number(item.id))
+  }));
+};
+
 router.get('/trending/movies', async (req, res, next) => {
   try {
     const movies = await tmdbService.getTrendingMovies();
-    res.json({ status: 'success', data: movies });
+    const enriched = enrichWithWatchedStatus(movies, db);
+    res.json({ status: 'success', data: enriched });
   } catch (e) { next(e); }
 });
 
 router.get('/trending/shows', async (req, res, next) => {
   try {
     const shows = await tmdbService.getTrendingShows();
-    res.json({ status: 'success', data: shows });
+    const enriched = enrichWithWatchedStatus(shows, db);
+    res.json({ status: 'success', data: enriched });
   } catch (e) { next(e); }
 });
 
 router.get('/movies/now-playing', async (req, res, next) => {
   try {
     const movies = await tmdbService.getRecentMovies();
-    res.json({ status: 'success', data: movies });
+    const enriched = enrichWithWatchedStatus(movies, db);
+    res.json({ status: 'success', data: enriched });
   } catch (e) { next(e); }
 });
 
 router.get('/movies/upcoming', async (req, res, next) => {
   try {
     const movies = await tmdbService.getUpcomingMovies();
-    res.json({ status: 'success', data: movies });
+    const enriched = enrichWithWatchedStatus(movies, db);
+    res.json({ status: 'success', data: enriched });
   } catch (e) { next(e); }
 });
 
 router.get('/shows/upcoming', async (req, res, next) => {
   try {
     const shows = await tmdbService.getUpcomingShows();
-    res.json({ status: 'success', data: shows });
+    const enriched = enrichWithWatchedStatus(shows, db);
+    res.json({ status: 'success', data: enriched });
   } catch (e) { next(e); }
 });
 
@@ -46,7 +67,8 @@ router.get('/search/movie', async (req, res, next) => {
       return res.status(400).json({ status: 'error', message: 'Query is required' });
     }
     const results = await tmdbService.searchMovies(query);
-    res.json({ status: 'success', data: results });
+    const enriched = enrichWithWatchedStatus(results, db);
+    res.json({ status: 'success', data: enriched });
   } catch (e) {
     next(e);
   }
@@ -59,7 +81,8 @@ router.get('/search/show', async (req, res, next) => {
       return res.status(400).json({ status: 'error', message: 'Query is required' });
     }
     const results = await tmdbService.searchShows(query);
-    res.json({ status: 'success', data: results });
+    const enriched = enrichWithWatchedStatus(results, db);
+    res.json({ status: 'success', data: enriched });
   } catch (e) {
     next(e);
   }
@@ -72,7 +95,8 @@ router.get('/search/multi', async (req, res, next) => {
       return res.status(400).json({ status: 'error', message: 'Query is required' });
     }
     const results = await tmdbService.searchMulti(query);
-    res.json({ status: 'success', data: results });
+    const enriched = enrichWithWatchedStatus(results, db);
+    res.json({ status: 'success', data: enriched });
   } catch (e) {
     next(e);
   }
@@ -102,7 +126,8 @@ router.get('/recent/:type', async (req, res, next) => {
   try {
     const type = req.params.type;
     const results = type === 'shows' ? await tmdbService.getRecentShows() : await tmdbService.getRecentMovies();
-    res.json({ status: 'success', data: results });
+    const enriched = enrichWithWatchedStatus(results, db);
+    res.json({ status: 'success', data: enriched });
   } catch (e) {
     next(e);
   }

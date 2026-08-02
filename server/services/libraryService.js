@@ -42,8 +42,8 @@ const addMovie = async (tmdbId, rootFolderPath = null) => {
   const defaultProfileId = defaultProfile?.id || null;
 
   const insert = db.prepare(`
-    INSERT INTO movies (tmdb_id, title, year, poster_path, overview, status, rating, genres, quality_profile_id, release_date)
-    VALUES (?, ?, ?, ?, ?, 'monitored', ?, ?, ?, ?)
+    INSERT INTO movies (tmdb_id, title, year, poster_path, overview, status, rating, genres, quality_profile_id, release_date, runtime)
+    VALUES (?, ?, ?, ?, ?, 'monitored', ?, ?, ?, ?, ?)
   `);
   
   const result = insert.run(
@@ -55,7 +55,8 @@ const addMovie = async (tmdbId, rootFolderPath = null) => {
     movieDetails.vote_average || 0,
     genres,
     defaultProfileId,
-    releaseDate || null
+    releaseDate || null,
+    movieDetails.runtime || null
   );
 
   // Pre-create the movie folder
@@ -174,9 +175,11 @@ const addShow = async (tmdbId, rootFolderPath = null, monitorLevel = 'all') => {
   const defaultProfile = db.prepare('SELECT id FROM quality_profiles ORDER BY id ASC LIMIT 1').get();
   const defaultProfileId = defaultProfile?.id || null;
 
+  const runtime = showDetails.episode_run_time?.length ? Math.round(showDetails.episode_run_time.reduce((a, b) => a + b, 0) / showDetails.episode_run_time.length) : null;
+
   const insert = db.prepare(`
-    INSERT INTO shows (tmdb_id, title, year, poster_path, overview, status, rating, genres, tmdb_status, quality_profile_id)
-    VALUES (?, ?, ?, ?, ?, 'monitored', ?, ?, ?, ?)
+    INSERT INTO shows (tmdb_id, title, year, poster_path, overview, status, rating, genres, tmdb_status, quality_profile_id, runtime)
+    VALUES (?, ?, ?, ?, ?, 'monitored', ?, ?, ?, ?, ?)
   `);
   
   const result = insert.run(
@@ -188,7 +191,8 @@ const addShow = async (tmdbId, rootFolderPath = null, monitorLevel = 'all') => {
     showDetails.vote_average || 0,
     genres,
     showDetails.status || '',
-    defaultProfileId
+    defaultProfileId,
+    runtime
   );
   
   const internalShowId = result.lastInsertRowid;
@@ -202,8 +206,8 @@ const addShow = async (tmdbId, rootFolderPath = null, monitorLevel = 'all') => {
       const seasons = await tmdbService.getShowSeasons(tmdbId);
       const insertEpSync = db.transaction((eps) => {
         const insertEp = db.prepare(`
-          INSERT INTO episodes (show_id, season_number, episode_number, title, overview, status, air_date, monitored)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+          INSERT INTO episodes (show_id, season_number, episode_number, title, overview, status, air_date, monitored, runtime)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
           ON CONFLICT(show_id, season_number, episode_number) DO NOTHING
         `);
         
@@ -224,7 +228,7 @@ const addShow = async (tmdbId, rootFolderPath = null, monitorLevel = 'all') => {
 
           const initialStatus = isMonitored ? 'monitored' : 'missing';
 
-          insertEp.run(internalShowId, ep.season_number, ep.episode_number, ep.name, ep.overview, initialStatus, ep.air_date, isMonitored);
+          insertEp.run(internalShowId, ep.season_number, ep.episode_number, ep.name, ep.overview, initialStatus, ep.air_date, isMonitored, ep.runtime || null);
         }
       });
       

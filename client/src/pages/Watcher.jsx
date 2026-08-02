@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import api from '../lib/api';
 import { Play, Pause, Tv, Film, User, Activity, Trophy, Monitor, Zap, Wifi, Clock, Subtitles, HardDrive, Volume2, Video, TrendingUp, Hash, Eye, MonitorPlay, RotateCcw, History } from 'lucide-react';
 import { customAlert } from '../utils/alerts';
@@ -162,9 +163,17 @@ export default function Watcher() {
                     </div>
                   </div>
                   <div className="flex-1 min-w-0">
-                    <h3 className="font-bold text-lg text-slate-100 line-clamp-2 leading-tight group-hover:text-cyan-400 transition-colors">
-                      {session.title}
-                    </h3>
+                    {session.tmdb_id ? (
+                      <Link to={session.type === 'movie' ? `/movies/${session.tmdb_id}` : `/shows/${session.tmdb_id}`}>
+                        <h3 className="font-bold text-lg text-slate-100 line-clamp-2 leading-tight hover:text-cyan-400 hover:underline transition-colors">
+                          {session.title}
+                        </h3>
+                      </Link>
+                    ) : (
+                      <h3 className="font-bold text-lg text-slate-100 line-clamp-2 leading-tight group-hover:text-cyan-400 transition-colors">
+                        {session.title}
+                      </h3>
+                    )}
                     <div className="flex items-center gap-2 mt-2 flex-wrap">
                       <p className="text-sm text-slate-400 flex items-center gap-1.5 font-medium bg-slate-800/50 px-2.5 py-1 rounded-md border border-white/5">
                         <span className={`w-2 h-2 rounded-full shadow-[0_0_8px_currentColor] ${session.state === 'playing' ? 'bg-emerald-500 text-emerald-500' : 'bg-amber-500 text-amber-500'}`}></span>

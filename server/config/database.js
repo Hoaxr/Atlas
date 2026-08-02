@@ -84,7 +84,8 @@ db.exec(`
     quality_profile_id INTEGER,
     release_date TEXT,
     added_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    ignore_cleanup INTEGER DEFAULT 0
+    ignore_cleanup INTEGER DEFAULT 0,
+    runtime INTEGER
   );
 
   CREATE TABLE IF NOT EXISTS library_paths (
@@ -111,7 +112,8 @@ db.exec(`
     status TEXT DEFAULT 'monitored',
     folder_path TEXT,
     quality_profile_id INTEGER,
-    added_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    added_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    runtime INTEGER
   );
 
   CREATE TABLE IF NOT EXISTS episodes (
@@ -126,6 +128,7 @@ db.exec(`
     scene_name TEXT,
     air_date TEXT,
     added_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    runtime INTEGER,
     UNIQUE(show_id, season_number, episode_number)
   );
 
@@ -195,6 +198,19 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_movies_file_path ON movies(file_path);
   CREATE INDEX IF NOT EXISTS idx_episodes_file_path ON episodes(file_path);
   CREATE INDEX IF NOT EXISTS idx_requests_tmdb_id ON requests(tmdb_id);
+
+  CREATE TABLE IF NOT EXISTS watch_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tmdb_id INTEGER NOT NULL,
+    type TEXT NOT NULL,
+    season_number INTEGER,
+    episode_number INTEGER,
+    watched_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    runtime INTEGER,
+    UNIQUE(tmdb_id, type, season_number, episode_number)
+  );
+  CREATE INDEX IF NOT EXISTS idx_watch_history_tmdb_id ON watch_history(tmdb_id);
+  CREATE INDEX IF NOT EXISTS idx_watch_history_type ON watch_history(type);
 `);
 
 db.exec(`
@@ -602,6 +618,68 @@ const MIGRATIONS = [
         db.exec('ALTER TABLE episodes ADD COLUMN watched INTEGER DEFAULT 0;');
       }
       db.exec('CREATE INDEX IF NOT EXISTS idx_episodes_watched ON episodes(watched);');
+    }
+  },
+  {
+    id: 19,
+    name: 'Create watch_history table',
+    run: (db) => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS watch_history (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          tmdb_id INTEGER NOT NULL,
+          type TEXT NOT NULL,
+          season_number INTEGER,
+          episode_number INTEGER,
+          watched_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE(tmdb_id, type, season_number, episode_number)
+        );
+        CREATE INDEX IF NOT EXISTS idx_watch_history_tmdb_id ON watch_history(tmdb_id);
+        CREATE INDEX IF NOT EXISTS idx_watch_history_type ON watch_history(type);
+
+        -- Migrate existing watched movies
+        INSERT OR IGNORE INTO watch_history (tmdb_id, type, watched_at)
+        SELECT tmdb_id, 'movie', COALESCE(watched_at, CURRENT_TIMESTAMP)
+        FROM movies
+        WHERE watched = 1 AND tmdb_id IS NOT NULL;
+
+        -- Migrate existing watched episodes
+        INSERT OR IGNORE INTO watch_history (tmdb_id, type, season_number, episode_number, watched_at)
+        SELECT s.tmdb_id, 'episode', e.season_number, e.episode_number, COALESCE(e.watched_at, CURRENT_TIMESTAMP)
+        FROM episodes e
+        JOIN shows s ON e.show_id = s.id
+        WHERE e.watched = 1 AND s.tmdb_id IS NOT NULL;
+      `);
+    }
+  },
+  {
+    id: 20,
+    name: 'Add runtime column',
+    run: (db) => {
+      if (!hasColumn('movies', 'runtime')) {
+        db.exec('ALTER TABLE movies ADD COLUMN runtime INTEGER;');
+      }
+      if (!hasColumn('shows', 'runtime')) {
+        db.exec('ALTER TABLE shows ADD COLUMN runtime INTEGER;');
+      }
+      if (!hasColumn('episodes', 'runtime')) {
+        db.exec('ALTER TABLE episodes ADD COLUMN runtime INTEGER;');
+      }
+      if (!hasColumn('watch_history', 'runtime')) {
+        db.exec('ALTER TABLE watch_history ADD COLUMN runtime INTEGER;');
+      }
+    }
+  },
+  {
+    id: 21,
+    name: 'Add watch_progress column',
+    run: (db) => {
+      if (!hasColumn('movies', 'watch_progress')) {
+        db.exec('ALTER TABLE movies ADD COLUMN watch_progress INTEGER DEFAULT 0;');
+      }
+      if (!hasColumn('episodes', 'watch_progress')) {
+        db.exec('ALTER TABLE episodes ADD COLUMN watch_progress INTEGER DEFAULT 0;');
+      }
     }
   }
 ];

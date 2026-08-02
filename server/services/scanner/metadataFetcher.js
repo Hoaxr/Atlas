@@ -61,8 +61,8 @@ const processScannedFiles = async (allFiles, scanProgress, mode, nextStage) => {
             try {
               const seasons = await tmdbService.getShowSeasons(tmdbId);
               const insertEp = db.prepare(`
-                INSERT INTO episodes (show_id, season_number, episode_number, title, overview, status, air_date, monitored)
-                VALUES (?, ?, ?, ?, ?, 'missing', ?, 0)
+                INSERT INTO episodes (show_id, season_number, episode_number, title, overview, status, air_date, monitored, runtime)
+                VALUES (?, ?, ?, ?, ?, 'missing', ?, 0, ?)
                 ON CONFLICT(show_id, season_number, episode_number) DO NOTHING
               `);
               
@@ -70,7 +70,7 @@ const processScannedFiles = async (allFiles, scanProgress, mode, nextStage) => {
                 if (s.season_number === 0) continue;
                 const eps = await tmdbService.getSeasonEpisodes(tmdbId, s.season_number);
                 for (const ep of eps) {
-                  insertEp.run(showId, ep.season_number, ep.episode_number, ep.name, ep.overview, ep.air_date);
+                  insertEp.run(showId, ep.season_number, ep.episode_number, ep.name, ep.overview, ep.air_date, ep.runtime || null);
                 }
               }
             } catch (epErr) {
@@ -157,8 +157,8 @@ const processScannedFiles = async (allFiles, scanProgress, mode, nextStage) => {
                 try {
                   const seasons = await tmdbService.getShowSeasons(tmdbId);
                   const insertEp = db.prepare(`
-                    INSERT INTO episodes (show_id, season_number, episode_number, title, overview, status, air_date, monitored)
-                    VALUES (?, ?, ?, ?, ?, 'missing', ?, 0)
+                    INSERT INTO episodes (show_id, season_number, episode_number, title, overview, status, air_date, monitored, runtime)
+                    VALUES (?, ?, ?, ?, ?, 'missing', ?, 0, ?)
                     ON CONFLICT(show_id, season_number, episode_number) DO NOTHING
                   `);
                   
@@ -166,7 +166,7 @@ const processScannedFiles = async (allFiles, scanProgress, mode, nextStage) => {
                     if (s.season_number === 0) continue;
                     const eps = await tmdbService.getSeasonEpisodes(tmdbId, s.season_number);
                     for (const ep of eps) {
-                      insertEp.run(showId, ep.season_number, ep.episode_number, ep.name, ep.overview, ep.air_date);
+                      insertEp.run(showId, ep.season_number, ep.episode_number, ep.name, ep.overview, ep.air_date, ep.runtime || null);
                       episodeCount++;
                     }
                   }
