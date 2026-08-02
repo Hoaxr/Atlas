@@ -191,18 +191,18 @@ const doScan = async (mode = 'full') => {
     }
 
     // ════════════════════════════════════════════
-    // Stage: Sync Trakt
+    // Stage: Sync Simkl
     // ════════════════════════════════════════════
     if (syncTrakt) {
-    nextStage('Syncing Trakt watched status...');
-    scanProgress.totalFiles = 1;
-    scanProgress.currentFile = 'Trakt';
-    try {
-      const traktService = require('../traktService');
-      await traktService.syncWatched();
-    } catch { /* Trakt may not be configured */ }
-    scanProgress.processedFiles = 1;
-    } // end syncTrakt
+      nextStage('Syncing Simkl watched status...');
+      scanProgress.totalFiles = 1;
+      scanProgress.currentFile = 'Simkl';
+      try {
+        const simklService = require('../simklService');
+        await simklService.syncWatched();
+      } catch { /* Simkl may not be configured */ }
+      scanProgress.processedFiles = 1;
+    }
 
     if (scanProgress.cancelled) throw new Error('Scan cancelled by user');
 

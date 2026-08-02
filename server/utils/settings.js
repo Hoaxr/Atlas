@@ -31,7 +31,7 @@ const invalidateSettingsCache = () => {
 };
 
 const isWatchedSyncEnabled = () => {
-  return getSetting('traktWatchedSync') === 'true' || getSetting('simklWatchedSync') === 'true';
+  return getSetting('simklWatchedSync') === 'true';
 };
 
 module.exports = { getSetting, setSetting, isWatchedSyncEnabled, invalidateSettingsCache };
