@@ -67,16 +67,15 @@ export function AnimatedUpNextCard({ item, type, onMarkWatched }) {
 
   return (
     <motion.div
-      layout
-      initial={{ opacity: 1, scale: 1 }}
+      initial={{ opacity: 1, scale: 1, y: 0, filter: 'blur(0px)' }}
       animate={
         animState === 'exiting'
           ? { opacity: 0, scale: 0.9, y: -16, filter: 'blur(4px)' }
           : animState === 'animating'
-          ? { scale: 1.01 }
-          : { opacity: 1, scale: 1 }
+          ? { opacity: 1, scale: 1.01, y: 0, filter: 'blur(0px)' }
+          : { opacity: 1, scale: 1, y: 0, filter: 'blur(0px)' }
       }
-      transition={{ duration: 0.4, ease: [0.4, 0, 0.2, 1] }}
+      transition={{ duration: 0.35, ease: [0.4, 0, 0.2, 1] }}
       className={`w-72 sm:w-80 shrink-0 snap-start bg-slate-800/60 border rounded-2xl overflow-hidden transition-colors duration-500 shadow-xl flex flex-col group relative ${
         isCompleted
           ? 'border-cyan-400 shadow-cyan-500/20 shadow-2xl'
