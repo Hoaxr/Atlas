@@ -860,11 +860,17 @@ router.post('/episodes/:id/watched', async (req, res, next) => {
       : 'UPDATE episodes SET watched = ?, watched_at = CURRENT_TIMESTAMP WHERE id = ?';
     db.prepare(updateSql).run(isWatched ? 1 : 0, req.params.id);
 
-    if (!isWatched && ep.show_tmdb_id) {
-      db.prepare('DELETE FROM watch_history WHERE tmdb_id = ? AND type = "episode" AND season_number = ? AND episode_number = ?').run(ep.show_tmdb_id, ep.season_number, ep.episode_number);
-    }
-
     if (ep.show_tmdb_id) {
+      if (isWatched) {
+        try {
+          db.prepare('INSERT OR IGNORE INTO watch_history (tmdb_id, type, season_number, episode_number, watched_at, runtime) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, ?)').run(ep.show_tmdb_id, 'episode', ep.season_number, ep.episode_number, ep.runtime || null);
+        } catch { /* ignore if watch_history table missing or constrained */ }
+      } else {
+        try {
+          db.prepare('DELETE FROM watch_history WHERE tmdb_id = ? AND type = "episode" AND season_number = ? AND episode_number = ?').run(ep.show_tmdb_id, ep.season_number, ep.episode_number);
+        } catch { /* ignore */ }
+      }
+
       simklService.pushToSimklOnWatched(ep.show_tmdb_id, 'show', isWatched, ep.season_number, ep.episode_number).catch(e => console.error('[SimklSync] Direct push error:', e.message));
     }
 
