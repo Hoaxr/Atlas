@@ -139,11 +139,9 @@ const syncWatchedShows = async () => {
         }
 
         const show = getShowByTmdb.get(tmdbId);
-        if (show) {
-          if (item.status === 'completed') {
-            updateShowWatched.run(show.id);
-            updateAllEpsWatched.run(showWatchedAt, show.id);
-          }
+        // Only mark the show as completely watched if Simkl explicitly marks status as completed AND no un-aired/un-watched episodes exist
+        if (show && item.status === 'completed') {
+          updateShowWatched.run(show.id);
         }
           
         if (Array.isArray(item.seasons)) {
