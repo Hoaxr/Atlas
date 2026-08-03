@@ -729,10 +729,10 @@ export default function ShowDetails() {
                           setEpisodes(prev => prev.map(ep => ep.season_number === sNum ? { ...ep, watched: allWatched ? 1 : 0 } : ep));
                         }
                       }}
-                      className={`p-2 rounded-lg transition-colors ${seasons[season].every(ep => ep.watched) ? 'bg-emerald-500/20 text-emerald-400 hover:bg-slate-700 hover:text-white' : 'text-slate-400 hover:bg-emerald-500/20 hover:text-emerald-400'}`}
+                      className={`p-2 rounded-lg transition-all ${seasons[season].every(ep => ep.watched) ? 'bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20' : 'text-slate-500 bg-slate-800/80 hover:bg-slate-700/80 hover:text-slate-300'}`}
                       title="Toggle season watched status"
                     >
-                      {seasons[season].every(ep => ep.watched) ? <CheckSquare className="w-5 h-5" /> : <Square className="w-5 h-5 opacity-60 hover:opacity-100" />}
+                      <CheckSquare className="w-5 h-5" />
                     </button>
                     <h3 className="text-xl font-bold text-purple-400">Season {season}</h3>
                   </div>
@@ -809,14 +809,14 @@ export default function ShowDetails() {
                                       }
                                     }
                                   }}
-                                  className={`p-1 rounded-md transition-all flex items-center justify-center ${
+                                  className={`p-1.5 rounded-lg transition-all flex items-center justify-center ${
                                     Boolean(ep.watched)
-                                      ? 'text-emerald-400 bg-emerald-500/10 hover:bg-slate-700 hover:text-white'
-                                      : 'text-slate-500 hover:bg-emerald-500/10 hover:text-emerald-400'
+                                      ? 'text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20'
+                                      : 'text-slate-500 bg-slate-800/80 hover:bg-slate-700/80 hover:text-slate-300'
                                   }`}
                                   title={ep.watched ? 'Mark unwatched' : 'Mark watched'}
                                 >
-                                  {Boolean(ep.watched) ? <CheckSquare className="w-4 h-4" /> : <Square className="w-4 h-4 opacity-60 hover:opacity-100" />}
+                                  <CheckSquare className="w-4 h-4" />
                                 </button>
                               </div>
                             </td>
@@ -1014,14 +1014,14 @@ export default function ShowDetails() {
                                     }
                                   }
                                 }}
-                                className={`p-1 rounded transition-colors flex items-center justify-center ${
+                                className={`p-1.5 rounded-lg transition-all flex items-center justify-center ${
                                   Boolean(ep.watched)
-                                    ? 'text-emerald-400 bg-emerald-500/10'
-                                    : 'text-slate-500 hover:text-emerald-400 hover:bg-emerald-500/10'
+                                    ? 'text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20'
+                                    : 'text-slate-500 bg-slate-800/80 hover:bg-slate-700/80 hover:text-slate-300'
                                 }`}
                                 title={ep.watched ? 'Mark unwatched' : 'Mark watched'}
                               >
-                                {Boolean(ep.watched) ? <CheckSquare className="w-3.5 h-3.5" /> : <Square className="w-3.5 h-3.5 opacity-60 hover:opacity-100" />}
+                                <CheckSquare className="w-3.5 h-3.5" />
                               </button>
                             </div>
                             <div className="min-w-0 flex-1">
