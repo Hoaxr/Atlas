@@ -275,9 +275,9 @@ const Tracker = () => {
             <Clock className="w-5 h-5" />
           </div>
           <div className="text-2xl font-black text-slate-100">{stats?.total_days} <span className="text-xs font-normal text-slate-400">Days</span></div>
-          <div className="text-xs font-bold text-cyan-400 mt-0.5">Total Watch Time</div>
-          <div className="text-[11px] text-slate-500 mt-2 flex items-center gap-1">
-            <TrendingUp className="w-3 h-3 text-emerald-400" /> +{stats?.this_month_hours || 0}h this month
+          <div className="text-xs font-medium text-slate-400 mt-0.5">Total Watch Time</div>
+          <div className="text-[11px] text-cyan-400/80 mt-2 flex items-center gap-1">
+            <TrendingUp className="w-3 h-3 text-cyan-400" /> +{stats?.this_month_hours || 0}h this month
           </div>
         </div>
 
@@ -287,31 +287,31 @@ const Tracker = () => {
             <Film className="w-5 h-5" />
           </div>
           <div className="text-2xl font-black text-slate-100">{stats?.movies?.count?.toLocaleString()}</div>
-          <div className="text-xs font-bold text-cyan-400 mt-0.5">Movies Watched</div>
-          <div className="text-[11px] text-slate-500 mt-2 flex items-center gap-1">
-            <TrendingUp className="w-3 h-3 text-emerald-400" /> ↑ {stats?.movies?.this_month || 0} this month
+          <div className="text-xs font-medium text-slate-400 mt-0.5">Movies Watched</div>
+          <div className="text-[11px] text-cyan-400/80 mt-2 flex items-center gap-1">
+            <TrendingUp className="w-3 h-3 text-cyan-400" /> ↑ {stats?.movies?.this_month || 0} this month
           </div>
         </div>
 
         {/* Episodes */}
         <div className="glass-panel p-5 rounded-2xl border border-slate-700/50 bg-slate-800/40 hover:bg-slate-800/70 transition-all duration-300 hover:-translate-y-1 shadow-lg group">
-          <div className="p-2.5 rounded-xl bg-emerald-500/10 text-emerald-400 w-fit mb-3 group-hover:scale-110 transition-transform">
+          <div className="p-2.5 rounded-xl bg-cyan-500/10 text-cyan-400 w-fit mb-3 group-hover:scale-110 transition-transform">
             <Tv className="w-5 h-5" />
           </div>
           <div className="text-2xl font-black text-slate-100">{stats?.episodes?.count?.toLocaleString()}</div>
-          <div className="text-xs font-bold text-emerald-400 mt-0.5">Episodes Watched</div>
-          <div className="text-[11px] text-slate-500 mt-2 flex items-center gap-1">
-            <TrendingUp className="w-3 h-3 text-emerald-400" /> ↑ {stats?.episodes?.this_month || 0} this month
+          <div className="text-xs font-medium text-slate-400 mt-0.5">Episodes Watched</div>
+          <div className="text-[11px] text-cyan-400/80 mt-2 flex items-center gap-1">
+            <TrendingUp className="w-3 h-3 text-cyan-400" /> ↑ {stats?.episodes?.this_month || 0} this month
           </div>
         </div>
 
         {/* Shows */}
         <div className="glass-panel p-5 rounded-2xl border border-slate-700/50 bg-slate-800/40 hover:bg-slate-800/70 transition-all duration-300 hover:-translate-y-1 shadow-lg group">
-          <div className="p-2.5 rounded-xl bg-amber-500/10 text-amber-400 w-fit mb-3 group-hover:scale-110 transition-transform">
+          <div className="p-2.5 rounded-xl bg-cyan-500/10 text-cyan-400 w-fit mb-3 group-hover:scale-110 transition-transform">
             <Sparkles className="w-5 h-5" />
           </div>
           <div className="text-2xl font-black text-slate-100">{stats?.shows?.count?.toLocaleString()}</div>
-          <div className="text-xs font-bold text-amber-400 mt-0.5">Shows Watched</div>
+          <div className="text-xs font-medium text-slate-400 mt-0.5">Shows Watched</div>
           <div className="text-[11px] text-slate-500 mt-2">
             {stats?.completed_shows || 0} completed
           </div>
@@ -319,11 +319,11 @@ const Tracker = () => {
 
         {/* Current Streak */}
         <div className="glass-panel p-5 rounded-2xl border border-slate-700/50 bg-slate-800/40 hover:bg-slate-800/70 transition-all duration-300 hover:-translate-y-1 shadow-lg group">
-          <div className="p-2.5 rounded-xl bg-rose-500/10 text-rose-400 w-fit mb-3 group-hover:scale-110 transition-transform">
+          <div className="p-2.5 rounded-xl bg-cyan-500/10 text-cyan-400 w-fit mb-3 group-hover:scale-110 transition-transform">
             <Flame className="w-5 h-5" />
           </div>
           <div className="text-2xl font-black text-slate-100">{stats?.streaks?.current || 0} <span className="text-xs font-normal text-slate-400">Days</span></div>
-          <div className="text-xs font-bold text-rose-400 mt-0.5">Current Streak</div>
+          <div className="text-xs font-medium text-slate-400 mt-0.5">Current Streak</div>
           <div className="text-[11px] text-slate-500 mt-2">
             Best: {stats?.streaks?.longest || 0} days
           </div>
@@ -331,11 +331,11 @@ const Tracker = () => {
 
         {/* Finished Seasons */}
         <div className="glass-panel p-5 rounded-2xl border border-slate-700/50 bg-slate-800/40 hover:bg-slate-800/70 transition-all duration-300 hover:-translate-y-1 shadow-lg group">
-          <div className="p-2.5 rounded-xl bg-teal-500/10 text-teal-400 w-fit mb-3 group-hover:scale-110 transition-transform">
+          <div className="p-2.5 rounded-xl bg-cyan-500/10 text-cyan-400 w-fit mb-3 group-hover:scale-110 transition-transform">
             <CheckCircle2 className="w-5 h-5" />
           </div>
           <div className="text-2xl font-black text-slate-100">{stats?.finished_seasons || 0}</div>
-          <div className="text-xs font-bold text-teal-400 mt-0.5">Seasons Finished</div>
+          <div className="text-xs font-medium text-slate-400 mt-0.5">Seasons Finished</div>
           <div className="text-[11px] text-slate-500 mt-2">
             across {stats?.shows?.count || 0} shows
           </div>
