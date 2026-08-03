@@ -498,7 +498,7 @@ router.post('/mark-watched', async (req, res) => {
         db.prepare('UPDATE movies SET watched = 1, watched_at = ? WHERE id = ?').run(watchedAt, movie.id);
       }
     } else if (type === 'episode') {
-      const show = db.prepare('SELECT id FROM shows WHERE tmdb_id = ?').get(tmdbId);
+      const show = db.prepare('SELECT id FROM shows WHERE tmdb_id = ? OR id = ?').get(tmdbId, tmdbId);
       let epRuntime = null;
       let epId = null;
       const sNum = parseInt(season, 10);
@@ -515,9 +515,13 @@ router.post('/mark-watched', async (req, res) => {
       db.prepare('INSERT INTO watch_history (tmdb_id, type, season_number, episode_number, watched_at, runtime) VALUES (?, ?, ?, ?, ?, ?)').run(tmdbId, 'episode', sNum, eNum, watchedAt, epRuntime);
     }
 
-    // Trigger sync to Simkl if enabled
-    const simklService = require('../services/simklService');
-    simklService.pushToSimklOnWatched(tmdbId, type, true, season, episode);
+    // Trigger sync to Simkl in background if enabled
+    try {
+      const simklService = require('../services/simklService');
+      simklService.pushToSimklOnWatched(tmdbId, type, true, season, episode).catch(e => console.error('[SimklSync] background push error:', e.message));
+    } catch (e) {
+      // ignore
+    }
 
     res.json({ success: true });
   } catch (error) {

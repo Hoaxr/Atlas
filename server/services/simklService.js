@@ -201,7 +201,7 @@ const pushToSimklOnWatched = async (tmdbId, type, watched, seasonNumber, episode
 
     if (type === 'movie') {
       payload = { movies: [{ ids: { tmdb: tmdbId } }] };
-    } else if (type === 'show') {
+    } else if (type === 'show' || type === 'episode') {
       if (seasonNumber !== undefined && episodeNumber !== undefined) {
         payload = {
           shows: [{
