@@ -93,7 +93,6 @@ const syncWatchedMovies = async () => {
           insertHistory.run(tmdbId, 'movie', null, null, watchedAt, runtime);
         }
 
-        const movie = getMovieByTmdb.get(tmdbId);
         if (movie && (item.status === 'completed' || item.watched_at || item.last_watched_at)) {
           db.prepare('UPDATE movies SET watched = 1, watched_at = COALESCE(watched_at, ?) WHERE id = ?').run(watchedAt, movie.id);
           localCount++;
