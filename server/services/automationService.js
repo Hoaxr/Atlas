@@ -157,7 +157,16 @@ const runSearchCycle = async () => {
         AND (e.next_search_at IS NULL OR e.next_search_at <= datetime('now'))
     `).all();
 
-    monitoredEpisodes.forEach(e => e.priority = calculatePriority(e, 'episode'));
+    monitoredEpisodes.forEach(e => {
+      e.priority = calculatePriority(e, 'episode');
+      // Boost recently aired episodes (air date within last 7 days or today) to guarantee top queue placement
+      if (e.air_date) {
+        const airDiffDays = (Date.now() - new Date(e.air_date).getTime()) / (86400 * 1000);
+        if (airDiffDays >= -1 && airDiffDays <= 7) {
+          e.priority += 500;
+        }
+      }
+    });
     monitoredEpisodes.sort((a, b) => b.priority - a.priority);
     monitoredEpisodes = monitoredEpisodes.slice(0, 50);
 
@@ -811,7 +820,7 @@ const runReleaseMonitoring = async () => {
     SET next_search_at = datetime('now'), search_state = 'PENDING'
     WHERE status = 'monitored' 
       AND air_date IS NOT NULL 
-      AND air_date <= date('now', '-1 day')
+      AND air_date <= date('now')
       AND (last_searched_at IS NULL OR last_searched_at < datetime(air_date))
   `).run();
 
