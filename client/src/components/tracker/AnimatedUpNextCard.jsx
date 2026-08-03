@@ -47,20 +47,17 @@ export function AnimatedUpNextCard({ item, type, onMarkWatched }) {
     setAnimState('animating');
 
     // Sequence timing:
-    // 0-500ms: Fill progress bar, glow card, ripple/particle checkmark, switch text to Watched ✓
-    // 800ms: Smooth card slide/fade exit & trigger backend mark watched
+    // 0-650ms: Fill progress bar, glow card, ripple/particle checkmark, switch text to Watched ✓
+    // 700ms: Trigger mark watched to pull next episode into card
     setTimeout(() => {
-      setAnimState('exiting');
-      setTimeout(() => {
-        onMarkWatched(
-          itemKey,
-          tmdbId,
-          type,
-          isEpisode ? item.season_number : undefined,
-          isEpisode ? item.episode_number : undefined
-        );
-      }, 400);
-    }, 850);
+      onMarkWatched(
+        itemKey,
+        tmdbId,
+        type,
+        isEpisode ? item.season_number : undefined,
+        isEpisode ? item.episode_number : undefined
+      );
+    }, 700);
   };
 
   const isCompleted = animState === 'animating' || animState === 'exiting';

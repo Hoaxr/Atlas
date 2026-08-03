@@ -372,7 +372,7 @@ const Tracker = () => {
           <div ref={scrollRef} className="flex gap-5 overflow-x-auto scrollbar-none pb-4 pt-1 snap-x">
             {upNextEpisodes.map(ep => (
               <AnimatedUpNextCard 
-                key={`show-${ep.show_id}`}
+                key={`ep-${ep.episode_id}`}
                 item={ep}
                 type="episode"
                 onMarkWatched={handleMarkWatched}
