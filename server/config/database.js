@@ -756,33 +756,38 @@ const MIGRATIONS = [
     id: 28,
     name: 'Backfill watch_history runtimes',
     run: (db) => {
-      // 1. Backfill movies from movies table
-      db.exec(`
-        UPDATE watch_history
-        SET runtime = (SELECT runtime FROM movies WHERE movies.tmdb_id = watch_history.tmdb_id LIMIT 1)
-        WHERE type = 'movie' AND (runtime IS NULL OR runtime = 0);
-      `);
-      // 2. Backfill episodes from episodes table
-      db.exec(`
-        UPDATE watch_history
-        SET runtime = (
-          SELECT e.runtime 
-          FROM episodes e 
-          JOIN shows s ON e.show_id = s.id 
-          WHERE s.tmdb_id = watch_history.tmdb_id 
-            AND e.season_number = watch_history.season_number 
-            AND e.episode_number = watch_history.episode_number
-            AND e.runtime > 0
-          LIMIT 1
-        )
-        WHERE type = 'episode' AND (runtime IS NULL OR runtime = 0);
-      `);
-      // 3. Fallback episode runtimes from show default runtime
-      db.exec(`
-        UPDATE watch_history
-        SET runtime = (SELECT runtime FROM shows WHERE shows.tmdb_id = watch_history.tmdb_id AND shows.runtime > 0 LIMIT 1)
-        WHERE type = 'episode' AND (runtime IS NULL OR runtime = 0);
-      `);
+      try {
+        db.exec(`
+          UPDATE watch_history
+          SET runtime = (SELECT runtime FROM movies WHERE movies.tmdb_id = watch_history.tmdb_id LIMIT 1)
+          WHERE type = 'movie' AND (runtime IS NULL OR runtime = 0);
+        `);
+      } catch (e) { console.error('[DB Migration 28] Step 1 non-fatal error:', e.message); }
+
+      try {
+        db.exec(`
+          UPDATE watch_history
+          SET runtime = (
+            SELECT e.runtime 
+            FROM episodes e 
+            JOIN shows s ON e.show_id = s.id 
+            WHERE s.tmdb_id = watch_history.tmdb_id 
+              AND e.season_number = watch_history.season_number 
+              AND e.episode_number = watch_history.episode_number
+              AND e.runtime > 0
+            LIMIT 1
+          )
+          WHERE type = 'episode' AND (runtime IS NULL OR runtime = 0);
+        `);
+      } catch (e) { console.error('[DB Migration 28] Step 2 non-fatal error:', e.message); }
+
+      try {
+        db.exec(`
+          UPDATE watch_history
+          SET runtime = (SELECT runtime FROM shows WHERE shows.tmdb_id = watch_history.tmdb_id AND shows.runtime > 0 LIMIT 1)
+          WHERE type = 'episode' AND (runtime IS NULL OR runtime = 0);
+        `);
+      } catch (e) { console.error('[DB Migration 28] Step 3 non-fatal error:', e.message); }
     }
   }
 ];
