@@ -133,8 +133,8 @@ const syncWatchedShows = async () => {
         
         const showWatchedAt = item.last_watched_at || item.watched_at || new Date().toISOString();
 
-        // If show status is completed or watched
-        if (item.status === 'completed' || item.watched_at || item.last_watched_at) {
+        // Only mark show as completed in watched_tmdb table if Simkl status is explicitly completed
+        if (item.status === 'completed') {
           insertWatched.run(tmdbId, 'show');
         }
 
@@ -212,6 +212,11 @@ const pushToSimklOnWatched = async (tmdbId, type, watched, seasonNumber, episode
     }
 
     await simklApi.post(endpoint, payload);
+    if (!watched) {
+      if (type === 'movie' || (type === 'show' && seasonNumber === undefined)) {
+        db.prepare('DELETE FROM watched_tmdb WHERE tmdb_id = ? AND type = ?').run(tmdbId, type);
+      }
+    }
     const detail = type === 'show' && seasonNumber !== undefined ? `S${seasonNumber}E${episodeNumber}` : type;
     console.log(`[SimklSync] ${watched ? 'Pushed watched' : 'Removed watched'} for ${detail} (TMDB ${tmdbId}) to Simkl`);
   } catch (error) {
