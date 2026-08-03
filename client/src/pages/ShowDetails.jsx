@@ -787,12 +787,14 @@ export default function ShowDetails() {
                                 <button
                                   onClick={async (e) => {
                                     e.stopPropagation(); e.preventDefault();
+                                    const newWatched = ep.watched ? 0 : 1;
+                                    setEpisodes(prev => prev.map(item => item.id === ep.id ? { ...item, watched: newWatched } : item));
                                     try {
-                                      const newWatched = ep.watched ? 0 : 1;
                                       await api.post(`/library/episodes/${ep.id}/watched`, { watched: newWatched });
                                       fetchShowData();
                                     } catch (err) {
                                       console.error(err);
+                                      setEpisodes(prev => prev.map(item => item.id === ep.id ? { ...item, watched: ep.watched } : item));
                                     }
                                   }}
                                   className={`p-1 rounded-md transition-all flex items-center justify-center ${
@@ -984,12 +986,14 @@ export default function ShowDetails() {
                               <button
                                 onClick={async (e) => {
                                   e.stopPropagation(); e.preventDefault();
+                                  const newWatched = ep.watched ? 0 : 1;
+                                  setEpisodes(prev => prev.map(item => item.id === ep.id ? { ...item, watched: newWatched } : item));
                                   try {
-                                    const newWatched = ep.watched ? 0 : 1;
                                     await api.post(`/library/episodes/${ep.id}/watched`, { watched: newWatched });
                                     fetchShowData();
                                   } catch (err) {
                                     console.error(err);
+                                    setEpisodes(prev => prev.map(item => item.id === ep.id ? { ...item, watched: ep.watched } : item));
                                   }
                                 }}
                                 className={`p-1 rounded transition-colors flex items-center justify-center ${
