@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { CheckCircle2, Check, Tv, Film } from 'lucide-react';
 import { tmdbImgUrl } from '../../lib/posterUrl';
@@ -16,6 +17,7 @@ const formatRuntime = (minutes) => {
 const PARTICLE_ANGLES = Array.from({ length: 10 }, (_, i) => (i * 36 * Math.PI) / 180);
 
 export function AnimatedUpNextCard({ item, type, onMarkWatched }) {
+  const navigate = useNavigate();
   const [animState, setAnimState] = useState('idle'); // 'idle' | 'animating' | 'exiting'
 
   const isEpisode = type === 'episode';
@@ -26,6 +28,17 @@ export function AnimatedUpNextCard({ item, type, onMarkWatched }) {
   React.useEffect(() => {
     setAnimState('idle');
   }, [itemKey]);
+
+  const handleTitleClick = (e) => {
+    e.stopPropagation();
+    if (isEpisode && item.show_id) {
+      navigate(`/shows/${item.show_id}`);
+    } else if (!isEpisode && item.id) {
+      navigate(`/movies/${item.id}`);
+    } else if (tmdbId) {
+      navigate(`/${isEpisode ? 'shows' : 'movies'}/${tmdbId}`);
+    }
+  };
 
   const handleTriggerWatched = (e) => {
     e.stopPropagation();
@@ -84,7 +97,10 @@ export function AnimatedUpNextCard({ item, type, onMarkWatched }) {
       </AnimatePresence>
 
       {/* THUMBNAIL CONTAINER */}
-      <div className="relative h-40 bg-slate-900 overflow-hidden z-10">
+      <div 
+        onClick={handleTitleClick}
+        className="relative h-40 bg-slate-900 overflow-hidden z-10 cursor-pointer"
+      >
         {item.poster_path ? (
           <motion.img
             src={tmdbImgUrl(item.poster_path, 'w500')}
@@ -184,7 +200,10 @@ export function AnimatedUpNextCard({ item, type, onMarkWatched }) {
       {/* CARD CONTENT */}
       <div className="p-4 flex-1 flex flex-col justify-between space-y-3 z-10">
         <div>
-          <h3 className="font-bold text-slate-100 text-lg truncate group-hover:text-cyan-400 transition-colors">
+          <h3 
+            onClick={handleTitleClick}
+            className="font-bold text-slate-100 text-lg truncate hover:text-cyan-400 transition-colors cursor-pointer"
+          >
             {isEpisode ? item.show_title : item.title}
           </h3>
           <p className="text-xs text-slate-400 truncate mt-0.5">
