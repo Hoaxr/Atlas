@@ -292,7 +292,7 @@ router.get('/stats', async (req, res) => {
   }
 });
 
-router.get('/history', (req, res) => {
+router.get('/history', async (req, res) => {
   try {
     const limit = parseInt(req.query.limit, 10) || 50;
     const offset = parseInt(req.query.offset, 10) || 0;
@@ -304,18 +304,39 @@ router.get('/history', (req, res) => {
         s.title as show_title, s.poster_path as show_poster,
         e.title as episode_title
       FROM watch_history w
-      LEFT JOIN movies m ON w.type = 'movie' AND w.tmdb_id = m.tmdb_id
-      LEFT JOIN shows s ON w.type = 'episode' AND w.tmdb_id = s.tmdb_id
+      LEFT JOIN movies m ON (w.type = 'movie') AND w.tmdb_id = m.tmdb_id
+      LEFT JOIN shows s ON (w.type = 'episode' OR w.type = 'show') AND w.tmdb_id = s.tmdb_id
       LEFT JOIN episodes e ON w.type = 'episode' AND s.id = e.show_id AND w.season_number = e.season_number AND w.episode_number = e.episode_number
       ORDER BY w.watched_at DESC
       LIMIT ? OFFSET ?
     `).all(limit, offset);
 
-    // If local library doesn't have the item, we still return the TMDB ID so frontend can show a placeholder or fetch TMDB
-    // To make the tracker fast, we will rely on frontend querying TMDB for missing posters/titles if they aren't in library.
-    // Or we can query them here (but might be slow for 50 items). Since the user wants to see their history, we return what we have.
+    // Resolve missing titles/posters asynchronously for external watch history items
+    const tmdbService = require('../services/tmdbService');
+    const enrichedHistory = await Promise.all(history.map(async (item) => {
+      if ((item.type === 'movie' && !item.movie_title) || ((item.type === 'episode' || item.type === 'show') && !item.show_title)) {
+        try {
+          if (item.type === 'movie') {
+            const tmdbData = await tmdbService.getMovieById(item.tmdb_id);
+            if (tmdbData) {
+              item.movie_title = tmdbData.title;
+              item.movie_poster = tmdbData.poster_path;
+            }
+          } else {
+            const tmdbData = await tmdbService.getShowById(item.tmdb_id);
+            if (tmdbData) {
+              item.show_title = tmdbData.name || tmdbData.title;
+              item.show_poster = tmdbData.poster_path;
+            }
+          }
+        } catch (e) {
+          // ignore lookup errors
+        }
+      }
+      return item;
+    }));
 
-    res.json({ success: true, history });
+    res.json({ success: true, history: enrichedHistory });
   } catch (error) {
     console.error('[Tracker] /history error:', error);
     res.status(500).json({ error: 'Failed to fetch history' });
@@ -472,7 +493,7 @@ router.post('/mark-watched', async (req, res) => {
 
     if (type === 'movie') {
       const movie = db.prepare('SELECT id, runtime FROM movies WHERE tmdb_id = ?').get(tmdbId);
-      db.prepare('INSERT OR IGNORE INTO watch_history (tmdb_id, type, watched_at, runtime) VALUES (?, ?, ?, ?)').run(tmdbId, 'movie', watchedAt, movie ? movie.runtime : null);
+      db.prepare('INSERT INTO watch_history (tmdb_id, type, watched_at, runtime) VALUES (?, ?, ?, ?)').run(tmdbId, 'movie', watchedAt, movie ? movie.runtime : null);
       if (movie) {
         db.prepare('UPDATE movies SET watched = 1, watched_at = ? WHERE id = ?').run(watchedAt, movie.id);
       }
@@ -489,7 +510,7 @@ router.post('/mark-watched', async (req, res) => {
           db.prepare('UPDATE episodes SET watched = 1, watched_at = ? WHERE id = ?').run(watchedAt, epId);
         }
       }
-      db.prepare('INSERT OR IGNORE INTO watch_history (tmdb_id, type, season_number, episode_number, watched_at, runtime) VALUES (?, ?, ?, ?, ?, ?)').run(tmdbId, 'episode', season, episode, watchedAt, epRuntime);
+      db.prepare('INSERT INTO watch_history (tmdb_id, type, season_number, episode_number, watched_at, runtime) VALUES (?, ?, ?, ?, ?, ?)').run(tmdbId, 'episode', season, episode, watchedAt, epRuntime);
     }
 
     // Trigger sync to Simkl if enabled

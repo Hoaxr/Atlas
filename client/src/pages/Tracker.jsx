@@ -491,8 +491,8 @@ const Tracker = () => {
                     </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
