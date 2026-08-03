@@ -144,13 +144,6 @@ const Tracker = () => {
   }, []);
 
   const handleMarkWatched = async (key, tmdbId, type, season, episode) => {
-    // Optimistically remove completed item from current view
-    if (type === 'episode') {
-      setUpNextEpisodes(prev => prev.filter(ep => `ep-${ep.episode_id}` !== key));
-    } else if (type === 'movie') {
-      setUpNextMovies(prev => prev.filter(m => `movie-${m.id}` !== key));
-    }
-
     try {
       await api.post('/tracker/mark-watched', { tmdbId, type, season, episode });
       await fetchData();
