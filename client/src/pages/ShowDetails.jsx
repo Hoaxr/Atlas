@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import api from '../lib/api';
@@ -202,11 +202,13 @@ export default function ShowDetails() {
   };
 
   // Group by season
-  const seasons = episodes.reduce((acc, ep) => {
-    if (!acc[ep.season_number]) acc[ep.season_number] = [];
-    acc[ep.season_number].push(ep);
-    return acc;
-  }, {});
+  const seasons = useMemo(() => {
+    return episodes.reduce((acc, ep) => {
+      if (!acc[ep.season_number]) acc[ep.season_number] = [];
+      acc[ep.season_number].push(ep);
+      return acc;
+    }, {});
+  }, [episodes]);
 
   const toggleSeason = (season) => {
     setCollapsedSeasons(prev => {
@@ -791,7 +793,8 @@ export default function ShowDetails() {
                                 <button
                                   onClick={async (e) => {
                                     e.stopPropagation(); e.preventDefault();
-                                    const newWatched = ep.watched ? 0 : 1;
+                                    const isCurrentlyWatched = Boolean(ep.watched);
+                                    const newWatched = isCurrentlyWatched ? 0 : 1;
                                     setEpisodes(prev => prev.map(item => item.id === ep.id ? { ...item, watched: newWatched } : item));
                                     if (detailsModalEpisode?.id === ep.id) {
                                       setDetailsModalEpisode(prev => prev ? { ...prev, watched: newWatched } : null);
@@ -807,13 +810,13 @@ export default function ShowDetails() {
                                     }
                                   }}
                                   className={`p-1 rounded-md transition-all flex items-center justify-center ${
-                                    ep.watched
+                                    Boolean(ep.watched)
                                       ? 'text-emerald-400 bg-emerald-500/10 hover:bg-slate-700 hover:text-white'
                                       : 'text-slate-500 hover:bg-emerald-500/10 hover:text-emerald-400'
                                   }`}
                                   title={ep.watched ? 'Mark unwatched' : 'Mark watched'}
                                 >
-                                  {ep.watched ? <CheckSquare className="w-4 h-4" /> : <Square className="w-4 h-4 opacity-60 hover:opacity-100" />}
+                                  {Boolean(ep.watched) ? <CheckSquare className="w-4 h-4" /> : <Square className="w-4 h-4 opacity-60 hover:opacity-100" />}
                                 </button>
                               </div>
                             </td>
@@ -995,7 +998,8 @@ export default function ShowDetails() {
                               <button
                                 onClick={async (e) => {
                                   e.stopPropagation(); e.preventDefault();
-                                  const newWatched = ep.watched ? 0 : 1;
+                                  const isCurrentlyWatched = Boolean(ep.watched);
+                                  const newWatched = isCurrentlyWatched ? 0 : 1;
                                   setEpisodes(prev => prev.map(item => item.id === ep.id ? { ...item, watched: newWatched } : item));
                                   if (detailsModalEpisode?.id === ep.id) {
                                     setDetailsModalEpisode(prev => prev ? { ...prev, watched: newWatched } : null);
@@ -1011,13 +1015,13 @@ export default function ShowDetails() {
                                   }
                                 }}
                                 className={`p-1 rounded transition-colors flex items-center justify-center ${
-                                  ep.watched
+                                  Boolean(ep.watched)
                                     ? 'text-emerald-400 bg-emerald-500/10'
                                     : 'text-slate-500 hover:text-emerald-400 hover:bg-emerald-500/10'
                                 }`}
                                 title={ep.watched ? 'Mark unwatched' : 'Mark watched'}
                               >
-                                {ep.watched ? <CheckSquare className="w-3.5 h-3.5" /> : <Square className="w-3.5 h-3.5 opacity-60 hover:opacity-100" />}
+                                {Boolean(ep.watched) ? <CheckSquare className="w-3.5 h-3.5" /> : <Square className="w-3.5 h-3.5 opacity-60 hover:opacity-100" />}
                               </button>
                             </div>
                             <div className="min-w-0 flex-1">
