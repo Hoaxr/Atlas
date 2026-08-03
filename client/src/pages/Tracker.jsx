@@ -144,6 +144,13 @@ const Tracker = () => {
     setExitingItems(prev => new Set(prev).add(key));
 
     setTimeout(async () => {
+      // Optimistically remove from Up Next lists
+      if (type === 'episode') {
+        setUpNextEpisodes(prev => prev.filter(ep => `ep-${ep.episode_id}` !== key));
+      } else if (type === 'movie') {
+        setUpNextMovies(prev => prev.filter(m => `movie-${m.id}` !== key));
+      }
+
       try {
         await api.post('/tracker/mark-watched', { tmdbId, type, season, episode });
         fetchData();

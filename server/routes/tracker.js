@@ -501,16 +501,18 @@ router.post('/mark-watched', async (req, res) => {
       const show = db.prepare('SELECT id FROM shows WHERE tmdb_id = ?').get(tmdbId);
       let epRuntime = null;
       let epId = null;
+      const sNum = parseInt(season, 10);
+      const eNum = parseInt(episode, 10);
       
       if (show) {
-        const ep = db.prepare('SELECT id, runtime FROM episodes WHERE show_id = ? AND season_number = ? AND episode_number = ?').get(show.id, season, episode);
+        const ep = db.prepare('SELECT id, runtime FROM episodes WHERE show_id = ? AND season_number = ? AND episode_number = ?').get(show.id, sNum, eNum);
         if (ep) {
           epRuntime = ep.runtime;
           epId = ep.id;
           db.prepare('UPDATE episodes SET watched = 1, watched_at = ? WHERE id = ?').run(watchedAt, epId);
         }
       }
-      db.prepare('INSERT INTO watch_history (tmdb_id, type, season_number, episode_number, watched_at, runtime) VALUES (?, ?, ?, ?, ?, ?)').run(tmdbId, 'episode', season, episode, watchedAt, epRuntime);
+      db.prepare('INSERT INTO watch_history (tmdb_id, type, season_number, episode_number, watched_at, runtime) VALUES (?, ?, ?, ?, ?, ?)').run(tmdbId, 'episode', sNum, eNum, watchedAt, epRuntime);
     }
 
     // Trigger sync to Simkl if enabled
