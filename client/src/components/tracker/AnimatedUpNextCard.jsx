@@ -24,10 +24,10 @@ export function AnimatedUpNextCard({ item, type, onMarkWatched }) {
   const itemKey = isEpisode ? `ep-${item.episode_id}` : `movie-${item.id}`;
   const tmdbId = item.tmdb_id;
 
-  // Reset animation state when key/item changes
+  // Reset animation state when episode_id or item.id changes
   React.useEffect(() => {
     setAnimState('idle');
-  }, [itemKey]);
+  }, [item.episode_id, item.id]);
 
   const handleTitleClick = (e) => {
     e.stopPropagation();
