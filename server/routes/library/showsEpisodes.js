@@ -813,8 +813,8 @@ router.post('/shows/:id/wanted', (req, res, next) => {
 
 router.post('/shows/:id/seasons/:season/watched', async (req, res, next) => {
   try {
-    const { watched = 1 } = req.body;
-    const isWatched = !!watched;
+    const { watched } = req.body;
+    const isWatched = watched === undefined ? true : !!watched;
     const result = db.prepare(
       `UPDATE episodes SET watched = ?, watched_at = CURRENT_TIMESTAMP${isWatched ? ', watch_progress = 0' : ''} WHERE show_id = ? AND season_number = ?`
     ).run(isWatched ? 1 : 0, req.params.id, req.params.season);
@@ -836,8 +836,8 @@ router.post('/shows/:id/seasons/:season/watched', async (req, res, next) => {
 
 router.post('/episodes/:id/watched', async (req, res, next) => {
   try {
-    const { watched = 1 } = req.body;
-    const isWatched = !!watched;
+    const { watched } = req.body;
+    const isWatched = watched === undefined ? true : !!watched;
     const ep = db.prepare('SELECT e.*, s.tmdb_id as show_tmdb_id FROM episodes e JOIN shows s ON e.show_id = s.id WHERE e.id = ?').get(req.params.id);
     if (!ep) return res.status(404).json({ status: 'error', message: 'Episode not found' });
 
