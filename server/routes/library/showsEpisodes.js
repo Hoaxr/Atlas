@@ -332,7 +332,11 @@ router.get('/shows/:id/episodes', async (req, res, next) => {
     }));
     
     // Episodes that don't have a file_path still need empty subtitles array
-    const episodesWithSubtitles = episodes.map(ep => ({ ...ep, subtitles: ep.subtitles || [] }));
+    const episodesWithSubtitles = episodes.map(ep => ({
+      ...ep,
+      watched: isWatchedSyncEnabled() ? ep.watched : (ep.watched || 0),
+      subtitles: ep.subtitles || []
+    }));
 
     res.json({ status: 'success', data: episodesWithSubtitles });
   } catch (err) {

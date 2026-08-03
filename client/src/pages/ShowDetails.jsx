@@ -715,18 +715,22 @@ export default function ShowDetails() {
                     <button 
                       onClick={async (e) => {
                         e.stopPropagation(); e.preventDefault();
+                        const sNum = Number(season);
                         const allWatched = seasons[season].every(ep => ep.watched);
+                        const targetWatched = allWatched ? 0 : 1;
+                        setEpisodes(prev => prev.map(ep => ep.season_number === sNum ? { ...ep, watched: targetWatched } : ep));
                         try {
-                          await api.post(`/library/shows/${show.id}/seasons/${season}/watched`, { watched: allWatched ? 0 : 1 });
+                          await api.post(`/library/shows/${show.id}/seasons/${season}/watched`, { watched: targetWatched });
                           fetchShowData();
                         } catch (err) {
                           customAlert('Failed to mark season as watched', 'error');
+                          setEpisodes(prev => prev.map(ep => ep.season_number === sNum ? { ...ep, watched: allWatched ? 1 : 0 } : ep));
                         }
                       }}
                       className={`p-2 rounded-lg transition-colors ${seasons[season].every(ep => ep.watched) ? 'bg-emerald-500/20 text-emerald-400 hover:bg-slate-700 hover:text-white' : 'text-slate-400 hover:bg-emerald-500/20 hover:text-emerald-400'}`}
                       title="Toggle season watched status"
                     >
-                      <CheckSquare className="w-5 h-5" />
+                      {seasons[season].every(ep => ep.watched) ? <CheckSquare className="w-5 h-5" /> : <Square className="w-5 h-5 opacity-60 hover:opacity-100" />}
                     </button>
                     <h3 className="text-xl font-bold text-purple-400">Season {season}</h3>
                   </div>
@@ -789,12 +793,18 @@ export default function ShowDetails() {
                                     e.stopPropagation(); e.preventDefault();
                                     const newWatched = ep.watched ? 0 : 1;
                                     setEpisodes(prev => prev.map(item => item.id === ep.id ? { ...item, watched: newWatched } : item));
+                                    if (detailsModalEpisode?.id === ep.id) {
+                                      setDetailsModalEpisode(prev => prev ? { ...prev, watched: newWatched } : null);
+                                    }
                                     try {
                                       await api.post(`/library/episodes/${ep.id}/watched`, { watched: newWatched });
                                       fetchShowData();
                                     } catch (err) {
                                       console.error(err);
                                       setEpisodes(prev => prev.map(item => item.id === ep.id ? { ...item, watched: ep.watched } : item));
+                                      if (detailsModalEpisode?.id === ep.id) {
+                                        setDetailsModalEpisode(prev => prev ? { ...prev, watched: ep.watched } : null);
+                                      }
                                     }
                                   }}
                                   className={`p-1 rounded-md transition-all flex items-center justify-center ${
@@ -988,12 +998,18 @@ export default function ShowDetails() {
                                   e.stopPropagation(); e.preventDefault();
                                   const newWatched = ep.watched ? 0 : 1;
                                   setEpisodes(prev => prev.map(item => item.id === ep.id ? { ...item, watched: newWatched } : item));
+                                  if (detailsModalEpisode?.id === ep.id) {
+                                    setDetailsModalEpisode(prev => prev ? { ...prev, watched: newWatched } : null);
+                                  }
                                   try {
                                     await api.post(`/library/episodes/${ep.id}/watched`, { watched: newWatched });
                                     fetchShowData();
                                   } catch (err) {
                                     console.error(err);
                                     setEpisodes(prev => prev.map(item => item.id === ep.id ? { ...item, watched: ep.watched } : item));
+                                    if (detailsModalEpisode?.id === ep.id) {
+                                      setDetailsModalEpisode(prev => prev ? { ...prev, watched: ep.watched } : null);
+                                    }
                                   }
                                 }}
                                 className={`p-1 rounded transition-colors flex items-center justify-center ${
