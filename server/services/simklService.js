@@ -77,18 +77,20 @@ const syncWatchedMovies = async () => {
     const count = db.transaction((list) => {
       let localCount = 0;
       const insertWatched = db.prepare('INSERT OR REPLACE INTO watched_tmdb (tmdb_id, type) VALUES (?, ?)');
-      const insertHistory = db.prepare('INSERT OR IGNORE INTO watch_history (tmdb_id, type, season_number, episode_number, watched_at) VALUES (?, ?, ?, ?, ?)');
-      const getMovieByTmdb = db.prepare('SELECT id FROM movies WHERE tmdb_id = ?');
+      const insertHistory = db.prepare('INSERT OR IGNORE INTO watch_history (tmdb_id, type, season_number, episode_number, watched_at, runtime) VALUES (?, ?, ?, ?, ?, ?)');
+      const getMovieByTmdb = db.prepare('SELECT id, runtime FROM movies WHERE tmdb_id = ?');
 
       for (const item of list) {
         const tmdbId = item.ids?.tmdb || item.movie?.ids?.tmdb;
         if (!tmdbId) continue;
 
         const watchedAt = item.last_watched_at || item.watched_at || new Date().toISOString();
+        const movie = getMovieByTmdb.get(tmdbId);
+        const runtime = item.runtime || (movie ? movie.runtime : null);
 
         if (item.status === 'completed' || item.watched_at || item.last_watched_at) {
           insertWatched.run(tmdbId, 'movie');
-          insertHistory.run(tmdbId, 'movie', null, null, watchedAt);
+          insertHistory.run(tmdbId, 'movie', null, null, watchedAt, runtime);
         }
 
         const movie = getMovieByTmdb.get(tmdbId);
@@ -120,10 +122,10 @@ const syncWatchedShows = async () => {
 
     const count = db.transaction((list) => {
       let localCount = 0;
-      const insertWatched = db.prepare('INSERT OR REPLACE INTO watched_tmdb (tmdb_id, type) VALUES (?, ?)');
-      const insertHistory = db.prepare('INSERT OR IGNORE INTO watch_history (tmdb_id, type, season_number, episode_number, watched_at) VALUES (?, ?, ?, ?, ?)');
-      const getShowByTmdb = db.prepare('SELECT id FROM shows WHERE tmdb_id = ?');
+      const insertHistory = db.prepare('INSERT OR IGNORE INTO watch_history (tmdb_id, type, season_number, episode_number, watched_at, runtime) VALUES (?, ?, ?, ?, ?, ?)');
+      const getShowByTmdb = db.prepare('SELECT id, runtime FROM shows WHERE tmdb_id = ?');
       const updateShowWatched = db.prepare('UPDATE shows SET watched = 1 WHERE id = ?');
+      const getEpRuntime = db.prepare('SELECT runtime FROM episodes WHERE show_id = ? AND season_number = ? AND episode_number = ?');
       const updateEpWatched = db.prepare('UPDATE episodes SET watched = 1, watched_at = COALESCE(watched_at, ?) WHERE show_id = ? AND season_number = ? AND episode_number = ?');
       const updateAllEpsWatched = db.prepare('UPDATE episodes SET watched = 1, watched_at = COALESCE(watched_at, ?) WHERE show_id = ?');
 
@@ -151,7 +153,12 @@ const syncWatchedShows = async () => {
               for (const ep of season.episodes) {
                 const epNum = ep.number;
                 const epWatchedAt = ep.last_watched_at || ep.watched_at || showWatchedAt;
-                insertHistory.run(tmdbId, 'episode', seasonNum, epNum, epWatchedAt);
+                let rt = ep.runtime || null;
+                if (!rt && show) {
+                  const localEp = getEpRuntime.get(show.id, seasonNum, epNum);
+                  rt = localEp ? localEp.runtime : show.runtime;
+                }
+                insertHistory.run(tmdbId, 'episode', seasonNum, epNum, epWatchedAt, rt);
                 
                 if (show) {
                   updateEpWatched.run(epWatchedAt, show.id, seasonNum, epNum);
@@ -160,7 +167,7 @@ const syncWatchedShows = async () => {
             }
           }
         } else if (item.status === 'completed') {
-           insertHistory.run(tmdbId, 'show', null, null, showWatchedAt);
+           insertHistory.run(tmdbId, 'show', null, null, showWatchedAt, show ? show.runtime : null);
         }
         
         if (show) localCount++;

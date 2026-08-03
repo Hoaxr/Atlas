@@ -23,9 +23,11 @@ const importTraktJson = async (jsonData) => {
         }
       }
 
-      const insertHistory = db.prepare('INSERT OR IGNORE INTO watch_history (tmdb_id, type, season_number, episode_number, watched_at) VALUES (?, ?, ?, ?, ?)');
+      const insertHistory = db.prepare('INSERT OR IGNORE INTO watch_history (tmdb_id, type, season_number, episode_number, watched_at, runtime) VALUES (?, ?, ?, ?, ?, ?)');
+      const getMovie = db.prepare('SELECT id, runtime FROM movies WHERE tmdb_id = ?');
       const updateMovie = db.prepare('UPDATE movies SET watched = 1, watched_at = COALESCE(watched_at, ?) WHERE tmdb_id = ?');
-      const getShow = db.prepare('SELECT id FROM shows WHERE tmdb_id = ?');
+      const getShow = db.prepare('SELECT id, runtime FROM shows WHERE tmdb_id = ?');
+      const getEpRuntime = db.prepare('SELECT runtime FROM episodes WHERE show_id = ? AND season_number = ? AND episode_number = ?');
       const updateEpisode = db.prepare('UPDATE episodes SET watched = 1, watched_at = COALESCE(watched_at, ?) WHERE show_id = ? AND season_number = ? AND episode_number = ?');
 
       db.transaction(() => {
@@ -34,11 +36,6 @@ const importTraktJson = async (jsonData) => {
           let tmdbId = item.tmdb_id || item.tmdbId || null;
           if (!tmdbId && item.movie && item.movie.ids) tmdbId = item.movie.ids.tmdb;
           if (!tmdbId && item.show && item.show.ids) tmdbId = item.show.ids.tmdb;
-          if (!tmdbId && item.episode && item.episode.ids) {
-            // Trakt might provide show level data inside item.show, but just in case:
-            if (!tmdbId) tmdbId = item.episode.ids.tmdb; 
-          }
-          if (!tmdbId && item.ids) tmdbId = item.ids.tmdb;
 
           if (!tmdbId) continue;
 
@@ -53,7 +50,9 @@ const importTraktJson = async (jsonData) => {
           const watchedAt = item.watched_at || item.watchedAt || item.last_watched_at || new Date().toISOString();
 
           if (type === 'movie' || type === 'movies') {
-            insertHistory.run(tmdbId, 'movie', null, null, watchedAt);
+            const m = getMovie.get(tmdbId);
+            const rt = item.runtime || item.movie?.runtime || (m ? m.runtime : null);
+            insertHistory.run(tmdbId, 'movie', null, null, watchedAt, rt);
             updateMovie.run(watchedAt, tmdbId);
             importedMovies++;
           } else if (type === 'episode' || type === 'episodes' || type === 'show' || type === 'shows') {
@@ -66,7 +65,12 @@ const importTraktJson = async (jsonData) => {
                    for (const ep of s.episodes) {
                      const episodeNum = ep.number;
                      const epWatchedAt = ep.last_watched_at || ep.watched_at || watchedAt;
-                     insertHistory.run(tmdbId, 'episode', seasonNum, episodeNum, epWatchedAt);
+                     let rt = ep.runtime || null;
+                     if (!rt && show) {
+                       const localEp = getEpRuntime.get(show.id, seasonNum, episodeNum);
+                       rt = localEp ? localEp.runtime : show.runtime;
+                     }
+                     insertHistory.run(tmdbId, 'episode', seasonNum, episodeNum, epWatchedAt, rt);
                      if (show) {
                        updateEpisode.run(epWatchedAt, show.id, seasonNum, episodeNum);
                      }
@@ -79,9 +83,14 @@ const importTraktJson = async (jsonData) => {
                let episode = item.episode_number !== undefined ? item.episode_number : (item.episode !== undefined && typeof item.episode === 'number' ? item.episode : (item.episode?.number));
   
                if (season !== undefined && episode !== undefined) {
-                 insertHistory.run(tmdbId, 'episode', season, episode, watchedAt);
-                 
                  const show = getShow.get(tmdbId);
+                 let rt = item.runtime || item.episode?.runtime || null;
+                 if (!rt && show) {
+                   const localEp = getEpRuntime.get(show.id, season, episode);
+                   rt = localEp ? localEp.runtime : show.runtime;
+                 }
+                 insertHistory.run(tmdbId, 'episode', season, episode, watchedAt, rt);
+                 
                  if (show) {
                    updateEpisode.run(watchedAt, show.id, season, episode);
                  }
@@ -89,7 +98,7 @@ const importTraktJson = async (jsonData) => {
                } else if (type === 'show' || type === 'shows') {
                   // It's just a show watched status, but Trakt usually tracks episodes
                   // We could insert it as show, but Atlas watch_history primarily cares about episode and movie
-                  insertHistory.run(tmdbId, 'show', null, null, watchedAt);
+                  insertHistory.run(tmdbId, 'show', null, null, watchedAt, null);
                }
              }
           }
