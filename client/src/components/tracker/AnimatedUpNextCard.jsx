@@ -47,18 +47,22 @@ export function AnimatedUpNextCard({ item, type, onMarkWatched }) {
     setAnimState('animating');
 
     // Sequence timing:
-    // 0-650ms: Fill progress bar, glow card, ripple/particle checkmark, switch text to Watched ✓
-    // 700ms: Trigger mark watched to pull next episode into card and reset animState
-    setTimeout(async () => {
-      await onMarkWatched(
-        itemKey,
-        tmdbId,
-        type,
-        isEpisode ? item.season_number : undefined,
-        isEpisode ? item.episode_number : undefined
-      );
-      setAnimState('idle');
-    }, 700);
+    // 0-600ms: Celebration burst, progress fill to 100%, status text to Watched ✓
+    // 600ms: Start smooth exit slide/fade
+    // 950ms: Trigger API mark watched to fetch next episode and reset to idle
+    setTimeout(() => {
+      setAnimState('exiting');
+      setTimeout(async () => {
+        await onMarkWatched(
+          itemKey,
+          tmdbId,
+          type,
+          isEpisode ? item.season_number : undefined,
+          isEpisode ? item.episode_number : undefined
+        );
+        setAnimState('idle');
+      }, 350);
+    }, 600);
   };
 
   const isCompleted = animState === 'animating' || animState === 'exiting';
