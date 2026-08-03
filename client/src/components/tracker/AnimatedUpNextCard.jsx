@@ -60,6 +60,7 @@ export function AnimatedUpNextCard({ item, type, onMarkWatched }) {
           isEpisode ? item.season_number : undefined,
           isEpisode ? item.episode_number : undefined
         );
+        setAnimState('idle');
       }, 350);
     }, 600);
   };
