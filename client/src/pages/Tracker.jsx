@@ -137,13 +137,26 @@ const Tracker = () => {
     fetchData();
   }, []);
 
-  const handleMarkWatched = async (tmdbId, type, season, episode) => {
-    try {
-      await api.post('/tracker/mark-watched', { tmdbId, type, season, episode });
-      fetchData();
-    } catch (err) {
-      console.error('Failed to mark as watched', err);
-    }
+  const [exitingItems, setExitingItems] = useState(new Set());
+
+  const handleMarkWatched = async (key, tmdbId, type, season, episode) => {
+    // Trigger smooth fade-out & scale-down animation
+    setExitingItems(prev => new Set(prev).add(key));
+
+    setTimeout(async () => {
+      try {
+        await api.post('/tracker/mark-watched', { tmdbId, type, season, episode });
+        fetchData();
+      } catch (err) {
+        console.error('Failed to mark as watched', err);
+      } finally {
+        setExitingItems(prev => {
+          const next = new Set(prev);
+          next.delete(key);
+          return next;
+        });
+      }
+    }, 350);
   };
 
   const handleDeleteHistory = async (historyId) => {
@@ -364,80 +377,101 @@ const Tracker = () => {
           </div>
 
           <div ref={scrollRef} className="flex gap-5 overflow-x-auto scrollbar-none pb-4 pt-1 snap-x">
-            {upNextEpisodes.map(ep => (
-              <div 
-                key={`ep-${ep.episode_id}`}
-                className="w-72 sm:w-80 shrink-0 snap-start bg-slate-800/60 border border-slate-700/50 rounded-2xl overflow-hidden hover:border-cyan-500/40 transition-all duration-300 hover:-translate-y-1 shadow-xl flex flex-col group"
-              >
-                <div className="relative h-40 bg-slate-900 overflow-hidden">
-                  {ep.poster_path ? (
-                    <img src={tmdbImgUrl(ep.poster_path, 'w500')} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center text-slate-600"><Tv className="w-10 h-10" /></div>
-                  )}
-                  <div className="absolute inset-0 bg-gradient-to-t from-slate-900 via-slate-900/40 to-transparent"></div>
-                  
-                  <span className="absolute top-3 left-3 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-cyan-600/80 text-white backdrop-blur-md shadow">
-                    S{ep.season_number} E{ep.episode_number}
-                  </span>
+            {upNextEpisodes.map(ep => {
+              const itemKey = `ep-${ep.episode_id}`;
+              const isExiting = exitingItems.has(itemKey);
 
-                  <button 
-                    onClick={() => handleMarkWatched(ep.tmdb_id, 'episode', ep.season_number, ep.episode_number)}
-                    className="absolute bottom-3 right-3 p-2 rounded-xl bg-slate-900/80 hover:bg-emerald-500 text-slate-300 hover:text-white border border-white/10 hover:border-emerald-400 backdrop-blur-md transition-all duration-200 shadow-lg"
-                    title="Mark Watched"
-                  >
-                    <CheckCircle2 className="w-4 h-4" />
-                  </button>
-                </div>
+              return (
+                <div 
+                  key={itemKey}
+                  className={`w-72 sm:w-80 shrink-0 snap-start bg-slate-800/60 border border-slate-700/50 rounded-2xl overflow-hidden hover:border-cyan-500/40 transition-all duration-350 shadow-xl flex flex-col group ${
+                    isExiting ? 'opacity-0 scale-90 -translate-y-4 blur-sm duration-350 pointer-events-none' : 'hover:-translate-y-1'
+                  }`}
+                >
+                  <div className="relative h-40 bg-slate-900 overflow-hidden">
+                    {ep.poster_path ? (
+                      <img src={tmdbImgUrl(ep.poster_path, 'w500')} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-slate-600"><Tv className="w-10 h-10" /></div>
+                    )}
+                    <div className="absolute inset-0 bg-gradient-to-t from-slate-900 via-slate-900/40 to-transparent"></div>
+                    
+                    <span className="absolute top-3 left-3 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-cyan-600/80 text-white backdrop-blur-md shadow">
+                      S{ep.season_number} E{ep.episode_number}
+                    </span>
 
-                <div className="p-4 flex-1 flex flex-col justify-between space-y-3">
-                  <div>
-                    <h3 className="font-bold text-slate-100 text-lg truncate group-hover:text-cyan-400 transition-colors">
-                      {ep.show_title}
-                    </h3>
-                    <p className="text-xs text-slate-400 truncate mt-0.5">
-                      {ep.episode_title || `Episode ${ep.episode_number}`}
-                    </p>
+                    <button 
+                      onClick={() => handleMarkWatched(itemKey, ep.tmdb_id, 'episode', ep.season_number, ep.episode_number)}
+                      className={`absolute bottom-3 right-3 p-2 rounded-xl backdrop-blur-md transition-all duration-300 shadow-lg ${
+                        isExiting 
+                          ? 'bg-emerald-500 text-white scale-125 border-emerald-400' 
+                          : 'bg-slate-900/80 hover:bg-emerald-500 text-slate-300 hover:text-white border border-white/10 hover:border-emerald-400'
+                      }`}
+                      title="Mark Watched"
+                    >
+                      <CheckCircle2 className="w-4 h-4" />
+                    </button>
                   </div>
 
-                  <div className="space-y-2">
-                    <div className="flex justify-between items-center text-xs text-slate-400 font-mono">
-                      <span>{ep.episodes_left} ep left</span>
-                      <span>{formatRuntime(ep.total_time_left)}</span>
+                  <div className="p-4 flex-1 flex flex-col justify-between space-y-3">
+                    <div>
+                      <h3 className="font-bold text-slate-100 text-lg truncate group-hover:text-cyan-400 transition-colors">
+                        {ep.show_title}
+                      </h3>
+                      <p className="text-xs text-slate-400 truncate mt-0.5">
+                        {ep.episode_title || `Episode ${ep.episode_number}`}
+                      </p>
                     </div>
-                    <div className="w-full h-1.5 bg-slate-700/60 rounded-full overflow-hidden">
-                      <div className="h-full bg-cyan-400 rounded-full" style={{ width: `${Math.max(10, Math.min(100, Math.round(((ep.total_episodes - ep.episodes_left) / ep.total_episodes) * 100)))}%` }}></div>
+
+                    <div className="space-y-2">
+                      <div className="flex justify-between items-center text-xs text-slate-400 font-mono">
+                        <span>{ep.episodes_left} ep left</span>
+                        <span>{formatRuntime(ep.total_time_left)}</span>
+                      </div>
+                      <div className="w-full h-1.5 bg-slate-700/60 rounded-full overflow-hidden">
+                        <div className="h-full bg-cyan-400 rounded-full" style={{ width: `${Math.max(10, Math.min(100, Math.round(((ep.total_episodes - ep.episodes_left) / ep.total_episodes) * 100)))}%` }}></div>
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
 
-            {upNextMovies.map(m => (
-              <div 
-                key={`movie-${m.id}`}
-                className="w-72 sm:w-80 shrink-0 snap-start bg-slate-800/60 border border-slate-700/50 rounded-2xl overflow-hidden hover:border-cyan-500/40 transition-all duration-300 hover:-translate-y-1 shadow-xl flex flex-col group"
-              >
-                <div className="relative h-40 bg-slate-900 overflow-hidden">
-                  {m.poster_path ? (
-                    <img src={tmdbImgUrl(m.poster_path, 'w500')} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center text-slate-600"><Film className="w-10 h-10" /></div>
-                  )}
-                  <div className="absolute inset-0 bg-gradient-to-t from-slate-900 via-slate-900/40 to-transparent"></div>
-                  
-                  <span className="absolute top-3 left-3 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-cyan-600/80 text-white backdrop-blur-md shadow">
-                    Movie
-                  </span>
+            {upNextMovies.map(m => {
+              const itemKey = `movie-${m.id}`;
+              const isExiting = exitingItems.has(itemKey);
 
-                  <button 
-                    onClick={() => handleMarkWatched(m.tmdb_id, 'movie')}
-                    className="absolute bottom-3 right-3 p-2 rounded-xl bg-slate-900/80 hover:bg-emerald-500 text-slate-300 hover:text-white border border-white/10 hover:border-emerald-400 backdrop-blur-md transition-all duration-200 shadow-lg"
-                    title="Mark Watched"
-                  >
-                    <CheckCircle2 className="w-4 h-4" />
-                  </button>
-                </div>
+              return (
+                <div 
+                  key={itemKey}
+                  className={`w-72 sm:w-80 shrink-0 snap-start bg-slate-800/60 border border-slate-700/50 rounded-2xl overflow-hidden hover:border-cyan-500/40 transition-all duration-350 shadow-xl flex flex-col group ${
+                    isExiting ? 'opacity-0 scale-90 -translate-y-4 blur-sm duration-350 pointer-events-none' : 'hover:-translate-y-1'
+                  }`}
+                >
+                  <div className="relative h-40 bg-slate-900 overflow-hidden">
+                    {m.poster_path ? (
+                      <img src={tmdbImgUrl(m.poster_path, 'w500')} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-slate-600"><Film className="w-10 h-10" /></div>
+                    )}
+                    <div className="absolute inset-0 bg-gradient-to-t from-slate-900 via-slate-900/40 to-transparent"></div>
+                    
+                    <span className="absolute top-3 left-3 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-cyan-600/80 text-white backdrop-blur-md shadow">
+                      Movie
+                    </span>
+
+                    <button 
+                      onClick={() => handleMarkWatched(itemKey, m.tmdb_id, 'movie')}
+                      className={`absolute bottom-3 right-3 p-2 rounded-xl backdrop-blur-md transition-all duration-300 shadow-lg ${
+                        isExiting 
+                          ? 'bg-emerald-500 text-white scale-125 border-emerald-400' 
+                          : 'bg-slate-900/80 hover:bg-emerald-500 text-slate-300 hover:text-white border border-white/10 hover:border-emerald-400'
+                      }`}
+                      title="Mark Watched"
+                    >
+                      <CheckCircle2 className="w-4 h-4" />
+                    </button>
+                  </div>
 
                 <div className="p-4 flex-1 flex flex-col justify-between space-y-3">
                   <div>
