@@ -200,7 +200,7 @@ const Tracker = () => {
   if (loading && !stats) {
     return (
       <div className="flex flex-col justify-center items-center min-h-[60vh] text-slate-400 gap-4">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-500"></div>
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-cyan-500"></div>
         <p className="font-medium animate-pulse text-slate-300">Loading Watch Tracker Analytics Dashboard...</p>
       </div>
     );
@@ -217,7 +217,7 @@ const Tracker = () => {
     <div className="w-full max-w-7xl mx-auto space-y-10 px-4 sm:px-6 lg:px-8 pb-16 animate-in fade-in duration-500">
       
       {/* ── HERO HEADER ── */}
-      <div className="relative rounded-3xl overflow-hidden border border-white/10 bg-slate-900/80 backdrop-blur-xl shadow-2xl p-6 sm:p-10">
+      <div className="relative rounded-3xl overflow-hidden border border-slate-700/50 bg-slate-900/80 backdrop-blur-xl shadow-2xl p-6 sm:p-10">
         {currently?.backdrop && (
           <div className="absolute inset-0 z-0 opacity-20 filter blur-2xl scale-110 pointer-events-none">
             <img src={tmdbImgUrl(currently.backdrop, 'w1280')} alt="" className="w-full h-full object-cover" />
@@ -226,21 +226,21 @@ const Tracker = () => {
         
         <div className="relative z-10 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-8">
           <div className="space-y-3 max-w-2xl">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-purple-500/10 border border-purple-500/30 text-purple-400 text-xs font-bold uppercase tracking-wider">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 text-xs font-bold uppercase tracking-wider">
               <Sparkles className="w-3.5 h-3.5" /> Streaming Analytics Dashboard
             </div>
             <h1 className="text-4xl sm:text-5xl font-black text-slate-100 tracking-tight">
               Watch Tracker
             </h1>
             <p className="text-slate-300 text-lg sm:text-xl font-medium">
-              You've watched <span className="text-purple-400 font-bold">{stats?.total_days || '0'} days</span> ({stats?.total_hours || '0'} hours) of content.
+              You've watched <span className="text-cyan-400 font-bold">{stats?.total_days || '0'} days</span> ({stats?.total_hours || '0'} hours) of content.
             </p>
           </div>
 
           {/* Currently Watching Mini Panel */}
           {currently && (
-            <div className="w-full lg:w-96 p-4 rounded-2xl bg-slate-800/80 border border-white/10 backdrop-blur-md shadow-xl flex items-center gap-4 group">
-              <div className="w-16 h-22 rounded-xl overflow-hidden bg-slate-900 shrink-0 border border-white/10">
+            <div className="w-full lg:w-96 p-4 rounded-2xl bg-slate-800/80 border border-slate-700/60 backdrop-blur-md shadow-xl flex items-center gap-4 group">
+              <div className="w-16 h-22 rounded-xl overflow-hidden bg-slate-900 shrink-0 border border-slate-700/50">
                 {currently.poster ? (
                   <img src={tmdbImgUrl(currently.poster, 'w200')} alt="" className="w-full h-full object-cover" />
                 ) : (
@@ -251,7 +251,7 @@ const Tracker = () => {
                 <span className="text-[10px] uppercase font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
                   Latest Watch
                 </span>
-                <h3 className="text-slate-100 font-bold text-base truncate mt-1 group-hover:text-purple-400 transition-colors">
+                <h3 className="text-slate-100 font-bold text-base truncate mt-1 group-hover:text-cyan-400 transition-colors">
                   {currently.title}
                 </h3>
                 {currently.season && (
@@ -259,7 +259,7 @@ const Tracker = () => {
                 )}
                 <div className="mt-2.5 flex items-center gap-2">
                   <div className="flex-1 h-1.5 bg-slate-700/80 rounded-full overflow-hidden">
-                    <div className="h-full bg-gradient-to-r from-purple-500 to-emerald-400 rounded-full" style={{ width: `${currently.progress || 100}%` }}></div>
+                    <div className="h-full bg-gradient-to-r from-cyan-500 to-emerald-400 rounded-full" style={{ width: `${currently.progress || 100}%` }}></div>
                   </div>
                   <span className="text-[10px] text-slate-400 font-mono font-semibold">{currently.runtime}m</span>
                 </div>
@@ -273,31 +273,31 @@ const Tracker = () => {
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
         
         {/* Total Time */}
-        <div className="glass-panel p-5 rounded-2xl border border-white/5 bg-slate-800/40 hover:bg-slate-800/70 transition-all duration-300 hover:-translate-y-1 shadow-lg group">
-          <div className="p-2.5 rounded-xl bg-purple-500/10 text-purple-400 w-fit mb-3 group-hover:scale-110 transition-transform">
+        <div className="glass-panel p-5 rounded-2xl border border-slate-700/50 bg-slate-800/40 hover:bg-slate-800/70 transition-all duration-300 hover:-translate-y-1 shadow-lg group">
+          <div className="p-2.5 rounded-xl bg-cyan-500/10 text-cyan-400 w-fit mb-3 group-hover:scale-110 transition-transform">
             <Clock className="w-5 h-5" />
           </div>
           <div className="text-2xl font-black text-slate-100">{stats?.total_days} <span className="text-xs font-normal text-slate-400">Days</span></div>
-          <div className="text-xs font-bold text-purple-400 mt-0.5">Total Watch Time</div>
+          <div className="text-xs font-bold text-cyan-400 mt-0.5">Total Watch Time</div>
           <div className="text-[11px] text-slate-500 mt-2 flex items-center gap-1">
             <TrendingUp className="w-3 h-3 text-emerald-400" /> +{stats?.this_month_hours || 0}h this month
           </div>
         </div>
 
         {/* Movies */}
-        <div className="glass-panel p-5 rounded-2xl border border-white/5 bg-slate-800/40 hover:bg-slate-800/70 transition-all duration-300 hover:-translate-y-1 shadow-lg group">
-          <div className="p-2.5 rounded-xl bg-blue-500/10 text-blue-400 w-fit mb-3 group-hover:scale-110 transition-transform">
+        <div className="glass-panel p-5 rounded-2xl border border-slate-700/50 bg-slate-800/40 hover:bg-slate-800/70 transition-all duration-300 hover:-translate-y-1 shadow-lg group">
+          <div className="p-2.5 rounded-xl bg-cyan-500/10 text-cyan-400 w-fit mb-3 group-hover:scale-110 transition-transform">
             <Film className="w-5 h-5" />
           </div>
           <div className="text-2xl font-black text-slate-100">{stats?.movies?.count?.toLocaleString()}</div>
-          <div className="text-xs font-bold text-blue-400 mt-0.5">Movies Watched</div>
+          <div className="text-xs font-bold text-cyan-400 mt-0.5">Movies Watched</div>
           <div className="text-[11px] text-slate-500 mt-2 flex items-center gap-1">
             <TrendingUp className="w-3 h-3 text-emerald-400" /> ↑ {stats?.movies?.this_month || 0} this month
           </div>
         </div>
 
         {/* Episodes */}
-        <div className="glass-panel p-5 rounded-2xl border border-white/5 bg-slate-800/40 hover:bg-slate-800/70 transition-all duration-300 hover:-translate-y-1 shadow-lg group">
+        <div className="glass-panel p-5 rounded-2xl border border-slate-700/50 bg-slate-800/40 hover:bg-slate-800/70 transition-all duration-300 hover:-translate-y-1 shadow-lg group">
           <div className="p-2.5 rounded-xl bg-emerald-500/10 text-emerald-400 w-fit mb-3 group-hover:scale-110 transition-transform">
             <Tv className="w-5 h-5" />
           </div>
@@ -309,7 +309,7 @@ const Tracker = () => {
         </div>
 
         {/* Shows */}
-        <div className="glass-panel p-5 rounded-2xl border border-white/5 bg-slate-800/40 hover:bg-slate-800/70 transition-all duration-300 hover:-translate-y-1 shadow-lg group">
+        <div className="glass-panel p-5 rounded-2xl border border-slate-700/50 bg-slate-800/40 hover:bg-slate-800/70 transition-all duration-300 hover:-translate-y-1 shadow-lg group">
           <div className="p-2.5 rounded-xl bg-amber-500/10 text-amber-400 w-fit mb-3 group-hover:scale-110 transition-transform">
             <Sparkles className="w-5 h-5" />
           </div>
@@ -321,7 +321,7 @@ const Tracker = () => {
         </div>
 
         {/* Current Streak */}
-        <div className="glass-panel p-5 rounded-2xl border border-white/5 bg-slate-800/40 hover:bg-slate-800/70 transition-all duration-300 hover:-translate-y-1 shadow-lg group">
+        <div className="glass-panel p-5 rounded-2xl border border-slate-700/50 bg-slate-800/40 hover:bg-slate-800/70 transition-all duration-300 hover:-translate-y-1 shadow-lg group">
           <div className="p-2.5 rounded-xl bg-rose-500/10 text-rose-400 w-fit mb-3 group-hover:scale-110 transition-transform">
             <Flame className="w-5 h-5" />
           </div>
@@ -333,12 +333,12 @@ const Tracker = () => {
         </div>
 
         {/* Finished Seasons */}
-        <div className="glass-panel p-5 rounded-2xl border border-white/5 bg-slate-800/40 hover:bg-slate-800/70 transition-all duration-300 hover:-translate-y-1 shadow-lg group">
-          <div className="p-2.5 rounded-xl bg-indigo-500/10 text-indigo-400 w-fit mb-3 group-hover:scale-110 transition-transform">
+        <div className="glass-panel p-5 rounded-2xl border border-slate-700/50 bg-slate-800/40 hover:bg-slate-800/70 transition-all duration-300 hover:-translate-y-1 shadow-lg group">
+          <div className="p-2.5 rounded-xl bg-teal-500/10 text-teal-400 w-fit mb-3 group-hover:scale-110 transition-transform">
             <CheckCircle2 className="w-5 h-5" />
           </div>
           <div className="text-2xl font-black text-slate-100">{stats?.finished_seasons || 0}</div>
-          <div className="text-xs font-bold text-indigo-400 mt-0.5">Seasons Finished</div>
+          <div className="text-xs font-bold text-teal-400 mt-0.5">Seasons Finished</div>
           <div className="text-[11px] text-slate-500 mt-2">
             across {stats?.shows?.count || 0} shows
           </div>
@@ -352,15 +352,15 @@ const Tracker = () => {
           <div className="flex justify-between items-center">
             <div>
               <h2 className="text-2xl font-bold text-slate-100 flex items-center gap-2">
-                <Play className="w-6 h-6 text-emerald-400 fill-emerald-400" /> Continue Watching & Up Next
+                <Play className="w-6 h-6 text-cyan-400 fill-cyan-400" /> Continue Watching & Up Next
               </h2>
               <p className="text-sm text-slate-400">Pick up right where you left off across your library</p>
             </div>
             <div className="flex items-center gap-2">
-              <button onClick={() => scrollContainer('left')} className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-white/5 transition-all">
+              <button onClick={() => scrollContainer('left')} className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700/50 transition-all">
                 <ChevronLeft className="w-5 h-5" />
               </button>
-              <button onClick={() => scrollContainer('right')} className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-white/5 transition-all">
+              <button onClick={() => scrollContainer('right')} className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700/50 transition-all">
                 <ChevronRight className="w-5 h-5" />
               </button>
             </div>
@@ -370,7 +370,7 @@ const Tracker = () => {
             {upNextEpisodes.map(ep => (
               <div 
                 key={`ep-${ep.episode_id}`}
-                className="w-72 sm:w-80 shrink-0 snap-start bg-slate-800/60 border border-white/10 rounded-2xl overflow-hidden hover:border-purple-500/40 transition-all duration-300 hover:-translate-y-1 shadow-xl flex flex-col group"
+                className="w-72 sm:w-80 shrink-0 snap-start bg-slate-800/60 border border-slate-700/50 rounded-2xl overflow-hidden hover:border-cyan-500/40 transition-all duration-300 hover:-translate-y-1 shadow-xl flex flex-col group"
               >
                 <div className="relative h-40 bg-slate-900 overflow-hidden">
                   {ep.poster_path ? (
@@ -380,7 +380,7 @@ const Tracker = () => {
                   )}
                   <div className="absolute inset-0 bg-gradient-to-t from-slate-900 via-slate-900/40 to-transparent"></div>
                   
-                  <span className="absolute top-3 left-3 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-purple-500/80 text-white backdrop-blur-md shadow">
+                  <span className="absolute top-3 left-3 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-cyan-600/80 text-white backdrop-blur-md shadow">
                     S{ep.season_number} E{ep.episode_number}
                   </span>
 
@@ -395,7 +395,7 @@ const Tracker = () => {
 
                 <div className="p-4 flex-1 flex flex-col justify-between space-y-3">
                   <div>
-                    <h3 className="font-bold text-slate-100 text-lg truncate group-hover:text-purple-400 transition-colors">
+                    <h3 className="font-bold text-slate-100 text-lg truncate group-hover:text-cyan-400 transition-colors">
                       {ep.show_title}
                     </h3>
                     <p className="text-xs text-slate-400 truncate mt-0.5">
@@ -409,7 +409,7 @@ const Tracker = () => {
                       <span>{formatRuntime(ep.total_time_left)}</span>
                     </div>
                     <div className="w-full h-1.5 bg-slate-700/60 rounded-full overflow-hidden">
-                      <div className="h-full bg-emerald-400 rounded-full" style={{ width: `${Math.max(10, Math.min(100, Math.round(((ep.total_episodes - ep.episodes_left) / ep.total_episodes) * 100)))}%` }}></div>
+                      <div className="h-full bg-cyan-400 rounded-full" style={{ width: `${Math.max(10, Math.min(100, Math.round(((ep.total_episodes - ep.episodes_left) / ep.total_episodes) * 100)))}%` }}></div>
                     </div>
                   </div>
                 </div>
@@ -419,7 +419,7 @@ const Tracker = () => {
             {upNextMovies.map(m => (
               <div 
                 key={`movie-${m.id}`}
-                className="w-72 sm:w-80 shrink-0 snap-start bg-slate-800/60 border border-white/10 rounded-2xl overflow-hidden hover:border-blue-500/40 transition-all duration-300 hover:-translate-y-1 shadow-xl flex flex-col group"
+                className="w-72 sm:w-80 shrink-0 snap-start bg-slate-800/60 border border-slate-700/50 rounded-2xl overflow-hidden hover:border-cyan-500/40 transition-all duration-300 hover:-translate-y-1 shadow-xl flex flex-col group"
               >
                 <div className="relative h-40 bg-slate-900 overflow-hidden">
                   {m.poster_path ? (
@@ -429,7 +429,7 @@ const Tracker = () => {
                   )}
                   <div className="absolute inset-0 bg-gradient-to-t from-slate-900 via-slate-900/40 to-transparent"></div>
                   
-                  <span className="absolute top-3 left-3 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-blue-500/80 text-white backdrop-blur-md shadow">
+                  <span className="absolute top-3 left-3 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-cyan-600/80 text-white backdrop-blur-md shadow">
                     Movie
                   </span>
 
@@ -444,7 +444,7 @@ const Tracker = () => {
 
                 <div className="p-4 flex-1 flex flex-col justify-between space-y-3">
                   <div>
-                    <h3 className="font-bold text-slate-100 text-lg truncate group-hover:text-blue-400 transition-colors">
+                    <h3 className="font-bold text-slate-100 text-lg truncate group-hover:text-cyan-400 transition-colors">
                       {m.title}
                     </h3>
                     <p className="text-xs text-slate-400 truncate mt-0.5">{m.runtime ? `${m.runtime} mins` : 'Movie'}</p>
@@ -456,7 +456,7 @@ const Tracker = () => {
                       <span>{m.watch_progress || 0}%</span>
                     </div>
                     <div className="w-full h-1.5 bg-slate-700/60 rounded-full overflow-hidden">
-                      <div className="h-full bg-blue-400 rounded-full" style={{ width: `${m.watch_progress || 50}%` }}></div>
+                      <div className="h-full bg-cyan-400 rounded-full" style={{ width: `${m.watch_progress || 50}%` }}></div>
                     </div>
                   </div>
                 </div>
@@ -470,15 +470,15 @@ const Tracker = () => {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         
         {/* Heatmap (2 Cols) */}
-        <div className="lg:col-span-2 glass-panel p-6 rounded-3xl border border-white/10 bg-slate-800/40 backdrop-blur-xl shadow-xl space-y-4">
+        <div className="lg:col-span-2 glass-panel p-6 rounded-3xl border border-slate-700/50 bg-slate-800/40 backdrop-blur-xl shadow-xl space-y-4">
           <div className="flex justify-between items-center">
             <div>
               <h3 className="text-xl font-bold text-slate-100 flex items-center gap-2">
-                <Calendar className="w-5 h-5 text-purple-400" /> 365-Day Viewing Heatmap
+                <Calendar className="w-5 h-5 text-cyan-400" /> 365-Day Viewing Heatmap
               </h3>
               <p className="text-xs text-slate-400">Daily viewing intensity over the past year</p>
             </div>
-            <span className="text-xs font-mono text-slate-400 bg-slate-900/60 px-3 py-1 rounded-full border border-white/5">
+            <span className="text-xs font-mono text-slate-400 bg-slate-900/60 px-3 py-1 rounded-full border border-slate-700/50">
               {stats?.heatmap_data?.length || 0} active days
             </span>
           </div>
@@ -497,11 +497,11 @@ const Tracker = () => {
                     const match = stats?.heatmap_data?.find(h => h.date === dateStr);
                     const hrs = match ? parseFloat(match.hours || 0) : 0;
 
-                    let bgClass = 'bg-slate-800/60 border-white/5';
-                    if (hrs > 0 && hrs < 2) bgClass = 'bg-purple-900/60 border-purple-700/30';
-                    else if (hrs >= 2 && hrs < 4) bgClass = 'bg-purple-700/80 border-purple-500/40';
-                    else if (hrs >= 4 && hrs < 6) bgClass = 'bg-purple-500 border-purple-400/60';
-                    else if (hrs >= 6) bgClass = 'bg-emerald-400 border-emerald-300 shadow-md shadow-emerald-400/20';
+                    let bgClass = 'bg-slate-800/60 border-slate-700/30';
+                    if (hrs > 0 && hrs < 2) bgClass = 'bg-cyan-950/60 border-cyan-800/40';
+                    else if (hrs >= 2 && hrs < 4) bgClass = 'bg-cyan-800/80 border-cyan-600/50';
+                    else if (hrs >= 4 && hrs < 6) bgClass = 'bg-cyan-600 border-cyan-400/60';
+                    else if (hrs >= 6) bgClass = 'bg-cyan-400 border-cyan-300 shadow-md shadow-cyan-400/20';
 
                     return (
                       <div 
@@ -509,8 +509,8 @@ const Tracker = () => {
                         className={`w-3.5 h-3.5 rounded-sm border ${bgClass} transition-all duration-200 hover:scale-125 cursor-pointer relative group`}
                       >
                         <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:flex flex-col items-center z-30 pointer-events-none">
-                          <div className="bg-slate-900 text-white text-[11px] font-medium py-1.5 px-3 rounded-xl shadow-2xl border border-white/10 whitespace-nowrap">
-                            <div className="font-bold text-purple-300">{dateStr}</div>
+                          <div className="bg-slate-900 text-white text-[11px] font-medium py-1.5 px-3 rounded-xl shadow-2xl border border-slate-700/50 whitespace-nowrap">
+                            <div className="font-bold text-cyan-300">{dateStr}</div>
                             <div>{hrs > 0 ? `${hrs}h watched` : 'No activity'}</div>
                             {match && <div className="text-[10px] text-slate-400">{match.episodes} eps, {match.movies} movies</div>}
                           </div>
@@ -525,19 +525,19 @@ const Tracker = () => {
 
           <div className="flex items-center justify-end gap-2 text-xs text-slate-400 pt-2">
             <span>Less</span>
-            <div className="w-3 h-3 rounded-sm bg-slate-800 border border-white/5"></div>
-            <div className="w-3 h-3 rounded-sm bg-purple-900/60"></div>
-            <div className="w-3 h-3 rounded-sm bg-purple-700/80"></div>
-            <div className="w-3 h-3 rounded-sm bg-purple-500"></div>
-            <div className="w-3 h-3 rounded-sm bg-emerald-400"></div>
+            <div className="w-3 h-3 rounded-sm bg-slate-800 border border-slate-700/30"></div>
+            <div className="w-3 h-3 rounded-sm bg-cyan-950/60"></div>
+            <div className="w-3 h-3 rounded-sm bg-cyan-800/80"></div>
+            <div className="w-3 h-3 rounded-sm bg-cyan-600"></div>
+            <div className="w-3 h-3 rounded-sm bg-cyan-400"></div>
             <span>More</span>
           </div>
         </div>
 
         {/* Genre Breakdown (1 Col) */}
-        <div className="glass-panel p-6 rounded-3xl border border-white/10 bg-slate-800/40 backdrop-blur-xl shadow-xl space-y-4">
+        <div className="glass-panel p-6 rounded-3xl border border-slate-700/50 bg-slate-800/40 backdrop-blur-xl shadow-xl space-y-4">
           <h3 className="text-xl font-bold text-slate-100 flex items-center gap-2">
-            <BarChart2 className="w-5 h-5 text-blue-400" /> Genre Breakdown
+            <BarChart2 className="w-5 h-5 text-cyan-400" /> Genre Breakdown
           </h3>
           <p className="text-xs text-slate-400">Your top watched genres</p>
 
@@ -546,14 +546,14 @@ const Tracker = () => {
               <div key={g.name} className="space-y-1">
                 <div className="flex justify-between text-xs font-bold text-slate-300">
                   <span>{g.name}</span>
-                  <span className="font-mono text-purple-400">{g.percentage}%</span>
+                  <span className="font-mono text-cyan-400">{g.percentage}%</span>
                 </div>
-                <div className="w-full h-2 bg-slate-900/80 rounded-full overflow-hidden border border-white/5">
+                <div className="w-full h-2 bg-slate-900/80 rounded-full overflow-hidden border border-slate-700/30">
                   <div 
                     className={`h-full rounded-full transition-all duration-1000 ${
-                      idx === 0 ? 'bg-gradient-to-r from-purple-500 to-indigo-500' :
-                      idx === 1 ? 'bg-gradient-to-r from-blue-500 to-cyan-500' :
-                      idx === 2 ? 'bg-gradient-to-r from-emerald-500 to-teal-500' :
+                      idx === 0 ? 'bg-gradient-to-r from-cyan-500 to-teal-400' :
+                      idx === 1 ? 'bg-gradient-to-r from-blue-500 to-cyan-400' :
+                      idx === 2 ? 'bg-gradient-to-r from-emerald-500 to-teal-400' :
                       'bg-slate-600'
                     }`} 
                     style={{ width: `${g.percentage}%` }}
@@ -573,26 +573,26 @@ const Tracker = () => {
         </h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
           
-          <div className="glass-panel p-6 rounded-3xl border border-purple-500/20 bg-gradient-to-br from-purple-950/40 to-slate-900/60 backdrop-blur-xl shadow-xl flex flex-col justify-between group hover:scale-[1.02] transition-transform">
+          <div className="glass-panel p-6 rounded-3xl border border-cyan-500/20 bg-gradient-to-br from-cyan-950/40 to-slate-900/60 backdrop-blur-xl shadow-xl flex flex-col justify-between group hover:scale-[1.02] transition-transform">
             <div className="flex justify-between items-center">
-              <Moon className="w-8 h-8 text-purple-400" />
-              <span className="text-[10px] uppercase font-bold text-purple-400 bg-purple-500/10 px-2.5 py-1 rounded-full border border-purple-500/20">Habit</span>
+              <Moon className="w-8 h-8 text-cyan-400" />
+              <span className="text-[10px] uppercase font-bold text-cyan-400 bg-cyan-500/10 px-2.5 py-1 rounded-full border border-cyan-500/20">Habit</span>
             </div>
             <div className="my-4">
               <div className="text-3xl font-black text-slate-100">{stats?.habits?.night_owl_pct || 75}%</div>
-              <h4 className="text-lg font-bold text-purple-300 mt-1">Night Owl Binger</h4>
+              <h4 className="text-lg font-bold text-cyan-300 mt-1">Night Owl Binger</h4>
               <p className="text-xs text-slate-400 mt-1">of your total viewing happens after 8 PM</p>
             </div>
           </div>
 
-          <div className="glass-panel p-6 rounded-3xl border border-blue-500/20 bg-gradient-to-br from-blue-950/40 to-slate-900/60 backdrop-blur-xl shadow-xl flex flex-col justify-between group hover:scale-[1.02] transition-transform">
+          <div className="glass-panel p-6 rounded-3xl border border-teal-500/20 bg-gradient-to-br from-teal-950/40 to-slate-900/60 backdrop-blur-xl shadow-xl flex flex-col justify-between group hover:scale-[1.02] transition-transform">
             <div className="flex justify-between items-center">
-              <Sun className="w-8 h-8 text-blue-400" />
-              <span className="text-[10px] uppercase font-bold text-blue-400 bg-blue-500/10 px-2.5 py-1 rounded-full border border-blue-500/20">Pattern</span>
+              <Sun className="w-8 h-8 text-teal-400" />
+              <span className="text-[10px] uppercase font-bold text-teal-400 bg-teal-500/10 px-2.5 py-1 rounded-full border border-teal-500/20">Pattern</span>
             </div>
             <div className="my-4">
               <div className="text-3xl font-black text-slate-100">{stats?.habits?.weekend_pct || 60}%</div>
-              <h4 className="text-lg font-bold text-blue-300 mt-1">Weekend Warrior</h4>
+              <h4 className="text-lg font-bold text-teal-300 mt-1">Weekend Warrior</h4>
               <p className="text-xs text-slate-400 mt-1">of total screen time takes place on weekends</p>
             </div>
           </div>
@@ -625,10 +625,10 @@ const Tracker = () => {
       </div>
 
       {/* ── GAMIFIED ACHIEVEMENTS ── */}
-      <div className="glass-panel p-6 sm:p-8 rounded-3xl border border-white/10 bg-slate-800/40 backdrop-blur-xl shadow-xl space-y-6">
+      <div className="glass-panel p-6 sm:p-8 rounded-3xl border border-slate-700/50 bg-slate-800/40 backdrop-blur-xl shadow-xl space-y-6">
         <div>
           <h2 className="text-2xl font-bold text-slate-100 flex items-center gap-2">
-            <Award className="w-6 h-6 text-purple-400" /> Achievements & Milestones
+            <Award className="w-6 h-6 text-cyan-400" /> Achievements & Milestones
           </h2>
           <p className="text-xs text-slate-400">Unlock badges as your watch history grows</p>
         </div>
@@ -639,8 +639,8 @@ const Tracker = () => {
               key={ach.id}
               className={`p-5 rounded-2xl border transition-all duration-300 flex flex-col justify-between ${
                 ach.unlocked 
-                  ? 'bg-gradient-to-b from-purple-900/40 to-slate-900/80 border-purple-500/40 shadow-lg shadow-purple-500/10 hover:border-purple-400' 
-                  : 'bg-slate-900/40 border-white/5 opacity-60'
+                  ? 'bg-gradient-to-b from-cyan-950/40 to-slate-900/80 border-cyan-500/40 shadow-lg shadow-cyan-500/10 hover:border-cyan-400' 
+                  : 'bg-slate-900/40 border-slate-700/30 opacity-60'
               }`}
             >
               <div className="flex justify-between items-start mb-3">
@@ -655,13 +655,13 @@ const Tracker = () => {
                 <h4 className="font-bold text-slate-100 text-base">{ach.title}</h4>
                 <p className="text-xs text-slate-400 mt-1 leading-snug">{ach.desc}</p>
               </div>
-              <div className="mt-4 pt-3 border-t border-white/5">
+              <div className="mt-4 pt-3 border-t border-slate-700/30">
                 <div className="flex justify-between text-[10px] text-slate-400 mb-1 font-mono">
                   <span>Progress</span>
                   <span>{ach.progress}%</span>
                 </div>
                 <div className="w-full h-1 bg-slate-800 rounded-full overflow-hidden">
-                  <div className={`h-full rounded-full ${ach.unlocked ? 'bg-emerald-400' : 'bg-purple-500'}`} style={{ width: `${ach.progress}%` }}></div>
+                  <div className={`h-full rounded-full ${ach.unlocked ? 'bg-emerald-400' : 'bg-cyan-500'}`} style={{ width: `${ach.progress}%` }}></div>
                 </div>
               </div>
             </div>
@@ -670,7 +670,7 @@ const Tracker = () => {
       </div>
 
       {/* ── CHRONOLOGICAL RECENTLY WATCHED TIMELINE ── */}
-      <div className="glass-panel p-6 sm:p-8 rounded-3xl border border-white/10 bg-slate-800/40 backdrop-blur-xl shadow-xl space-y-6">
+      <div className="glass-panel p-6 sm:p-8 rounded-3xl border border-slate-700/50 bg-slate-800/40 backdrop-blur-xl shadow-xl space-y-6">
         <div className="flex justify-between items-center">
           <div>
             <h2 className="text-2xl font-bold text-slate-100 flex items-center gap-2">
@@ -687,10 +687,10 @@ const Tracker = () => {
             return (
               <div key={groupTitle} className="space-y-3">
                 <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold uppercase tracking-wider text-purple-400 bg-purple-500/10 px-3 py-1 rounded-full border border-purple-500/20">
+                  <span className="text-xs font-bold uppercase tracking-wider text-cyan-400 bg-cyan-500/10 px-3 py-1 rounded-full border border-cyan-500/20">
                     {groupTitle}
                   </span>
-                  <div className="flex-1 h-px bg-white/5"></div>
+                  <div className="flex-1 h-px bg-slate-700/30"></div>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   {items.map((item, idx) => (
