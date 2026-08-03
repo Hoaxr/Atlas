@@ -473,21 +473,22 @@ const Tracker = () => {
                     </button>
                   </div>
 
-                <div className="p-4 flex-1 flex flex-col justify-between space-y-3">
-                  <div>
-                    <h3 className="font-bold text-slate-100 text-lg truncate group-hover:text-cyan-400 transition-colors">
-                      {m.title}
-                    </h3>
-                    <p className="text-xs text-slate-400 truncate mt-0.5">{m.runtime ? `${m.runtime} mins` : 'Movie'}</p>
-                  </div>
-
-                  <div className="space-y-2">
-                    <div className="flex justify-between items-center text-xs text-slate-400 font-mono">
-                      <span>In Progress</span>
-                      <span>{m.watch_progress || 0}%</span>
+                  <div className="p-4 flex-1 flex flex-col justify-between space-y-3">
+                    <div>
+                      <h3 className="font-bold text-slate-100 text-lg truncate group-hover:text-cyan-400 transition-colors">
+                        {m.title}
+                      </h3>
+                      <p className="text-xs text-slate-400 truncate mt-0.5">{m.runtime ? `${m.runtime} mins` : 'Movie'}</p>
                     </div>
-                    <div className="w-full h-1.5 bg-slate-700/60 rounded-full overflow-hidden">
-                      <div className="h-full bg-cyan-400 rounded-full" style={{ width: `${m.watch_progress || 50}%` }}></div>
+
+                    <div className="space-y-2">
+                      <div className="flex justify-between items-center text-xs text-slate-400 font-mono">
+                        <span>In Progress</span>
+                        <span>{m.watch_progress || 0}%</span>
+                      </div>
+                      <div className="w-full h-1.5 bg-slate-700/60 rounded-full overflow-hidden">
+                        <div className="h-full bg-cyan-400 rounded-full" style={{ width: `${m.watch_progress || 50}%` }}></div>
+                      </div>
                     </div>
                   </div>
                 </div>
