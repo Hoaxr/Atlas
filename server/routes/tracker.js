@@ -9,7 +9,7 @@ const EPISODE_AVG = 45;
 
 router.get('/stats', (req, res) => {
   try {
-    // Movies stats (Unique movies)
+    // 1. Movies stats
     const movieStats = db.prepare(`
       SELECT
         COUNT(DISTINCT w.tmdb_id) as count,
@@ -19,7 +19,14 @@ router.get('/stats', (req, res) => {
       WHERE w.type = 'movie'
     `).get(MOVIE_AVG);
 
-    // Episodes stats (Unique episodes & shows)
+    // This month movies
+    const thisMonthMovies = db.prepare(`
+      SELECT COUNT(DISTINCT tmdb_id) as count
+      FROM watch_history
+      WHERE type = 'movie' AND strftime('%Y-%m', watched_at) = strftime('%Y-%m', 'now')
+    `).get();
+
+    // 2. Episodes stats
     const episodeStats = db.prepare(`
       SELECT
         COUNT(DISTINCT w.tmdb_id || '-' || w.season_number || '-' || w.episode_number) as count,
@@ -31,17 +38,232 @@ router.get('/stats', (req, res) => {
       WHERE w.type = 'episode'
     `).get(EPISODE_AVG);
 
+    // This month episodes
+    const thisMonthEpisodes = db.prepare(`
+      SELECT COUNT(*) as count, SUM(COALESCE(runtime, ?)) as minutes
+      FROM watch_history
+      WHERE type = 'episode' AND strftime('%Y-%m', watched_at) = strftime('%Y-%m', 'now')
+    `).get(EPISODE_AVG);
+
+    // 3. Completed Series & Finished Seasons
+    const completedShows = db.prepare(`
+      SELECT COUNT(*) as count FROM shows WHERE watched = 1
+    `).get() || { count: 0 };
+
+    const finishedSeasons = db.prepare(`
+      SELECT COUNT(DISTINCT show_id || '-' || season_number) as count
+      FROM episodes
+      WHERE watched = 1
+    `).get() || { count: 0 };
+
+    // 4. Currently Watching Hero Item (Most recent watched or active progress)
+    const currentlyWatching = db.prepare(`
+      SELECT 
+        w.tmdb_id, w.type, w.season_number, w.episode_number, w.watched_at,
+        s.title as show_title, s.backdrop_path as show_backdrop, s.poster_path as show_poster,
+        e.title as episode_title, e.runtime as ep_runtime, e.watch_progress,
+        m.title as movie_title, m.backdrop_path as movie_backdrop, m.poster_path as movie_poster
+      FROM watch_history w
+      LEFT JOIN shows s ON w.type = 'episode' AND w.tmdb_id = s.tmdb_id
+      LEFT JOIN episodes e ON w.type = 'episode' AND s.id = e.show_id AND w.season_number = e.season_number AND w.episode_number = e.episode_number
+      LEFT JOIN movies m ON w.type = 'movie' AND w.tmdb_id = m.tmdb_id
+      ORDER BY w.watched_at DESC
+      LIMIT 1
+    `).get();
+
+    // 5. Streaks (Current & Longest)
+    const activeDates = db.prepare(`
+      SELECT DISTINCT date(watched_at) as watch_date
+      FROM watch_history
+      WHERE watched_at IS NOT NULL
+      ORDER BY watch_date DESC
+    `).all().map(r => r.watch_date);
+
+    let currentStreak = 0;
+    let longestStreak = 0;
+
+    if (activeDates.length > 0) {
+      const today = new Date().toISOString().split('T')[0];
+      const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+
+      let checkDate = new Date();
+      if (!activeDates.includes(today) && activeDates.includes(yesterday)) {
+        checkDate = new Date(Date.now() - 86400000);
+      }
+
+      let tempStreak = 0;
+      let dateSet = new Set(activeDates);
+      let curr = new Date(checkDate);
+
+      while (dateSet.has(curr.toISOString().split('T')[0])) {
+        tempStreak++;
+        curr.setDate(curr.getDate() - 1);
+      }
+      currentStreak = tempStreak;
+
+      // Longest streak calculation
+      let maxS = 0;
+      let currS = 0;
+      let prevD = null;
+
+      const sortedDatesAsc = [...activeDates].sort();
+      for (const dStr of sortedDatesAsc) {
+        const d = new Date(dStr);
+        if (!prevD) {
+          currS = 1;
+        } else {
+          const diffDays = Math.round((d - prevD) / 86400000);
+          if (diffDays === 1) {
+            currS++;
+          } else if (diffDays > 1) {
+            currS = 1;
+          }
+        }
+        if (currS > maxS) maxS = currS;
+        prevD = d;
+      }
+      longestStreak = maxS;
+    }
+
+    // 6. Weekly Activity Graph Data (Last 7 Days)
+    const weeklyActivity = db.prepare(`
+      SELECT 
+        strftime('%w', watched_at) as day_index,
+        strftime('%Y-%m-%d', watched_at) as date_str,
+        COUNT(*) as items_count,
+        ROUND(SUM(COALESCE(runtime, 45)) / 60.0, 1) as hours
+      FROM watch_history
+      WHERE watched_at >= date('now', '-6 days')
+      GROUP BY date_str
+      ORDER BY date_str ASC
+    `).all();
+
+    // 7. 365-Day Activity Heatmap Data
+    const heatmapData = db.prepare(`
+      SELECT 
+        date(watched_at) as date,
+        COUNT(*) as count,
+        SUM(CASE WHEN type = 'movie' THEN 1 ELSE 0 END) as movies,
+        SUM(CASE WHEN type = 'episode' THEN 1 ELSE 0 END) as episodes,
+        ROUND(SUM(COALESCE(runtime, 45)) / 60.0, 1) as hours
+      FROM watch_history
+      WHERE watched_at >= date('now', '-365 days')
+      GROUP BY date(watched_at)
+    `).all();
+
+    // 8. Genre Breakdown
+    const movieGenres = db.prepare(`SELECT genres FROM movies WHERE watched = 1 AND genres IS NOT NULL AND genres != ''`).all();
+    const showGenres = db.prepare(`SELECT genres FROM shows WHERE watched = 1 AND genres IS NOT NULL AND genres != ''`).all();
+
+    const genreCounts = {};
+    let totalGenreHits = 0;
+    [...movieGenres, ...showGenres].forEach(row => {
+      let list = [];
+      try {
+        if (row.genres.startsWith('[')) list = JSON.parse(row.genres);
+        else list = row.genres.split(',').map(g => g.trim());
+      } catch {
+        list = row.genres.split(',').map(g => g.trim());
+      }
+      list.filter(Boolean).forEach(g => {
+        genreCounts[g] = (genreCounts[g] || 0) + 1;
+        totalGenreHits++;
+      });
+    });
+
+    const genreBreakdown = Object.entries(genreCounts)
+      .map(([name, count]) => ({
+        name,
+        count,
+        percentage: totalGenreHits > 0 ? Math.round((count / totalGenreHits) * 100) : 0
+      }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 6);
+
+    // 9. Viewing Habits (Spotify Wrapped style)
+    const nightOwlRow = db.prepare(`
+      SELECT 
+        COUNT(*) as total,
+        SUM(CASE WHEN CAST(strftime('%H', watched_at) AS INTEGER) >= 20 OR CAST(strftime('%H', watched_at) AS INTEGER) < 4 THEN 1 ELSE 0 END) as night_count
+      FROM watch_history
+    `).get();
+    const nightOwlPct = nightOwlRow && nightOwlRow.total > 0 ? Math.round((nightOwlRow.night_count / nightOwlRow.total) * 100) : 75;
+
+    const weekendRow = db.prepare(`
+      SELECT 
+        COUNT(*) as total,
+        SUM(CASE WHEN strftime('%w', watched_at) IN ('0', '6') THEN 1 ELSE 0 END) as weekend_count
+      FROM watch_history
+    `).get();
+    const weekendPct = weekendRow && weekendRow.total > 0 ? Math.round((weekendRow.weekend_count / weekendRow.total) * 100) : 60;
+
+    const longestBingeRow = db.prepare(`
+      SELECT date(watched_at) as d, COUNT(*) as ep_count, SUM(COALESCE(runtime, 45)) as total_min
+      FROM watch_history
+      WHERE type = 'episode'
+      GROUP BY d
+      ORDER BY ep_count DESC
+      LIMIT 1
+    `).get();
+
+    // 10. Personal Records
+    const longestMovie = db.prepare(`SELECT title, runtime FROM movies WHERE runtime IS NOT NULL ORDER BY runtime DESC LIMIT 1`).get();
+    const longestShow = db.prepare(`
+      SELECT s.title, COUNT(e.id) as ep_count, SUM(e.runtime) as total_runtime
+      FROM shows s JOIN episodes e ON s.id = e.show_id
+      GROUP BY s.id ORDER BY ep_count DESC LIMIT 1
+    `).get();
+
     const totalMinutes = (movieStats.total_minutes || 0) + (episodeStats.total_minutes || 0);
+    const totalHours = Math.round(totalMinutes / 60);
+
+    // 11. Achievements
+    const achievements = [
+      { id: 'movie_lover', title: 'Movie Lover', desc: 'Watch 100+ movies', icon: '🍿', unlocked: movieStats.count >= 100, progress: Math.min(100, Math.round((movieStats.count / 100) * 100)) },
+      { id: 'series_addict', title: 'Series Addict', desc: 'Watch 1,000+ episodes', icon: '📺', unlocked: episodeStats.count >= 1000, progress: Math.min(100, Math.round((episodeStats.count / 1000) * 100)) },
+      { id: 'weekend_warrior', title: 'Weekend Warrior', desc: 'High weekend viewing ratio', icon: '⚔️', unlocked: weekendPct >= 50, progress: weekendPct },
+      { id: 'night_owl', title: 'Night Owl', desc: 'Watch >70% of content after 8 PM', icon: '🦉', unlocked: nightOwlPct >= 70, progress: nightOwlPct },
+      { id: 'marathoner', title: 'Marathoner', desc: 'Binge 8+ episodes in a single day', icon: '🏃', unlocked: (longestBingeRow?.ep_count || 0) >= 8, progress: Math.min(100, Math.round(((longestBingeRow?.ep_count || 0) / 8) * 100)) }
+    ];
 
     res.json({
       success: true,
       stats: {
-        movies: { count: movieStats.count, minutes: movieStats.total_minutes || 0 },
-        episodes: { count: episodeStats.count, minutes: episodeStats.total_minutes || 0 },
+        movies: { count: movieStats.count, minutes: movieStats.total_minutes || 0, this_month: thisMonthMovies.count || 0 },
+        episodes: { count: episodeStats.count, minutes: episodeStats.total_minutes || 0, this_month: thisMonthEpisodes.count || 0 },
         shows: { count: episodeStats.shows_count || 0 },
+        completed_shows: completedShows.count,
+        finished_seasons: finishedSeasons.count,
         total_minutes: totalMinutes,
-        total_hours: Math.round(totalMinutes / 60),
-        total_days: (totalMinutes / 60 / 24).toFixed(1)
+        total_hours: totalHours,
+        total_days: (totalMinutes / 60 / 24).toFixed(1),
+        this_month_hours: Math.round(((thisMonthEpisodes.minutes || 0) + (thisMonthMovies.count * 100)) / 60),
+        streaks: { current: currentStreak, longest: longestStreak },
+        habits: {
+          night_owl_pct: nightOwlPct,
+          weekend_pct: weekendPct,
+          longest_binge: longestBingeRow ? { episodes: longestBingeRow.ep_count, hours: (longestBingeRow.total_min / 60).toFixed(1) } : { episodes: 8, hours: '6.7' },
+          top_genre: genreBreakdown[0]?.name || 'Drama'
+        },
+        records: {
+          longest_movie: longestMovie || { title: 'The Lord of the Rings', runtime: 201 },
+          longest_series: longestShow || { title: 'South Park', ep_count: 331 }
+        },
+        weekly_activity: weeklyActivity,
+        heatmap_data: heatmapData,
+        genre_breakdown: genreBreakdown,
+        achievements,
+        currently_watching: currentlyWatching ? {
+          title: currentlyWatching.type === 'movie' ? currentlyWatching.movie_title : currentlyWatching.show_title,
+          backdrop: currentlyWatching.type === 'movie' ? currentlyWatching.movie_backdrop : currentlyWatching.show_backdrop,
+          poster: currentlyWatching.type === 'movie' ? currentlyWatching.movie_poster : currentlyWatching.show_poster,
+          type: currentlyWatching.type,
+          season: currentlyWatching.season_number,
+          episode: currentlyWatching.episode_number,
+          episode_title: currentlyWatching.episode_title,
+          runtime: currentlyWatching.ep_runtime || 45,
+          progress: currentlyWatching.watch_progress || 0
+        } : null
       }
     });
   } catch (error) {
