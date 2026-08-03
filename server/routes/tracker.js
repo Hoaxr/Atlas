@@ -7,7 +7,7 @@ const tmdbService = require('../services/tmdbService');
 const MOVIE_AVG = 100;
 const EPISODE_AVG = 45;
 
-router.get('/stats', (req, res) => {
+router.get('/stats', async (req, res) => {
   try {
     // 1. Movies stats
     const movieStats = db.prepare(`
@@ -57,19 +57,49 @@ router.get('/stats', (req, res) => {
     `).get() || { count: 0 };
 
     // 4. Currently Watching Hero Item (Most recent watched or active progress)
-    const currentlyWatching = db.prepare(`
+    const currentlyRow = db.prepare(`
       SELECT 
         w.tmdb_id, w.type, w.season_number, w.episode_number, w.watched_at,
         s.title as show_title, s.poster_path as show_poster,
         e.title as episode_title, e.runtime as ep_runtime, e.watch_progress,
         m.title as movie_title, m.poster_path as movie_poster
       FROM watch_history w
-      LEFT JOIN shows s ON w.type = 'episode' AND w.tmdb_id = s.tmdb_id
+      LEFT JOIN shows s ON (w.type = 'episode' OR w.type = 'show') AND w.tmdb_id = s.tmdb_id
       LEFT JOIN episodes e ON w.type = 'episode' AND s.id = e.show_id AND w.season_number = e.season_number AND w.episode_number = e.episode_number
       LEFT JOIN movies m ON w.type = 'movie' AND w.tmdb_id = m.tmdb_id
       ORDER BY w.watched_at DESC
       LIMIT 1
     `).get();
+
+    let currentlyWatching = null;
+    if (currentlyRow) {
+      let title = currentlyRow.type === 'movie' ? currentlyRow.movie_title : currentlyRow.show_title;
+      let poster = currentlyRow.type === 'movie' ? currentlyRow.movie_poster : currentlyRow.show_poster;
+
+      if (!title && currentlyRow.tmdb_id) {
+        try {
+          const details = currentlyRow.type === 'movie' 
+            ? await tmdbService.getMovieById(currentlyRow.tmdb_id) 
+            : await tmdbService.getShowById(currentlyRow.tmdb_id);
+          title = details?.name || details?.title;
+          poster = details?.poster_path;
+        } catch (e) {
+          console.error('[Tracker] Failed resolving TMDB item for currently watching:', e);
+        }
+      }
+
+      currentlyWatching = {
+        title: title || `${currentlyRow.type === 'movie' ? 'Movie' : 'Show'} ${currentlyRow.tmdb_id}`,
+        backdrop: poster,
+        poster: poster,
+        type: currentlyRow.type,
+        season: currentlyRow.season_number,
+        episode: currentlyRow.episode_number,
+        episode_title: currentlyRow.episode_title,
+        runtime: currentlyRow.ep_runtime || 45,
+        progress: currentlyRow.watch_progress || 0
+      };
+    }
 
     // 5. Streaks (Current & Longest)
     const activeDates = db.prepare(`
@@ -253,17 +283,7 @@ router.get('/stats', (req, res) => {
         heatmap_data: heatmapData,
         genre_breakdown: genreBreakdown,
         achievements,
-        currently_watching: currentlyWatching ? {
-          title: currentlyWatching.type === 'movie' ? currentlyWatching.movie_title : currentlyWatching.show_title,
-          backdrop: currentlyWatching.type === 'movie' ? currentlyWatching.movie_poster : currentlyWatching.show_poster,
-          poster: currentlyWatching.type === 'movie' ? currentlyWatching.movie_poster : currentlyWatching.show_poster,
-          type: currentlyWatching.type,
-          season: currentlyWatching.season_number,
-          episode: currentlyWatching.episode_number,
-          episode_title: currentlyWatching.episode_title,
-          runtime: currentlyWatching.ep_runtime || 45,
-          progress: currentlyWatching.watch_progress || 0
-        } : null
+        currently_watching: currentlyWatching
       }
     });
   } catch (error) {

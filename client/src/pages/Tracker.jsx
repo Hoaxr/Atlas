@@ -226,9 +226,6 @@ const Tracker = () => {
         
         <div className="relative z-10 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-8">
           <div className="space-y-3 max-w-2xl">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 text-xs font-bold uppercase tracking-wider">
-              <Sparkles className="w-3.5 h-3.5" /> Streaming Analytics Dashboard
-            </div>
             <h1 className="text-4xl sm:text-5xl font-black text-slate-100 tracking-tight">
               Watch Tracker
             </h1>
