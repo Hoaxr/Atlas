@@ -23,6 +23,11 @@ const HistoryItem = ({ item, handleMarkUnwatched, handleDeleteHistory }) => {
   const [localPoster, setLocalPoster] = useState(isMovie ? item.movie_poster : item.show_poster);
 
   useEffect(() => {
+    setLocalTitle(isMovie ? item.movie_title : item.show_title);
+    setLocalPoster(isMovie ? item.movie_poster : item.show_poster);
+  }, [item.movie_title, item.show_title, item.movie_poster, item.show_poster, isMovie]);
+
+  useEffect(() => {
     if (!localTitle && item.tmdb_id) {
       const fetchTmdb = async () => {
         try {
