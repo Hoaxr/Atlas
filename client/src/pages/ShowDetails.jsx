@@ -5,7 +5,7 @@ import api from '../lib/api';
 import { formatSize, parseResolution, parseCodec, parseAudio, LANG_LABEL, LANG_NAME } from '../lib/format';
 import { useSettings } from '../lib/useSettings';
 import { useTMDBDetails } from '../lib/useTMDBDetails';
-import { ArrowLeft, HardDrive, Tv, PlayCircle, ChevronDown, ChevronRight, ChevronLeft, Bookmark, BookmarkMinus, Search, Star, X, RefreshCw, Loader2, Download, CheckSquare, Film, Trash2, Globe, Eye, Volume2 } from 'lucide-react';
+import { ArrowLeft, HardDrive, Tv, PlayCircle, ChevronDown, ChevronRight, ChevronLeft, Bookmark, BookmarkMinus, Search, Star, X, RefreshCw, Loader2, Download, CheckSquare, Square, Film, Trash2, Globe, Eye, Volume2 } from 'lucide-react';
 import { customAlert, customConfirm } from '../utils/alerts';
 import { useOutsideClick } from '../lib/useOutsideClick';
 import { cachedShows, setCachedShows } from '../lib/libraryCache';
@@ -804,7 +804,7 @@ export default function ShowDetails() {
                                   }`}
                                   title={ep.watched ? 'Mark unwatched' : 'Mark watched'}
                                 >
-                                  <CheckSquare className="w-4 h-4" />
+                                  {ep.watched ? <CheckSquare className="w-4 h-4" /> : <Square className="w-4 h-4 opacity-60 hover:opacity-100" />}
                                 </button>
                               </div>
                             </td>
@@ -1003,7 +1003,7 @@ export default function ShowDetails() {
                                 }`}
                                 title={ep.watched ? 'Mark unwatched' : 'Mark watched'}
                               >
-                                <CheckSquare className="w-3.5 h-3.5" />
+                                {ep.watched ? <CheckSquare className="w-3.5 h-3.5" /> : <Square className="w-3.5 h-3.5 opacity-60 hover:opacity-100" />}
                               </button>
                             </div>
                             <div className="min-w-0 flex-1">
