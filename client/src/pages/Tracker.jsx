@@ -383,7 +383,7 @@ const Tracker = () => {
 
                   <button 
                     onClick={() => handleMarkWatched(ep.tmdb_id, 'episode', ep.season_number, ep.episode_number)}
-                    className="absolute bottom-3 right-3 p-2 rounded-xl bg-emerald-500/90 hover:bg-emerald-400 text-white backdrop-blur-md transition-all duration-200 shadow-lg"
+                    className="absolute bottom-3 right-3 p-2 rounded-xl bg-slate-900/80 hover:bg-emerald-500 text-slate-300 hover:text-white border border-white/10 hover:border-emerald-400 backdrop-blur-md transition-all duration-200 shadow-lg"
                     title="Mark Watched"
                   >
                     <CheckCircle2 className="w-4 h-4" />
@@ -432,7 +432,7 @@ const Tracker = () => {
 
                   <button 
                     onClick={() => handleMarkWatched(m.tmdb_id, 'movie')}
-                    className="absolute bottom-3 right-3 p-2 rounded-xl bg-emerald-500/90 hover:bg-emerald-400 text-white backdrop-blur-md transition-all duration-200 shadow-lg"
+                    className="absolute bottom-3 right-3 p-2 rounded-xl bg-slate-900/80 hover:bg-emerald-500 text-slate-300 hover:text-white border border-white/10 hover:border-emerald-400 backdrop-blur-md transition-all duration-200 shadow-lg"
                     title="Mark Watched"
                   >
                     <CheckCircle2 className="w-4 h-4" />
