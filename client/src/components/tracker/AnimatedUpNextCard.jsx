@@ -48,15 +48,16 @@ export function AnimatedUpNextCard({ item, type, onMarkWatched }) {
 
     // Sequence timing:
     // 0-650ms: Fill progress bar, glow card, ripple/particle checkmark, switch text to Watched ✓
-    // 700ms: Trigger mark watched to pull next episode into card
-    setTimeout(() => {
-      onMarkWatched(
+    // 700ms: Trigger mark watched to pull next episode into card and reset animState
+    setTimeout(async () => {
+      await onMarkWatched(
         itemKey,
         tmdbId,
         type,
         isEpisode ? item.season_number : undefined,
         isEpisode ? item.episode_number : undefined
       );
+      setAnimState('idle');
     }, 700);
   };
 
