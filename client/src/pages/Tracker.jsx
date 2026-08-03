@@ -566,54 +566,54 @@ const Tracker = () => {
       {/* ── WATCHING HABITS (SPOTIFY WRAPPED CARDS) ── */}
       <div className="space-y-4">
         <h2 className="text-2xl font-bold text-slate-100 flex items-center gap-2">
-          <Zap className="w-6 h-6 text-amber-400 fill-amber-400" /> Viewing Persona & Habits
+          <Zap className="w-6 h-6 text-cyan-400" /> Viewing Persona & Habits
         </h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
           
-          <div className="glass-panel p-6 rounded-3xl border border-cyan-500/20 bg-gradient-to-br from-cyan-950/40 to-slate-900/60 backdrop-blur-xl shadow-xl flex flex-col justify-between group hover:scale-[1.02] transition-transform">
+          <div className="glass-panel p-6 rounded-3xl border border-slate-700/50 bg-slate-800/40 backdrop-blur-xl shadow-xl flex flex-col justify-between group hover:scale-[1.02] transition-transform">
             <div className="flex justify-between items-center">
               <Moon className="w-8 h-8 text-cyan-400" />
               <span className="text-[10px] uppercase font-bold text-cyan-400 bg-cyan-500/10 px-2.5 py-1 rounded-full border border-cyan-500/20">Habit</span>
             </div>
             <div className="my-4">
               <div className="text-3xl font-black text-slate-100">{stats?.habits?.night_owl_pct || 75}%</div>
-              <h4 className="text-lg font-bold text-cyan-300 mt-1">Night Owl Binger</h4>
+              <h4 className="text-lg font-bold text-slate-100 mt-1">Night Owl Binger</h4>
               <p className="text-xs text-slate-400 mt-1">of your total viewing happens after 8 PM</p>
             </div>
           </div>
 
-          <div className="glass-panel p-6 rounded-3xl border border-teal-500/20 bg-gradient-to-br from-teal-950/40 to-slate-900/60 backdrop-blur-xl shadow-xl flex flex-col justify-between group hover:scale-[1.02] transition-transform">
+          <div className="glass-panel p-6 rounded-3xl border border-slate-700/50 bg-slate-800/40 backdrop-blur-xl shadow-xl flex flex-col justify-between group hover:scale-[1.02] transition-transform">
             <div className="flex justify-between items-center">
-              <Sun className="w-8 h-8 text-teal-400" />
-              <span className="text-[10px] uppercase font-bold text-teal-400 bg-teal-500/10 px-2.5 py-1 rounded-full border border-teal-500/20">Pattern</span>
+              <Sun className="w-8 h-8 text-cyan-400" />
+              <span className="text-[10px] uppercase font-bold text-cyan-400 bg-cyan-500/10 px-2.5 py-1 rounded-full border border-cyan-500/20">Pattern</span>
             </div>
             <div className="my-4">
               <div className="text-3xl font-black text-slate-100">{stats?.habits?.weekend_pct || 60}%</div>
-              <h4 className="text-lg font-bold text-teal-300 mt-1">Weekend Warrior</h4>
+              <h4 className="text-lg font-bold text-slate-100 mt-1">Weekend Warrior</h4>
               <p className="text-xs text-slate-400 mt-1">of total screen time takes place on weekends</p>
             </div>
           </div>
 
-          <div className="glass-panel p-6 rounded-3xl border border-emerald-500/20 bg-gradient-to-br from-emerald-950/40 to-slate-900/60 backdrop-blur-xl shadow-xl flex flex-col justify-between group hover:scale-[1.02] transition-transform">
+          <div className="glass-panel p-6 rounded-3xl border border-slate-700/50 bg-slate-800/40 backdrop-blur-xl shadow-xl flex flex-col justify-between group hover:scale-[1.02] transition-transform">
             <div className="flex justify-between items-center">
-              <Flame className="w-8 h-8 text-emerald-400" />
-              <span className="text-[10px] uppercase font-bold text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-full border border-emerald-500/20">Record Binge</span>
+              <Flame className="w-8 h-8 text-cyan-400" />
+              <span className="text-[10px] uppercase font-bold text-cyan-400 bg-cyan-500/10 px-2.5 py-1 rounded-full border border-cyan-500/20">Record Binge</span>
             </div>
             <div className="my-4">
               <div className="text-3xl font-black text-slate-100">{stats?.habits?.longest_binge?.episodes || 8} <span className="text-base font-normal text-slate-400">eps</span></div>
-              <h4 className="text-lg font-bold text-emerald-300 mt-1">Single Day Record</h4>
+              <h4 className="text-lg font-bold text-slate-100 mt-1">Single Day Record</h4>
               <p className="text-xs text-slate-400 mt-1">{stats?.habits?.longest_binge?.hours || '6.7'} hours watched in 24 hours</p>
             </div>
           </div>
 
-          <div className="glass-panel p-6 rounded-3xl border border-amber-500/20 bg-gradient-to-br from-amber-950/40 to-slate-900/60 backdrop-blur-xl shadow-xl flex flex-col justify-between group hover:scale-[1.02] transition-transform">
+          <div className="glass-panel p-6 rounded-3xl border border-slate-700/50 bg-slate-800/40 backdrop-blur-xl shadow-xl flex flex-col justify-between group hover:scale-[1.02] transition-transform">
             <div className="flex justify-between items-center">
-              <Star className="w-8 h-8 text-amber-400" />
-              <span className="text-[10px] uppercase font-bold text-amber-400 bg-amber-500/10 px-2.5 py-1 rounded-full border border-amber-500/20">Favorite</span>
+              <Star className="w-8 h-8 text-cyan-400" />
+              <span className="text-[10px] uppercase font-bold text-cyan-400 bg-cyan-500/10 px-2.5 py-1 rounded-full border border-cyan-500/20">Favorite</span>
             </div>
             <div className="my-4">
               <div className="text-3xl font-black text-slate-100 truncate">{stats?.habits?.top_genre || 'Drama'}</div>
-              <h4 className="text-lg font-bold text-amber-300 mt-1">Top Genre</h4>
+              <h4 className="text-lg font-bold text-slate-100 mt-1">Top Genre</h4>
               <p className="text-xs text-slate-400 mt-1">Most watched category in your library</p>
             </div>
           </div>
@@ -636,14 +636,14 @@ const Tracker = () => {
               key={ach.id}
               className={`p-5 rounded-2xl border transition-all duration-300 flex flex-col justify-between ${
                 ach.unlocked 
-                  ? 'bg-gradient-to-b from-cyan-950/40 to-slate-900/80 border-cyan-500/40 shadow-lg shadow-cyan-500/10 hover:border-cyan-400' 
+                  ? 'bg-slate-800/60 border-cyan-500/40 shadow-lg shadow-cyan-500/10 hover:border-cyan-400' 
                   : 'bg-slate-900/40 border-slate-700/30 opacity-60'
               }`}
             >
               <div className="flex justify-between items-start mb-3">
                 <span className="text-3xl filter drop-shadow">{ach.icon}</span>
                 {ach.unlocked ? (
-                  <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">Unlocked</span>
+                  <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded-full bg-cyan-500/10 text-cyan-400 border border-cyan-500/30">Unlocked</span>
                 ) : (
                   <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded-full bg-slate-700/60 text-slate-400">Locked</span>
                 )}
@@ -658,7 +658,7 @@ const Tracker = () => {
                   <span>{ach.progress}%</span>
                 </div>
                 <div className="w-full h-1 bg-slate-800 rounded-full overflow-hidden">
-                  <div className={`h-full rounded-full ${ach.unlocked ? 'bg-emerald-400' : 'bg-cyan-500'}`} style={{ width: `${ach.progress}%` }}></div>
+                  <div className={`h-full rounded-full ${ach.unlocked ? 'bg-cyan-400' : 'bg-slate-600'}`} style={{ width: `${ach.progress}%` }}></div>
                 </div>
               </div>
             </div>
