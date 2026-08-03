@@ -21,8 +21,13 @@ router.post('/shows/:id/watched', async (req, res, next) => {
   try {
     const { watched } = req.body;
     const isWatched = !!watched;
+    const cols = db.prepare('PRAGMA table_info(episodes)').all().map(c => c.name);
+    const hasProgress = cols.includes('watch_progress');
+    const updateEpSql = hasProgress && isWatched 
+      ? 'UPDATE episodes SET watched = ?, watched_at = CURRENT_TIMESTAMP, watch_progress = 0 WHERE show_id = ?'
+      : 'UPDATE episodes SET watched = ?, watched_at = CURRENT_TIMESTAMP WHERE show_id = ?';
     db.prepare('UPDATE shows SET watched = ?, watched_at = CURRENT_TIMESTAMP WHERE id = ?').run(isWatched ? 1 : 0, req.params.id);
-    db.prepare(`UPDATE episodes SET watched = ?, watched_at = CURRENT_TIMESTAMP${isWatched ? ', watch_progress = 0' : ''} WHERE show_id = ?`).run(isWatched ? 1 : 0, req.params.id);
+    db.prepare(updateEpSql).run(isWatched ? 1 : 0, req.params.id);
     const show = db.prepare('SELECT tmdb_id FROM shows WHERE id = ?').get(req.params.id);
     if (!isWatched && show?.tmdb_id) {
       db.prepare('DELETE FROM watch_history WHERE tmdb_id = ? AND type = "episode"').run(show.tmdb_id);
@@ -819,9 +824,12 @@ router.post('/shows/:id/seasons/:season/watched', async (req, res, next) => {
   try {
     const { watched } = req.body;
     const isWatched = watched === undefined ? true : !!watched;
-    const result = db.prepare(
-      `UPDATE episodes SET watched = ?, watched_at = CURRENT_TIMESTAMP${isWatched ? ', watch_progress = 0' : ''} WHERE show_id = ? AND season_number = ?`
-    ).run(isWatched ? 1 : 0, req.params.id, req.params.season);
+    const cols = db.prepare('PRAGMA table_info(episodes)').all().map(c => c.name);
+    const hasProgress = cols.includes('watch_progress');
+    const updateSeasonSql = hasProgress && isWatched 
+      ? 'UPDATE episodes SET watched = ?, watched_at = CURRENT_TIMESTAMP, watch_progress = 0 WHERE show_id = ? AND season_number = ?'
+      : 'UPDATE episodes SET watched = ?, watched_at = CURRENT_TIMESTAMP WHERE show_id = ? AND season_number = ?';
+    const result = db.prepare(updateSeasonSql).run(isWatched ? 1 : 0, req.params.id, req.params.season);
 
     const show = db.prepare('SELECT tmdb_id FROM shows WHERE id = ?').get(req.params.id);
     if (!isWatched && show?.tmdb_id) {
@@ -845,7 +853,12 @@ router.post('/episodes/:id/watched', async (req, res, next) => {
     const ep = db.prepare('SELECT e.*, s.tmdb_id as show_tmdb_id FROM episodes e JOIN shows s ON e.show_id = s.id WHERE e.id = ?').get(req.params.id);
     if (!ep) return res.status(404).json({ status: 'error', message: 'Episode not found' });
 
-    db.prepare(`UPDATE episodes SET watched = ?, watched_at = CURRENT_TIMESTAMP${isWatched ? ', watch_progress = 0' : ''} WHERE id = ?`).run(isWatched ? 1 : 0, req.params.id);
+    const cols = db.prepare('PRAGMA table_info(episodes)').all().map(c => c.name);
+    const hasProgress = cols.includes('watch_progress');
+    const updateSql = hasProgress && isWatched 
+      ? 'UPDATE episodes SET watched = ?, watched_at = CURRENT_TIMESTAMP, watch_progress = 0 WHERE id = ?'
+      : 'UPDATE episodes SET watched = ?, watched_at = CURRENT_TIMESTAMP WHERE id = ?';
+    db.prepare(updateSql).run(isWatched ? 1 : 0, req.params.id);
 
     if (!isWatched && ep.show_tmdb_id) {
       db.prepare('DELETE FROM watch_history WHERE tmdb_id = ? AND type = "episode" AND season_number = ? AND episode_number = ?').run(ep.show_tmdb_id, ep.season_number, ep.episode_number);
