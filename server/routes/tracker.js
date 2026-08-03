@@ -60,9 +60,9 @@ router.get('/stats', async (req, res) => {
     const currentlyRow = db.prepare(`
       SELECT 
         w.tmdb_id, w.type, w.season_number, w.episode_number, w.watched_at,
-        s.title as show_title, s.poster_path as show_poster,
-        e.title as episode_title, e.runtime as ep_runtime, e.watch_progress,
-        m.title as movie_title, m.poster_path as movie_poster
+        m.id as movie_id, m.title as movie_title, m.poster_path as movie_poster,
+        s.id as show_id, s.title as show_title, s.poster_path as show_poster,
+        e.title as episode_title, e.runtime as ep_runtime, e.watch_progress
       FROM watch_history w
       LEFT JOIN shows s ON (w.type = 'episode' OR w.type = 'show') AND w.tmdb_id = s.tmdb_id
       LEFT JOIN episodes e ON w.type = 'episode' AND s.id = e.show_id AND w.season_number = e.season_number AND w.episode_number = e.episode_number
@@ -89,6 +89,9 @@ router.get('/stats', async (req, res) => {
       }
 
       currentlyWatching = {
+        tmdb_id: currentlyRow.tmdb_id,
+        movie_id: currentlyRow.movie_id,
+        show_id: currentlyRow.show_id,
         title: title || `${currentlyRow.type === 'movie' ? 'Movie' : 'Show'} ${currentlyRow.tmdb_id}`,
         backdrop: poster,
         poster: poster,
@@ -300,8 +303,8 @@ router.get('/history', async (req, res) => {
     const history = db.prepare(`
       SELECT 
         w.id as history_id, w.tmdb_id, w.type, w.season_number, w.episode_number, w.watched_at,
-        m.title as movie_title, m.poster_path as movie_poster,
-        s.title as show_title, s.poster_path as show_poster,
+        m.id as movie_id, m.title as movie_title, m.poster_path as movie_poster,
+        s.id as show_id, s.title as show_title, s.poster_path as show_poster,
         e.title as episode_title
       FROM watch_history w
       LEFT JOIN movies m ON (w.type = 'movie') AND w.tmdb_id = m.tmdb_id
@@ -493,7 +496,12 @@ router.post('/mark-watched', async (req, res) => {
 
     if (type === 'movie') {
       const movie = db.prepare('SELECT id, runtime FROM movies WHERE tmdb_id = ?').get(tmdbId);
-      db.prepare('INSERT INTO watch_history (tmdb_id, type, watched_at, runtime) VALUES (?, ?, ?, ?)').run(tmdbId, 'movie', watchedAt, movie ? movie.runtime : null);
+      const existingMovie = db.prepare('SELECT id FROM watch_history WHERE tmdb_id = ? AND type = ?').get(tmdbId, 'movie');
+      if (existingMovie) {
+        db.prepare('UPDATE watch_history SET watched_at = ?, runtime = ? WHERE id = ?').run(watchedAt, movie ? movie.runtime : null, existingMovie.id);
+      } else {
+        db.prepare('INSERT INTO watch_history (tmdb_id, type, watched_at, runtime) VALUES (?, ?, ?, ?)').run(tmdbId, 'movie', watchedAt, movie ? movie.runtime : null);
+      }
       if (movie) {
         db.prepare('UPDATE movies SET watched = 1, watched_at = ? WHERE id = ?').run(watchedAt, movie.id);
       }
@@ -512,8 +520,18 @@ router.post('/mark-watched', async (req, res) => {
           db.prepare('UPDATE episodes SET watched = 1, watched_at = ? WHERE id = ?').run(watchedAt, epId);
         }
       }
-      db.prepare('INSERT INTO watch_history (tmdb_id, type, season_number, episode_number, watched_at, runtime) VALUES (?, ?, ?, ?, ?, ?)').run(tmdbId, 'episode', sNum, eNum, watchedAt, epRuntime);
+      const existingEp = db.prepare('SELECT id FROM watch_history WHERE tmdb_id = ? AND type = ? AND season_number = ? AND episode_number = ?').get(tmdbId, 'episode', sNum, eNum);
+      if (existingEp) {
+        db.prepare('UPDATE watch_history SET watched_at = ?, runtime = ? WHERE id = ?').run(watchedAt, epRuntime, existingEp.id);
+      } else {
+        db.prepare('INSERT INTO watch_history (tmdb_id, type, season_number, episode_number, watched_at, runtime) VALUES (?, ?, ?, ?, ?, ?)').run(tmdbId, 'episode', sNum, eNum, watchedAt, epRuntime);
+      }
     }
+
+    // Force WAL checkpoint so the subsequent up-next query sees this write.
+    // node:sqlite DatabaseSync with mmap may otherwise return stale data on
+    // immediate re-reads of the same connection.
+    db.exec('PRAGMA wal_checkpoint(TRUNCATE);');
 
     // Trigger sync to Simkl in background if enabled
     try {

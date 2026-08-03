@@ -606,7 +606,10 @@ export default function MovieDetails() {
                     onClick={() => {
                       const newWatched = movie.watched ? 0 : 1;
                       api.post(`/library/movies/${movie.id}/watched`, { watched: newWatched })
-                        .then(() => fetchMovieData(true))
+                        .then(() => {
+                          sessionStorage.setItem('tracker-stale', 'true');
+                          fetchMovieData(true);
+                        })
                         .catch(() => customAlert('Failed to toggle watched status', 'error'));
                     }}
                     className="flex items-center gap-2.5 sm:gap-3 bg-slate-800/30 dark:bg-slate-900/35 border border-slate-700/30 dark:border-white/5 rounded-xl p-2.5 sm:p-3 cursor-pointer hover:border-emerald-500/30 transition-colors group/watched"

@@ -540,11 +540,22 @@ const simklService = require('../../services/simklService');
 router.post('/:id/watched', async (req, res, next) => {
   try {
     const { watched } = req.body;
-    db.prepare(`UPDATE movies SET watched = ?, watched_at = CURRENT_TIMESTAMP${watched ? ', watch_progress = 0' : ''} WHERE id = ?`).run(watched ? 1 : 0, req.params.id);
-    const movie = db.prepare('SELECT tmdb_id FROM movies WHERE id = ?').get(req.params.id);
+    const watchedAt = new Date().toISOString();
+    db.prepare(`UPDATE movies SET watched = ?, watched_at = ?${watched ? ', watch_progress = 0' : ''} WHERE id = ?`).run(watched ? 1 : 0, watchedAt, req.params.id);
+    const movie = db.prepare('SELECT tmdb_id, runtime FROM movies WHERE id = ?').get(req.params.id);
     
-    if (!watched && movie?.tmdb_id) {
-      db.prepare('DELETE FROM watch_history WHERE tmdb_id = ? AND type = "movie"').run(movie.tmdb_id);
+    if (movie?.tmdb_id) {
+      if (watched) {
+        const existing = db.prepare('SELECT id FROM watch_history WHERE tmdb_id = ? AND type = ?').get(movie.tmdb_id, 'movie');
+        if (existing) {
+          db.prepare('UPDATE watch_history SET watched_at = ?, runtime = ? WHERE id = ?').run(watchedAt, movie.runtime || null, existing.id);
+        } else {
+          db.prepare('INSERT INTO watch_history (tmdb_id, type, watched_at, runtime) VALUES (?, ?, ?, ?)').run(movie.tmdb_id, 'movie', watchedAt, movie.runtime || null);
+        }
+      } else {
+        db.prepare('DELETE FROM watch_history WHERE tmdb_id = ? AND type = ?').run(movie.tmdb_id, 'movie');
+      }
+      db.exec('PRAGMA wal_checkpoint(TRUNCATE);');
     }
 
     if (movie?.tmdb_id) {

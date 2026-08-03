@@ -49,17 +49,26 @@ export function AnimatedUpNextCard({ item, type, onMarkWatched }) {
     // Sequence timing:
     // 0-600ms: Celebration burst, progress fill to 100%, status text to Watched ✓
     // 600ms: Start smooth exit slide/fade
-    // 950ms: Trigger API mark watched to fetch next episode and reset to idle
+    // 950ms: Trigger API mark watched to fetch next episode
+    // On success the parent re-renders with fresh data and this card unmounts,
+    // so we intentionally do NOT reset animState — the next episode gets a fresh card.
     setTimeout(() => {
       setAnimState('exiting');
       setTimeout(async () => {
-        await onMarkWatched(
-          itemKey,
-          tmdbId,
-          type,
-          isEpisode ? item.season_number : undefined,
-          isEpisode ? item.episode_number : undefined
-        );
+        try {
+          await onMarkWatched(
+            itemKey,
+            tmdbId,
+            type,
+            isEpisode ? item.season_number : undefined,
+            isEpisode ? item.episode_number : undefined
+          );
+        } catch (err) {
+          console.error('Failed to mark as watched', err);
+        }
+        // Always reset — if the parent re-rendered with new data
+        // this component is already unmounted so this is a no-op.
+        // If something went wrong, the card recovers to visible.
         setAnimState('idle');
       }, 350);
     }, 600);
@@ -78,10 +87,10 @@ export function AnimatedUpNextCard({ item, type, onMarkWatched }) {
           : { opacity: 1, scale: 1, y: 0, filter: 'blur(0px)' }
       }
       transition={{ duration: 0.35, ease: [0.4, 0, 0.2, 1] }}
-      className={`w-72 sm:w-80 shrink-0 snap-start bg-slate-800/60 border rounded-2xl overflow-hidden transition-colors duration-500 shadow-xl flex flex-col group relative ${
+      className={`w-72 sm:w-80 shrink-0 snap-start bg-slate-800/60 border rounded-2xl overflow-hidden transition-all duration-500 flex flex-col group relative ${
         isCompleted
-          ? 'border-cyan-400 shadow-cyan-500/20 shadow-2xl'
-          : 'border-slate-700/50 hover:border-cyan-500/40 hover:-translate-y-1'
+          ? 'border-cyan-500/40 ring-1 ring-cyan-500/20 shadow-lg shadow-cyan-500/10'
+          : 'border-slate-700/50 shadow-xl hover:border-cyan-500/40 hover:-translate-y-1'
       }`}
     >
       {/* CARD AMBIENT GLOW ON SUCCESS */}
@@ -129,6 +138,23 @@ export function AnimatedUpNextCard({ item, type, onMarkWatched }) {
         <span className="absolute top-3 left-3 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-cyan-600/80 text-white backdrop-blur-md shadow">
           {isEpisode ? `S${item.season_number} E${item.episode_number}` : 'Movie'}
         </span>
+
+        {/* RUNTIME PILL (bottom-left of poster) */}
+        {item.runtime && (
+          <span className="absolute bottom-6 left-3 px-2 py-0.5 rounded-md text-[10px] font-semibold bg-black/70 text-white backdrop-blur-sm">
+            {formatRuntime(item.runtime)}
+          </span>
+        )}
+
+        {/* POSTER PROGRESS BAR — thin bar at very bottom of poster image */}
+        <div className="absolute bottom-0 left-0 right-0 h-[3px] bg-white/20 z-20">
+          <motion.div
+            className="h-full bg-cyan-400"
+            initial={false}
+            animate={{ width: isCompleted ? '100%' : `${item.watch_progress || 0}%` }}
+            transition={{ duration: 0.5, ease: 'easeOut' }}
+          />
+        </div>
 
         {/* ── SATISFYING CHECKMARK BUTTON & CELEBRATION EFFECTS ── */}
         <div className="absolute bottom-3 right-3 z-20 flex items-center justify-center">
@@ -217,8 +243,9 @@ export function AnimatedUpNextCard({ item, type, onMarkWatched }) {
         </div>
 
         {/* PROGRESS BAR & STATUS */}
-        <div className="space-y-2">
-          <div className="flex justify-between items-center text-xs font-mono">
+        <div className="space-y-1.5">
+          {/* Labels row */}
+          <div className="flex justify-between items-center">
             <AnimatePresence mode="wait">
               {isCompleted ? (
                 <motion.span
@@ -227,38 +254,63 @@ export function AnimatedUpNextCard({ item, type, onMarkWatched }) {
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -4 }}
                   transition={{ duration: 0.25 }}
-                  className="font-bold text-emerald-400 flex items-center gap-1"
+                  className="text-[10px] font-bold text-emerald-400"
                 >
                   Watched ✓
                 </motion.span>
               ) : (
                 <motion.span
-                  key="left"
+                  key="runtime"
                   initial={{ opacity: 0, y: 4 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -4 }}
                   transition={{ duration: 0.25 }}
-                  className="text-slate-400"
+                  className="text-[10px] font-semibold text-white/80"
                 >
-                  {isEpisode ? `${item.episodes_left} ep left` : 'In Progress'}
+                  {item.runtime ? formatRuntime(item.runtime) : ''}
                 </motion.span>
               )}
             </AnimatePresence>
-            <span className="text-slate-400">
-              {isEpisode ? formatRuntime(item.total_time_left) : `${item.watch_progress || 0}%`}
-            </span>
+            <AnimatePresence mode="wait">
+              {isCompleted ? (
+                <motion.span
+                  key="done"
+                  initial={{ opacity: 0, y: 4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -4 }}
+                  transition={{ duration: 0.25 }}
+                  className="text-[10px] font-semibold text-emerald-400"
+                >
+                  100%
+                </motion.span>
+              ) : (
+                <motion.span
+                  key="remaining"
+                  initial={{ opacity: 0, y: 4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -4 }}
+                  transition={{ duration: 0.25 }}
+                  className="text-[10px] font-semibold text-white/70 text-right"
+                >
+                  {isEpisode
+                    ? `${item.episodes_left || 1} left${item.total_time_left ? ` · ${formatRuntime(item.total_time_left)}` : ''}`
+                    : item.watch_progress != null ? `${item.watch_progress}%` : 'In Progress'}
+                </motion.span>
+              )}
+            </AnimatePresence>
           </div>
 
-          <div className="w-full h-1.5 bg-slate-700/60 rounded-full overflow-hidden">
+          {/* Total progress bar */}
+          <div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden">
             <motion.div
               className={`h-full rounded-full ${isCompleted ? 'bg-emerald-400' : 'bg-cyan-400'}`}
               initial={false}
               animate={{
                 width: isCompleted
                   ? '100%'
-                  : isEpisode
-                  ? `${Math.max(10, Math.min(100, Math.round(((item.total_episodes - item.episodes_left) / item.total_episodes) * 100)))}%`
-                  : `${item.watch_progress || 50}%`
+                  : isEpisode && item.total_episodes > 0
+                  ? `${Math.round(((item.total_episodes - (item.episodes_left || 0)) / item.total_episodes) * 100)}%`
+                  : `${item.watch_progress || 0}%`
               }}
               transition={{ duration: 0.5, ease: 'easeOut' }}
             />

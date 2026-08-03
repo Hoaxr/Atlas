@@ -18,6 +18,7 @@ const formatRuntime = (minutes) => {
 };
 
 const HistoryItem = ({ item, handleMarkUnwatched, handleDeleteHistory }) => {
+  const navigate = useNavigate();
   const isMovie = item.type === 'movie';
   const [localTitle, setLocalTitle] = useState(isMovie ? item.movie_title : item.show_title);
   const [localPoster, setLocalPoster] = useState(isMovie ? item.movie_poster : item.show_poster);
@@ -44,12 +45,26 @@ const HistoryItem = ({ item, handleMarkUnwatched, handleDeleteHistory }) => {
     }
   }, [item.tmdb_id, isMovie, localTitle]);
 
+  const handleTitleClick = (e) => {
+    e.stopPropagation();
+    if (isMovie && item.movie_id) {
+      navigate(`/movies/${item.movie_id}`);
+    } else if (!isMovie && item.show_id) {
+      navigate(`/shows/${item.show_id}`);
+    } else if (item.tmdb_id) {
+      navigate(`/${isMovie ? 'movies' : 'shows'}/${item.tmdb_id}`);
+    }
+  };
+
   const title = localTitle || `${isMovie ? 'Movie' : 'Show'} (TMDB: ${item.tmdb_id})`;
   const poster = localPoster;
   
   return (
     <div className="p-4 flex items-center gap-4 bg-slate-900/40 border border-white/5 rounded-2xl hover:bg-slate-800/40 hover:border-purple-500/20 transition-all duration-300 group">
-      <div className="w-12 h-16 bg-slate-800/80 rounded-xl overflow-hidden flex-shrink-0 border border-white/5">
+      <div 
+        onClick={handleTitleClick}
+        className="w-12 h-16 bg-slate-800/80 rounded-xl overflow-hidden flex-shrink-0 border border-white/5 cursor-pointer"
+      >
         {poster ? (
           <img src={tmdbImgUrl(poster, 'w200')} alt={title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
         ) : (
@@ -68,7 +83,10 @@ const HistoryItem = ({ item, handleMarkUnwatched, handleDeleteHistory }) => {
             {new Date(item.watched_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} • {new Date(item.watched_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
           </span>
         </div>
-        <h4 className="text-slate-100 font-bold text-base truncate group-hover:text-purple-400 transition-colors">
+        <h4 
+          onClick={handleTitleClick}
+          className="text-slate-100 font-bold text-base truncate group-hover:text-purple-400 transition-colors cursor-pointer"
+        >
           {title}
         </h4>
         {!isMovie && item.season_number != null && item.episode_number != null && (
@@ -121,9 +139,9 @@ const Tracker = () => {
     try {
       if (isInitial) setLoading(true);
       const [statsRes, historyRes, upNextRes] = await Promise.all([
-        api.get('/tracker/stats'),
-        api.get('/tracker/history?limit=40'),
-        api.get('/tracker/up-next')
+        api.get('/tracker/stats', { params: { _t: Date.now() } }),
+        api.get('/tracker/history', { params: { limit: 40, _t: Date.now() } }),
+        api.get('/tracker/up-next', { params: { _t: Date.now() } })
       ]);
 
       setStats(statsRes.data.stats);
@@ -143,21 +161,32 @@ const Tracker = () => {
     fetchData(true);
   }, []);
 
+  // Poll for stale flag set by show/movie detail pages when they toggle watched
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (sessionStorage.getItem('tracker-stale')) {
+        sessionStorage.removeItem('tracker-stale');
+        fetchData();
+      }
+    }, 2000);
+    return () => clearInterval(interval);
+  }, []);
+
   const handleMarkWatched = async (key, tmdbId, type, season, episode) => {
     try {
       await api.post('/tracker/mark-watched', { tmdbId, type, season, episode });
-      await fetchData();
     } catch (err) {
       console.error('Failed to mark as watched', err);
+      throw err;
     }
+    await fetchData();
   };
 
   const handleDeleteHistory = async (historyId) => {
     try {
       await api.delete(`/tracker/history/${historyId}`);
       setHistory(prev => prev.filter(item => item.history_id !== historyId));
-      const statsRes = await api.get('/tracker/stats');
-      setStats(statsRes.data.stats);
+      await fetchData();
     } catch (err) {
       console.error('Failed to delete history entry', err);
     }
@@ -172,8 +201,7 @@ const Tracker = () => {
         episode: item.episode_number
       });
       setHistory(prev => prev.filter(h => h.history_id !== item.history_id));
-      const statsRes = await api.get('/tracker/stats');
-      setStats(statsRes.data.stats);
+      await fetchData();
     } catch (err) {
       console.error('Failed to mark unwatched', err);
     }
@@ -243,9 +271,17 @@ const Tracker = () => {
           {/* Currently Watching Mini Panel */}
           {currently && (
             <div className="w-full lg:w-96 p-4 rounded-2xl bg-slate-800/80 border border-slate-700/60 backdrop-blur-md shadow-xl flex items-center gap-4 group">
-              <div className="w-16 h-22 rounded-xl overflow-hidden bg-slate-900 shrink-0 border border-slate-700/50">
+              <div 
+                onClick={() => {
+                  const isMovie = currently.type === 'movie';
+                  if (isMovie && currently.movie_id) navigate(`/movies/${currently.movie_id}`);
+                  else if (!isMovie && currently.show_id) navigate(`/shows/${currently.show_id}`);
+                  else if (currently.tmdb_id) navigate(`/${isMovie ? 'movies' : 'shows'}/${currently.tmdb_id}`);
+                }}
+                className="w-16 h-22 rounded-xl overflow-hidden bg-slate-900 shrink-0 border border-slate-700/50 cursor-pointer"
+              >
                 {currently.poster ? (
-                  <img src={tmdbImgUrl(currently.poster, 'w200')} alt="" className="w-full h-full object-cover" />
+                  <img src={tmdbImgUrl(currently.poster, 'w200')} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center text-slate-600"><Tv className="w-6 h-6" /></div>
                 )}
@@ -254,7 +290,15 @@ const Tracker = () => {
                 <span className="text-[10px] uppercase font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
                   Latest Watch
                 </span>
-                <h3 className="text-slate-100 font-bold text-base truncate mt-1 group-hover:text-cyan-400 transition-colors">
+                <h3 
+                  onClick={() => {
+                    const isMovie = currently.type === 'movie';
+                    if (isMovie && currently.movie_id) navigate(`/movies/${currently.movie_id}`);
+                    else if (!isMovie && currently.show_id) navigate(`/shows/${currently.show_id}`);
+                    else if (currently.tmdb_id) navigate(`/${isMovie ? 'movies' : 'shows'}/${currently.tmdb_id}`);
+                  }}
+                  className="text-slate-100 font-bold text-base truncate mt-1 group-hover:text-cyan-400 transition-colors cursor-pointer"
+                >
                   {currently.title}
                 </h3>
                 {currently.season && (

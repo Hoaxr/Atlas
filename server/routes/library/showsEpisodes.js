@@ -824,16 +824,19 @@ router.post('/shows/:id/seasons/:season/watched', async (req, res, next) => {
   try {
     const { watched } = req.body;
     const isWatched = watched === undefined ? true : !!watched;
+    const watchedAt = new Date().toISOString();
     const cols = db.prepare('PRAGMA table_info(episodes)').all().map(c => c.name);
     const hasProgress = cols.includes('watch_progress');
     const updateSeasonSql = hasProgress && isWatched 
-      ? 'UPDATE episodes SET watched = ?, watched_at = CURRENT_TIMESTAMP, watch_progress = 0 WHERE show_id = ? AND season_number = ?'
-      : 'UPDATE episodes SET watched = ?, watched_at = CURRENT_TIMESTAMP WHERE show_id = ? AND season_number = ?';
-    const result = db.prepare(updateSeasonSql).run(isWatched ? 1 : 0, req.params.id, req.params.season);
+      ? 'UPDATE episodes SET watched = ?, watched_at = ?, watch_progress = 0 WHERE show_id = ? AND season_number = ?'
+      : 'UPDATE episodes SET watched = ?, watched_at = ? WHERE show_id = ? AND season_number = ?';
+    const result = db.prepare(updateSeasonSql).run(isWatched ? 1 : 0, watchedAt, req.params.id, req.params.season);
 
     const show = db.prepare('SELECT tmdb_id FROM shows WHERE id = ?').get(req.params.id);
     if (!isWatched && show?.tmdb_id) {
-      db.prepare('DELETE FROM watch_history WHERE tmdb_id = ? AND type = "episode" AND season_number = ?').run(show.tmdb_id, req.params.season);
+      const delResult = db.prepare('DELETE FROM watch_history WHERE tmdb_id = ? AND type = ? AND season_number = ?').run(show.tmdb_id, 'episode', req.params.season);
+      console.log('[Episodes] season watch_history DELETE: removed %d row(s) for tmdb=%s S%s', delResult.changes, show.tmdb_id, req.params.season);
+      db.exec('PRAGMA wal_checkpoint(TRUNCATE);');
     }
     if (show?.tmdb_id) {
       const episodes = db.prepare('SELECT episode_number FROM episodes WHERE show_id = ? AND season_number = ?').all(req.params.id, req.params.season);
@@ -850,25 +853,28 @@ router.post('/episodes/:id/watched', async (req, res, next) => {
   try {
     const { watched } = req.body;
     const isWatched = watched === undefined ? true : !!watched;
+    const watchedAt = new Date().toISOString();
     const ep = db.prepare('SELECT e.*, s.tmdb_id as show_tmdb_id FROM episodes e JOIN shows s ON e.show_id = s.id WHERE e.id = ?').get(req.params.id);
     if (!ep) return res.status(404).json({ status: 'error', message: 'Episode not found' });
 
     const cols = db.prepare('PRAGMA table_info(episodes)').all().map(c => c.name);
     const hasProgress = cols.includes('watch_progress');
     const updateSql = hasProgress && isWatched 
-      ? 'UPDATE episodes SET watched = ?, watched_at = CURRENT_TIMESTAMP, watch_progress = 0 WHERE id = ?'
-      : 'UPDATE episodes SET watched = ?, watched_at = CURRENT_TIMESTAMP WHERE id = ?';
-    db.prepare(updateSql).run(isWatched ? 1 : 0, req.params.id);
+      ? 'UPDATE episodes SET watched = ?, watched_at = ?, watch_progress = 0 WHERE id = ?'
+      : 'UPDATE episodes SET watched = ?, watched_at = ? WHERE id = ?';
+    db.prepare(updateSql).run(isWatched ? 1 : 0, watchedAt, req.params.id);
 
     if (ep.show_tmdb_id) {
       if (isWatched) {
         try {
-          db.prepare('INSERT OR IGNORE INTO watch_history (tmdb_id, type, season_number, episode_number, watched_at, runtime) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, ?)').run(ep.show_tmdb_id, 'episode', ep.season_number, ep.episode_number, ep.runtime || null);
-        } catch { /* ignore if watch_history table missing or constrained */ }
+          db.prepare('INSERT OR IGNORE INTO watch_history (tmdb_id, type, season_number, episode_number, watched_at, runtime) VALUES (?, ?, ?, ?, ?, ?)').run(ep.show_tmdb_id, 'episode', ep.season_number, ep.episode_number, watchedAt, ep.runtime || null);
+        } catch (e) { console.error('[Episodes] watch_history INSERT failed:', e.message); }
       } else {
         try {
-          db.prepare('DELETE FROM watch_history WHERE tmdb_id = ? AND type = "episode" AND season_number = ? AND episode_number = ?').run(ep.show_tmdb_id, ep.season_number, ep.episode_number);
-        } catch { /* ignore */ }
+          const delResult = db.prepare('DELETE FROM watch_history WHERE tmdb_id = ? AND type = ? AND season_number = ? AND episode_number = ?').run(ep.show_tmdb_id, 'episode', ep.season_number, ep.episode_number);
+          console.log('[Episodes] watch_history DELETE: removed %d row(s) for tmdb=%s S%02dE%02d', delResult.changes, ep.show_tmdb_id, ep.season_number, ep.episode_number);
+          db.exec('PRAGMA wal_checkpoint(TRUNCATE);');
+        } catch (e) { console.error('[Episodes] watch_history DELETE failed:', e.message); }
       }
 
       simklService.pushToSimklOnWatched(ep.show_tmdb_id, 'show', isWatched, ep.season_number, ep.episode_number).catch(e => console.error('[SimklSync] Direct push error:', e.message));

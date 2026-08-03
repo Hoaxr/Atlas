@@ -723,6 +723,7 @@ export default function ShowDetails() {
                         setEpisodes(prev => prev.map(ep => ep.season_number === sNum ? { ...ep, watched: targetWatched } : ep));
                         try {
                           await api.post(`/library/shows/${show.id}/seasons/${season}/watched`, { watched: targetWatched });
+                          sessionStorage.setItem('tracker-stale', 'true');
                           fetchShowData();
                         } catch (err) {
                           customAlert('Failed to mark season as watched', 'error');
@@ -801,6 +802,7 @@ export default function ShowDetails() {
                                     }
                                     try {
                                       await api.post(`/library/episodes/${ep.id}/watched`, { watched: newWatched });
+                                      sessionStorage.setItem('tracker-stale', 'true');
                                     } catch (err) {
                                       console.error(err);
                                       setEpisodes(prev => prev.map(item => item.id === ep.id ? { ...item, watched: ep.watched } : item));
@@ -1006,6 +1008,7 @@ export default function ShowDetails() {
                                   }
                                   try {
                                     await api.post(`/library/episodes/${ep.id}/watched`, { watched: newWatched });
+                                    sessionStorage.setItem('tracker-stale', 'true');
                                   } catch (err) {
                                     console.error(err);
                                     setEpisodes(prev => prev.map(item => item.id === ep.id ? { ...item, watched: ep.watched } : item));
