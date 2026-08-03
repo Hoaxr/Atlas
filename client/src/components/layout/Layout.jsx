@@ -14,6 +14,7 @@ const navSections = [
   {
     title: 'Media Hub',
     items: [
+      { name: 'Tracker', path: '/tracker', icon: Clock },
       { name: 'Discover', path: '/discover', icon: Search },
       { name: 'Movies', path: '/movies', icon: Film },
       { name: 'TV Shows', path: '/shows', icon: TvIcon },
@@ -28,7 +29,6 @@ const navSections = [
       { name: 'Statistics', path: '/stats', icon: BarChart3 },
       { name: 'Tasks', path: '/tasks', icon: Activity },
       { name: 'Watchers', path: '/watcher', icon: Eye },
-      { name: 'Tracker', path: '/tracker', icon: Clock },
     ]
   },
   {
