@@ -798,7 +798,6 @@ export default function ShowDetails() {
                                     }
                                     try {
                                       await api.post(`/library/episodes/${ep.id}/watched`, { watched: newWatched });
-                                      fetchShowData();
                                     } catch (err) {
                                       console.error(err);
                                       setEpisodes(prev => prev.map(item => item.id === ep.id ? { ...item, watched: ep.watched } : item));
@@ -1003,7 +1002,6 @@ export default function ShowDetails() {
                                   }
                                   try {
                                     await api.post(`/library/episodes/${ep.id}/watched`, { watched: newWatched });
-                                    fetchShowData();
                                   } catch (err) {
                                     console.error(err);
                                     setEpisodes(prev => prev.map(item => item.id === ep.id ? { ...item, watched: ep.watched } : item));
