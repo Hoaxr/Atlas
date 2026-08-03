@@ -60,9 +60,9 @@ router.get('/stats', (req, res) => {
     const currentlyWatching = db.prepare(`
       SELECT 
         w.tmdb_id, w.type, w.season_number, w.episode_number, w.watched_at,
-        s.title as show_title, s.backdrop_path as show_backdrop, s.poster_path as show_poster,
+        s.title as show_title, s.poster_path as show_poster,
         e.title as episode_title, e.runtime as ep_runtime, e.watch_progress,
-        m.title as movie_title, m.backdrop_path as movie_backdrop, m.poster_path as movie_poster
+        m.title as movie_title, m.poster_path as movie_poster
       FROM watch_history w
       LEFT JOIN shows s ON w.type = 'episode' AND w.tmdb_id = s.tmdb_id
       LEFT JOIN episodes e ON w.type = 'episode' AND s.id = e.show_id AND w.season_number = e.season_number AND w.episode_number = e.episode_number
@@ -255,7 +255,7 @@ router.get('/stats', (req, res) => {
         achievements,
         currently_watching: currentlyWatching ? {
           title: currentlyWatching.type === 'movie' ? currentlyWatching.movie_title : currentlyWatching.show_title,
-          backdrop: currentlyWatching.type === 'movie' ? currentlyWatching.movie_backdrop : currentlyWatching.show_backdrop,
+          backdrop: currentlyWatching.type === 'movie' ? currentlyWatching.movie_poster : currentlyWatching.show_poster,
           poster: currentlyWatching.type === 'movie' ? currentlyWatching.movie_poster : currentlyWatching.show_poster,
           type: currentlyWatching.type,
           season: currentlyWatching.season_number,
