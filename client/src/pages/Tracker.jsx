@@ -112,9 +112,9 @@ const Tracker = () => {
     }
   };
 
-  const fetchData = async () => {
+  const fetchData = async (isInitial = false) => {
     try {
-      setLoading(true);
+      if (isInitial) setLoading(true);
       const [statsRes, historyRes, upNextRes] = await Promise.all([
         api.get('/tracker/stats'),
         api.get('/tracker/history?limit=40'),
@@ -128,14 +128,14 @@ const Tracker = () => {
       setError(null);
     } catch (err) {
       console.error('Failed to fetch tracker data', err);
-      setError('Failed to load tracking data.');
+      if (isInitial) setError('Failed to load tracking data.');
     } finally {
-      setLoading(false);
+      if (isInitial) setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchData();
+    fetchData(true);
   }, []);
 
   const handleMarkWatched = async (key, tmdbId, type, season, episode) => {
