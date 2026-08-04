@@ -263,15 +263,15 @@ router.post('/plex/login', loginLimiter, async (req, res) => {
       return res.status(400).json({ status: 'error', message: 'Plex account has no username or email' });
     }
 
-    let user = db.prepare('SELECT id, username, role, origin FROM users WHERE username = ? OR email = ?').get(username, email);
+    let user = db.prepare('SELECT id, username, role, origin, jwt_version FROM users WHERE username = ? OR email = ?').get(username, email);
     
     if (!user) {
       // Create new user for Plex
       const result = db.prepare("INSERT INTO users (username, email, role, origin) VALUES (?, ?, 'user', 'plex')").run(username, email);
-      user = { id: result.lastInsertRowid, username, role: 'user', origin: 'plex' };
+      user = { id: result.lastInsertRowid, username, role: 'user', origin: 'plex', jwt_version: 1 };
     }
 
-    const token = jwt.sign({ id: user.id, username: user.username, role: user.role }, JWT_SECRET, { expiresIn: '7d' });
+    const token = jwt.sign({ id: user.id, username: user.username, role: user.role, jwt_version: user.jwt_version }, JWT_SECRET, { expiresIn: '7d' });
     db.prepare('UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = ?').run(user.id);
     
     res.json({ status: 'success', data: { token, user: { id: user.id, username: user.username, role: user.role, origin: user.origin } } });
@@ -311,15 +311,15 @@ router.post('/jellyfin/login', loginLimiter, async (req, res) => {
       const jellyUser = jellyfinRes.data.User;
       const jfUsername = jellyUser.Name;
 
-      let user = db.prepare('SELECT id, username, role, origin FROM users WHERE username = ?').get(jfUsername);
+      let user = db.prepare('SELECT id, username, role, origin, jwt_version FROM users WHERE username = ?').get(jfUsername);
       
       if (!user) {
         // Create new user for Jellyfin
         const result = db.prepare("INSERT INTO users (username, role, origin) VALUES (?, 'user', 'jellyfin')").run(jfUsername);
-        user = { id: result.lastInsertRowid, username: jfUsername, role: 'user', origin: 'jellyfin' };
+        user = { id: result.lastInsertRowid, username: jfUsername, role: 'user', origin: 'jellyfin', jwt_version: 1 };
       }
 
-      const token = jwt.sign({ id: user.id, username: user.username, role: user.role }, JWT_SECRET, { expiresIn: '7d' });
+      const token = jwt.sign({ id: user.id, username: user.username, role: user.role, jwt_version: user.jwt_version }, JWT_SECRET, { expiresIn: '7d' });
       db.prepare('UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = ?').run(user.id);
       
       res.json({ status: 'success', data: { token, user: { id: user.id, username: user.username, role: user.role, origin: user.origin } } });
@@ -394,14 +394,14 @@ router.post('/jellyfin/quickconnect/login', async (req, res) => {
       const jellyUser = loginRes.data.User;
       const jfUsername = jellyUser.Name;
 
-      let user = db.prepare('SELECT id, username, role, origin FROM users WHERE username = ?').get(jfUsername);
+      let user = db.prepare('SELECT id, username, role, origin, jwt_version FROM users WHERE username = ?').get(jfUsername);
       
       if (!user) {
         const result = db.prepare("INSERT INTO users (username, role, origin) VALUES (?, 'user', 'jellyfin')").run(jfUsername);
-        user = { id: result.lastInsertRowid, username: jfUsername, role: 'user', origin: 'jellyfin' };
+        user = { id: result.lastInsertRowid, username: jfUsername, role: 'user', origin: 'jellyfin', jwt_version: 1 };
       }
 
-      const token = jwt.sign({ id: user.id, username: user.username, role: user.role }, JWT_SECRET, { expiresIn: '7d' });
+      const token = jwt.sign({ id: user.id, username: user.username, role: user.role, jwt_version: user.jwt_version }, JWT_SECRET, { expiresIn: '7d' });
       db.prepare('UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = ?').run(user.id);
       
       res.json({ status: 'success', data: { token, user: { id: user.id, username: user.username, role: user.role, origin: user.origin } } });
