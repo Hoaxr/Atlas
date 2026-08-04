@@ -415,7 +415,7 @@ export default function Discover() {
             ref={searchInputRef}
             type="text"
             placeholder="Search by title, IMDb ID, or TMDB ID..."
-            className="glass-input w-full !pl-10 sm:!pl-12 !pr-12 sm:!pr-14 h-10 sm:h-12 text-sm sm:text-lg shadow-inner"
+            className="glass-input w-full !pl-10 sm:!pl-12 !pr-12 sm:!pr-14 h-10 sm:h-12 text-base sm:text-lg shadow-inner"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />

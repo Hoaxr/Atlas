@@ -22,7 +22,7 @@ export default function RemapModal({ type, title, currentTmdbId, open, onClose, 
     >
       <p className="text-sm text-slate-400 mb-4">Search TMDB for the correct {label.toLowerCase()} to link <strong className="text-slate-200">{title}</strong> to.</p>
       <div className="flex gap-2 mb-4 shrink-0">
-        <input type="text" value={query} onChange={e => setQuery(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') onSearch(); }} placeholder={`Search for the correct ${label.toLowerCase()}...`} className={`flex-1 bg-slate-800 border border-white/10 rounded-xl px-4 py-2.5 text-white placeholder-slate-500 focus:outline-none ${theme.focusRing} text-sm`} />
+        <input type="text" value={query} onChange={e => setQuery(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') onSearch(); }} placeholder={`Search for the correct ${label.toLowerCase()}...`} className={`flex-1 bg-slate-800 border border-white/10 rounded-xl px-4 py-2.5 text-white placeholder-slate-500 focus:outline-none ${theme.focusRing} text-base`} />
         <button onClick={onSearch} disabled={!query.trim() || searching} className={`${btnBg} ${btnText} font-bold px-5 py-2 rounded-xl flex items-center gap-2 transition-colors disabled:opacity-50 text-sm`}>{searching ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />} Search</button>
       </div>
       <div className="overflow-y-auto flex-1 min-h-0 space-y-2">

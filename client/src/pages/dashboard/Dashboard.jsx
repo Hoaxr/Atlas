@@ -601,7 +601,7 @@ export default function Dashboard() {
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
               placeholder={`Search ${viewMode === 'movies' ? 'movies' : 'shows'}...`}
-              className="w-full bg-slate-900 border border-white/10 text-slate-200 text-sm rounded-lg pl-9 pr-8 py-2 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500/50 placeholder-slate-500 transition-all"
+              className="w-full bg-slate-900 border border-white/10 text-slate-200 text-base rounded-lg pl-9 pr-8 py-2 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500/50 placeholder-slate-500 transition-all"
             />
             {searchQuery && (
               <button

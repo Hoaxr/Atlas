@@ -34,7 +34,7 @@ export function ThisWeekCard({ item, type }) {
   return (
     <div
       onClick={handleClick}
-      className="w-72 sm:w-80 shrink-0 snap-start bg-slate-800/60 border border-slate-700/50 rounded-2xl overflow-hidden transition-all duration-300 flex flex-col group cursor-pointer hover:border-cyan-500/40 hover:-translate-y-1 shadow-xl"
+      className="w-64 sm:w-72 md:w-80 shrink-0 snap-start bg-slate-800/60 border border-slate-700/50 rounded-2xl overflow-hidden transition-all duration-300 flex flex-col group cursor-pointer hover:border-cyan-500/40 hover:-translate-y-1 shadow-xl"
     >
       {/* Poster + Day Badge */}
       <div className="relative aspect-[16/9] bg-slate-900 overflow-hidden">
@@ -78,10 +78,10 @@ export function ThisWeekCard({ item, type }) {
       {/* Card body */}
       <div className="p-3.5 space-y-1.5 flex-1 flex flex-col justify-between">
         <div>
-          <h3 className="text-slate-100 font-bold text-sm truncate group-hover:text-cyan-400 transition-colors">
+          <h3 className="text-slate-100 font-bold text-xs sm:text-sm truncate group-hover:text-cyan-400 transition-colors">
             {title}
           </h3>
-          <p className="text-xs text-slate-400 truncate mt-0.5">
+          <p className="text-[11px] sm:text-xs text-slate-400 truncate mt-0.5">
             {subtitle}
           </p>
         </div>

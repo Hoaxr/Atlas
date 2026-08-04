@@ -87,7 +87,7 @@ export function AnimatedUpNextCard({ item, type, onMarkWatched }) {
           : { opacity: 1, scale: 1, y: 0, filter: 'blur(0px)' }
       }
       transition={{ duration: 0.35, ease: [0.4, 0, 0.2, 1] }}
-      className={`w-72 sm:w-80 shrink-0 snap-start bg-slate-800/60 border rounded-2xl overflow-hidden transition-all duration-500 flex flex-col group relative ${
+      className={`w-64 sm:w-72 md:w-80 shrink-0 snap-start bg-slate-800/60 border rounded-2xl overflow-hidden transition-all duration-500 flex flex-col group relative ${
         isCompleted
           ? 'border-cyan-500/40 ring-1 ring-cyan-500/20 shadow-lg shadow-cyan-500/10'
           : 'border-slate-700/50 shadow-xl hover:border-cyan-500/40 hover:-translate-y-1'
@@ -109,7 +109,7 @@ export function AnimatedUpNextCard({ item, type, onMarkWatched }) {
       {/* THUMBNAIL CONTAINER */}
       <div 
         onClick={handleTitleClick}
-        className="relative h-40 bg-slate-900 overflow-hidden z-10 cursor-pointer"
+        className="relative h-32 sm:h-36 md:h-40 bg-slate-900 overflow-hidden z-10 cursor-pointer"
       >
         {item.poster_path ? (
           <motion.img
@@ -225,24 +225,24 @@ export function AnimatedUpNextCard({ item, type, onMarkWatched }) {
       </div>
 
       {/* CARD CONTENT */}
-      <div className="p-4 flex-1 flex flex-col justify-between space-y-3 z-10">
+      <div className="p-3 sm:p-4 flex-1 flex flex-col justify-between space-y-2 sm:space-y-3 z-10">
         <div>
           <div className="flex items-start justify-between gap-2">
             <h3 
               onClick={handleTitleClick}
-              className="font-bold text-slate-100 text-lg truncate hover:text-cyan-400 transition-colors cursor-pointer min-w-0"
+              className="font-bold text-slate-100 text-sm sm:text-base md:text-lg truncate hover:text-cyan-400 transition-colors cursor-pointer min-w-0"
             >
               {isEpisode ? item.show_title : item.title}
             </h3>
             {!isCompleted && (
-              <span className="text-[11px] font-semibold text-white bg-cyan-600/80 px-2 py-0.5 rounded-full whitespace-nowrap shrink-0">
+              <span className="text-[10px] sm:text-[11px] font-semibold text-white bg-cyan-600/80 px-1.5 sm:px-2 py-0.5 rounded-full whitespace-nowrap shrink-0">
                 {isEpisode
                   ? `${item.episodes_left || 1} left${item.total_time_left ? ` · ${formatRuntime(item.total_time_left)}` : ''}`
                   : item.watch_progress != null ? `${item.watch_progress}%` : 'In Progress'}
               </span>
             )}
           </div>
-          <p className="text-xs text-slate-400 truncate mt-0.5">
+          <p className="text-[11px] sm:text-xs text-slate-400 truncate mt-0.5">
             {isEpisode
               ? item.episode_title || `Episode ${item.episode_number}`
               : item.runtime
