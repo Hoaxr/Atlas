@@ -194,14 +194,15 @@ export default function UserPortal() {
 
   const renderMediaCard = (item, isTrending = false, isGrid = true) => {
     const tmdbId = item.tmdb_id || item.id || (item.ids && item.ids.tmdb);
-    const isRequested = requests.some(r => r.tmdb_id === tmdbId);
+    const tmdbStr = String(tmdbId);
+    const isRequested = requests.some(r => String(r.tmdb_id) === tmdbStr);
     const isMovie = item.media_type 
       ? item.media_type === 'movie' 
       : item.type === 'movie' || (item.title !== undefined && !item.name);
     
     const inLibrary = isMovie
-      ? libraryMovies.some(m => m.tmdb_id === tmdbId)
-      : libraryShows.some(s => s.tmdb_id === tmdbId);
+      ? libraryMovies.some(m => String(m.tmdb_id) === tmdbStr)
+      : libraryShows.some(s => String(s.tmdb_id) === tmdbStr);
       
     const title = item.title || item.name;
     const releaseYear = (item.release_date || item.first_air_date || item.year || '')?.toString().split('-')[0] || 'Unknown';
@@ -227,15 +228,21 @@ export default function UserPortal() {
         }}
       >
         <div className="absolute top-2 left-2 z-20 flex items-center gap-1">
-          {!inLibrary && isNotYetReleased(item.release_date || item.first_air_date) ? (
+          {inLibrary && (
+            <div className="bg-slate-900/80 rounded-full shadow-lg" title="In Library">
+              <CheckCircle2 className="w-6 h-6 text-emerald-400 fill-emerald-400/20" />
+            </div>
+          )}
+          {isNotYetReleased(item.release_date || item.first_air_date) && (
             <div className="bg-slate-900/80 rounded-full shadow-lg" title="Coming Soon">
               <CalendarClock className="w-6 h-6 text-sky-400 fill-sky-400/20" />
             </div>
-          ) : !inLibrary && isRequested ? (
+          )}
+          {!inLibrary && !isNotYetReleased(item.release_date || item.first_air_date) && isRequested && (
             <div className="bg-slate-900/80 rounded-full shadow-lg" title="Requested">
               <Clock className="w-6 h-6 text-amber-400 fill-amber-400/20" />
             </div>
-          ) : null}
+          )}
         </div>
 
         <div className="aspect-[2/3] relative bg-slate-800">
@@ -255,7 +262,7 @@ export default function UserPortal() {
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation();
-                  const isMyRequest = requests.some(r => r.tmdb_id === tmdbId && r.user_id === user?.id);
+                  const isMyRequest = requests.some(r => String(r.tmdb_id) === tmdbStr && r.user_id === user?.id);
                   if (inLibrary || (isRequested && !isMyRequest)) {
                     setSelectedMediaId(tmdbId);
                     setSelectedMediaType(isMovie ? 'movie' : 'tv');
@@ -273,6 +280,7 @@ export default function UserPortal() {
               >
                 {inLibrary ? <><CheckCircle2 className="w-4 h-4 flex-shrink-0" /> In Library</> :
                  isRequested ? <><Clock className="w-4 h-4 flex-shrink-0" /> Requested</> : 
+                 isNotYetReleased(item.release_date || item.first_air_date) ? <><CalendarClock className="w-4 h-4 flex-shrink-0" /> Coming Soon</> :
                  <><Plus className="w-4 h-4 flex-shrink-0" /> Request</>}
               </button>
             </div>
