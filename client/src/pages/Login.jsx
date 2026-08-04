@@ -133,24 +133,32 @@ export default function Login() {
         throw new Error('Popup was blocked by the browser');
       }
       
+      let attempts = 0;
+      const MAX_ATTEMPTS = 150; // 5 minutes
+      
       pollIntervalRef.current = setInterval(async () => {
-        if (popup?.closed) {
+        attempts++;
+        
+        if (attempts >= MAX_ATTEMPTS) {
           clearInterval(pollIntervalRef.current);
+          if (popup && !popup.closed) popup.close();
           setLoading(false);
           setLoadingMethod(null);
+          return;
         }
         
         try {
           const pollRes = await api.get(`/auth/plex/pin/${pinData.id}?clientId=${clientId}`);
           if (pollRes.data.status === 'success' && pollRes.data.data.authToken) {
             clearInterval(pollIntervalRef.current);
-            if (!popup?.closed) popup.close();
+            if (popup && !popup.closed) popup.close();
             
             // Send token to Atlas
             const atlasRes = await api.post('/auth/plex/login', { authToken: pollRes.data.data.authToken });
             if (atlasRes.data.status === 'success') {
               handleSuccessfulLogin(atlasRes);
             } else {
+              customAlert(atlasRes.data.message || 'Plex login failed on server');
               setLoading(false);
               setLoadingMethod(null);
             }
