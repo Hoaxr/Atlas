@@ -135,8 +135,12 @@ const getMovies = (limit = 0, offset = 0, sort = 'added_desc', filters = {}) => 
   const params = [];
 
   if (filters.status) {
-    conditions.push('m.status = ?');
-    params.push(filters.status);
+    if (filters.status === 'missing') {
+      conditions.push("(m.status = 'missing' OR (m.status != 'downloaded' AND m.status != 'downloading' AND m.monitored = 1 AND (m.file_path IS NULL OR m.file_path = '')))");
+    } else {
+      conditions.push('m.status = ?');
+      params.push(filters.status);
+    }
   }
   if (filters.qualityProfileId) {
     conditions.push('m.quality_profile_id = ?');
