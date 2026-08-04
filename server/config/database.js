@@ -789,6 +789,41 @@ const MIGRATIONS = [
         `);
       } catch (e) { console.error('[DB Migration 28] Step 3 non-fatal error:', e.message); }
     }
+  },
+  {
+    id: 29,
+    name: 'Backfill watch_history runtimes (post-scan)',
+    run: (db) => {
+      console.log('[DB Migration 29] Backfilling watch_history runtimes from movies/episodes...');
+
+      const movieResult = db.prepare(`
+        UPDATE watch_history
+        SET runtime = (SELECT runtime FROM movies WHERE movies.tmdb_id = watch_history.tmdb_id AND movies.runtime > 0 LIMIT 1)
+        WHERE type = 'movie' AND runtime IS NULL
+      `).run();
+      console.log(`[DB Migration 29] Movies backfilled: ${movieResult.changes}`);
+
+      const epResult = db.prepare(`
+        UPDATE watch_history
+        SET runtime = (
+          SELECT e.runtime 
+          FROM episodes e 
+          JOIN shows s ON e.show_id = s.id 
+          WHERE s.tmdb_id = watch_history.tmdb_id 
+            AND e.season_number = watch_history.season_number 
+            AND e.episode_number = watch_history.episode_number
+            AND e.runtime > 0
+          LIMIT 1
+        )
+        WHERE type = 'episode' AND runtime IS NULL
+      `).run();
+      console.log(`[DB Migration 29] Episodes backfilled: ${epResult.changes}`);
+
+      const remainingNull = db.prepare(`
+        SELECT COUNT(*) as count FROM watch_history WHERE runtime IS NULL
+      `).get();
+      console.log(`[DB Migration 29] Remaining NULL runtimes: ${remainingNull.count}`);
+    }
   }
 ];
 

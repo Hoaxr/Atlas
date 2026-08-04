@@ -133,10 +133,6 @@ const TimelineHistoryCard = ({ item, handleMarkUnwatched, handleDeleteHistory })
           <span className="flex items-center gap-0.5 sm:gap-1 text-emerald-400 font-semibold text-[10px] sm:text-[11px]">
             <CheckCircle2 className="w-3 h-3" /> <span className="hidden sm:inline">Watched</span>
           </span>
-          <span className="flex items-center gap-0.5 sm:gap-1 font-mono text-[10px] sm:text-[11px] text-slate-400">
-            <Clock className="w-3 h-3 text-slate-500 hidden sm:inline" />
-            {new Date(item.watched_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-          </span>
           {runtimeMin && (
             <span className="text-slate-500 font-mono text-[10px] sm:text-[11px] hidden sm:inline">{formatRuntime(runtimeMin)}</span>
           )}

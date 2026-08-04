@@ -43,7 +43,7 @@ router.get('/stats', async (req, res) => {
       FROM (
         SELECT
           w.tmdb_id, w.season_number, w.episode_number,
-          COALESCE(w.runtime, e.runtime) as runtime
+          COALESCE(w.runtime, e.runtime, s.runtime) as runtime
         FROM (
           SELECT tmdb_id, season_number, episode_number,
                  MAX(runtime) as runtime
@@ -59,7 +59,7 @@ router.get('/stats', async (req, res) => {
     // This month episodes
     const thisMonthEpisodes = db.prepare(`
       SELECT COUNT(*) as count, SUM(
-        COALESCE(w.runtime, e.runtime, ?)
+        COALESCE(w.runtime, e.runtime, s.runtime, ?)
       ) as minutes
       FROM watch_history w
       LEFT JOIN shows s ON w.tmdb_id = s.tmdb_id
