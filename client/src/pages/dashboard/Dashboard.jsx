@@ -386,7 +386,12 @@ export default function Dashboard() {
     } else if (statusFilter === 'downloading') {
       items = items.filter(item => item.status === 'downloading');
     } else if (statusFilter === 'missing') {
-      items = items.filter(item => item.status === 'monitored' && !item.file_path && !item.folder_path);
+      items = items.filter(item => {
+        if (item.missing_episodes !== undefined) {
+          return item.missing_episodes > 0;
+        }
+        return (item.status === 'monitored' || item.status === 'missing') && !item.file_path;
+      });
     }
 
     // TMDB status filter (shows only)
