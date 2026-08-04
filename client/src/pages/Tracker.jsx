@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { AnimatedUpNextCard } from '../components/tracker/AnimatedUpNextCard';
+import { ThisWeekCard } from '../components/tracker/ThisWeekCard';
 import { useNavigate } from 'react-router-dom';
 import api from '../lib/api';
 import { 
@@ -167,10 +168,13 @@ const Tracker = () => {
   const [history, setHistory] = useState([]);
   const [upNextMovies, setUpNextMovies] = useState([]);
   const [upNextEpisodes, setUpNextEpisodes] = useState([]);
+  const [thisWeekMovies, setThisWeekMovies] = useState([]);
+  const [thisWeekEpisodes, setThisWeekEpisodes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   
   const scrollRef = useRef(null);
+  const weekScrollRef = useRef(null);
 
   const scrollContainer = (dir) => {
     if (scrollRef.current) {
@@ -179,19 +183,29 @@ const Tracker = () => {
     }
   };
 
+  const scrollContainerWeek = (dir) => {
+    if (weekScrollRef.current) {
+      const amount = 480;
+      weekScrollRef.current.scrollBy({ left: dir === 'left' ? -amount : amount, behavior: 'smooth' });
+    }
+  };
+
   const fetchData = async (isInitial = false) => {
     try {
       if (isInitial) setLoading(true);
-      const [statsRes, historyRes, upNextRes] = await Promise.all([
+      const [statsRes, historyRes, upNextRes, thisWeekRes] = await Promise.all([
         api.get('/tracker/stats', { params: { _t: Date.now() } }),
         api.get('/tracker/history', { params: { limit: 40, _t: Date.now() } }),
-        api.get('/tracker/up-next', { params: { _t: Date.now() } })
+        api.get('/tracker/up-next', { params: { _t: Date.now() } }),
+        api.get('/tracker/this-week', { params: { _t: Date.now() } })
       ]);
 
       setStats(statsRes.data.stats);
       setHistory(historyRes.data.history);
       setUpNextMovies(upNextRes.data.movies);
       setUpNextEpisodes(upNextRes.data.episodes);
+      setThisWeekMovies(thisWeekRes.data.movies);
+      setThisWeekEpisodes(thisWeekRes.data.episodes);
       setError(null);
     } catch (err) {
       console.error('Failed to fetch tracker data', err);
@@ -302,6 +316,10 @@ const Tracker = () => {
 
   const currently = stats?.currently_watching;
   const upNextCombined = [...(upNextEpisodes || []), ...(upNextMovies || [])];
+  const thisWeekCombined = [
+    ...(thisWeekEpisodes || []).map(ep => ({ ...ep, _type: 'episode' })),
+    ...(thisWeekMovies || []).map(m => ({ ...m, _type: 'movie' }))
+  ];
 
   return (
     <div className="w-full space-y-10 pb-16 animate-in fade-in duration-500">
@@ -413,6 +431,38 @@ const Tracker = () => {
                 item={m}
                 type="movie"
                 onMarkWatched={handleMarkWatched}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── THIS WEEK'S RELEASES ── */}
+      {thisWeekCombined.length > 0 && (
+        <div className="space-y-4">
+          <div className="flex justify-between items-center">
+            <div>
+              <h2 className="text-2xl font-bold text-slate-100 flex items-center gap-2">
+                <Sparkles className="w-6 h-6 text-amber-400" /> This Week's Releases
+              </h2>
+              <p className="text-sm text-slate-400">Movies and episodes dropping this week</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <button onClick={() => scrollContainerWeek('left')} className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700/50 transition-all">
+                <ChevronLeft className="w-5 h-5" />
+              </button>
+              <button onClick={() => scrollContainerWeek('right')} className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700/50 transition-all">
+                <ChevronRight className="w-5 h-5" />
+              </button>
+            </div>
+          </div>
+
+          <div ref={weekScrollRef} className="flex gap-5 overflow-x-auto scrollbar-none pb-4 pt-1 snap-x">
+            {thisWeekCombined.map(item => (
+              <ThisWeekCard
+                key={item._type === 'episode' ? `wk-ep-${item.episode_id}` : `wk-movie-${item.id}`}
+                item={item}
+                type={item._type}
               />
             ))}
           </div>

@@ -599,4 +599,78 @@ router.post('/mark-unwatched', async (req, res) => {
   }
 });
 
+// This week's releases — movies and episodes airing/releasing Sun–Sat.
+// We use Sun–Sat instead of Mon–Sun because US evening broadcasts become
+// available the next day in European timezones (e.g. Sunday US → Monday EU).
+router.get('/this-week', (req, res) => {
+  try {
+    const now = new Date();
+    const dayOfWeek = now.getDay(); // 0=Sun, 1=Mon, ..., 6=Sat
+
+    // Week starts on the previous Sunday (inclusive)
+    const weekStart = new Date(now);
+    weekStart.setDate(now.getDate() - dayOfWeek);
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekStart.getDate() + 6); // Saturday
+
+    const fromStr = weekStart.toISOString().split('T')[0];
+    const toStr = weekEnd.toISOString().split('T')[0];
+
+    // Movies releasing this week (not yet watched)
+    const movies = db.prepare(`
+      SELECT id, tmdb_id, title, poster_path, overview, release_date, runtime
+      FROM movies
+      WHERE release_date >= ? AND release_date <= ? AND watched = 0
+      ORDER BY release_date ASC
+    `).all(fromStr, toStr);
+
+    // Episodes airing this week (not yet watched)
+    const episodes = db.prepare(`
+      SELECT 
+        e.id as episode_id,
+        e.show_id,
+        e.season_number,
+        e.episode_number,
+        e.title as episode_title,
+        e.runtime,
+        e.air_date,
+        s.tmdb_id,
+        s.title as show_title,
+        s.poster_path
+      FROM episodes e
+      JOIN shows s ON e.show_id = s.id
+      WHERE e.air_date >= ? AND e.air_date <= ? AND e.watched = 0
+      ORDER BY e.air_date ASC, s.title, e.season_number, e.episode_number
+    `).all(fromStr, toStr);
+
+    // Day labels offset by +1 for European timezones:
+    // US evening broadcasts are effectively next-day in EU.
+    // We shift the date forward by 1 day and use standard day names.
+    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+    const euDayLabel = (dateStr) => {
+      if (!dateStr) return { dayName: 'Unknown', isToday: false };
+      const d = new Date(dateStr + 'T00:00:00');
+      // Shift by +1 day: US air date Sunday → EU availability Monday
+      d.setDate(d.getDate() + 1);
+      const today = new Date();
+      const todayStr = today.toISOString().split('T')[0];
+      return {
+        dayName: dayNames[d.getDay()],
+        isToday: d.toISOString().split('T')[0] === todayStr
+      };
+    };
+
+    res.json({
+      success: true,
+      weekRange: { from: fromStr, to: toStr },
+      movies: movies.map(m => ({ ...m, ...euDayLabel(m.release_date) })),
+      episodes: episodes.map(ep => ({ ...ep, ...euDayLabel(ep.air_date) }))
+    });
+  } catch (error) {
+    console.error('[Tracker] /this-week error:', error);
+    res.status(500).json({ error: 'Failed to fetch this week releases' });
+  }
+});
+
 module.exports = router;

@@ -511,6 +511,7 @@ router.get('/calendar', async (req, res, next) => {
         s.title as show_title, 
         s.id as show_id, 
         s.tmdb_id,
+        s.poster_path,
         'episode' as type
       FROM episodes e
       JOIN shows s ON e.show_id = s.id
@@ -526,6 +527,7 @@ router.get('/calendar', async (req, res, next) => {
         NULL as show_title,
         m.id as show_id,
         m.tmdb_id,
+        m.poster_path,
         'movie' as type
       FROM movies m
       WHERE m.release_date IS NOT NULL
