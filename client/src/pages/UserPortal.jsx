@@ -205,7 +205,11 @@ export default function UserPortal() {
       : libraryShows.find(s => String(s.tmdb_id) === tmdbStr);
     
     const inLibrary = !!libraryItem;
-    const isDownloaded = libraryItem?.file_path && libraryItem?.status === 'downloaded';
+    // Movies: downloaded if file_path exists and status is 'downloaded'
+    // Shows: available if folder_path exists (any episodes on disk)
+    const isDownloaded = isMovie 
+      ? !!(libraryItem?.file_path && libraryItem?.status === 'downloaded')
+      : !!(libraryItem?.folder_path);
       
     const title = item.title || item.name;
     const releaseYear = (item.release_date || item.first_air_date || item.year || '')?.toString().split('-')[0] || 'Unknown';
@@ -535,7 +539,9 @@ export default function UserPortal() {
                         ? libraryMovies.find(m => String(m.tmdb_id) === String(req.tmdb_id))
                         : libraryShows.find(s => String(s.tmdb_id) === String(req.tmdb_id));
                       const inLibrary = !!libraryItem;
-                      const isDownloaded = libraryItem?.file_path && libraryItem?.status === 'downloaded';
+                      const isDownloaded = req.type === 'movie'
+                        ? !!(libraryItem?.file_path && libraryItem?.status === 'downloaded')
+                        : !!(libraryItem?.folder_path);
                       const effectiveReleaseDate = req.release_date || libraryItem?.release_date || null;
                       const unreleased = isNotYetReleased(effectiveReleaseDate);
                       const releaseYear = effectiveReleaseDate ? new Date(effectiveReleaseDate).getFullYear() : null;
