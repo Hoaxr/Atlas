@@ -39,6 +39,14 @@ router.post('/import', authMiddleware, upload.array('files'), async (req, res) =
     }
 
     res.json({ success: true, message: `Successfully imported ${totalMovies} movies and ${totalEpisodes} episodes` });
+    
+    // Push to Simkl in background so Simkl also gets the Trakt data
+    if (totalMovies > 0 || totalEpisodes > 0) {
+      const simklService = require('../services/simklService');
+      simklService.pushWatchedToSimkl().catch(e => 
+        console.error('[TraktImport] Failed to push to Simkl:', e.message)
+      );
+    }
   } catch (error) {
     console.error('Failed to import Trakt files:', error);
     if (req.files) {
