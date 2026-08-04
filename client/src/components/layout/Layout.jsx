@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Search, Settings as SettingsIcon, Film, Activity, Tv as TvIcon, DownloadCloud, ArrowDown, ArrowUp, Heart, Menu, Calendar as CalendarIcon, BarChart3, Keyboard, Key, LogOut, Eye, X, HeartPulse, Clock } from 'lucide-react';
+import { Search, Settings as SettingsIcon, Film, Activity, Tv as TvIcon, DownloadCloud, ArrowDown, ArrowUp, Heart, Menu, Calendar as CalendarIcon, BarChart3, Keyboard, Key, LogOut, Eye, X, HeartPulse, Clock, TrendingUp } from 'lucide-react';
 import Logo from './Logo';
 import clsx from 'clsx';
 import api from '../../lib/api';
@@ -14,11 +14,12 @@ const navSections = [
   {
     title: 'Media Hub',
     items: [
-      { name: 'Tracker', path: '/tracker', icon: Clock },
+      { name: 'Tracker', path: '/tracker', icon: TrendingUp },
       { name: 'Discover', path: '/discover', icon: Search },
       { name: 'Movies', path: '/movies', icon: Film },
       { name: 'TV Shows', path: '/shows', icon: TvIcon },
       { name: 'Calendar', path: '/calendar', icon: CalendarIcon },
+      { name: 'Statistics', path: '/stats', icon: BarChart3 },
     ]
   },
   {
@@ -26,7 +27,6 @@ const navSections = [
     items: [
       { name: 'Downloads', path: '/downloads', icon: DownloadCloud },
       { name: 'Requests', path: '/requests', icon: Heart },
-      { name: 'Statistics', path: '/stats', icon: BarChart3 },
       { name: 'Tasks', path: '/tasks', icon: Activity },
       { name: 'Watchers', path: '/watcher', icon: Eye },
     ]

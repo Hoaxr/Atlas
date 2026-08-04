@@ -227,12 +227,21 @@ export function AnimatedUpNextCard({ item, type, onMarkWatched }) {
       {/* CARD CONTENT */}
       <div className="p-4 flex-1 flex flex-col justify-between space-y-3 z-10">
         <div>
-          <h3 
-            onClick={handleTitleClick}
-            className="font-bold text-slate-100 text-lg truncate hover:text-cyan-400 transition-colors cursor-pointer"
-          >
-            {isEpisode ? item.show_title : item.title}
-          </h3>
+          <div className="flex items-start justify-between gap-2">
+            <h3 
+              onClick={handleTitleClick}
+              className="font-bold text-slate-100 text-lg truncate hover:text-cyan-400 transition-colors cursor-pointer min-w-0"
+            >
+              {isEpisode ? item.show_title : item.title}
+            </h3>
+            {!isCompleted && (
+              <span className="text-[11px] font-semibold text-white bg-cyan-600/80 px-2 py-0.5 rounded-full whitespace-nowrap shrink-0">
+                {isEpisode
+                  ? `${item.episodes_left || 1} left${item.total_time_left ? ` · ${formatRuntime(item.total_time_left)}` : ''}`
+                  : item.watch_progress != null ? `${item.watch_progress}%` : 'In Progress'}
+              </span>
+            )}
+          </div>
           <p className="text-xs text-slate-400 truncate mt-0.5">
             {isEpisode
               ? item.episode_title || `Episode ${item.episode_number}`
@@ -242,68 +251,11 @@ export function AnimatedUpNextCard({ item, type, onMarkWatched }) {
           </p>
         </div>
 
-        {/* PROGRESS BAR & STATUS */}
+        {/* PROGRESS BAR */}
         <div className="space-y-1.5">
-          {/* Labels row */}
-          <div className="flex justify-between items-center">
-            <AnimatePresence mode="wait">
-              {isCompleted ? (
-                <motion.span
-                  key="watched"
-                  initial={{ opacity: 0, y: 4 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -4 }}
-                  transition={{ duration: 0.25 }}
-                  className="text-[10px] font-bold text-emerald-400"
-                >
-                  Watched ✓
-                </motion.span>
-              ) : (
-                <motion.span
-                  key="runtime"
-                  initial={{ opacity: 0, y: 4 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -4 }}
-                  transition={{ duration: 0.25 }}
-                  className="text-[10px] font-semibold text-white/80"
-                >
-                  {item.runtime ? formatRuntime(item.runtime) : ''}
-                </motion.span>
-              )}
-            </AnimatePresence>
-            <AnimatePresence mode="wait">
-              {isCompleted ? (
-                <motion.span
-                  key="done"
-                  initial={{ opacity: 0, y: 4 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -4 }}
-                  transition={{ duration: 0.25 }}
-                  className="text-[10px] font-semibold text-emerald-400"
-                >
-                  100%
-                </motion.span>
-              ) : (
-                <motion.span
-                  key="remaining"
-                  initial={{ opacity: 0, y: 4 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -4 }}
-                  transition={{ duration: 0.25 }}
-                  className="text-[10px] font-semibold text-white/70 text-right"
-                >
-                  {isEpisode
-                    ? `${item.episodes_left || 1} left${item.total_time_left ? ` · ${formatRuntime(item.total_time_left)}` : ''}`
-                    : item.watch_progress != null ? `${item.watch_progress}%` : 'In Progress'}
-                </motion.span>
-              )}
-            </AnimatePresence>
-          </div>
-
-          {/* Total progress bar */}
-          <div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden">
+          <div className="w-full h-6 bg-white/10 rounded-full overflow-hidden relative">
             <motion.div
-              className={`h-full rounded-full ${isCompleted ? 'bg-emerald-400' : 'bg-cyan-400'}`}
+              className={`h-full rounded-full absolute left-0 top-0 ${isCompleted ? 'bg-emerald-400' : 'bg-cyan-400'}`}
               initial={false}
               animate={{
                 width: isCompleted
@@ -314,6 +266,44 @@ export function AnimatedUpNextCard({ item, type, onMarkWatched }) {
               }}
               transition={{ duration: 0.5, ease: 'easeOut' }}
             />
+            <div className="absolute inset-0 flex items-center px-2 z-10">
+              <AnimatePresence mode="wait">
+                {isCompleted ? (
+                  <motion.span
+                    key="watched"
+                    initial={{ opacity: 0, y: 4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -4 }}
+                    transition={{ duration: 0.25 }}
+                    className="text-[11px] font-bold text-white bg-cyan-600/80 px-2 py-0.5 rounded-full"
+                  >
+                    Watched ✓
+                  </motion.span>
+                ) : isEpisode && item.total_episodes > 0 ? (
+                  <motion.span
+                    key="epProgress"
+                    initial={{ opacity: 0, y: 4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -4 }}
+                    transition={{ duration: 0.25 }}
+                    className="text-[11px] font-semibold text-white bg-cyan-600/80 px-2 py-0.5 rounded-full"
+                  >
+                    {item.total_episodes - (item.episodes_left || 0)}/{item.total_episodes}
+                  </motion.span>
+                ) : (
+                  <motion.span
+                    key="runtime"
+                    initial={{ opacity: 0, y: 4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -4 }}
+                    transition={{ duration: 0.25 }}
+                    className="text-[11px] font-semibold text-white bg-cyan-600/80 px-2 py-0.5 rounded-full"
+                  >
+                    {item.runtime ? formatRuntime(item.runtime) : ''}
+                  </motion.span>
+                )}
+              </AnimatePresence>
+            </div>
           </div>
         </div>
       </div>
