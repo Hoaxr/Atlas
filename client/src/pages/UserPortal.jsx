@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Search, Loader2, Plus, Clock, CheckCircle2, XCircle, LogOut, Key, Star, X, Film, Tv, Info, CalendarClock, Sparkles, Filter, BarChart2, Check, TrendingUp } from 'lucide-react';
+import { Search, Loader2, Plus, Clock, CheckCircle2, XCircle, LogOut, Key, Star, X, Film, Tv, Info, CalendarClock, Sparkles, Filter, BarChart2, Check, TrendingUp, DownloadCloud } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import api from '../lib/api';
@@ -200,9 +200,12 @@ export default function UserPortal() {
       ? item.media_type === 'movie' 
       : item.type === 'movie' || (item.title !== undefined && !item.name);
     
-    const inLibrary = isMovie
-      ? libraryMovies.some(m => String(m.tmdb_id) === tmdbStr)
-      : libraryShows.some(s => String(s.tmdb_id) === tmdbStr);
+    const libraryItem = isMovie
+      ? libraryMovies.find(m => String(m.tmdb_id) === tmdbStr)
+      : libraryShows.find(s => String(s.tmdb_id) === tmdbStr);
+    
+    const inLibrary = !!libraryItem;
+    const isDownloaded = libraryItem?.file_path && libraryItem?.status === 'downloaded';
       
     const title = item.title || item.name;
     const releaseYear = (item.release_date || item.first_air_date || item.year || '')?.toString().split('-')[0] || 'Unknown';
@@ -228,14 +231,19 @@ export default function UserPortal() {
         }}
       >
         <div className="absolute top-2 left-2 z-20 flex items-center gap-1">
-          {inLibrary && (
-            <div className="bg-slate-900/80 rounded-full shadow-lg" title="In Library">
+          {isDownloaded && (
+            <div className="bg-slate-900/80 rounded-full shadow-lg" title="Downloaded">
               <CheckCircle2 className="w-6 h-6 text-emerald-400 fill-emerald-400/20" />
+            </div>
+          )}
+          {inLibrary && !isDownloaded && (
+            <div className="bg-slate-900/80 rounded-full shadow-lg" title="In Library (Not Available Yet)">
+              <Clock className="w-6 h-6 text-sky-400 fill-sky-400/20" />
             </div>
           )}
           {isNotYetReleased(item.release_date || item.first_air_date) && (
             <div className="bg-slate-900/80 rounded-full shadow-lg" title="Coming Soon">
-              <CalendarClock className="w-6 h-6 text-sky-400 fill-sky-400/20" />
+              <CalendarClock className="w-6 h-6 text-violet-400 fill-violet-400/20" />
             </div>
           )}
           {!inLibrary && !isNotYetReleased(item.release_date || item.first_air_date) && isRequested && (
@@ -271,14 +279,17 @@ export default function UserPortal() {
                   }
                 }}
                 className={`w-full py-2 px-2 text-sm rounded-xl font-bold flex items-center justify-center gap-1.5 shadow-lg transition-colors cursor-pointer
-                  ${inLibrary 
+                  ${isDownloaded 
                     ? 'bg-emerald-500/90 text-white hover:bg-emerald-400' 
-                    : isRequested 
-                      ? 'bg-amber-500/90 text-white hover:bg-amber-400' 
-                      : 'bg-cyan-500/90 text-white hover:bg-cyan-400'
+                    : inLibrary
+                      ? 'bg-sky-500/90 text-white hover:bg-sky-400'
+                      : isRequested 
+                        ? 'bg-amber-500/90 text-white hover:bg-amber-400' 
+                        : 'bg-cyan-500/90 text-white hover:bg-cyan-400'
                   }`}
               >
-                {inLibrary ? <><CheckCircle2 className="w-4 h-4 flex-shrink-0" /> In Library</> :
+                {isDownloaded ? <><CheckCircle2 className="w-4 h-4 flex-shrink-0" /> Downloaded</> :
+                 inLibrary ? <><DownloadCloud className="w-4 h-4 flex-shrink-0" /> Not Available Yet</> :
                  isRequested ? <><Clock className="w-4 h-4 flex-shrink-0" /> Requested</> : 
                  isNotYetReleased(item.release_date || item.first_air_date) ? <><CalendarClock className="w-4 h-4 flex-shrink-0" /> Coming Soon</> :
                  <><Plus className="w-4 h-4 flex-shrink-0" /> Request</>}
@@ -511,8 +522,8 @@ export default function UserPortal() {
                     {userRequests.filter(req => {
                       if (requestFilter === 'all') return true;
                       const inLibrary = req.type === 'movie' 
-                        ? libraryMovies.some(m => m.tmdb_id === req.tmdb_id)
-                        : libraryShows.some(s => s.tmdb_id === req.tmdb_id);
+                        ? libraryMovies.some(m => String(m.tmdb_id) === String(req.tmdb_id))
+                        : libraryShows.some(s => String(s.tmdb_id) === String(req.tmdb_id));
                       const displayStatus = inLibrary ? 'approved' : req.status.toLowerCase();
                       
                       if (requestFilter === 'approved') return displayStatus === 'approved' || displayStatus === 'available';
@@ -520,18 +531,42 @@ export default function UserPortal() {
                       if (requestFilter === 'denied') return displayStatus === 'denied';
                       return true;
                     }).map(req => {
-                      const inLibrary = req.type === 'movie' 
-                        ? libraryMovies.some(m => m.tmdb_id === req.tmdb_id)
-                        : libraryShows.some(s => s.tmdb_id === req.tmdb_id);
-                      
-                      const displayStatus = inLibrary ? 'Approved' : req.status;
-
                       const libraryItem = req.type === 'movie'
-                        ? libraryMovies.find(m => m.tmdb_id === req.tmdb_id)
-                        : libraryShows.find(s => s.tmdb_id === req.tmdb_id);
+                        ? libraryMovies.find(m => String(m.tmdb_id) === String(req.tmdb_id))
+                        : libraryShows.find(s => String(s.tmdb_id) === String(req.tmdb_id));
+                      const inLibrary = !!libraryItem;
+                      const isDownloaded = libraryItem?.file_path && libraryItem?.status === 'downloaded';
                       const effectiveReleaseDate = req.release_date || libraryItem?.release_date || null;
                       const unreleased = isNotYetReleased(effectiveReleaseDate);
                       const releaseYear = effectiveReleaseDate ? new Date(effectiveReleaseDate).getFullYear() : null;
+
+                      // Build display labels
+                      let displayStatus, statusLabel, statusColor;
+                      if (isDownloaded) {
+                        displayStatus = 'available';
+                        statusLabel = unreleased ? 'Downloaded · Coming Soon' : 'Downloaded';
+                        statusColor = 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20';
+                      } else if (inLibrary) {
+                        displayStatus = 'unreleased';
+                        statusLabel = unreleased ? 'Not Available Yet · Coming Soon' : 'Not Available Yet';
+                        statusColor = 'bg-sky-500/10 text-sky-400 border-sky-500/20';
+                      } else if (unreleased) {
+                        displayStatus = 'unreleased';
+                        statusLabel = 'Coming Soon';
+                        statusColor = 'bg-violet-500/10 text-violet-400 border-violet-500/20';
+                      } else if (req.status.toLowerCase() === 'approved') {
+                        displayStatus = 'approved';
+                        statusLabel = 'Approved';
+                        statusColor = 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20';
+                      } else if (req.status.toLowerCase() === 'denied') {
+                        displayStatus = 'denied';
+                        statusLabel = 'Denied';
+                        statusColor = 'bg-rose-500/10 text-rose-400 border-rose-500/20';
+                      } else {
+                        displayStatus = 'pending';
+                        statusLabel = 'Pending';
+                        statusColor = 'bg-amber-500/10 text-amber-400 border-amber-500/20';
+                      }
 
                       return (
                         <motion.div 
@@ -573,20 +608,10 @@ export default function UserPortal() {
                             
                             <div className="mt-3">
                               <div className="flex flex-wrap items-center gap-2">
-                                <div className={`flex items-center gap-1 text-xs font-bold px-2 py-1 rounded-lg border ${
-                                  displayStatus.toLowerCase() === 'approved' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
-                                  displayStatus.toLowerCase() === 'denied' ? 'bg-rose-500/10 text-rose-400 border-rose-500/20' :
-                                  'bg-amber-500/10 text-amber-400 border-amber-500/20'
-                                }`}>
+                                <div className={`flex items-center gap-1 text-xs font-bold px-2 py-1 rounded-lg border ${statusColor}`}>
                                   {getStatusIcon(displayStatus)}
-                                  <span className="capitalize">{displayStatus}</span>
+                                  <span>{statusLabel}</span>
                                 </div>
-                                {unreleased && (
-                                  <span className="flex items-center gap-1 text-[10px] uppercase tracking-wider font-bold px-2 py-1 rounded-lg bg-violet-500/10 text-violet-400 border border-violet-500/20">
-                                    <CalendarClock className="w-3 h-3" />
-                                    Soon
-                                  </span>
-                                )}
                               </div>
                             </div>
                           </div>

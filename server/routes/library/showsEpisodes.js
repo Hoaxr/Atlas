@@ -71,8 +71,11 @@ router.get('/shows', (req, res, next) => {
 
 router.get('/shows/:id', async (req, res, next) => {
   try {
-    
-    const show = db.prepare('SELECT s.*, qp.name as quality_profile_name FROM shows s LEFT JOIN quality_profiles qp ON s.quality_profile_id = qp.id WHERE s.id = ?').get(req.params.id);
+    const paramId = req.params.id;
+    let show = db.prepare('SELECT s.*, qp.name as quality_profile_name FROM shows s LEFT JOIN quality_profiles qp ON s.quality_profile_id = qp.id WHERE s.id = ?').get(paramId);
+    if (!show) {
+      show = db.prepare('SELECT s.*, qp.name as quality_profile_name FROM shows s LEFT JOIN quality_profiles qp ON s.quality_profile_id = qp.id WHERE s.tmdb_id = ?').get(paramId);
+    }
     if (!show) return res.status(404).json({ status: 'error', message: 'Show not found' });
     if (!isWatchedSyncEnabled()) show.watched = 0;
     

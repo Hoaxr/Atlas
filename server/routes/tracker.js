@@ -648,6 +648,7 @@ router.get('/this-week', (req, res) => {
     const euDayLabel = (dateStr) => {
       if (!dateStr) return { dayName: 'Unknown', isToday: false };
       const d = new Date(dateStr + 'T00:00:00');
+      if (isNaN(d.getTime())) return { dayName: 'Unknown', isToday: false };
       // Shift by +1 day: US air date Sunday → EU availability Monday
       d.setDate(d.getDate() + 1);
       const today = new Date();

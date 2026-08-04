@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Clock, CheckCircle2, XCircle, Loader2, Trash2, Heart, CalendarClock } from 'lucide-react';
 import api from '../lib/api';
 import { customAlert, customConfirm } from '../utils/alerts';
@@ -7,6 +8,7 @@ import StickyBar from '../components/shared/StickyBar';
 import { useStickyBar } from '../lib/useStickyBar';
 
 export default function Requests() {
+  const navigate = useNavigate();
   const { headerRef, stickyVisible } = useStickyBar();
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -129,7 +131,12 @@ export default function Requests() {
                 return (
                 <tr key={req.id} className="hover:bg-slate-800/30 transition-colors">
                   <td className="py-4 px-6 font-medium text-slate-200">
-                    <div>{req.title}</div>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); navigate(`/${req.type === 'movie' ? 'movies' : 'shows'}/${req.tmdb_id}`); }}
+                      className="text-left hover:text-cyan-400 transition-colors cursor-pointer"
+                    >
+                      {req.title}
+                    </button>
                     {unreleased && req.release_date && (
                       <div className="flex items-center gap-1 mt-1">
                         <span className="flex items-center gap-1 text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-full bg-violet-500/15 text-violet-300 border border-violet-500/30">
@@ -200,7 +207,12 @@ export default function Requests() {
               <div key={req.id} className="p-4 space-y-3 hover:bg-slate-800/20 transition-colors">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">
-                    <h3 className="font-bold text-slate-200 text-sm truncate">{req.title}</h3>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); navigate(`/${req.type === 'movie' ? 'movies' : 'shows'}/${req.tmdb_id}`); }}
+                      className="font-bold text-slate-200 text-sm truncate text-left hover:text-cyan-400 transition-colors cursor-pointer"
+                    >
+                      {req.title}
+                    </button>
                     <div className="flex items-center gap-2 mt-1 flex-wrap">
                       <span className="text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 border border-white/5">
                         {req.type}

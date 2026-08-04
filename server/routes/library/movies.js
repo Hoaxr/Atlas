@@ -83,7 +83,12 @@ router.get('/', async (req, res, next) => {
 
 router.get('/:id', async (req, res, next) => {
   try {
-    const movie = db.prepare('SELECT m.*, qp.name as quality_profile_name FROM movies m LEFT JOIN quality_profiles qp ON m.quality_profile_id = qp.id WHERE m.id = ?').get(req.params.id);
+    const paramId = req.params.id;
+    // Try internal ID first, then tmdb_id as fallback
+    let movie = db.prepare('SELECT m.*, qp.name as quality_profile_name FROM movies m LEFT JOIN quality_profiles qp ON m.quality_profile_id = qp.id WHERE m.id = ?').get(paramId);
+    if (!movie) {
+      movie = db.prepare('SELECT m.*, qp.name as quality_profile_name FROM movies m LEFT JOIN quality_profiles qp ON m.quality_profile_id = qp.id WHERE m.tmdb_id = ?').get(paramId);
+    }
     if (!movie) return res.status(404).json({ status: 'error', message: 'Movie not found' });
     if (!isWatchedSyncEnabled()) movie.watched = 0;
     
