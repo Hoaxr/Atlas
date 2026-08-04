@@ -170,7 +170,7 @@ const refreshShowData = async (id) => {
                         WHEN status = 'downloading' THEN 'monitored'
                         ELSE status END,
           file_path = NULL,
-          file_size = 0,
+          file_size = NULL,
           scene_name = NULL
       WHERE show_id = ?
     `).run(show.id);

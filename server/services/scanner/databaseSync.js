@@ -252,6 +252,12 @@ const updateLibraryMetadata = async (scanProgress, nextStage, mode = 'full') => 
           updates.push('genres = ?');
           values.push(data.genres.map(g => g.name).join(', '));
         }
+        // Update show-level runtime from TMDB episode_run_time average
+        if (data.episode_run_time?.length) {
+          const rt = Math.round(data.episode_run_time.reduce((a, b) => a + b, 0) / data.episode_run_time.length);
+          updates.push('runtime = ?');
+          values.push(rt);
+        }
         if (updates.length > 0) {
           values.push(s.id);
           db.prepare(`UPDATE shows SET ${updates.join(', ')} WHERE id = ?`).run(...values);
@@ -261,6 +267,7 @@ const updateLibraryMetadata = async (scanProgress, nextStage, mode = 'full') => 
     } catch { /* skip */ }
     scanProgress.processedFiles++;
   }
+
 };
 
 const scanLibrarySubtitles = async (scanProgress, nextStage, mode = 'full') => {

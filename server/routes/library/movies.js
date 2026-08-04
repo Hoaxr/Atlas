@@ -318,8 +318,8 @@ const refreshMovieData = async (id) => {
         releaseDate = theatrical.toISOString().split('T')[0];
       }
       if (!releaseDate) releaseDate = data.release_date || null;
-      db.prepare('UPDATE movies SET rating = ?, poster_path = ?, overview = ?, release_date = ? WHERE id = ?')
-        .run(data.vote_average || 0, data.poster_path, data.overview, releaseDate, movie.id);
+      db.prepare('UPDATE movies SET rating = ?, poster_path = ?, overview = ?, release_date = ?, runtime = ? WHERE id = ?')
+        .run(data.vote_average || 0, data.poster_path, data.overview, releaseDate, data.runtime || null, movie.id);
     }
   } catch (e) { console.error('TMDB refresh failed for movie:', e.message); }
 

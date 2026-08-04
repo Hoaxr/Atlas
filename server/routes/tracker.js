@@ -58,9 +58,14 @@ router.get('/stats', async (req, res) => {
 
     // This month episodes
     const thisMonthEpisodes = db.prepare(`
-      SELECT COUNT(*) as count, SUM(COALESCE(runtime, ?)) as minutes
-      FROM watch_history
-      WHERE type = 'episode' AND strftime('%Y-%m', watched_at) = strftime('%Y-%m', 'now')
+      SELECT COUNT(*) as count, SUM(
+        COALESCE(w.runtime, e.runtime, ?)
+      ) as minutes
+      FROM watch_history w
+      LEFT JOIN shows s ON w.tmdb_id = s.tmdb_id
+      LEFT JOIN episodes e ON s.id = e.show_id
+        AND w.season_number = e.season_number AND w.episode_number = e.episode_number
+      WHERE w.type = 'episode' AND strftime('%Y-%m', w.watched_at) = strftime('%Y-%m', 'now')
     `).get(EPISODE_AVG);
 
     // 3. Completed Series & Finished Seasons
@@ -249,13 +254,18 @@ router.get('/stats', async (req, res) => {
     const weekendPct = weekendRow && weekendRow.total > 0 ? Math.round((weekendRow.weekend_count / weekendRow.total) * 100) : 60;
 
     const longestBingeRow = db.prepare(`
-      SELECT date(watched_at) as d, COUNT(*) as ep_count, SUM(COALESCE(runtime, 45)) as total_min
-      FROM watch_history
-      WHERE type = 'episode'
+      SELECT date(w.watched_at) as d, COUNT(*) as ep_count, SUM(
+        COALESCE(w.runtime, e.runtime, ?)
+      ) as total_min
+      FROM watch_history w
+      LEFT JOIN shows s ON w.tmdb_id = s.tmdb_id
+      LEFT JOIN episodes e ON s.id = e.show_id
+        AND w.season_number = e.season_number AND w.episode_number = e.episode_number
+      WHERE w.type = 'episode'
       GROUP BY d
       ORDER BY ep_count DESC
       LIMIT 1
-    `).get();
+    `).get(EPISODE_AVG);
 
     // 10. Personal Records
     const longestMovie = db.prepare(`SELECT title, runtime FROM movies WHERE runtime IS NOT NULL ORDER BY runtime DESC LIMIT 1`).get();

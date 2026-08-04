@@ -133,9 +133,13 @@ const processScannedFiles = async (allFiles, scanProgress, mode, nextStage) => {
                 const defaultProfile = db.prepare("SELECT id FROM quality_profiles WHERE media_type IN ('shows', 'both') OR media_type IS NULL ORDER BY id ASC LIMIT 1").get();
                 const defaultProfileId = defaultProfile?.id || null;
 
+                const showRuntime = fullShow?.episode_run_time?.length
+                  ? Math.round(fullShow.episode_run_time.reduce((a, b) => a + b, 0) / fullShow.episode_run_time.length)
+                  : null;
+
                 const insertRes = db.prepare(`
-                  INSERT INTO shows (tmdb_id, title, year, poster_path, overview, status, folder_path, rating, folder_size, quality_profile_id, tmdb_status)
-                  VALUES (?, ?, ?, ?, ?, 'downloaded', ?, ?, ?, ?, ?)
+                  INSERT INTO shows (tmdb_id, title, year, poster_path, overview, status, folder_path, rating, folder_size, quality_profile_id, tmdb_status, runtime)
+                  VALUES (?, ?, ?, ?, ?, 'downloaded', ?, ?, ?, ?, ?, ?)
                 `).run(
                   matchedShow.id,
                   matchedShow.name,
@@ -146,7 +150,8 @@ const processScannedFiles = async (allFiles, scanProgress, mode, nextStage) => {
                   showRating,
                   folderSize,
                   defaultProfileId,
-                  tmdbStatus
+                  tmdbStatus,
+                  showRuntime
                 );
                 showId = insertRes.lastInsertRowid;
                 if (matchedShow.poster_path) await imageService.ensurePoster('shows', matchedShow.id, matchedShow.poster_path).catch(err => console.error(`[Scanner] Poster fetch failed for show ${matchedShow.id}:`, err.message));
@@ -348,8 +353,8 @@ const processScannedFiles = async (allFiles, scanProgress, mode, nextStage) => {
               scanProgress.addedMovies.push({ title: matchedMovie.title, year: movieYear });
             } else {
               db.prepare(`
-                INSERT INTO movies (tmdb_id, title, year, poster_path, overview, status, file_path, rating, file_size, quality_profile_id, release_date)
-                VALUES (?, ?, ?, ?, ?, 'downloaded', ?, ?, ?, ?, ?)
+                INSERT INTO movies (tmdb_id, title, year, poster_path, overview, status, file_path, rating, file_size, quality_profile_id, release_date, runtime)
+                VALUES (?, ?, ?, ?, ?, 'downloaded', ?, ?, ?, ?, ?, ?)
               `).run(
                 matchedMovie.id,
                 matchedMovie.title,
@@ -360,7 +365,8 @@ const processScannedFiles = async (allFiles, scanProgress, mode, nextStage) => {
                 movieRating,
                 fileSize,
                 defaultProfileId,
-                matchedMovie.release_date || null
+                matchedMovie.release_date || null,
+                matchedMovie.runtime || null
               );
               scanProgress.addedMoviesCount++;
               if (matchedMovie.poster_path) await imageService.ensurePoster('movies', matchedMovie.id, matchedMovie.poster_path).catch(err => console.error(`[Scanner] Poster fetch failed for movie ${matchedMovie.id}:`, err.message));
