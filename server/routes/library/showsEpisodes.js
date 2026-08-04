@@ -21,18 +21,30 @@ router.post('/shows/:id/watched', async (req, res, next) => {
   try {
     const { watched } = req.body;
     const isWatched = !!watched;
+    const watchedAt = new Date().toISOString();
     const cols = db.prepare('PRAGMA table_info(episodes)').all().map(c => c.name);
     const hasProgress = cols.includes('watch_progress');
     const updateEpSql = hasProgress && isWatched 
-      ? 'UPDATE episodes SET watched = ?, watched_at = CURRENT_TIMESTAMP, watch_progress = 0 WHERE show_id = ?'
-      : 'UPDATE episodes SET watched = ?, watched_at = CURRENT_TIMESTAMP WHERE show_id = ?';
-    db.prepare('UPDATE shows SET watched = ?, watched_at = CURRENT_TIMESTAMP WHERE id = ?').run(isWatched ? 1 : 0, req.params.id);
-    db.prepare(updateEpSql).run(isWatched ? 1 : 0, req.params.id);
+      ? 'UPDATE episodes SET watched = ?, watched_at = ?, watch_progress = 0 WHERE show_id = ?'
+      : 'UPDATE episodes SET watched = ?, watched_at = ? WHERE show_id = ?';
+    db.prepare('UPDATE shows SET watched = ?, watched_at = ? WHERE id = ?').run(isWatched ? 1 : 0, watchedAt, req.params.id);
+    db.prepare(updateEpSql).run(isWatched ? 1 : 0, watchedAt, req.params.id);
     const show = db.prepare('SELECT tmdb_id FROM shows WHERE id = ?').get(req.params.id);
-    if (!isWatched && show?.tmdb_id) {
-      db.prepare('DELETE FROM watch_history WHERE tmdb_id = ? AND type = "episode"').run(show.tmdb_id);
-    }
     if (show?.tmdb_id) {
+      if (isWatched) {
+        // Insert watch_history entries for every episode so tracker stats are accurate
+        const episodes = db.prepare('SELECT season_number, episode_number, runtime FROM episodes WHERE show_id = ?').all(req.params.id);
+        const insertHistory = db.prepare('INSERT OR IGNORE INTO watch_history (tmdb_id, type, season_number, episode_number, watched_at, runtime) VALUES (?, ?, ?, ?, ?, ?)');
+        db.transaction(() => {
+          for (const ep of episodes) {
+            insertHistory.run(show.tmdb_id, 'episode', ep.season_number, ep.episode_number, watchedAt, ep.runtime || null);
+          }
+        })();
+        db.exec('PRAGMA wal_checkpoint(TRUNCATE);');
+      } else {
+        db.prepare('DELETE FROM watch_history WHERE tmdb_id = ? AND type = "episode"').run(show.tmdb_id);
+        db.exec('PRAGMA wal_checkpoint(TRUNCATE);');
+      }
       simklService.pushToSimklOnWatched(show.tmdb_id, 'show', isWatched).catch(e => console.error('[SimklSync] Direct push error:', e.message));
     }
     res.json({ status: 'success', message: isWatched ? 'Marked as watched' : 'Marked as unwatched' });
@@ -40,6 +52,7 @@ router.post('/shows/:id/watched', async (req, res, next) => {
     next(err);
   }
 });
+
 
 router.get('/shows', (req, res, next) => {
   try {
@@ -233,12 +246,13 @@ const refreshShowData = async (id) => {
 
         const seasons = await tmdbService.getShowSeasons(show.tmdb_id);
         const insertEp = db.prepare(`
-          INSERT INTO episodes (show_id, season_number, episode_number, title, overview, status, air_date)
-          VALUES (?, ?, ?, ?, ?, 'monitored', ?)
+          INSERT INTO episodes (show_id, season_number, episode_number, title, overview, status, air_date, runtime)
+          VALUES (?, ?, ?, ?, ?, 'monitored', ?, ?)
           ON CONFLICT(show_id, season_number, episode_number) DO UPDATE SET
             title = excluded.title,
             overview = excluded.overview,
-            air_date = excluded.air_date
+            air_date = excluded.air_date,
+            runtime = excluded.runtime
         `);
         const tmdbEpisodeKeys = new Set();
         for (const s of seasons) {
@@ -247,7 +261,7 @@ const refreshShowData = async (id) => {
           for (const ep of episodes) {
             const key = `${ep.season_number}|${ep.episode_number}`;
             tmdbEpisodeKeys.add(key);
-            insertEp.run(show.id, ep.season_number, ep.episode_number, ep.name, ep.overview, ep.air_date);
+            insertEp.run(show.id, ep.season_number, ep.episode_number, ep.name, ep.overview, ep.air_date, ep.runtime || null);
           }
         }
 
@@ -833,13 +847,22 @@ router.post('/shows/:id/seasons/:season/watched', async (req, res, next) => {
     const result = db.prepare(updateSeasonSql).run(isWatched ? 1 : 0, watchedAt, req.params.id, req.params.season);
 
     const show = db.prepare('SELECT tmdb_id FROM shows WHERE id = ?').get(req.params.id);
-    if (!isWatched && show?.tmdb_id) {
-      const delResult = db.prepare('DELETE FROM watch_history WHERE tmdb_id = ? AND type = ? AND season_number = ?').run(show.tmdb_id, 'episode', req.params.season);
-      console.log('[Episodes] season watch_history DELETE: removed %d row(s) for tmdb=%s S%s', delResult.changes, show.tmdb_id, req.params.season);
-      db.exec('PRAGMA wal_checkpoint(TRUNCATE);');
-    }
     if (show?.tmdb_id) {
-      const episodes = db.prepare('SELECT episode_number FROM episodes WHERE show_id = ? AND season_number = ?').all(req.params.id, req.params.season);
+      const episodes = db.prepare('SELECT episode_number, runtime FROM episodes WHERE show_id = ? AND season_number = ?').all(req.params.id, req.params.season);
+      if (isWatched) {
+        // Insert watch_history entries for each episode so tracker stats are accurate
+        const insertHistory = db.prepare('INSERT OR IGNORE INTO watch_history (tmdb_id, type, season_number, episode_number, watched_at, runtime) VALUES (?, ?, ?, ?, ?, ?)');
+        db.transaction(() => {
+          for (const ep of episodes) {
+            insertHistory.run(show.tmdb_id, 'episode', Number(req.params.season), ep.episode_number, watchedAt, ep.runtime || null);
+          }
+        })();
+        db.exec('PRAGMA wal_checkpoint(TRUNCATE);');
+      } else {
+        const delResult = db.prepare('DELETE FROM watch_history WHERE tmdb_id = ? AND type = ? AND season_number = ?').run(show.tmdb_id, 'episode', req.params.season);
+        console.log('[Episodes] season watch_history DELETE: removed %d row(s) for tmdb=%s S%s', delResult.changes, show.tmdb_id, req.params.season);
+        db.exec('PRAGMA wal_checkpoint(TRUNCATE);');
+      }
       for (const ep of episodes) {
         simklService.pushToSimklOnWatched(show.tmdb_id, 'show', isWatched, Number(req.params.season), ep.episode_number).catch(e => console.error('[SimklSync] Direct push error:', e.message));
       }

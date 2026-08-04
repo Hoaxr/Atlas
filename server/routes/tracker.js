@@ -9,14 +9,20 @@ const EPISODE_AVG = 45;
 
 router.get('/stats', async (req, res) => {
   try {
-    // 1. Movies stats
+    // 1. Movies stats — deduplicate per tmdb_id so re-watches don't inflate the runtime sum
     const movieStats = db.prepare(`
       SELECT
-        COUNT(DISTINCT w.tmdb_id) as count,
-        SUM(COALESCE(w.runtime, m.runtime, ?)) as total_minutes
-      FROM watch_history w
-      LEFT JOIN movies m ON w.tmdb_id = m.tmdb_id
-      WHERE w.type = 'movie'
+        COUNT(*) as count,
+        SUM(COALESCE(runtime, ?)) as total_minutes
+      FROM (
+        SELECT
+          w.tmdb_id,
+          COALESCE(MAX(w.runtime), m.runtime) as runtime
+        FROM watch_history w
+        LEFT JOIN movies m ON w.tmdb_id = m.tmdb_id
+        WHERE w.type = 'movie'
+        GROUP BY w.tmdb_id
+      )
     `).get(MOVIE_AVG);
 
     // This month movies
@@ -26,16 +32,28 @@ router.get('/stats', async (req, res) => {
       WHERE type = 'movie' AND strftime('%Y-%m', watched_at) = strftime('%Y-%m', 'now')
     `).get();
 
-    // 2. Episodes stats
+    // 2. Episodes stats — deduplicate watch_history rows per unique episode to avoid
+    //    double-counting when the same episode has multiple history entries (e.g. Simkl
+    //    sync + manual mark).
     const episodeStats = db.prepare(`
       SELECT
-        COUNT(DISTINCT w.tmdb_id || '-' || w.season_number || '-' || w.episode_number) as count,
-        COUNT(DISTINCT w.tmdb_id) as shows_count,
-        SUM(COALESCE(w.runtime, e.runtime, ?)) as total_minutes
-      FROM watch_history w
-      LEFT JOIN shows s ON w.tmdb_id = s.tmdb_id
-      LEFT JOIN episodes e ON s.id = e.show_id AND w.season_number = e.season_number AND w.episode_number = e.episode_number
-      WHERE w.type = 'episode'
+        COUNT(*) as count,
+        COUNT(DISTINCT tmdb_id) as shows_count,
+        SUM(COALESCE(runtime, ?)) as total_minutes
+      FROM (
+        SELECT
+          w.tmdb_id, w.season_number, w.episode_number,
+          COALESCE(w.runtime, e.runtime) as runtime
+        FROM (
+          SELECT tmdb_id, season_number, episode_number,
+                 MAX(runtime) as runtime
+          FROM watch_history
+          WHERE type = 'episode'
+          GROUP BY tmdb_id, season_number, episode_number
+        ) w
+        LEFT JOIN shows s ON w.tmdb_id = s.tmdb_id
+        LEFT JOIN episodes e ON s.id = e.show_id AND w.season_number = e.season_number AND w.episode_number = e.episode_number
+      )
     `).get(EPISODE_AVG);
 
     // This month episodes
@@ -161,28 +179,28 @@ router.get('/stats', async (req, res) => {
     // 6. Weekly Activity Graph Data (Last 7 Days)
     const weeklyActivity = db.prepare(`
       SELECT 
-        strftime('%w', watched_at) as day_index,
-        strftime('%Y-%m-%d', watched_at) as date_str,
+        strftime('%w', w.watched_at) as day_index,
+        strftime('%Y-%m-%d', w.watched_at) as date_str,
         COUNT(*) as items_count,
-        ROUND(SUM(COALESCE(runtime, 45)) / 60.0, 1) as hours
-      FROM watch_history
-      WHERE watched_at >= date('now', '-6 days')
+        ROUND(SUM(
+          COALESCE(
+            w.runtime,
+            CASE w.type
+              WHEN 'movie' THEN m.runtime
+              WHEN 'episode' THEN e.runtime
+            END,
+            CASE w.type WHEN 'movie' THEN ? ELSE ? END
+          )
+        ) / 60.0, 1) as hours
+      FROM watch_history w
+      LEFT JOIN movies m ON w.type = 'movie' AND w.tmdb_id = m.tmdb_id
+      LEFT JOIN shows s ON w.type = 'episode' AND w.tmdb_id = s.tmdb_id
+      LEFT JOIN episodes e ON w.type = 'episode' AND s.id = e.show_id
+        AND w.season_number = e.season_number AND w.episode_number = e.episode_number
+      WHERE w.watched_at >= date('now', '-6 days')
       GROUP BY date_str
       ORDER BY date_str ASC
-    `).all();
-
-    // 7. 365-Day Activity Heatmap Data
-    const heatmapData = db.prepare(`
-      SELECT 
-        date(watched_at) as date,
-        COUNT(*) as count,
-        SUM(CASE WHEN type = 'movie' THEN 1 ELSE 0 END) as movies,
-        SUM(CASE WHEN type = 'episode' THEN 1 ELSE 0 END) as episodes,
-        ROUND(SUM(COALESCE(runtime, 45)) / 60.0, 1) as hours
-      FROM watch_history
-      WHERE watched_at >= date('now', '-365 days')
-      GROUP BY date(watched_at)
-    `).all();
+    `).all(MOVIE_AVG, EPISODE_AVG);
 
     // 8. Genre Breakdown
     const movieGenres = db.prepare(`SELECT genres FROM movies WHERE watched = 1 AND genres IS NOT NULL AND genres != ''`).all();
@@ -283,7 +301,6 @@ router.get('/stats', async (req, res) => {
           longest_series: longestShow || { title: 'South Park', ep_count: 331 }
         },
         weekly_activity: weeklyActivity,
-        heatmap_data: heatmapData,
         genre_breakdown: genreBreakdown,
         achievements,
         currently_watching: currentlyWatching
@@ -302,10 +319,10 @@ router.get('/history', async (req, res) => {
 
     const history = db.prepare(`
       SELECT 
-        w.id as history_id, w.tmdb_id, w.type, w.season_number, w.episode_number, w.watched_at,
-        m.id as movie_id, m.title as movie_title, m.poster_path as movie_poster,
+        w.id as history_id, w.tmdb_id, w.type, w.season_number, w.episode_number, w.watched_at, w.runtime as history_runtime,
+        m.id as movie_id, m.title as movie_title, m.poster_path as movie_poster, m.runtime as movie_runtime,
         s.id as show_id, s.title as show_title, s.poster_path as show_poster,
-        e.title as episode_title
+        e.title as episode_title, e.runtime as ep_runtime
       FROM watch_history w
       LEFT JOIN movies m ON (w.type = 'movie') AND w.tmdb_id = m.tmdb_id
       LEFT JOIN shows s ON (w.type = 'episode' OR w.type = 'show') AND w.tmdb_id = s.tmdb_id
