@@ -345,41 +345,41 @@ export default function ConnectionsTab({
     <div className="space-y-8 animate-fade-in max-w-5xl mx-auto">
 
       {/* ── API's & Integrations ── */}
-      <div className="glass-panel p-6 rounded-2xl border border-white/10">
+      <div className="glass-panel p-4 sm:p-6 rounded-2xl border border-white/10">
         <h2 className="text-xl font-bold text-slate-200 flex items-center gap-2 mb-6">
           <Key className="w-5 h-5 text-cyan-400" /> API's & Integrations
         </h2>
 
         <div className="space-y-6">
           {/* TMDB */}
-          <div className="p-4 bg-slate-800/30 rounded-xl border border-slate-700/50 space-y-4">
+          <div className="p-3 sm:p-4 bg-slate-800/30 rounded-xl border border-slate-700/50 space-y-4">
             <div className="flex items-center gap-3">
               <h3 className="text-sm font-bold text-cyan-400">TMDB</h3>
               {!parentSettings?.tmdbApiKey || parentSettings.tmdbApiKey === '' ? (
-                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-700/50 text-slate-400 border border-slate-600/50">Not configured</span>
+                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-700/50 text-slate-400 border border-slate-600/50 whitespace-nowrap">Not configured</span>
               ) : (
-                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">Connected</span>
+                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 whitespace-nowrap">Connected</span>
               )}
             </div>
             <p className="text-xs text-slate-500">TMDB provides all metadata, posters, and search results.</p>
             <div>
-              <label className="flex items-center gap-2 text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">
+              <label className="flex items-center gap-2 text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 flex-wrap">
                 <span>API Key</span>
-                <a href="https://www.themoviedb.org/settings/api?language=en-US" target="_blank" rel="noopener noreferrer" className="text-[10px] text-cyan-400 hover:text-cyan-300 underline normal-case font-medium">Get key</a>
+                <a href="https://www.themoviedb.org/settings/api?language=en-US" target="_blank" rel="noopener noreferrer" className="text-[10px] text-cyan-400 hover:text-cyan-300 underline normal-case font-medium whitespace-nowrap">Get key</a>
               </label>
               <PasswordInput placeholder="Enter your TMDB API Key" className="w-full bg-slate-800/50 border border-slate-700 rounded-xl px-4 py-2.5 text-slate-200 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500/50 transition-all" value={parentSettings?.tmdbApiKey || ''} onChange={(e) => setParentSettings({ ...parentSettings, tmdbApiKey: e.target.value })} />
             </div>
           </div>
 
           {/* Simkl */}
-          <div className="p-4 bg-slate-800/30 rounded-xl border border-slate-700/50 space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
+          <div className="p-3 sm:p-4 bg-slate-800/30 rounded-xl border border-slate-700/50 space-y-4">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
                 <h3 className="text-sm font-bold text-cyan-400">Simkl</h3>
                 {!parentSettings?.simklAccessToken ? (
-                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-700/50 text-slate-400 border border-slate-600/50">Not configured</span>
+                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-700/50 text-slate-400 border border-slate-600/50 whitespace-nowrap">Not configured</span>
                 ) : (
-                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">Connected</span>
+                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 whitespace-nowrap">Connected</span>
                 )}
               </div>
               {parentSettings?.simklAccessToken && (
@@ -391,7 +391,7 @@ export default function ConnectionsTab({
                       fetchSettings();
                     }
                   }}
-                  className="px-3 py-1.5 text-xs font-bold text-rose-400 hover:text-rose-300 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 rounded-lg transition-all flex items-center gap-1.5"
+                  className="px-3 py-1.5 text-xs font-bold text-rose-400 hover:text-rose-300 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 rounded-lg transition-all flex items-center gap-1.5 whitespace-nowrap"
                 >
                   Disconnect
                 </button>
@@ -400,20 +400,20 @@ export default function ConnectionsTab({
             <p className="text-xs text-slate-500">Simkl syncs your watched status and movie/show completion history.</p>
             <div className="grid grid-cols-1 gap-4">
               <div>
-                <label className="flex items-center gap-2 text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">
+                <label className="flex items-center gap-2 text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 flex-wrap">
                   <span>Simkl Client ID / API Key</span>
-                  <a href="https://simkl.com/settings/developer/new/" target="_blank" rel="noopener noreferrer" className="text-[10px] text-cyan-400 hover:text-cyan-300 underline normal-case font-medium">Create API App</a>
+                  <a href="https://simkl.com/settings/developer/new/" target="_blank" rel="noopener noreferrer" className="text-[10px] text-cyan-400 hover:text-cyan-300 underline normal-case font-medium whitespace-nowrap">Create API App</a>
                 </label>
                 <PasswordInput placeholder="Enter your Simkl Client ID" className="w-full bg-slate-800/50 border border-slate-700 rounded-xl px-4 py-2.5 text-slate-200 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500/50 transition-all" value={parentSettings?.simklClientId || ''} onChange={(e) => setParentSettings({ ...parentSettings, simklClientId: e.target.value })} />
               </div>
             </div>
 
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 flex-wrap">
               {!parentSettings?.simklAccessToken && !simklDeviceCode && (
                 <button
                   onClick={connectSimkl}
                   disabled={!parentSettings?.simklClientId}
-                  className="bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold py-2 px-4 rounded-lg text-xs transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold py-2 px-4 rounded-lg text-xs transition-all disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
                 >
                   Connect with Simkl
                 </button>
@@ -422,7 +422,7 @@ export default function ConnectionsTab({
                 <button
                   onClick={handleSimklPull}
                   disabled={simklPulling}
-                  className="bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-400 font-bold py-2 px-4 rounded-lg text-xs transition-all flex items-center gap-2"
+                  className="bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-400 font-bold py-2 px-4 rounded-lg text-xs transition-all flex items-center gap-2 whitespace-nowrap"
                 >
                   {simklPulling ? (
                     <><div className="animate-spin rounded-full h-3 w-3 border-b-2 border-cyan-500" /> Pulling...</>
@@ -430,11 +430,11 @@ export default function ConnectionsTab({
                 </button>
               )}
               <div
-                className="flex items-center gap-2 cursor-pointer select-none transition-colors hover:bg-slate-700/30 rounded-lg px-3 py-2"
+                className="flex items-center gap-2 cursor-pointer select-none transition-colors hover:bg-slate-700/30 rounded-lg px-3 py-2 min-w-0"
                 onClick={() => setParentSettings(prev => ({ ...prev, simklWatchedSync: !prev.simklWatchedSync }))}
               >
-                {parentSettings?.simklWatchedSync ? <CheckSquare className="w-4 h-4 text-cyan-400" /> : <Square className="w-4 h-4 text-slate-500" />}
-                <div>
+                {parentSettings?.simklWatchedSync ? <CheckSquare className="w-4 h-4 text-cyan-400 shrink-0" /> : <Square className="w-4 h-4 text-slate-500 shrink-0" />}
+                <div className="min-w-0">
                   <span className="text-xs text-slate-300">Watched sync</span>
                   <p className="text-[10px] text-slate-500">Automatically sync watched status between Atlas and Simkl</p>
                 </div>
@@ -460,7 +460,7 @@ export default function ConnectionsTab({
           </div>
           
           {/* Trakt Import */}
-          <div className="p-4 bg-slate-800/30 rounded-xl border border-slate-700/50 space-y-4">
+          <div className="p-3 sm:p-4 bg-slate-800/30 rounded-xl border border-slate-700/50 space-y-4">
             <div className="flex items-center gap-3">
               <h3 className="text-sm font-bold text-red-500">Trakt Import</h3>
             </div>
@@ -496,14 +496,14 @@ export default function ConnectionsTab({
       </div>
 
       {/* Media Servers */}
-      <div className="glass-panel p-6 rounded-2xl">
+      <div className="glass-panel p-4 sm:p-6 rounded-2xl">
         <h2 className="text-xl font-bold text-slate-200 flex items-center gap-2 mb-6">
           <Server className="w-5 h-5 text-cyan-400" /> Media Servers
         </h2>
 
         <div className="space-y-6">
           {/* Plex */}
-          <div className="p-4 bg-slate-800/30 rounded-xl border border-slate-700/50 space-y-4">
+          <div className="p-3 sm:p-4 bg-slate-800/30 rounded-xl border border-slate-700/50 space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex items-center gap-3">
                 <h3 className="text-sm font-bold text-amber-400">Plex</h3>
@@ -574,7 +574,7 @@ export default function ConnectionsTab({
           </div>
 
           {/* Jellyfin */}
-          <div className="p-4 bg-slate-800/30 rounded-xl border border-slate-700/50 space-y-4">
+          <div className="p-3 sm:p-4 bg-slate-800/30 rounded-xl border border-slate-700/50 space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex items-center gap-3">
                 <h3 className="text-sm font-bold text-purple-400">Jellyfin</h3>
@@ -616,7 +616,7 @@ export default function ConnectionsTab({
           </div>
 
           {/* Emby */}
-          <div className="p-4 bg-slate-800/30 rounded-xl border border-slate-700/50 space-y-4">
+          <div className="p-3 sm:p-4 bg-slate-800/30 rounded-xl border border-slate-700/50 space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
               <div className="flex items-center gap-3">
                 <h3 className="text-sm font-bold text-emerald-400">Emby</h3>
@@ -660,14 +660,14 @@ export default function ConnectionsTab({
       </div>
 
       {/* Notifications */}
-      <div className="glass-panel p-6 rounded-2xl">
+      <div className="glass-panel p-4 sm:p-6 rounded-2xl">
         <h2 className="text-xl font-bold text-slate-200 flex items-center gap-2 mb-6">
           <BellRing className="w-5 h-5 text-amber-400" /> Notifications
         </h2>
 
         <div className="flex flex-col space-y-6">
           {/* Discord */}
-          <div className="space-y-4 bg-slate-900/50 p-5 rounded-xl border border-slate-700/50">
+          <div className="space-y-4 bg-slate-900/50 p-4 sm:p-5 rounded-xl border border-slate-700/50">
             <div>
               <h3 className="text-sm font-semibold text-slate-300">Discord Webhook</h3>
               <p className="text-[11px] text-slate-500 mt-0.5">Discord receives grab, download, and playback notifications via webhook.</p>
@@ -686,7 +686,7 @@ export default function ConnectionsTab({
           </div>
 
           {/* Telegram */}
-          <div className="space-y-4 bg-slate-900/50 p-5 rounded-xl border border-slate-700/50">
+          <div className="space-y-4 bg-slate-900/50 p-4 sm:p-5 rounded-xl border border-slate-700/50">
             <div>
               <h3 className="text-sm font-semibold text-slate-300">Telegram Bot</h3>
               <p className="text-[11px] text-slate-500 mt-0.5">Telegram receives grab, download, and playback notifications via a bot.</p>
@@ -717,7 +717,7 @@ export default function ConnectionsTab({
           </div>
 
           {/* Pushover */}
-          <div className="space-y-4 bg-slate-900/50 p-5 rounded-xl border border-slate-700/50">
+          <div className="space-y-4 bg-slate-900/50 p-4 sm:p-5 rounded-xl border border-slate-700/50">
             <div>
               <h3 className="text-sm font-semibold text-slate-300">Pushover</h3>
               <p className="text-[11px] text-slate-500 mt-0.5">Receive notifications natively on your iOS or Android devices.</p>
@@ -747,7 +747,7 @@ export default function ConnectionsTab({
           </div>
         </div>
 
-        <div className="mt-6 space-y-3 p-5 bg-slate-900/50 rounded-xl border border-slate-700/50">
+        <div className="mt-6 space-y-3 p-4 sm:p-5 bg-slate-900/50 rounded-xl border border-slate-700/50">
           <h3 className="text-sm font-semibold text-slate-300">Events</h3>
           
           <label className="flex items-start gap-3 cursor-pointer p-4 rounded-xl bg-slate-800/50 border border-white/5 hover:border-amber-500/30 transition-colors group">
@@ -761,7 +761,7 @@ export default function ConnectionsTab({
               />
               {localSettings.notifyOnGrab ? <CheckSquare className="w-5 h-5 text-amber-500" /> : <Square className="w-5 h-5 text-slate-500" />}
             </div>
-            <div>
+            <div className="min-w-0">
               <p className="text-sm font-bold text-slate-200 group-hover:text-amber-400 transition-colors">Notify on Grab</p>
               <p className="text-xs text-slate-400 mt-1">Send notification when a release is sent to download client</p>
             </div>
@@ -778,7 +778,7 @@ export default function ConnectionsTab({
               />
               {localSettings.notifyOnDownload ? <CheckSquare className="w-5 h-5 text-amber-500" /> : <Square className="w-5 h-5 text-slate-500" />}
             </div>
-            <div>
+            <div className="min-w-0">
               <p className="text-sm font-bold text-slate-200 group-hover:text-amber-400 transition-colors">Notify on Download Complete</p>
               <p className="text-xs text-slate-400 mt-1">Send notification when client finishes downloading and Atlas imports</p>
             </div>
@@ -795,7 +795,7 @@ export default function ConnectionsTab({
               />
               {localSettings.notifyOnPlaybackStart ? <CheckSquare className="w-5 h-5 text-amber-500" /> : <Square className="w-5 h-5 text-slate-500" />}
             </div>
-            <div>
+            <div className="min-w-0">
               <p className="text-sm font-bold text-slate-200 group-hover:text-amber-400 transition-colors">Notify on Playback Start</p>
               <p className="text-xs text-slate-400 mt-1">Send notification when a user starts watching media on a connected server</p>
             </div>
@@ -812,7 +812,7 @@ export default function ConnectionsTab({
               />
               {localSettings.notifyOnRequest ? <CheckSquare className="w-5 h-5 text-amber-500" /> : <Square className="w-5 h-5 text-slate-500" />}
             </div>
-            <div>
+            <div className="min-w-0">
               <p className="text-sm font-bold text-slate-200 group-hover:text-amber-400 transition-colors">Notify on Request</p>
               <p className="text-xs text-slate-400 mt-1">Send notification when a user requests a movie or show</p>
             </div>

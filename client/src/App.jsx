@@ -1,5 +1,5 @@
-import { BrowserRouter, Routes, Route, Navigate, useParams } from 'react-router-dom';
-import { lazy, Suspense } from 'react';
+import { BrowserRouter, Routes, Route, Navigate, useParams, useLocation } from 'react-router-dom';
+import { lazy, Suspense, useEffect } from 'react';
 import { Toaster } from 'react-hot-toast';
 import { ThemeProvider } from './lib/ThemeContext';
 import ErrorBoundary from './components/shared/ErrorBoundary';
@@ -39,6 +39,14 @@ function LazyPage({ children }) {
   return <Suspense fallback={<PageFallback />}>{children}</Suspense>;
 }
 
+function ScrollToTop() {
+  const { pathname } = useLocation();
+  useEffect(() => {
+    document.querySelector('main')?.scrollTo(0, 0);
+  }, [pathname]);
+  return null;
+}
+
 function App() {
   return (
     <ErrorBoundary>
@@ -55,6 +63,7 @@ function App() {
             }}
           />
           <BrowserRouter>
+            <ScrollToTop />
             <Routes>
               <Route path="/login" element={<LazyPage><Login /></LazyPage>} />
               <Route element={<ProtectedRoute />}>
