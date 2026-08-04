@@ -1,5 +1,10 @@
 require('dotenv').config();
 
+// ── Kill any orphaned ffprobe processes from previous runs ──
+try {
+  require('child_process').execSync('killall ffprobe 2>/dev/null || true', { timeout: 2000 });
+} catch { /* ignore */ }
+
 // ── Fail fast if JWT_SECRET is missing — must happen before any module load ──
 if (!process.env.JWT_SECRET) {
   console.error('[FATAL] JWT_SECRET environment variable is not set. Refusing to start.');
@@ -354,6 +359,13 @@ app.use(errorHandler);
 // Graceful shutdown
 const shutdown = (signal) => {
   console.log(`[Backend] ${signal} received — shutting down...`);
+  
+  // Cancel any running library scan
+  try {
+    const { stopScan } = require('./services/scanner');
+    stopScan();
+    console.log('[Backend] Library scan cancelled.');
+  } catch { /* ignore */ }
   
   // Stop all cron jobs to prevent new task executions
   stopAllCronJobs();

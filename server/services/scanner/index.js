@@ -67,9 +67,9 @@ const doScan = async (mode = 'full') => {
     full:      5,
     movies:    5,
     shows:     5,
-    new:       2,
+    new:       3,
     refresh:   1,
-    rematch:   2,
+    rematch:   3,
     subtitles: 1,
   };
   scanProgress.totalStages = MODE_STAGES[mode] || 5;
@@ -86,7 +86,7 @@ const doScan = async (mode = 'full') => {
   try {
     const gatherFiles = ['full', 'movies', 'shows', 'new', 'rematch'].includes(mode);
     const processFiles = ['full', 'movies', 'shows', 'new', 'rematch'].includes(mode);
-    const updateMetadata = ['full', 'movies', 'shows', 'refresh'].includes(mode);
+    const updateMetadata = ['full', 'movies', 'shows', 'new', 'rematch', 'refresh'].includes(mode);
     const syncTrakt = ['full', 'movies', 'shows'].includes(mode);
     const scanSubtitles = ['full', 'movies', 'shows', 'subtitles'].includes(mode);
 

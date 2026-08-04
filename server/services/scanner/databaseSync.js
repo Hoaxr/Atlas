@@ -16,7 +16,7 @@ const updateLibraryMetadata = async (scanProgress, nextStage, mode = 'full') => 
   let allShows = [];
 
   if (mode !== 'shows') {
-    existingMovies = db.prepare("SELECT id, title, file_path, scene_name, file_size, resolution, codec, audio FROM movies WHERE status = 'downloaded' AND file_path IS NOT NULL").all();
+    existingMovies = db.prepare("SELECT id, title, file_path, scene_name, file_size, resolution, codec, audio, runtime FROM movies WHERE status = 'downloaded' AND file_path IS NOT NULL").all();
     if (mode === 'refresh') {
       allMovies = db.prepare("SELECT id, title, tmdb_id FROM movies WHERE tmdb_id IS NOT NULL").all();
     } else {
@@ -26,7 +26,7 @@ const updateLibraryMetadata = async (scanProgress, nextStage, mode = 'full') => 
 
   if (mode !== 'movies') {
     existingShows = db.prepare("SELECT id, title, folder_path FROM shows WHERE status = 'downloaded' AND folder_path IS NOT NULL").all();
-    existingEpisodes = db.prepare("SELECT id, show_id, file_path, scene_name, file_size, resolution, codec, audio FROM episodes WHERE status = 'downloaded' AND file_path IS NOT NULL").all();
+    existingEpisodes = db.prepare("SELECT id, show_id, file_path, scene_name, file_size, resolution, codec, audio, runtime FROM episodes WHERE status = 'downloaded' AND file_path IS NOT NULL").all();
     if (mode === 'refresh') {
       allShows = db.prepare("SELECT id, title, tmdb_id FROM shows WHERE tmdb_id IS NOT NULL").all();
     } else {
@@ -74,36 +74,39 @@ const updateLibraryMetadata = async (scanProgress, nextStage, mode = 'full') => 
 
       const needsRes = !resolution && !hasRes;
 
-      if (!fileSize || fileSize === 0 || needsRes || !codec || !audio) {
+      const needsRuntime = !m.runtime || m.runtime === 0;
+
+      if (!fileSize || fileSize === 0 || needsRes || !codec || !audio || needsRuntime) {
         needsDisk = true;
       }
 
+      let runtime = m.runtime;
       if (needsDisk) {
         try {
           if (!fileSize || fileSize === 0) {
             const stat = await fs.stat(m.file_path);
             fileSize = stat.size;
           }
-          if (needsRes || !codec || !audio) {
-            const meta = await getMediaMetadata(m.file_path);
-            if (needsRes) {
-              resolution = meta.resolution;
-              if (resolution) resName = 'Unknown ' + resolution;
-            }
-            if (!codec) codec = meta.codec;
-            if (!audio) audio = meta.audio;
+          const meta = await getMediaMetadata(m.file_path);
+          if (needsRes) {
+            resolution = meta.resolution;
+            if (resolution) resName = 'Unknown ' + resolution;
           }
+          if (!codec) codec = meta.codec;
+          if (!audio) audio = meta.audio;
+          if (needsRuntime && meta.runtime) runtime = meta.runtime;
         } catch { /* ignore */ }
       }
       
-      if (needsDisk || resolution !== m.resolution || codec !== m.codec || audio !== m.audio) {
+      if (needsDisk || resolution !== m.resolution || codec !== m.codec || audio !== m.audio || runtime !== m.runtime) {
         movieUpdates.push({
           id: m.id,
           fileSize,
           resName,
           resolution,
           codec,
-          audio
+          audio,
+          runtime
         });
       }
     } catch { /* skip */ }
@@ -112,9 +115,9 @@ const updateLibraryMetadata = async (scanProgress, nextStage, mode = 'full') => 
 
   if (movieUpdates.length > 0) {
     db.transaction(() => {
-      const stmt = db.prepare('UPDATE movies SET file_size = COALESCE(?, file_size), scene_name = COALESCE(?, scene_name), resolution = ?, codec = ?, audio = ? WHERE id = ?');
+      const stmt = db.prepare('UPDATE movies SET file_size = COALESCE(?, file_size), scene_name = COALESCE(?, scene_name), resolution = ?, codec = ?, audio = ?, runtime = COALESCE(?, runtime) WHERE id = ?');
       for (const u of movieUpdates) {
-        stmt.run(u.fileSize, u.resName, u.resolution, u.codec, u.audio, u.id);
+        stmt.run(u.fileSize, u.resName, u.resolution, u.codec, u.audio, u.runtime, u.id);
       }
     })();
   }
@@ -153,36 +156,39 @@ const updateLibraryMetadata = async (scanProgress, nextStage, mode = 'full') => 
 
       const needsRes = !resolution && !hasRes;
 
-      if (!fileSize || fileSize === 0 || needsRes || !codec || !audio) {
+      const needsRuntime = !ep.runtime || ep.runtime === 0;
+
+      if (!fileSize || fileSize === 0 || needsRes || !codec || !audio || needsRuntime) {
         needsDisk = true;
       }
 
+      let runtime = ep.runtime;
       if (needsDisk) {
         try {
           if (!fileSize || fileSize === 0) {
             const stat = await fs.stat(ep.file_path);
             fileSize = stat.size;
           }
-          if (needsRes || !codec || !audio) {
-            const meta = await getMediaMetadata(ep.file_path);
-            if (needsRes) {
-              resolution = meta.resolution;
-              if (resolution) resName = 'Unknown ' + resolution;
-            }
-            if (!codec) codec = meta.codec;
-            if (!audio) audio = meta.audio;
+          const meta = await getMediaMetadata(ep.file_path);
+          if (needsRes) {
+            resolution = meta.resolution;
+            if (resolution) resName = 'Unknown ' + resolution;
           }
+          if (!codec) codec = meta.codec;
+          if (!audio) audio = meta.audio;
+          if (needsRuntime && meta.runtime) runtime = meta.runtime;
         } catch { /* ignore */ }
       }
 
-      if (needsDisk || resolution !== ep.resolution || codec !== ep.codec || audio !== ep.audio) {
+      if (needsDisk || resolution !== ep.resolution || codec !== ep.codec || audio !== ep.audio || runtime !== ep.runtime) {
         epUpdates.push({
           id: ep.id,
           fileSize,
           resName,
           resolution,
           codec,
-          audio
+          audio,
+          runtime
         });
       }
     } catch { /* skip */ }
@@ -191,9 +197,9 @@ const updateLibraryMetadata = async (scanProgress, nextStage, mode = 'full') => 
 
   if (epUpdates.length > 0) {
     db.transaction(() => {
-      const stmt = db.prepare('UPDATE episodes SET file_size = COALESCE(?, file_size), scene_name = COALESCE(?, scene_name), resolution = ?, codec = ?, audio = ? WHERE id = ?');
+      const stmt = db.prepare('UPDATE episodes SET file_size = COALESCE(?, file_size), scene_name = COALESCE(?, scene_name), resolution = ?, codec = ?, audio = ?, runtime = COALESCE(?, runtime) WHERE id = ?');
       for (const u of epUpdates) {
-        stmt.run(u.fileSize, u.resName, u.resolution, u.codec, u.audio, u.id);
+        stmt.run(u.fileSize, u.resName, u.resolution, u.codec, u.audio, u.runtime, u.id);
       }
     })();
   }

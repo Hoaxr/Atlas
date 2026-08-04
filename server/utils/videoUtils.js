@@ -6,15 +6,23 @@ const getMediaMetadata = async (filePath) => {
   try {
     const { stdout } = await execFileAsync('ffprobe', [
       '-v', 'error',
-      '-show_entries', 'stream=codec_type,codec_name,width,height,channels,channel_layout',
+      '-show_entries', 'stream=codec_type,codec_name,width,height,channels,channel_layout:format=duration',
       '-of', 'json',
       filePath
     ]);
     const info = JSON.parse(stdout) || {};
     const streams = info.streams || [];
+    const format = info.format || {};
     
     const videoStream = streams.find(s => s.codec_type === 'video') || {};
     const audioStream = streams.find(s => s.codec_type === 'audio') || {};
+
+    // Determine runtime in minutes from ffprobe duration (seconds)
+    let runtime = null;
+    const duration = parseFloat(format.duration);
+    if (!isNaN(duration) && duration > 0) {
+      runtime = Math.round(duration / 60);
+    }
     
     // Determine resolution
     let resolution = null;
@@ -58,9 +66,9 @@ const getMediaMetadata = async (filePath) => {
       }
     }
 
-    return { resolution, codec, audio };
+    return { resolution, codec, audio, runtime };
   } catch (err) {
-    return { resolution: null, codec: null, audio: null };
+    return { resolution: null, codec: null, audio: null, runtime: null };
   }
 };
 

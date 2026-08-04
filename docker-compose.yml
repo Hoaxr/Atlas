@@ -7,6 +7,8 @@ services:
     build: .
     container_name: Atlas
     restart: unless-stopped
+    init: true
+    stop_grace_period: 30s
     environment:
       - PUID=1026
       - PGID=100
