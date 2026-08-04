@@ -429,8 +429,33 @@ class WatcherService {
     // Update active sessions
     this.activeSessions = currentSessionIds;
 
-    // Emit event with current count
-    eventBus.emit('event', { type: 'WATCHERS_UPDATE', count: currentSessionIds.size });
+    // Emit event with full sessions + stats (replaces per-client HTTP polling)
+    const topMovies = db.prepare(`SELECT title, COUNT(*) as plays FROM play_history WHERE type = 'movie' GROUP BY title ORDER BY plays DESC LIMIT 10`).all();
+    const topShows = db.prepare(`SELECT CASE WHEN INSTR(title, ' - S') > 0 THEN SUBSTR(title, 1, INSTR(title, ' - S') - 1) ELSE title END as title, COUNT(*) as plays FROM play_history WHERE type IN ('episode', 'live') GROUP BY 1 ORDER BY plays DESC LIMIT 10`).all();
+    const topUsers = db.prepare(`SELECT user, COUNT(*) as plays FROM play_history GROUP BY user ORDER BY plays DESC LIMIT 10`).all();
+    const popularMovies = db.prepare(`SELECT title, COUNT(DISTINCT user) as users FROM play_history WHERE type = 'movie' GROUP BY title ORDER BY users DESC LIMIT 10`).all();
+    const popularShows = db.prepare(`SELECT CASE WHEN INSTR(title, ' - S') > 0 THEN SUBSTR(title, 1, INSTR(title, ' - S') - 1) ELSE title END as title, COUNT(DISTINCT user) as users FROM play_history WHERE type IN ('episode', 'live') GROUP BY 1 ORDER BY users DESC LIMIT 10`).all();
+    const recent = db.prepare(`SELECT user, title, type, server, player, created_at FROM play_history ORDER BY created_at DESC LIMIT 10`).all();
+    const topPlatforms = db.prepare(`SELECT player, COUNT(*) as plays FROM play_history WHERE player IS NOT NULL AND player != '' GROUP BY player ORDER BY plays DESC LIMIT 10`).all();
+    const totalPlays = db.prepare(`SELECT COUNT(*) as count FROM play_history`).get()?.count || 0;
+    const uniqueUsers = db.prepare(`SELECT COUNT(DISTINCT user) as count FROM play_history`).get()?.count || 0;
+    const uniqueTitles = db.prepare(`SELECT COUNT(DISTINCT title) as count FROM play_history`).get()?.count || 0;
+
+    eventBus.emit('event', {
+      type: 'WATCHERS_UPDATE',
+      count: currentSessionIds.size,
+      sessions,
+      stats: {
+        topMovies,
+        topShows,
+        topUsers,
+        popularMovies,
+        popularShows,
+        recent,
+        topPlatforms,
+        overview: { totalPlays, uniqueUsers, uniqueTitles }
+      }
+    });
   }
 }
 

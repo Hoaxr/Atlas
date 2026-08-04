@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../lib/api';
+import useWebSocket from '../lib/useWebSocket';
 import { Play, Pause, Tv, Film, User, Activity, Trophy, Monitor, Zap, Wifi, Clock, Subtitles, HardDrive, Volume2, Video, TrendingUp, Hash, Eye, MonitorPlay, RotateCcw, History } from 'lucide-react';
 import { customAlert } from '../utils/alerts';
 import { formatRelativeTime } from '../lib/format';
@@ -10,19 +11,26 @@ import { useStickyBar } from '../lib/useStickyBar';
 
 export default function Watcher() {
   const { headerRef, stickyVisible } = useStickyBar();
+  const { onEvent } = useWebSocket();
   const [sessions, setSessions] = useState([]);
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [resetting, setResetting] = useState(false);
 
   useEffect(() => {
+    // Initial fetch for first paint, then WebSocket takes over
     fetchSessions();
     fetchStats();
-    const interval = setInterval(() => {
-      fetchSessions();
-      fetchStats();
-    }, 5000);
-    return () => clearInterval(interval);
+
+    const cleanup = onEvent((data) => {
+      if (data.type === 'WATCHERS_UPDATE') {
+        if (data.sessions) setSessions(data.sessions);
+        if (data.stats) setStats(data.stats);
+        setLoading(false);
+      }
+    });
+
+    return () => cleanup();
   }, []);
 
   const fetchStats = async () => {
@@ -79,7 +87,7 @@ export default function Watcher() {
       await api.delete('/watcher/stats');
       setStats(null);
       customAlert('Watcher statistics have been reset');
-      // Refetch empty stats
+      // Re-fetch stats via HTTP (WebSocket will pick up subsequent updates)
       fetchStats();
     } catch (err) {
       customAlert('Failed to reset statistics');

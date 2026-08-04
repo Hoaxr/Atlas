@@ -266,7 +266,7 @@ export function AnimatedUpNextCard({ item, type, onMarkWatched }) {
               }}
               transition={{ duration: 0.5, ease: 'easeOut' }}
             />
-            <div className="absolute inset-0 flex items-center px-2 z-10">
+            <div className="absolute inset-0 flex items-center justify-center px-2 z-10">
               <AnimatePresence mode="wait">
                 {isCompleted ? (
                   <motion.span
@@ -275,7 +275,7 @@ export function AnimatedUpNextCard({ item, type, onMarkWatched }) {
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -4 }}
                     transition={{ duration: 0.25 }}
-                    className="text-[11px] font-bold text-white bg-cyan-600/80 px-2 py-0.5 rounded-full"
+                    className="text-[11px] font-bold text-white drop-shadow-md"
                   >
                     Watched ✓
                   </motion.span>
@@ -286,22 +286,11 @@ export function AnimatedUpNextCard({ item, type, onMarkWatched }) {
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -4 }}
                     transition={{ duration: 0.25 }}
-                    className="text-[11px] font-semibold text-white bg-cyan-600/80 px-2 py-0.5 rounded-full"
+                    className="text-[11px] font-bold text-white drop-shadow-md tracking-wider"
                   >
-                    {item.total_episodes - (item.episodes_left || 0)}/{item.total_episodes}
+                    {item.total_episodes - (item.episodes_left || 0)} / {item.total_episodes}
                   </motion.span>
-                ) : (
-                  <motion.span
-                    key="runtime"
-                    initial={{ opacity: 0, y: 4 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -4 }}
-                    transition={{ duration: 0.25 }}
-                    className="text-[11px] font-semibold text-white bg-cyan-600/80 px-2 py-0.5 rounded-full"
-                  >
-                    {item.runtime ? formatRuntime(item.runtime) : ''}
-                  </motion.span>
-                )}
+                ) : null}
               </AnimatePresence>
             </div>
           </div>

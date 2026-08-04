@@ -162,9 +162,7 @@ const Tracker = () => {
   const navigate = useNavigate();
   const [stats, setStats] = useState(null);
   const [history, setHistory] = useState([]);
-  const [upNextMovies, setUpNextMovies] = useState([]);
   const [upNextEpisodes, setUpNextEpisodes] = useState([]);
-  const [thisWeekMovies, setThisWeekMovies] = useState([]);
   const [thisWeekEpisodes, setThisWeekEpisodes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -202,9 +200,7 @@ const Tracker = () => {
 
       setStats(statsRes.data.stats);
       setHistory(historyRes.data.history);
-      setUpNextMovies(upNextRes.data.movies);
       setUpNextEpisodes(upNextRes.data.episodes);
-      setThisWeekMovies(thisWeekRes.data.movies);
       setThisWeekEpisodes(thisWeekRes.data.episodes);
       setError(null);
     } catch (err) {
@@ -315,11 +311,7 @@ const Tracker = () => {
   }
 
   const currently = stats?.currently_watching;
-  const upNextCombined = [...(upNextEpisodes || []), ...(upNextMovies || [])];
-  const thisWeekCombined = [
-    ...(thisWeekEpisodes || []).map(ep => ({ ...ep, _type: 'episode' })),
-    ...(thisWeekMovies || []).map(m => ({ ...m, _type: 'movie' }))
-  ];
+  const thisWeekCombined = (thisWeekEpisodes || []).map(ep => ({ ...ep, _type: 'episode' }));
 
   return (
     <div className="w-full space-y-6 sm:space-y-8 md:space-y-10 pb-12 sm:pb-16 animate-in fade-in duration-500">
@@ -396,7 +388,7 @@ const Tracker = () => {
       </div>
 
       {/* ── CONTINUE WATCHING / UP NEXT CAROUSEL ── */}
-      {upNextCombined.length > 0 && (
+      {upNextEpisodes.length > 0 && (
         <div className="space-y-4">
           <div className="flex justify-between items-center">
             <div className="min-w-0 mr-2">
@@ -424,15 +416,6 @@ const Tracker = () => {
                 onMarkWatched={handleMarkWatched}
               />
             ))}
-
-            {upNextMovies.map(m => (
-              <AnimatedUpNextCard 
-                key={`movie-${m.id}`}
-                item={m}
-                type="movie"
-                onMarkWatched={handleMarkWatched}
-              />
-            ))}
           </div>
         </div>
       )}
@@ -445,7 +428,7 @@ const Tracker = () => {
               <h2 className="text-lg sm:text-xl md:text-2xl font-bold text-slate-100 flex items-center gap-2">
                 <Zap className="w-5 h-5 sm:w-6 sm:h-6 text-cyan-400" /> Next Up
               </h2>
-              <p className="text-xs sm:text-sm text-slate-400 hidden sm:block">Movies and episodes dropping in the coming week</p>
+              <p className="text-xs sm:text-sm text-slate-400 hidden sm:block">Episodes dropping in the coming week</p>
             </div>
             <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
               <button onClick={() => scrollContainerWeek('left')} className="p-1.5 sm:p-2 rounded-lg sm:rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700/50 transition-all">
