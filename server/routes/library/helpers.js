@@ -1,5 +1,9 @@
 const db = require('../../config/database');
 const { isWatchedSyncEnabled } = require('../../utils/settings');
+const { LANG_TO_CODE } = require('../../utils/constants');
+// aiTranslationWorker is lazy-required inside translateSrt to break the
+// circular dependency: helpers → aiTranslationWorker → helpers (for LANG_CODE).
+
 
 const SUBTITLE_EXTS = ['.srt', '.sub', '.vtt', '.ass', '.ssa', '.smi', '.idx'];
 
@@ -41,6 +45,7 @@ const extractLang = (filename, pathLib) => {
 const translateSrt = async (enSrtContent, targetLang) => {
   const provider = db.prepare("SELECT value FROM settings WHERE key = 'translationProvider'").get();
   const activeProvider = (provider && provider.value) || 'googleTranslate';
+  // Lazy require to break the circular dependency with aiTranslationWorker
   const { translateWithGemini, translateWithGoogleTranslate, translateWithDeepSeek, translateWithClaude } = require('../../services/aiTranslationWorker');
 
   if (activeProvider === 'gemini') {
@@ -60,7 +65,8 @@ const translateSrt = async (enSrtContent, targetLang) => {
   }
 };
 
-// Shared language name → ISO 639-1 code mapping
-const LANG_CODE = { 'Dutch': 'nl', 'French': 'fr', 'German': 'de', 'Spanish': 'es', 'Italian': 'it', 'Portuguese': 'pt' };
+
+// Re-exported from constants.js — single source of truth for language name → ISO 639-1 code.
+const LANG_CODE = LANG_TO_CODE;
 
 module.exports = { isWatchedSyncEnabled, translateSrt, getSubtitlesInDir, extractLang, LANG_CODE };

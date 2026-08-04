@@ -34,10 +34,11 @@ const parseCodec = (title) => {
 /**
  * Parse audio codec information from a filename or release title.
  * Returns: 'Atmos', 'TrueHD', 'DTS-HD', 'DTS', 'DDP 7.1', 'DDP 5.1',
- *          'DD 5.1', 'DD Stereo', 'AC3', 'AAC 5.1', 'AAC Stereo', 'AAC', or 'Unknown'
+ *          'DD 5.1', 'DD Stereo', 'AC3', 'AAC 5.1', 'AAC Stereo', 'AAC',
+ *          '7.1', '5.1', 'Stereo', 'FLAC', 'Opus', 'MP3', or null.
  */
 const parseAudio = (title) => {
-  if (!title) return 'Unknown';
+  if (!title) return null;
   const lower = title.toLowerCase();
 
   if (lower.includes('atmos')) return 'Atmos';
@@ -55,7 +56,15 @@ const parseAudio = (title) => {
   if (lower.includes('aac 2.0') || lower.includes('aac2.0')) return 'AAC Stereo';
   if (lower.includes('aac')) return 'AAC';
 
-  return 'Unknown';
+  if (lower.includes('7.1')) return '7.1';
+  if (lower.includes('5.1')) return '5.1';
+  if (lower.includes('2.0') || lower.includes('stereo')) return 'Stereo';
+
+  if (lower.includes('flac')) return 'FLAC';
+  if (lower.includes('opus')) return 'Opus';
+  if (lower.includes('mp3')) return 'MP3';
+
+  return null;
 };
 
 module.exports = { parseResolution, parseCodec, parseAudio };

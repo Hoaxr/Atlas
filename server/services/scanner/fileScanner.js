@@ -55,7 +55,7 @@ const scanSubtitleLangs = async (filePath) => {
 };
 
 const parseMediaTitle = (filename, folderPath) => {
-  const cleanName = filename.replace(/\.(mp4|mkv|avi|mov|wmv)$/i, '');
+  const cleanName = filename.replace(/\.(mp4|mkv|avi|mov|wmv|webm|ts|m2ts|mpg|mpeg)$/i, '');
   
   const tvShowMatch = cleanName.match(/(S\d{1,2}E\d{1,2}(?:[-]E?\d{1,2})*|Season \d+)/i);
   if (tvShowMatch) {

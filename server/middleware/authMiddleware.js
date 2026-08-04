@@ -78,10 +78,10 @@ const authMiddleware = (req, res, next) => {
     }
   }
 
-  // Check if authentication is enabled
-  const authEnabled = getCachedSetting('authEnabled') === 'true';
+  // If no valid token, check bypass rules.
+  // `authEnabled` defaults to true when the setting is unset (fresh install safe-default).
+  const authEnabled = getCachedSetting('authEnabled') !== 'false';
 
-  // If no valid token, check bypass rules
   if (!authEnabled) {
     attachDefaultAdmin();
     return next();

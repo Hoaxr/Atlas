@@ -22,9 +22,7 @@ router.post('/shows/:id/watched', async (req, res, next) => {
     const { watched } = req.body;
     const isWatched = !!watched;
     const watchedAt = new Date().toISOString();
-    const cols = db.prepare('PRAGMA table_info(episodes)').all().map(c => c.name);
-    const hasProgress = cols.includes('watch_progress');
-    const updateEpSql = hasProgress && isWatched 
+    const updateEpSql = isWatched
       ? 'UPDATE episodes SET watched = ?, watched_at = ?, watch_progress = 0 WHERE show_id = ?'
       : 'UPDATE episodes SET watched = ?, watched_at = ? WHERE show_id = ?';
     db.prepare('UPDATE shows SET watched = ?, watched_at = ? WHERE id = ?').run(isWatched ? 1 : 0, watchedAt, req.params.id);
@@ -842,9 +840,7 @@ router.post('/shows/:id/seasons/:season/watched', async (req, res, next) => {
     const { watched } = req.body;
     const isWatched = watched === undefined ? true : !!watched;
     const watchedAt = new Date().toISOString();
-    const cols = db.prepare('PRAGMA table_info(episodes)').all().map(c => c.name);
-    const hasProgress = cols.includes('watch_progress');
-    const updateSeasonSql = hasProgress && isWatched 
+    const updateSeasonSql = isWatched
       ? 'UPDATE episodes SET watched = ?, watched_at = ?, watch_progress = 0 WHERE show_id = ? AND season_number = ?'
       : 'UPDATE episodes SET watched = ?, watched_at = ? WHERE show_id = ? AND season_number = ?';
     const result = db.prepare(updateSeasonSql).run(isWatched ? 1 : 0, watchedAt, req.params.id, req.params.season);
@@ -883,9 +879,7 @@ router.post('/episodes/:id/watched', async (req, res, next) => {
     const ep = db.prepare('SELECT e.*, s.tmdb_id as show_tmdb_id FROM episodes e JOIN shows s ON e.show_id = s.id WHERE e.id = ?').get(req.params.id);
     if (!ep) return res.status(404).json({ status: 'error', message: 'Episode not found' });
 
-    const cols = db.prepare('PRAGMA table_info(episodes)').all().map(c => c.name);
-    const hasProgress = cols.includes('watch_progress');
-    const updateSql = hasProgress && isWatched 
+    const updateSql = isWatched
       ? 'UPDATE episodes SET watched = ?, watched_at = ?, watch_progress = 0 WHERE id = ?'
       : 'UPDATE episodes SET watched = ?, watched_at = ? WHERE id = ?';
     db.prepare(updateSql).run(isWatched ? 1 : 0, watchedAt, req.params.id);
@@ -922,14 +916,22 @@ router.post('/episodes/:id/grab', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// Lightweight sibling navigation — avoids fetching entire library
+// Lightweight sibling navigation using LAG/LEAD window functions
+// (SQLite 3.25+) — avoids loading all show IDs into JS.
 router.get('/shows/:id/siblings', (req, res, next) => {
   try {
-    const ids = db.prepare('SELECT id FROM shows ORDER BY title ASC').all().map(r => r.id);
-    const idx = ids.indexOf(Number(req.params.id));
+    const row = db.prepare(`
+      SELECT prevId, nextId FROM (
+        SELECT
+          id,
+          LAG(id)  OVER (ORDER BY title ASC) AS prevId,
+          LEAD(id) OVER (ORDER BY title ASC) AS nextId
+        FROM shows
+      ) WHERE id = ?
+    `).get(Number(req.params.id));
     res.json({
       status: 'success',
-      data: { prevId: ids[idx - 1] || null, nextId: ids[idx + 1] || null }
+      data: { prevId: row?.prevId ?? null, nextId: row?.nextId ?? null }
     });
   } catch (err) {
     next(err);

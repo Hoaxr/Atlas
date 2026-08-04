@@ -6,8 +6,9 @@ const fsp = require('fs/promises');
  * Covers common containers including broadcast/transport formats.
  */
 const VIDEO_EXTENSIONS = new Set([
-  '.mkv', '.mp4', '.avi', '.mov', '.wmv', '.ts', '.m2ts', '.mpg', '.mpeg',
+  '.mkv', '.mp4', '.avi', '.mov', '.wmv', '.webm', '.ts', '.m2ts', '.mpg', '.mpeg',
 ]);
+
 
 /**
  * Unified set of recognised subtitle file extensions.
@@ -57,4 +58,53 @@ const isRootLibraryPath = (folderPath) => {
   }
 };
 
-module.exports = { VIDEO_EXTENSIONS, SUBTITLE_EXTENSIONS, isVideoFile, isSubtitleFile, deleteFolderRecursive, isRootLibraryPath };
+/**
+ * Recursively finds the largest video file inside `dirPath`.
+ * If `dirPath` is itself a video file, it is returned directly.
+ * @param {string} dirPath — absolute path to a file or directory
+ * @returns {Promise<{path: string, name: string, size: number, dir: string}|null>}
+ */
+const findLargestVideoFile = async (dirPath) => {
+  let stat;
+  try {
+    stat = await fsp.stat(dirPath);
+  } catch {
+    return null;
+  }
+
+  // If given a file directly, return it if it's a recognised video
+  if (stat.isFile()) {
+    if (isVideoFile(dirPath)) {
+      return { path: dirPath, name: path.basename(dirPath), size: stat.size, dir: path.dirname(dirPath) };
+    }
+    return null;
+  }
+
+  let best = null;
+  let maxSize = -1;
+  let items;
+  try {
+    items = await fsp.readdir(dirPath);
+  } catch {
+    return null;
+  }
+  for (const item of items) {
+    const fullPath = path.join(dirPath, item);
+    try {
+      const s = await fsp.stat(fullPath);
+      if (s.isDirectory()) {
+        const sub = await findLargestVideoFile(fullPath);
+        if (sub && sub.size > maxSize) {
+          maxSize = sub.size;
+          best = sub;
+        }
+      } else if (isVideoFile(item) && s.size > maxSize) {
+        maxSize = s.size;
+        best = { path: fullPath, name: item, size: s.size, dir: dirPath };
+      }
+    } catch { /* ignore unstatable entries */ }
+  }
+  return best;
+};
+
+module.exports = { VIDEO_EXTENSIONS, SUBTITLE_EXTENSIONS, isVideoFile, isSubtitleFile, deleteFolderRecursive, isRootLibraryPath, findLargestVideoFile };

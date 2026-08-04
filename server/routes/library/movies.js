@@ -15,6 +15,8 @@ const subtitleService = require('../../services/subtitles');
 const { getMediaMetadata, parseAudioFromFileName } = require('../../utils/videoUtils');
 const { isWatchedSyncEnabled, getSubtitlesInDir, extractLang, translateSrt, LANG_CODE } = require('./helpers');
 const { USER_AGENT } = require('../../utils/constants');
+const { isRootLibraryPath, findLargestVideoFile } = require('../../utils/fileUtils');
+const { scanSubtitleLangs } = require('../../services/scanner/fileScanner');
 
 // In-memory cache for network mount directory scans — movies are on a CIFS/SMB
 // mount with actimeo=1, so every fresh request hits the NAS. Cache avoids that.
@@ -176,7 +178,6 @@ router.delete('/:id/files/:filename', async (req, res, next) => {
         db.prepare("UPDATE movies SET file_path = NULL, file_size = 0, status = 'monitored' WHERE id = ?").run(req.params.id);
       } else if (movie.file_path) {
         try {
-          const { scanSubtitleLangs } = require('../../services/scanner/fileScanner');
           const langs = await scanSubtitleLangs(movie.file_path);
           db.prepare('UPDATE movies SET subtitles = ? WHERE id = ?').run(JSON.stringify(langs), req.params.id);
         } catch (e) {
@@ -195,31 +196,6 @@ router.delete('/:id/files/:filename', async (req, res, next) => {
 const refreshMovieData = async (id) => {
   const movie = db.prepare('SELECT * FROM movies WHERE id = ?').get(id);
   if (!movie) return null;
-
-  // Recursively find the largest video file inside a directory
-  const findBestFile = async (dirPath) => {
-    let best = null;
-    let max = -1;
-    let items;
-    try { items = await fsp.readdir(dirPath); } catch { return null; }
-    for (const item of items) {
-      const fullPath = path.join(dirPath, item);
-      try {
-        const stats = await fsp.stat(fullPath);
-        if (stats.isDirectory()) {
-          const sub = await findBestFile(fullPath);
-          if (sub && sub.size > max) { max = sub.size; best = sub; }
-        } else {
-          const ext = path.extname(item).toLowerCase();
-          if (['.mp4', '.mkv', '.avi', '.mov', '.wmv', '.webm', '.ts', '.m2ts'].includes(ext) && stats.size > max) {
-            max = stats.size;
-            best = { path: fullPath, name: item, size: stats.size, dir: dirPath };
-          }
-        }
-      } catch { /* ignore */ }
-    }
-    return best;
-  };
 
   // Collect candidate directories to scan
   const scanPaths = new Set();
@@ -264,7 +240,7 @@ const refreshMovieData = async (id) => {
   let bestFile = null;
   for (const dirPath of scanPaths) {
     dirCache.delete(dirPath);
-    const result = await findBestFile(dirPath);
+    const result = await findLargestVideoFile(dirPath);
     if (result && (!bestFile || result.size > bestFile.size)) bestFile = result;
   }
 
@@ -604,7 +580,6 @@ router.delete('/:id', async (req, res, next) => {
       try {
         const dir = movie.file_path ? path.dirname(movie.file_path) : movie.folder_path;
         if (dir) {
-          const { isRootLibraryPath } = require('../../utils/fileUtils');
           if (isRootLibraryPath(dir)) {
             // Only delete the file itself if the directory is a root library path
             if (movie.file_path) await fsp.unlink(movie.file_path).catch(() => {});
@@ -758,31 +733,7 @@ router.post('/:id/set-path', async (req, res, next) => {
     db.prepare('UPDATE movies SET folder_path = ? WHERE id = ?').run(folderPath, req.params.id);
 
     // Scan the folder for the largest video file
-    const findBestFile = async (dirPath) => {
-      let best = null;
-      let max = -1;
-      let items;
-      try { items = await fsp.readdir(dirPath); } catch { return null; }
-      for (const item of items) {
-        const fullPath = path.join(dirPath, item);
-        try {
-          const stats = await fsp.stat(fullPath);
-          if (stats.isDirectory()) {
-            const sub = await findBestFile(fullPath);
-            if (sub && sub.size > max) { max = sub.size; best = sub; }
-          } else {
-            const ext = path.extname(item).toLowerCase();
-            if (['.mp4', '.mkv', '.avi', '.mov', '.wmv', '.webm', '.ts', '.m2ts'].includes(ext) && stats.size > max) {
-              max = stats.size;
-              best = { path: fullPath, name: item, size: stats.size, dir: dirPath };
-            }
-          }
-        } catch { /* ignore */ }
-      }
-      return best;
-    };
-
-    const best = await findBestFile(folderPath);
+    const best = await findLargestVideoFile(folderPath);
     if (best) {
       db.prepare("UPDATE movies SET file_path = ?, file_size = ?, status = 'downloaded' WHERE id = ?")
         .run(best.path, best.size, req.params.id);
@@ -805,14 +756,22 @@ router.post('/:id/set-path', async (req, res, next) => {
   }
 });
 
-// Lightweight sibling navigation — avoids fetching entire library
+// Lightweight sibling navigation using LAG/LEAD window functions
+// (SQLite 3.25+) — avoids loading all movie IDs into JS.
 router.get('/:id/siblings', (req, res, next) => {
   try {
-    const ids = db.prepare('SELECT id FROM movies ORDER BY title ASC').all().map(r => r.id);
-    const idx = ids.indexOf(Number(req.params.id));
+    const row = db.prepare(`
+      SELECT prevId, nextId FROM (
+        SELECT
+          id,
+          LAG(id)  OVER (ORDER BY title ASC) AS prevId,
+          LEAD(id) OVER (ORDER BY title ASC) AS nextId
+        FROM movies
+      ) WHERE id = ?
+    `).get(Number(req.params.id));
     res.json({
       status: 'success',
-      data: { prevId: ids[idx - 1] || null, nextId: ids[idx + 1] || null }
+      data: { prevId: row?.prevId ?? null, nextId: row?.nextId ?? null }
     });
   } catch (err) {
     next(err);

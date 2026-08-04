@@ -501,62 +501,12 @@ const MIGRATIONS = [
     id: 12,
     name: 'add_episodes_syncing_column',
     run: (db) => {
-      db.exec(`
-        ALTER TABLE shows ADD COLUMN episodes_syncing INTEGER NOT NULL DEFAULT 0;
-      `);
-    }
-  },
-  {
-    id: 18,
-    name: 'smart_scheduler_tracking',
-    run: (db) => {
-      const alters = [
-        ['movies', 'next_search_at', 'DATETIME'],
-        ['movies', 'search_state', "TEXT DEFAULT 'PENDING'"],
-        ['movies', 'retry_count', 'INTEGER DEFAULT 0'],
-        ['movies', 'priority', 'INTEGER DEFAULT 0'],
-        ['movies', 'last_provider_response', 'TEXT'],
-        ['movies', 'first_seen_at', 'DATETIME'],
-        ['movies', 'last_success_at', 'DATETIME'],
-        ['movies', 'last_failure_at', 'DATETIME'],
-        
-        ['episodes', 'next_search_at', 'DATETIME'],
-        ['episodes', 'search_state', "TEXT DEFAULT 'PENDING'"],
-        ['episodes', 'retry_count', 'INTEGER DEFAULT 0'],
-        ['episodes', 'priority', 'INTEGER DEFAULT 0'],
-        ['episodes', 'last_provider_response', 'TEXT'],
-        ['episodes', 'first_seen_at', 'DATETIME'],
-        ['episodes', 'last_success_at', 'DATETIME'],
-        ['episodes', 'last_failure_at', 'DATETIME']
-      ];
-      
-      for (const [table, col, def] of alters) {
-        if (!hasColumn(table, col)) {
-          db.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${def};`);
-        }
+      if (!hasColumn('shows', 'episodes_syncing')) {
+        db.exec('ALTER TABLE shows ADD COLUMN episodes_syncing INTEGER NOT NULL DEFAULT 0;');
       }
-      
-      // Initialize next_search_at and first_seen_at for existing monitored items
-      db.exec(`
-        UPDATE movies 
-        SET next_search_at = datetime('now'), 
-            first_seen_at = added_at,
-            search_state = 'PENDING'
-        WHERE next_search_at IS NULL AND status = 'monitored';
-        
-        UPDATE episodes 
-        SET next_search_at = datetime('now'), 
-            first_seen_at = added_at,
-            search_state = 'PENDING'
-        WHERE next_search_at IS NULL AND status = 'monitored';
-      `);
-      
-      db.exec(`
-        CREATE INDEX IF NOT EXISTS idx_movies_next_search ON movies(next_search_at);
-        CREATE INDEX IF NOT EXISTS idx_episodes_next_search ON episodes(next_search_at);
-      `);
     }
   },
+  // NOTE: IDs 13 and 19–21 were intentionally removed during development.
   {
     id: 14,
     name: 'Add indexer_stats table',
@@ -607,6 +557,57 @@ const MIGRATIONS = [
           size INTEGER,
           detected_at DATETIME DEFAULT CURRENT_TIMESTAMP
         );
+      `);
+    }
+  },
+  {
+    id: 18,
+    name: 'smart_scheduler_tracking',
+    run: (db) => {
+      const alters = [
+        ['movies', 'next_search_at', 'DATETIME'],
+        ['movies', 'search_state', "TEXT DEFAULT 'PENDING'"],
+        ['movies', 'retry_count', 'INTEGER DEFAULT 0'],
+        ['movies', 'priority', 'INTEGER DEFAULT 0'],
+        ['movies', 'last_provider_response', 'TEXT'],
+        ['movies', 'first_seen_at', 'DATETIME'],
+        ['movies', 'last_success_at', 'DATETIME'],
+        ['movies', 'last_failure_at', 'DATETIME'],
+
+        ['episodes', 'next_search_at', 'DATETIME'],
+        ['episodes', 'search_state', "TEXT DEFAULT 'PENDING'"],
+        ['episodes', 'retry_count', 'INTEGER DEFAULT 0'],
+        ['episodes', 'priority', 'INTEGER DEFAULT 0'],
+        ['episodes', 'last_provider_response', 'TEXT'],
+        ['episodes', 'first_seen_at', 'DATETIME'],
+        ['episodes', 'last_success_at', 'DATETIME'],
+        ['episodes', 'last_failure_at', 'DATETIME']
+      ];
+
+      for (const [table, col, def] of alters) {
+        if (!hasColumn(table, col)) {
+          db.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${def};`);
+        }
+      }
+
+      // Initialize next_search_at and first_seen_at for existing monitored items
+      db.exec(`
+        UPDATE movies
+        SET next_search_at = datetime('now'),
+            first_seen_at = added_at,
+            search_state = 'PENDING'
+        WHERE next_search_at IS NULL AND status = 'monitored';
+
+        UPDATE episodes
+        SET next_search_at = datetime('now'),
+            first_seen_at = added_at,
+            search_state = 'PENDING'
+        WHERE next_search_at IS NULL AND status = 'monitored';
+      `);
+
+      db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_movies_next_search ON movies(next_search_at);
+        CREATE INDEX IF NOT EXISTS idx_episodes_next_search ON episodes(next_search_at);
       `);
     }
   },

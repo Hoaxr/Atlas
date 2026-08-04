@@ -41,6 +41,11 @@ const downloadClientService = require('./services/downloadClientService');
 const errorHandler = require('./middleware/errorHandler');
 const eventBus = require('./services/eventBus');
 const presenceTracker = require('./services/presenceTracker');
+const { getSetting } = require('./utils/settings');
+const fs = require('fs');
+const authMiddleware = require('./middleware/authMiddleware');
+const requireAdmin = require('./middleware/requireAdmin');
+const { stopScan } = require('./services/scanner');
 
 // Services
 const automationService = require('./services/automationService');
@@ -87,7 +92,6 @@ wss.on('connection', (ws, req) => {
   };
 
   try {
-    const { getSetting } = require('./utils/settings');
     const authEnabled = getSetting('authEnabled') !== 'false';
     
     let isBypassed = !authEnabled;
@@ -175,7 +179,12 @@ const broadcastLayoutUpdate = () => {
         try { ws.send(msg); } catch { /* ignore */ }
       }
     });
-  } catch { /* ignore */ }
+  } catch (err) {
+    broadcastLayoutUpdate._errCount = (broadcastLayoutUpdate._errCount || 0) + 1;
+    if (broadcastLayoutUpdate._errCount % 10 === 1) {
+      console.warn('[Layout] broadcastLayoutUpdate error (suppressed):', err?.message);
+    }
+  }
 };
 
 // Broadcast torrent data + download stats (heavier — separate interval at 5s)
@@ -265,7 +274,6 @@ app.use(cors({
 }));
 app.use(express.json({ limit: '500kb' }));
 
-const authMiddleware = require('./middleware/authMiddleware');
 
 // Routes
 // Apply auth middleware to all /api routes except /api/auth
@@ -277,7 +285,6 @@ app.use('/api', (req, res, next) => {
 });
 
 app.use('/api', apiRoutes);
-const requireAdmin = require('./middleware/requireAdmin');
 
 // Safe routes wrapper for settings (only GET /api/settings is safe)
 const settingsAdminWrapper = (req, res, next) => {
@@ -320,7 +327,6 @@ app.get('/api/images/:type/:tmdbId/poster', async (req, res) => {
   // Validate tmdbId is numeric to prevent path traversal via path.join (#2)
   if (!/^\d+$/.test(tmdbId)) return res.status(400).json({ error: 'Invalid tmdbId' });
 
-  const fs   = require('fs');
   const dest = imageService.posterPath(type, tmdbId);
 
   // Serve from cache if it exists
@@ -362,7 +368,6 @@ const shutdown = (signal) => {
   
   // Cancel any running library scan
   try {
-    const { stopScan } = require('./services/scanner');
     stopScan();
     console.log('[Backend] Library scan cancelled.');
   } catch { /* ignore */ }

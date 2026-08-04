@@ -10,7 +10,7 @@ const tmdbService = require('./tmdbService');
 const imageService = require('./imageService');
 
 const { getSetting } = require('../utils/settings');
-const { isVideoFile } = require('../utils/fileUtils');
+const { isVideoFile, findLargestVideoFile } = require('../utils/fileUtils');
 const { getMediaMetadata, parseAudioFromFileName } = require('../utils/videoUtils');
 const subtitleService = require('./subtitles');
 
@@ -49,43 +49,6 @@ const sanitizeTitle = (title, config) => {
   return sanitized.trim().replace(/\s+/g, ' ');
 };
 
-
-const findLargestVideoFile = async (dirPath) => {
-  let largestFile = null;
-  let maxSize = 0;
-
-  try {
-    const stats = await fs.promises.stat(dirPath);
-    if (stats.isFile()) {
-      if (isVideoFile(dirPath)) return { path: dirPath, size: stats.size };
-      return null;
-    }
-
-    const files = await fs.promises.readdir(dirPath);
-    for (const file of files) {
-      const fullPath = path.join(dirPath, file);
-      const fileStats = await fs.promises.stat(fullPath);
-      
-      if (fileStats.isDirectory()) {
-        const nested = await findLargestVideoFile(fullPath);
-        // nested already carries its size — no extra stat needed
-        if (nested && nested.size > maxSize) {
-          maxSize = nested.size;
-          largestFile = nested;
-        }
-      } else if (fileStats.isFile() && isVideoFile(fullPath)) {
-        if (fileStats.size > maxSize) {
-          maxSize = fileStats.size;
-          largestFile = { path: fullPath, size: fileStats.size };
-        }
-      }
-    }
-  } catch (err) {
-    console.error('[MediaManagement] Error scanning for video files:', err);
-  }
-  
-  return largestFile;
-};
 
 // Find ALL video files in a directory tree — used for season pack imports
 const findAllVideoFiles = async (dirPath) => {
