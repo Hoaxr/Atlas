@@ -791,6 +791,43 @@ const runDeepMetadataRefresh = async () => {
       if (data) {
         db.prepare('UPDATE shows SET rating = ?, poster_path = ?, overview = ?, tmdb_status = ?, last_refreshed_at = datetime("now") WHERE id = ?')
           .run(data.vote_average || 0, data.poster_path, data.overview, data.status || '', show.id);
+
+        const seasons = await tmdbService.getShowSeasons(show.tmdb_id);
+        const insertEp = db.prepare(`
+          INSERT INTO episodes (show_id, season_number, episode_number, title, overview, status, air_date, runtime)
+          VALUES (?, ?, ?, ?, ?, 'monitored', ?, ?)
+          ON CONFLICT(show_id, season_number, episode_number) DO UPDATE SET
+            title = excluded.title,
+            overview = excluded.overview,
+            air_date = excluded.air_date,
+            runtime = excluded.runtime
+        `);
+
+        const tmdbEpisodeKeys = new Set();
+        for (const s of seasons) {
+          if (s.season_number === 0) continue;
+          const episodes = await tmdbService.getSeasonEpisodes(show.tmdb_id, s.season_number);
+          for (const ep of episodes) {
+            const key = `${ep.season_number}|${ep.episode_number}`;
+            tmdbEpisodeKeys.add(key);
+            insertEp.run(show.id, ep.season_number, ep.episode_number, ep.name, ep.overview, ep.air_date, ep.runtime || null);
+          }
+        }
+
+        const allDbEpisodes = db.prepare(
+          'SELECT id, season_number, episode_number, status FROM episodes WHERE show_id = ?'
+        ).all(show.id);
+
+        db.transaction(() => {
+          const deleteStale = db.prepare('DELETE FROM episodes WHERE id = ?');
+          for (const ep of allDbEpisodes) {
+            const key = `${ep.season_number}|${ep.episode_number}`;
+            if (!tmdbEpisodeKeys.has(key) && ep.status !== 'downloaded') {
+              deleteStale.run(ep.id);
+            }
+          }
+        })();
+
         showsUpdated++;
       } else {
         db.prepare('UPDATE shows SET last_refreshed_at = datetime("now") WHERE id = ?').run(show.id);
