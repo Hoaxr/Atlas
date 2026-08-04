@@ -121,6 +121,7 @@ const syncWatchedShows = async () => {
 
     const count = db.transaction((list) => {
       let localCount = 0;
+      const insertWatched = db.prepare('INSERT OR REPLACE INTO watched_tmdb (tmdb_id, type) VALUES (?, ?)');
       const insertHistory = db.prepare('INSERT OR IGNORE INTO watch_history (tmdb_id, type, season_number, episode_number, watched_at, runtime) VALUES (?, ?, ?, ?, ?, ?)');
       const getShowByTmdb = db.prepare('SELECT id, runtime FROM shows WHERE tmdb_id = ?');
       const updateShowWatched = db.prepare('UPDATE shows SET watched = 1 WHERE id = ?');
