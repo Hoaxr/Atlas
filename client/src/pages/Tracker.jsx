@@ -401,7 +401,7 @@ const Tracker = () => {
           <div className="flex justify-between items-center">
             <div>
               <h2 className="text-2xl font-bold text-slate-100 flex items-center gap-2">
-                <Play className="w-6 h-6 text-cyan-400 fill-cyan-400" /> Continue Watching & Up Next
+                <Play className="w-6 h-6 text-cyan-400 fill-cyan-400" /> Continue Watching
               </h2>
               <p className="text-sm text-slate-400">Pick up right where you left off across your library</p>
             </div>
@@ -437,15 +437,15 @@ const Tracker = () => {
         </div>
       )}
 
-      {/* ── THIS WEEK'S RELEASES ── */}
+      {/* ── NEXT 7 DAYS ── */}
       {thisWeekCombined.length > 0 && (
         <div className="space-y-4">
           <div className="flex justify-between items-center">
             <div>
               <h2 className="text-2xl font-bold text-slate-100 flex items-center gap-2">
-                <Sparkles className="w-6 h-6 text-amber-400" /> This Week's Releases
+                <Zap className="w-6 h-6 text-cyan-400" /> Next Up
               </h2>
-              <p className="text-sm text-slate-400">Movies and episodes dropping this week</p>
+              <p className="text-sm text-slate-400">Movies and episodes dropping in the coming week</p>
             </div>
             <div className="flex items-center gap-2">
               <button onClick={() => scrollContainerWeek('left')} className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700/50 transition-all">

@@ -599,22 +599,19 @@ router.post('/mark-unwatched', async (req, res) => {
   }
 });
 
-// This week's releases — movies and episodes airing/releasing Sun–Sat.
-// We use Sun–Sat instead of Mon–Sun because US evening broadcasts become
-// available the next day in European timezones (e.g. Sunday US → Monday EU).
+// Next 7 days of releases — rolling window from today through today+6.
+// US evening broadcasts become available next day in European timezones.
 router.get('/this-week', (req, res) => {
   try {
     const now = new Date();
-    const dayOfWeek = now.getDay(); // 0=Sun, 1=Mon, ..., 6=Sat
 
-    // Week starts on the previous Sunday (inclusive)
-    const weekStart = new Date(now);
-    weekStart.setDate(now.getDate() - dayOfWeek);
-    const weekEnd = new Date(weekStart);
-    weekEnd.setDate(weekStart.getDate() + 6); // Saturday
+    // Rolling 7-day window: today through today+6
+    const fromDate = new Date(now);
+    const toDate = new Date(now);
+    toDate.setDate(now.getDate() + 6);
 
-    const fromStr = weekStart.toISOString().split('T')[0];
-    const toStr = weekEnd.toISOString().split('T')[0];
+    const fromStr = fromDate.toISOString().split('T')[0];
+    const toStr = toDate.toISOString().split('T')[0];
 
     // Movies releasing this week (not yet watched)
     const movies = db.prepare(`
