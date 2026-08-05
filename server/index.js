@@ -97,7 +97,7 @@ wss.on('connection', (ws, req) => {
     let isBypassed = !authEnabled;
     
     if (authEnabled) {
-      const bypassLocalhost = getSetting('authBypassLocalhost') !== 'false';
+      const bypassLocalhost = getSetting('authBypassLocalhost') === 'true';
       
       if (bypassLocalhost) {
         const ip = (req.socket?.remoteAddress || req.connection?.remoteAddress || '').replace(/^::ffff:/, '');
@@ -224,11 +224,22 @@ const broadcastTorrentsUpdate = async () => {
 
 const startPolling = (fn, interval) => {
   const poll = async () => {
-    try { await fn(); } catch { /* ignore */ }
-    setTimeout(poll, interval);
+    try {
+      if (wss.clients.size > 0) {
+        await fn();
+      }
+    } catch { /* ignore */ }
+    setTimeout(poll, wss.clients.size > 0 ? interval : 10000);
   };
   setTimeout(poll, interval);
 };
+
+// Event-driven broadcast triggers on library/request updates
+eventBus.on('event', (data) => {
+  if (['MOVIE_ADDED', 'SHOW_ADDED', 'REQUEST_CREATED', 'REQUEST_UPDATED'].includes(data.type)) {
+    broadcastLayoutUpdate();
+  }
+});
 
 startPolling(broadcastLayoutUpdate, LAYOUT_PUSH_INTERVAL);
 startPolling(broadcastTorrentsUpdate, TORRENTS_PUSH_INTERVAL);

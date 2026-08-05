@@ -19,9 +19,9 @@ export default function HealthWidget() {
 
   useEffect(() => {
     setLoading(true);
-    api.get('/library/health')
+    api.get('/library/system-health')
       .then(res => { if (res.data.status === 'success') setData(res.data.data); })
-      .catch(() => { /* ignore */ })
+      .catch(err => { console.error('[HealthWidget] Failed to load health data:', err); })
       .finally(() => setLoading(false));
   }, []);
 

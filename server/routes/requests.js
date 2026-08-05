@@ -6,7 +6,7 @@ const notificationService = require('../services/notificationService');
 const { getSetting } = require('../utils/settings');
 
 // GET /api/requests/pending-count
-router.get('/pending-count', (req, res) => {
+router.get('/pending-count', (req, res, next) => {
   try {
     let count = 0;
     if (req.user && req.user.role === 'admin') {
@@ -18,12 +18,12 @@ router.get('/pending-count', (req, res) => {
     }
     res.json({ status: 'success', data: { count } });
   } catch (err) {
-    res.status(500).json({ status: 'error', message: err.message });
+    next(err);
   }
 });
 
 // GET /api/requests
-router.get('/', (req, res) => {
+router.get('/', (req, res, next) => {
   try {
     let requests;
     if (req.user?.role === 'admin') {
@@ -52,12 +52,12 @@ router.get('/', (req, res) => {
     }
     res.json({ status: 'success', data: requests });
   } catch (err) {
-    res.status(500).json({ status: 'error', message: err.message });
+    next(err);
   }
 });
 
 // POST /api/requests (Create request)
-router.post('/', (req, res) => {
+router.post('/', (req, res, next) => {
   try {
     const { tmdb_id, type, title, release_date, poster_path } = req.body;
     const user_id = req.user?.id;
@@ -101,12 +101,12 @@ router.post('/', (req, res) => {
 
     res.json({ status: 'success', message: 'Request submitted successfully', data: { id: result.lastInsertRowid } });
   } catch (err) {
-    res.status(500).json({ status: 'error', message: err.message });
+    next(err);
   }
 });
 
 // PUT /api/requests/:id/approve (Admin only)
-router.put('/:id/approve', requireAdmin, async (req, res) => {
+router.put('/:id/approve', requireAdmin, async (req, res, next) => {
   try {
     const request = db.prepare('SELECT * FROM requests WHERE id = ?').get(req.params.id);
     if (!request) return res.status(404).json({ status: 'error', message: 'Request not found' });
@@ -127,22 +127,22 @@ router.put('/:id/approve', requireAdmin, async (req, res) => {
     db.prepare("UPDATE requests SET status = 'approved' WHERE id = ?").run(req.params.id);
     res.json({ status: 'success', message: 'Request approved' });
   } catch (err) {
-    res.status(500).json({ status: 'error', message: err.message });
+    next(err);
   }
 });
 
 // PUT /api/requests/:id/deny (Admin only)
-router.put('/:id/deny', requireAdmin, (req, res) => {
+router.put('/:id/deny', requireAdmin, (req, res, next) => {
   try {
     db.prepare("UPDATE requests SET status = 'denied' WHERE id = ?").run(req.params.id);
     res.json({ status: 'success', message: 'Request denied' });
   } catch (err) {
-    res.status(500).json({ status: 'error', message: err.message });
+    next(err);
   }
 });
 
 // DELETE /api/requests/:id
-router.delete('/:id', (req, res) => {
+router.delete('/:id', (req, res, next) => {
   try {
     const request = db.prepare('SELECT user_id FROM requests WHERE id = ?').get(req.params.id);
     if (!request) return res.status(404).json({ status: 'error', message: 'Request not found' });
@@ -154,7 +154,7 @@ router.delete('/:id', (req, res) => {
     db.prepare('DELETE FROM requests WHERE id = ?').run(req.params.id);
     res.json({ status: 'success', message: 'Request deleted' });
   } catch (err) {
-    res.status(500).json({ status: 'error', message: err.message });
+    next(err);
   }
 });
 

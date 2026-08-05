@@ -148,8 +148,8 @@ router.get('/stats', async (req, res) => {
       }
 
       let tempStreak = 0;
-      let dateSet = new Set(activeDates);
-      let curr = new Date(checkDate);
+      const dateSet = new Set(activeDates);
+      const curr = new Date(checkDate);
 
       while (dateSet.has(curr.toISOString().split('T')[0])) {
         tempStreak++;
@@ -214,7 +214,7 @@ router.get('/stats', async (req, res) => {
     const genreCounts = {};
     let totalGenreHits = 0;
     [...movieGenres, ...showGenres].forEach(row => {
-      let list = [];
+      let list;
       try {
         if (row.genres.startsWith('[')) list = JSON.parse(row.genres);
         else list = row.genres.split(',').map(g => g.trim());

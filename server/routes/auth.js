@@ -134,7 +134,7 @@ router.post('/simkl/disconnect', (req, res) => {
 router.get('/status', (req, res) => {
   const { getSetting } = require('../utils/settings');
   const authEnabled = getSetting('authEnabled') === 'true';
-  const bypassLocalhost = getSetting('authBypassLocalhost') !== 'false';
+  const bypassLocalhost = getSetting('authBypassLocalhost') === 'true';
   const plexConfigured = !!getSetting('plexUrl');
   const jellyfinConfigured = !!getSetting('jellyfinUrl');
 

@@ -87,8 +87,8 @@ const authMiddleware = (req, res, next) => {
     return next();
   }
 
-  // Check if bypass for localhost is enabled
-  const bypassLocalhost = getCachedSetting('authBypassLocalhost') !== 'false'; // default true
+  // Check if bypass for localhost is enabled (must be explicitly enabled in settings)
+  const bypassLocalhost = getCachedSetting('authBypassLocalhost') === 'true'; // default false
 
   if (bypassLocalhost) {
     // Use the raw socket peer address rather than req.ip — req.ip can be derived from

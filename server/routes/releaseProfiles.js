@@ -19,10 +19,26 @@ router.get('/', (req, res) => {
   }
 });
 
+const validateRegexArray = (arr) => {
+  if (!Array.isArray(arr)) return [];
+  return arr.filter(item => {
+    if (typeof item !== 'string' || !item.trim()) return false;
+    try {
+      new RegExp(item, 'i');
+      return true;
+    } catch {
+      return false;
+    }
+  });
+};
+
 // Create a release profile
-router.post('/', (req, res) => {
+router.post('/', (req, res, next) => {
   try {
     const { name, enabled, must_contain, must_not_contain, indexer_id, apply_to } = req.body;
+    const cleanMustContain = validateRegexArray(must_contain);
+    const cleanMustNotContain = validateRegexArray(must_not_contain);
+
     const stmt = db.prepare(`
       INSERT INTO release_profiles (name, enabled, must_contain, must_not_contain, indexer_id, apply_to)
       VALUES (?, ?, ?, ?, ?, ?)
@@ -30,23 +46,25 @@ router.post('/', (req, res) => {
     const info = stmt.run(
       name || 'New Profile',
       enabled ? 1 : 0,
-      JSON.stringify(must_contain || []),
-      JSON.stringify(must_not_contain || []),
+      JSON.stringify(cleanMustContain),
+      JSON.stringify(cleanMustNotContain),
       indexer_id || null,
       apply_to || 'all'
     );
     res.json({ status: 'success', data: { id: info.lastInsertRowid } });
   } catch (error) {
-    console.error('Error creating release profile:', error);
-    res.status(500).json({ status: 'error', message: error.message });
+    next(error);
   }
 });
 
 // Update a release profile
-router.put('/:id', (req, res) => {
+router.put('/:id', (req, res, next) => {
   try {
     const { id } = req.params;
     const { name, enabled, must_contain, must_not_contain, indexer_id, apply_to } = req.body;
+    const cleanMustContain = validateRegexArray(must_contain);
+    const cleanMustNotContain = validateRegexArray(must_not_contain);
+
     const stmt = db.prepare(`
       UPDATE release_profiles 
       SET name = ?, enabled = ?, must_contain = ?, must_not_contain = ?, indexer_id = ?, apply_to = ?
@@ -55,29 +73,27 @@ router.put('/:id', (req, res) => {
     stmt.run(
       name,
       enabled ? 1 : 0,
-      JSON.stringify(must_contain || []),
-      JSON.stringify(must_not_contain || []),
+      JSON.stringify(cleanMustContain),
+      JSON.stringify(cleanMustNotContain),
       indexer_id || null,
       apply_to || 'all',
       id
     );
     res.json({ status: 'success' });
   } catch (error) {
-    console.error('Error updating release profile:', error);
-    res.status(500).json({ status: 'error', message: error.message });
+    next(error);
   }
 });
 
 // Delete a release profile
-router.delete('/:id', (req, res) => {
+router.delete('/:id', (req, res, next) => {
   try {
     const { id } = req.params;
     const stmt = db.prepare('DELETE FROM release_profiles WHERE id = ?');
     stmt.run(id);
     res.json({ status: 'success' });
   } catch (error) {
-    console.error('Error deleting release profile:', error);
-    res.status(500).json({ status: 'error', message: error.message });
+    next(error);
   }
 });
 

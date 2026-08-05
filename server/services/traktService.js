@@ -79,8 +79,8 @@ const importTraktJson = async (jsonData) => {
                  }
                }
              } else {
-               let season = item.season_number !== undefined ? item.season_number : (item.season !== undefined ? item.season : (item.episode?.season));
-               let episode = item.episode_number !== undefined ? item.episode_number : (item.episode !== undefined && typeof item.episode === 'number' ? item.episode : (item.episode?.number));
+               const season = item.season_number !== undefined ? item.season_number : (item.season !== undefined ? item.season : (item.episode?.season));
+               const episode = item.episode_number !== undefined ? item.episode_number : (item.episode !== undefined && typeof item.episode === 'number' ? item.episode : (item.episode?.number));
   
                if (season !== undefined && episode !== undefined) {
                  const show = getShow.get(tmdbId);

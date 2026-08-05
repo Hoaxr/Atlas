@@ -32,11 +32,39 @@ const isSubtitleFile = (filename) =>
   SUBTITLE_EXTENSIONS.has(path.extname(filename).toLowerCase());
 
 /**
+ * Checks if a target path is strictly contained within any configured library root path.
+ */
+const isPathContainedInLibrary = (targetPath) => {
+  try {
+    const db = require('../config/database');
+    const paths = db.prepare('SELECT path FROM library_paths').all();
+    const resolvedTarget = path.resolve(targetPath);
+
+    return paths.some(p => {
+      const resolvedRoot = path.resolve(p.path);
+      const rel = path.relative(resolvedRoot, resolvedTarget);
+      // Contained if relative path exists, does not start with '..' and is not absolute
+      return rel && !rel.startsWith('..') && !path.isAbsolute(rel);
+    });
+  } catch {
+    return false;
+  }
+};
+
+/**
  * Recursively deletes a folder and all its contents.
  * Used by movie/show delete and bulk delete endpoints.
+ * Includes strict path containment validation against library paths.
  * @param {string} folderPath — absolute path to delete
  */
 const deleteFolderRecursive = async (folderPath) => {
+  if (isRootLibraryPath(folderPath)) {
+    throw new Error(`Cannot delete root library path: ${folderPath}`);
+  }
+  if (!isPathContainedInLibrary(folderPath)) {
+    throw new Error(`Deletion target is outside configured media library paths: ${folderPath}`);
+  }
+
   const entries = await fsp.readdir(folderPath, { withFileTypes: true });
   await Promise.all(entries.map(entry => {
     const full = path.join(folderPath, entry.name);
@@ -107,4 +135,4 @@ const findLargestVideoFile = async (dirPath) => {
   return best;
 };
 
-module.exports = { VIDEO_EXTENSIONS, SUBTITLE_EXTENSIONS, isVideoFile, isSubtitleFile, deleteFolderRecursive, isRootLibraryPath, findLargestVideoFile };
+module.exports = { VIDEO_EXTENSIONS, SUBTITLE_EXTENSIONS, isVideoFile, isSubtitleFile, deleteFolderRecursive, isRootLibraryPath, isPathContainedInLibrary, findLargestVideoFile };

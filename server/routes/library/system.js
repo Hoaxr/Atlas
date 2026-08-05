@@ -690,7 +690,7 @@ router.post('/duplicates/delete', (req, res, next) => {
 });
 
 
-router.get('/system-health', async (req, res, next) => {
+const getSystemHealth = async (req, res, next) => {
   try {
     const fs = require('fs/promises');
     const path = require('path');
@@ -770,7 +770,10 @@ router.get('/system-health', async (req, res, next) => {
       }
     });
   } catch (err) { next(err); }
-});
+};
+
+router.get('/system-health', getSystemHealth);
+router.get('/health', getSystemHealth);
 
 
 router.get('/export', (req, res, next) => {

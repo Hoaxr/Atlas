@@ -9,7 +9,7 @@ const requireAdmin = require('../middleware/requireAdmin');
 const hashPassword = (password) => bcrypt.hash(password, 12);
 
 // GET /api/users
-router.get('/', requireAdmin, (req, res) => {
+router.get('/', requireAdmin, (req, res, next) => {
   try {
     const users = db.prepare('SELECT id, username, email, role, origin, created_at, last_login FROM users').all();
     const data = users.map(u => ({
@@ -20,22 +20,22 @@ router.get('/', requireAdmin, (req, res) => {
     }));
     res.json({ status: 'success', data });
   } catch (err) {
-    res.status(500).json({ status: 'error', message: err.message });
+    next(err);
   }
 });
 
 // POST /api/users/import
-router.post('/import', requireAdmin, async (req, res) => {
+router.post('/import', requireAdmin, async (req, res, next) => {
   try {
     const result = await userProvisioningService.importUsers();
     res.json({ status: 'success', data: result });
   } catch (err) {
-    res.status(500).json({ status: 'error', message: err.message });
+    next(err);
   }
 });
 
 // POST /api/users
-router.post('/', requireAdmin, async (req, res) => {
+router.post('/', requireAdmin, async (req, res, next) => {
   try {
     const { username, password, email, role, autoCreateMedia } = req.body;
     
@@ -68,12 +68,12 @@ router.post('/', requireAdmin, async (req, res) => {
       data: { id: result.lastInsertRowid, username, email, role, provisionResults }
     });
   } catch (err) {
-    res.status(500).json({ status: 'error', message: err.message });
+    next(err);
   }
 });
 
 // DELETE /api/users/:id
-router.delete('/:id', requireAdmin, (req, res) => {
+router.delete('/:id', requireAdmin, (req, res, next) => {
   try {
     const { id } = req.params;
     
@@ -95,12 +95,12 @@ router.delete('/:id', requireAdmin, (req, res) => {
 
     res.json({ status: 'success', message: 'User deleted' });
   } catch (err) {
-    res.status(500).json({ status: 'error', message: err.message });
+    next(err);
   }
 });
 
 // PUT /api/users/:id
-router.put('/:id', requireAdmin, async (req, res) => {
+router.put('/:id', requireAdmin, async (req, res, next) => {
   try {
     const { id } = req.params;
     const { username, password, email, role } = req.body;
@@ -155,7 +155,7 @@ router.put('/:id', requireAdmin, async (req, res) => {
 
     res.json({ status: 'success', message: 'User updated successfully' });
   } catch (err) {
-    res.status(500).json({ status: 'error', message: err.message });
+    next(err);
   }
 });
 

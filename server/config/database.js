@@ -26,7 +26,7 @@ db.transaction = function (fn) {
   };
 };
 
-db.exec('PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;');
+db.exec('PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000;');
 // Performance tuning — safe with WAL mode, dramatically reduces I/O
 db.exec(`
   PRAGMA synchronous = NORMAL;
@@ -181,6 +181,7 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_shows_status ON shows(status);
   CREATE INDEX IF NOT EXISTS idx_episodes_show_id ON episodes(show_id);
   CREATE INDEX IF NOT EXISTS idx_episodes_status ON episodes(status);
+  CREATE INDEX IF NOT EXISTS idx_movie_collections_coll ON movie_collections(collection_id);
 
   CREATE TABLE IF NOT EXISTS play_history (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -744,7 +745,9 @@ const MIGRATIONS = [
               updateStmt.run(JSON.stringify(cleanSubs), row.id);
               updated++;
             }
-          } catch(e) {}
+          } catch {
+            /* ignore malformed json entry */
+          }
         }
         console.log(`[DB] Cleaned ${updated} rows in ${tableName} subtitle languages`);
       };
