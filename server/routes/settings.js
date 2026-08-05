@@ -125,7 +125,8 @@ router.get('/', (req, res, next) => {
         pushoverAppToken: mask(getSetting('pushoverAppToken')),
         pushoverUserKey: mask(getSetting('pushoverUserKey')),
         autoDeleteWatchedEnabled: getSetting('autoDeleteWatchedEnabled') === 'true',
-        autoDeleteWatchedDays: getSetting('autoDeleteWatchedDays')
+        autoDeleteWatchedDays: getSetting('autoDeleteWatchedDays'),
+        autoWatchUser: getSetting('autoWatchUser') || ''
       }
     });
   } catch (e) {
@@ -189,6 +190,7 @@ const SETTING_SCHEMA = {
   pushoverUserKey:          { type: 'apiKey' },
   autoDeleteWatchedEnabled: { type: 'boolean' },
   autoDeleteWatchedDays:    { type: 'string' },
+  autoWatchUser:            { type: 'string' },
 };
 
 const isMasked = (val) => typeof val === 'string' && /^\*+$/.test(val);

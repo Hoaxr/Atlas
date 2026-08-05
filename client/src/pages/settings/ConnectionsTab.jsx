@@ -16,6 +16,7 @@ export default function ConnectionsTab({
     jellyfinApiKey: '',
     embyUrl: '',
     embyApiKey: '',
+    autoWatchUser: '',
     discordWebhookUrl: '',
     telegramBotToken: '',
     telegramChatId: '',
@@ -60,6 +61,7 @@ export default function ConnectionsTab({
           jellyfinApiKey: data.jellyfinApiKey || '',
           embyUrl: data.embyUrl || '',
           embyApiKey: data.embyApiKey || '',
+          autoWatchUser: data.autoWatchUser || '',
           discordWebhookUrl: data.discordWebhookUrl || '',
           telegramBotToken: data.telegramBotToken || '',
           telegramChatId: data.telegramChatId || '',
@@ -654,6 +656,29 @@ export default function ConnectionsTab({
                   className="w-full bg-slate-800/50 border border-slate-700 rounded-xl px-4 py-2 text-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
                 />
               </div>
+            </div>
+          </div>
+
+          {/* Tracked Media Server User(s) */}
+          <div className="p-3 sm:p-4 bg-slate-800/30 rounded-xl border border-slate-700/50 space-y-4">
+            <div>
+              <h3 className="text-sm font-bold text-cyan-400">Tracked Media Server User(s)</h3>
+              <p className="text-xs text-slate-500 mt-1">
+                Only playback from these usernames on Plex/Jellyfin/Emby will update watch progress, auto-mark items as watched, and update your Tracker history. Leave blank to match your Atlas admin user, or enter * to track all users.
+              </p>
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">
+                Usernames (comma-separated)
+              </label>
+              <input
+                type="text"
+                name="autoWatchUser"
+                value={localSettings.autoWatchUser}
+                onChange={handleChange}
+                placeholder="e.g. silence, JohnDoe (or * for all users)"
+                className="w-full bg-slate-800/50 border border-slate-700 rounded-xl px-4 py-2 text-slate-200 focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
+              />
             </div>
           </div>
         </div>

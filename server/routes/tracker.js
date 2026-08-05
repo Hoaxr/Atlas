@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../config/database');
 const tmdbService = require('../services/tmdbService');
+const watcherService = require('../services/watcherService');
 
 // Helper to fallback to average runtimes if null
 const MOVIE_AVG = 100;
@@ -78,6 +79,35 @@ router.get('/stats', async (req, res) => {
       FROM episodes
       WHERE watched = 1
     `).get() || { count: 0 };
+
+    // Live Active Watching Session for Tracked User
+    let nowWatching = null;
+    try {
+      const activeSessions = await watcherService.getAllSessions();
+      const userSession = activeSessions.find(s => watcherService.shouldTrackUser(s.user));
+      if (userSession) {
+        nowWatching = {
+          id: userSession.id,
+          title: userSession.title,
+          type: userSession.type,
+          user: userSession.user,
+          player: userSession.player || userSession.product || 'Media Player',
+          platform: userSession.platform,
+          server: userSession.server,
+          state: userSession.state || 'playing',
+          progress: Math.round(userSession.progress || 0),
+          timeOffset: userSession.timeOffset,
+          timeTotal: userSession.timeTotal,
+          poster: userSession.poster,
+          tmdb_id: userSession.tmdb_id,
+          media_id: userSession.media_id,
+          quality: userSession.quality,
+          eta: userSession.eta
+        };
+      }
+    } catch (e) {
+      console.error('[Tracker] Error fetching active watcher sessions:', e.message);
+    }
 
     // 4. Currently Watching Hero Item (Most recent watched or active progress)
     const currentlyRow = db.prepare(`
@@ -319,7 +349,8 @@ router.get('/stats', async (req, res) => {
         weekly_activity: weeklyActivity,
         genre_breakdown: genreBreakdown,
         achievements,
-        currently_watching: currentlyWatching
+        currently_watching: currentlyWatching,
+        now_watching: nowWatching
       }
     });
   } catch (error) {

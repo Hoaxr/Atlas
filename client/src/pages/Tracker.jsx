@@ -3,9 +3,10 @@ import { AnimatedUpNextCard } from '../components/tracker/AnimatedUpNextCard';
 import { ThisWeekCard } from '../components/tracker/ThisWeekCard';
 import { useNavigate } from 'react-router-dom';
 import api from '../lib/api';
+import useWebSocket from '../lib/useWebSocket';
 import { 
   Clock, Film, Tv, Play, ChevronRight, ChevronLeft, Trash2, Undo2, Eye, 
-  Flame, Award, Calendar, Sparkles, Compass, CheckCircle2, TrendingUp, Zap, Moon, Sun, Star
+  Flame, Award, Calendar, Sparkles, Compass, CheckCircle2, TrendingUp, Zap, Moon, Sun, Star, MonitorPlay
 } from 'lucide-react';
 import { tmdbImgUrl } from '../lib/posterUrl';
 
@@ -160,7 +161,9 @@ const TimelineHistoryCard = ({ item, handleMarkUnwatched, handleDeleteHistory })
 
 const Tracker = () => {
   const navigate = useNavigate();
+  const { onEvent } = useWebSocket();
   const [stats, setStats] = useState(null);
+  const [liveSession, setLiveSession] = useState(null);
   const [history, setHistory] = useState([]);
   const [upNextEpisodes, setUpNextEpisodes] = useState([]);
   const [thisWeekEpisodes, setThisWeekEpisodes] = useState([]);
@@ -169,6 +172,32 @@ const Tracker = () => {
   
   const scrollRef = useRef(null);
   const weekScrollRef = useRef(null);
+
+  useEffect(() => {
+    const cleanup = onEvent((data) => {
+      if (data.type === 'WATCHERS_UPDATE' && Array.isArray(data.sessions)) {
+        api.get('/settings').then(res => {
+          const autoWatchUser = res.data?.data?.autoWatchUser || '';
+          
+          let active = null;
+          if (autoWatchUser && autoWatchUser.trim() !== '') {
+            if (autoWatchUser.trim() === '*') {
+              active = data.sessions[0] || null;
+            } else {
+              const allowed = autoWatchUser.split(',').map(u => u.trim().toLowerCase());
+              active = data.sessions.find(s => s.user && allowed.includes(s.user.trim().toLowerCase())) || null;
+            }
+          } else {
+            active = data.sessions[0] || null;
+          }
+          setLiveSession(active);
+        }).catch(() => {
+          setLiveSession(data.sessions[0] || null);
+        });
+      }
+    });
+    return () => cleanup();
+  }, [onEvent]);
 
   const scrollContainer = (dir) => {
     if (scrollRef.current) {
@@ -199,6 +228,9 @@ const Tracker = () => {
       ]);
 
       setStats(statsRes.data.stats);
+      if (statsRes.data.stats?.now_watching) {
+        setLiveSession(statsRes.data.stats.now_watching);
+      }
       setHistory(historyRes.data.history);
       setUpNextEpisodes(upNextRes.data.episodes);
       setThisWeekEpisodes(thisWeekRes.data.episodes);
@@ -311,6 +343,7 @@ const Tracker = () => {
   }
 
   const currently = stats?.currently_watching;
+  const activeWatching = liveSession || stats?.now_watching;
   const thisWeekCombined = (thisWeekEpisodes || []).map(ep => ({ ...ep, _type: 'episode' }));
 
   return (
@@ -318,9 +351,9 @@ const Tracker = () => {
       
       {/* ── HERO HEADER ── */}
       <div className="relative rounded-2xl sm:rounded-3xl overflow-hidden border border-slate-700/50 bg-slate-900/80 backdrop-blur-xl shadow-2xl p-4 sm:p-6 md:p-10">
-        {currently?.backdrop && (
+        {(activeWatching?.poster || currently?.backdrop) && (
           <div className="absolute inset-0 z-0 opacity-20 filter blur-2xl scale-110 pointer-events-none">
-            <img src={tmdbImgUrl(currently.backdrop, 'w1280')} alt="" className="w-full h-full object-cover" />
+            <img src={tmdbImgUrl(activeWatching?.poster || currently?.backdrop, 'w1280')} alt="" className="w-full h-full object-cover" />
           </div>
         )}
         
@@ -339,8 +372,84 @@ const Tracker = () => {
             </div>
           </div>
 
-          {/* Currently Watching Mini Panel */}
-          {currently && (
+          {/* Active Now Watching Panel or Latest Watch Panel */}
+          {activeWatching ? (
+            <div className="w-full lg:w-[420px] p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-slate-900/90 via-slate-800/90 to-cyan-950/40 border border-cyan-500/40 backdrop-blur-xl shadow-2xl shadow-cyan-500/10 flex items-center gap-4 group relative overflow-hidden">
+              <div className="absolute top-0 right-0 w-32 h-32 bg-cyan-500/10 rounded-full blur-2xl pointer-events-none animate-pulse" />
+
+              <div 
+                onClick={() => {
+                  const isMovie = activeWatching.type === 'movie';
+                  if (isMovie && activeWatching.media_id) navigate(`/movies/${activeWatching.media_id}`);
+                  else if (!isMovie && activeWatching.media_id) navigate(`/shows/${activeWatching.media_id}`);
+                  else if (activeWatching.tmdb_id) navigate(`/${isMovie ? 'movies' : 'shows'}/${activeWatching.tmdb_id}`);
+                }}
+                className="w-16 sm:w-20 h-24 sm:h-28 rounded-xl overflow-hidden bg-slate-950 shrink-0 border border-cyan-500/30 cursor-pointer shadow-lg relative group/poster"
+              >
+                {activeWatching.poster ? (
+                  <img 
+                    src={activeWatching.poster.startsWith('/api') ? activeWatching.poster : tmdbImgUrl(activeWatching.poster, 'w200')} 
+                    alt="" 
+                    className="w-full h-full object-cover group-hover/poster:scale-105 transition-transform duration-300" 
+                  />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center text-cyan-400"><Tv className="w-7 h-7" /></div>
+                )}
+              </div>
+
+              <div className="flex-1 min-w-0 space-y-1.5 z-10">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className={`text-[10px] uppercase font-black px-2.5 py-0.5 rounded-full flex items-center gap-1.5 ${
+                    activeWatching.state === 'paused'
+                      ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                      : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
+                  }`}>
+                    <span className={`w-2 h-2 rounded-full ${
+                      activeWatching.state === 'paused' ? 'bg-amber-400' : 'bg-emerald-400 animate-ping'
+                    }`} />
+                    {activeWatching.state === 'paused' ? 'Paused' : 'Now Watching'}
+                  </span>
+
+                  {activeWatching.server && (
+                    <span className="text-[10px] font-bold text-slate-300 bg-slate-800/80 px-2 py-0.5 rounded-full border border-slate-700">
+                      {activeWatching.server}
+                    </span>
+                  )}
+                </div>
+
+                <h3 
+                  onClick={() => {
+                    const isMovie = activeWatching.type === 'movie';
+                    if (isMovie && activeWatching.media_id) navigate(`/movies/${activeWatching.media_id}`);
+                    else if (!isMovie && activeWatching.media_id) navigate(`/shows/${activeWatching.media_id}`);
+                    else if (activeWatching.tmdb_id) navigate(`/${isMovie ? 'movies' : 'shows'}/${activeWatching.tmdb_id}`);
+                  }}
+                  className="text-slate-100 font-extrabold text-sm sm:text-base line-clamp-1 group-hover:text-cyan-400 transition-colors cursor-pointer leading-snug"
+                >
+                  {activeWatching.title}
+                </h3>
+
+                {activeWatching.player && (
+                  <p className="text-[11px] text-slate-400 font-medium truncate">
+                    Streaming on <span className="text-slate-200 font-semibold">{activeWatching.player}</span>
+                  </p>
+                )}
+
+                <div className="pt-1 space-y-1">
+                  <div className="flex justify-between items-center text-[10px] font-mono text-slate-400">
+                    <span>{Math.round(activeWatching.progress || 0)}%</span>
+                    {activeWatching.eta && <span>ETA {activeWatching.eta}</span>}
+                  </div>
+                  <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden border border-white/5">
+                    <div 
+                      className="h-full bg-gradient-to-r from-cyan-500 to-emerald-400 rounded-full transition-all duration-500" 
+                      style={{ width: `${Math.min(100, Math.max(0, activeWatching.progress || 0))}%` }}
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : currently ? (
             <div className="w-full lg:w-96 p-3 sm:p-4 rounded-xl sm:rounded-2xl bg-slate-800/80 border border-slate-700/60 backdrop-blur-md shadow-xl flex items-center gap-3 sm:gap-4 group">
               <div 
                 onClick={() => {
@@ -383,7 +492,7 @@ const Tracker = () => {
                 </div>
               </div>
             </div>
-          )}
+          ) : null}
         </div>
       </div>
 
