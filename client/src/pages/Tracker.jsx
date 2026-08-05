@@ -14,7 +14,7 @@ const formatRuntime = (minutes) => {
   const h = Math.floor(minutes / 60);
   const m = minutes % 60;
   if (h > 0 && m > 0) return `${h}h ${m}m`;
-  if (h > 0) return `${h}`;
+  if (h > 0) return `${h}h`;
   return `${m}m`;
 };
 
@@ -120,7 +120,7 @@ const TimelineHistoryCard = ({ item, handleMarkUnwatched, handleDeleteHistory })
             {title}
           </h3>
 
-          {!isMovie && (item.season_number != null || item.episode_number != null) && (
+          {!isMovie && (item.season_number !== null && item.season_number !== undefined || item.episode_number !== null && item.episode_number !== undefined) && (
             <p className="text-[10px] sm:text-xs text-cyan-300/90 font-medium truncate">
               S{String(item.season_number || 1).padStart(2, '0')} E{String(item.episode_number || 1).padStart(2, '0')}
               {item.episode_title ? ` — ${item.episode_title}` : ''}
@@ -288,7 +288,7 @@ const Tracker = () => {
       }
 
       groups[label].items.push(item);
-      const min = item.history_runtime || item.movie_runtime || item.ep_runtime || 45;
+      const min = item.history_runtime || item.movie_runtime || item.ep_runtime || (item.type === 'movie' ? 100 : 45);
       groups[label].totalMinutes += min;
       if (item.type === 'movie') groups[label].moviesCount++;
       else groups[label].episodesCount++;
@@ -379,7 +379,7 @@ const Tracker = () => {
                   <div className="flex-1 h-1.5 bg-slate-700/80 rounded-full overflow-hidden">
                     <div className="h-full bg-gradient-to-r from-cyan-500 to-emerald-400 rounded-full" style={{ width: `${currently.progress || 100}%` }}></div>
                   </div>
-                  <span className="text-[10px] text-slate-400 font-mono font-semibold">{currently.runtime}m</span>
+                  <span className="text-[10px] text-slate-400 font-mono font-semibold">{formatRuntime(currently.runtime) || `${currently.runtime}m`}</span>
                 </div>
               </div>
             </div>

@@ -82,8 +82,8 @@ router.get('/stats', async (req, res) => {
     // 4. Currently Watching Hero Item (Most recent watched or active progress)
     const currentlyRow = db.prepare(`
       SELECT 
-        w.tmdb_id, w.type, w.season_number, w.episode_number, w.watched_at,
-        m.id as movie_id, m.title as movie_title, m.poster_path as movie_poster,
+        w.tmdb_id, w.type, w.season_number, w.episode_number, w.watched_at, w.runtime as history_runtime,
+        m.id as movie_id, m.title as movie_title, m.poster_path as movie_poster, m.runtime as movie_runtime,
         s.id as show_id, s.title as show_title, s.poster_path as show_poster,
         e.title as episode_title, e.runtime as ep_runtime, e.watch_progress
       FROM watch_history w
@@ -98,18 +98,24 @@ router.get('/stats', async (req, res) => {
     if (currentlyRow) {
       let title = currentlyRow.type === 'movie' ? currentlyRow.movie_title : currentlyRow.show_title;
       let poster = currentlyRow.type === 'movie' ? currentlyRow.movie_poster : currentlyRow.show_poster;
+      let tmdbRuntime = null;
 
-      if (!title && currentlyRow.tmdb_id) {
+      if ((!title || (currentlyRow.type === 'movie' && !currentlyRow.movie_runtime && !currentlyRow.history_runtime)) && currentlyRow.tmdb_id) {
         try {
           const details = currentlyRow.type === 'movie' 
             ? await tmdbService.getMovieById(currentlyRow.tmdb_id) 
             : await tmdbService.getShowById(currentlyRow.tmdb_id);
-          title = details?.name || details?.title;
-          poster = details?.poster_path;
+          if (!title) title = details?.name || details?.title;
+          if (!poster) poster = details?.poster_path;
+          tmdbRuntime = details?.runtime;
         } catch (e) {
           console.error('[Tracker] Failed resolving TMDB item for currently watching:', e);
         }
       }
+
+      const itemRuntime = currentlyRow.type === 'movie'
+        ? (currentlyRow.history_runtime || currentlyRow.movie_runtime || tmdbRuntime || MOVIE_AVG)
+        : (currentlyRow.history_runtime || currentlyRow.ep_runtime || EPISODE_AVG);
 
       currentlyWatching = {
         tmdb_id: currentlyRow.tmdb_id,
@@ -122,7 +128,7 @@ router.get('/stats', async (req, res) => {
         season: currentlyRow.season_number,
         episode: currentlyRow.episode_number,
         episode_title: currentlyRow.episode_title,
-        runtime: currentlyRow.ep_runtime || 45,
+        runtime: itemRuntime,
         progress: currentlyRow.watch_progress || 0
       };
     }
