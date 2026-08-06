@@ -55,6 +55,7 @@ class WatcherService {
     
     this.activeSessions = new Set();
     this.autoWatchedSet = new Set(); // Track sessions already auto-marked to avoid duplicate calls
+    this.recentPlaybackNotifications = new Map(); // Cooldown map: key = `${user}:${title}`, value = timestamp
     this.pollInterval = null;
     this.startPolling();
   }
@@ -344,10 +345,27 @@ class WatcherService {
     const currentSessionIds = new Set(sessions.map(s => s.id));
     const notifyOnPlayback = getSetting('notifyOnPlaybackStart') === 'true';
 
+    const now = Date.now();
+    const PLAYBACK_NOTIFY_COOLDOWN = 2 * 60 * 1000; // 2 minutes
+
     for (const session of sessions) {
       if (!this.activeSessions.has(session.id)) {
         // New session detected
-        if (notifyOnPlayback) {
+        const playbackKey = `${session.user}:${session.title}`;
+        const lastNotified = this.recentPlaybackNotifications.get(playbackKey);
+
+        if (notifyOnPlayback && (!lastNotified || (now - lastNotified) > PLAYBACK_NOTIFY_COOLDOWN)) {
+          this.recentPlaybackNotifications.set(playbackKey, now);
+
+          // Cleanup stale keys
+          if (this.recentPlaybackNotifications.size > 200) {
+            for (const [k, time] of this.recentPlaybackNotifications.entries()) {
+              if (now - time > PLAYBACK_NOTIFY_COOLDOWN) {
+                this.recentPlaybackNotifications.delete(k);
+              }
+            }
+          }
+
           const typeLabel = session.type === 'movie' ? 'Movie' : session.type === 'episode' ? 'Episode' : 'Live TV';
           const device = session.product || session.player || 'Unknown device';
           const duration = session.timeTotal > 0 

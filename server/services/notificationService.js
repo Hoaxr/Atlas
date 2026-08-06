@@ -138,6 +138,7 @@ class NotificationService {
           caption = `*${title}*\n${description}`;
         }
 
+        let telegramPhotoSent = false;
         // Try to send as photo with poster for playback notifications
         if (metadata.poster && title === 'Playback Started') {
           try {
@@ -164,19 +165,21 @@ class NotificationService {
               await axios.post(`https://api.telegram.org/bot${telegramToken}/sendPhoto`, body, {
                 headers: { 'Content-Type': `multipart/form-data; boundary=${boundary}` }
               });
-              return; // Sent with photo, skip text-only below
+              telegramPhotoSent = true;
             }
           } catch (posterErr) {
-            console.error('[NotificationService] Telegram poster failed, sending text-only:', posterErr.message);
+            console.error('[NotificationService] Telegram poster failed, sending text fallback:', posterErr.message);
           }
         }
 
-        // Fallback: text-only message
-        await axios.post(`https://api.telegram.org/bot${telegramToken}/sendMessage`, {
-          chat_id: telegramChatId,
-          text: caption,
-          parse_mode: 'Markdown'
-        });
+        // Only send text fallback if photo was NOT sent
+        if (!telegramPhotoSent) {
+          await axios.post(`https://api.telegram.org/bot${telegramToken}/sendMessage`, {
+            chat_id: telegramChatId,
+            text: caption,
+            parse_mode: 'Markdown'
+          });
+        }
       } catch (err) {
         console.error('[NotificationService] Telegram notification failed:', err.response?.data || err.message);
       }
