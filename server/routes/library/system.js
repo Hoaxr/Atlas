@@ -535,7 +535,20 @@ router.get('/calendar', async (req, res, next) => {
       ORDER BY date ASC
     `).all();
 
-    res.json({ status: 'success', data: upcoming });
+    const formatted = upcoming.map(item => {
+      let dateStr = item.date;
+      if (dateStr && !dateStr.includes('T')) {
+        // Plain YYYY-MM-DD date: attach standard broadcast airtime (21:00 US Eastern EDT)
+        if (item.type === 'episode') {
+          dateStr = `${item.date}T21:00:00-04:00`;
+        } else {
+          dateStr = `${item.date}T00:00:00Z`;
+        }
+      }
+      return { ...item, date: dateStr };
+    });
+
+    res.json({ status: 'success', data: formatted });
   } catch (err) {
     next(err);
   }

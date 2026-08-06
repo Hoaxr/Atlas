@@ -11,6 +11,32 @@ import { tmdbImgUrl } from '../lib/posterUrl';
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
+/**
+ * Converts a release UTC ISO timestamp or airtime string into the user's local YYYY-MM-DD date key.
+ */
+export function getLocalDateKey(dateStr, type = 'episode') {
+  if (!dateStr) return null;
+  try {
+    let raw = dateStr;
+    if (!raw.includes('T')) {
+      if (type === 'episode') {
+        // Assume standard US Eastern broadcast air time (21:00 EDT / UTC-4) for TV episodes
+        raw = `${dateStr}T21:00:00-04:00`;
+      } else {
+        return dateStr;
+      }
+    }
+    const d = new Date(raw);
+    if (isNaN(d.getTime())) return dateStr.split('T')[0];
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  } catch (_) {
+    return dateStr.split('T')[0];
+  }
+}
+
 export default function Calendar() {
   const navigate = useNavigate();
   const [episodes, setEpisodes] = useState([]);
@@ -46,15 +72,20 @@ export default function Calendar() {
     return () => clearInterval(interval);
   }, []);
 
-  const groupedByDate = {};
-  episodes.forEach(item => {
-    if (!item.date) return;
-    const date = item.date.split('T')[0];
-    if (!groupedByDate[date]) groupedByDate[date] = [];
-    groupedByDate[date].push(item);
-  });
+  const groupedByDate = useMemo(() => {
+    const groups = {};
+    episodes.forEach(item => {
+      if (!item.date) return;
+      const dateKey = getLocalDateKey(item.date, item.type);
+      if (!dateKey) return;
+      if (!groups[dateKey]) groups[dateKey] = [];
+      groups[dateKey].push(item);
+    });
+    return groups;
+  }, [episodes]);
 
-  const today = new Date().toISOString().split('T')[0];
+  const now = new Date();
+  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 
   const goToToday = () => setCurrentDate(new Date());
 
@@ -84,9 +115,9 @@ export default function Calendar() {
       const y = currentDate.getFullYear();
       label = `${MONTHS[m]} ${y}`;
 
-      dates = Object.entries(groupedByDate).filter(([date]) => {
-        const d = new Date(date);
-        return d.getMonth() === m && d.getFullYear() === y;
+      dates = Object.entries(groupedByDate).filter(([dateKey]) => {
+        const [yStr, mStr] = dateKey.split('-');
+        return Number(mStr) === m + 1 && Number(yStr) === y;
       }).sort(([a], [b]) => a.localeCompare(b));
 
       const daysInMonth = new Date(y, m + 1, 0).getDate();
@@ -126,7 +157,10 @@ export default function Calendar() {
       for (let i = 0; i < 7; i++) {
         const cellDate = new Date(weekStart);
         cellDate.setDate(weekStart.getDate() + i);
-        const dateStr = cellDate.toISOString().split('T')[0];
+        const yStr = cellDate.getFullYear();
+        const mStr = String(cellDate.getMonth() + 1).padStart(2, '0');
+        const dStr = String(cellDate.getDate()).padStart(2, '0');
+        const dateStr = `${yStr}-${mStr}-${dStr}`;
         const eps = groupedByDate[dateStr] || [];
         if (eps.length > 0) {
           dates.push([dateStr, eps]);
@@ -134,7 +168,10 @@ export default function Calendar() {
       }
       dates.sort(([a], [b]) => a.localeCompare(b));
     } else {
-      const dateStr = currentDate.toISOString().split('T')[0];
+      const yStr = currentDate.getFullYear();
+      const mStr = String(currentDate.getMonth() + 1).padStart(2, '0');
+      const dStr = String(currentDate.getDate()).padStart(2, '0');
+      const dateStr = `${yStr}-${mStr}-${dStr}`;
       const opts = { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' };
       label = currentDate.toLocaleDateString('en-US', opts);
       if (groupedByDate[dateStr]) {
