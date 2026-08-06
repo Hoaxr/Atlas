@@ -3,6 +3,7 @@ const db = require('../config/database');
 const notificationService = require('./notificationService');
 const eventBus = require('./eventBus');
 const { getSetting } = require('../utils/settings');
+const tmdbService = require('./tmdbService');
 
 // ── Poster cache — avoids DB lookup per session per poll ──
 const posterCache = new Map();
@@ -405,67 +406,106 @@ class WatcherService {
       // Update watch_progress and auto-mark watched at 80% progress (only for tracked user)
       if (this.shouldTrackUser(session.user)) {
         try {
-          let matchedMovieId = null;
-          let matchedShowId = null;
-          let seasonNum = null;
-          let epNum = null;
+          const cleanTitle = (raw) => (raw || '').replace(/\s*\(\d{4}\)\s*$/, '').trim();
 
           if (session.type === 'movie') {
-            const movie = db.prepare('SELECT id, tmdb_id, runtime FROM movies WHERE title = ? COLLATE NOCASE').get(session.title);
-            if (movie) {
-              matchedMovieId = movie.id;
-              // Only update progress if it is not marked as watched
-              db.prepare('UPDATE movies SET watch_progress = ? WHERE id = ? AND watched = 0').run(Math.round(session.progress), movie.id);
+            const cleaned = cleanTitle(session.title);
+            let movie = db.prepare('SELECT id, tmdb_id, runtime FROM movies WHERE title = ? COLLATE NOCASE OR title = ? COLLATE NOCASE').get(session.title, cleaned);
 
-              if (session.progress >= 80 && !this.autoWatchedSet.has(session.id)) {
-                this.autoWatchedSet.add(session.id);
-                const watchedAt = new Date().toISOString();
+            if (movie) {
+              db.prepare('UPDATE movies SET watch_progress = ? WHERE id = ? AND watched = 0').run(Math.round(session.progress), movie.id);
+            }
+
+            if (session.progress >= 80 && !this.autoWatchedSet.has(session.id)) {
+              this.autoWatchedSet.add(session.id);
+              const watchedAt = new Date().toISOString();
+
+              if (movie) {
                 db.prepare('UPDATE movies SET watched = 1, watched_at = ?, watch_progress = 0 WHERE id = ?').run(watchedAt, movie.id);
-                // Write to watch_history so tracker stats count auto-marked plays
-                if (movie.tmdb_id) {
-                  try {
-                    const existing = db.prepare('SELECT id FROM watch_history WHERE tmdb_id = ? AND type = ?').get(movie.tmdb_id, 'movie');
-                    if (!existing) {
-                      db.prepare('INSERT INTO watch_history (tmdb_id, type, watched_at, runtime) VALUES (?, ?, ?, ?)').run(movie.tmdb_id, 'movie', watchedAt, movie.runtime || null);
-                    }
-                  } catch { /* non-critical */ }
-                  simklService.pushToSimklOnWatched(movie.tmdb_id, 'movie', true).catch(() => {});
-                }
-                console.log(`[WatcherService] Auto-marked movie "${session.title}" as watched at ${Math.round(session.progress)}% for ${session.user}`);
               }
+
+              // Resolve TMDB ID if movie record wasn't found
+              let tmdbId = movie?.tmdb_id || session.tmdb_id;
+              let runtime = movie?.runtime || null;
+
+              if (!tmdbId) {
+                try {
+                  const tmdbResults = await tmdbService.searchMovies(cleaned);
+                  if (tmdbResults && tmdbResults.length > 0) {
+                    tmdbId = tmdbResults[0].id;
+                  }
+                } catch { /* ignore TMDB lookup error */ }
+              }
+
+              if (tmdbId) {
+                try {
+                  const existing = db.prepare('SELECT id FROM watch_history WHERE tmdb_id = ? AND type = ?').get(tmdbId, 'movie');
+                  if (!existing) {
+                    db.prepare('INSERT INTO watch_history (tmdb_id, type, watched_at, runtime) VALUES (?, ?, ?, ?)').run(tmdbId, 'movie', watchedAt, runtime);
+                  } else {
+                    db.prepare('UPDATE watch_history SET watched_at = ? WHERE id = ?').run(watchedAt, existing.id);
+                  }
+                } catch (err) {
+                  console.error('[WatcherService] Failed to write watch_history for movie:', err.message);
+                }
+                simklService.pushToSimklOnWatched(tmdbId, 'movie', true).catch(() => {});
+              }
+
+              console.log(`[WatcherService] Auto-marked movie "${session.title}" (TMDB: ${tmdbId || 'N/A'}) as watched at ${Math.round(session.progress)}% for ${session.user}`);
             }
           } else if (session.type === 'episode') {
             const match = session.title.match(/^(.*) - S(\d+)E(\d+)$/i);
             if (match) {
-              const [, showTitle, seasonStr, epStr] = match;
-              seasonNum = parseInt(seasonStr, 10);
-              epNum = parseInt(epStr, 10);
+              const [, rawShowTitle, seasonStr, epStr] = match;
+              const seasonNum = parseInt(seasonStr, 10);
+              const epNum = parseInt(epStr, 10);
+              const cleanedShowTitle = cleanTitle(rawShowTitle);
 
-              const show = db.prepare('SELECT id, tmdb_id FROM shows WHERE title = ? COLLATE NOCASE').get(showTitle);
+              let show = db.prepare('SELECT id, tmdb_id FROM shows WHERE title = ? COLLATE NOCASE OR title = ? COLLATE NOCASE').get(rawShowTitle, cleanedShowTitle);
+              let episode = null;
+
               if (show) {
-                matchedShowId = show.id;
-                const episode = db.prepare('SELECT id, runtime FROM episodes WHERE show_id = ? AND season_number = ? AND episode_number = ?').get(show.id, seasonNum, epNum);
+                episode = db.prepare('SELECT id, runtime FROM episodes WHERE show_id = ? AND season_number = ? AND episode_number = ?').get(show.id, seasonNum, epNum);
                 if (episode) {
-                  // Only update progress if it is not marked as watched
                   db.prepare('UPDATE episodes SET watch_progress = ? WHERE id = ? AND watched = 0').run(Math.round(session.progress), episode.id);
-
-                  if (session.progress >= 80 && !this.autoWatchedSet.has(session.id)) {
-                    this.autoWatchedSet.add(session.id);
-                    const watchedAt = new Date().toISOString();
-                    db.prepare('UPDATE episodes SET watched = 1, watched_at = ?, watch_progress = 0 WHERE id = ?').run(watchedAt, episode.id);
-                    // Write to watch_history so tracker stats count auto-marked plays
-                    if (show.tmdb_id) {
-                      try {
-                        const existing = db.prepare('SELECT id FROM watch_history WHERE tmdb_id = ? AND type = ? AND season_number = ? AND episode_number = ?').get(show.tmdb_id, 'episode', seasonNum, epNum);
-                        if (!existing) {
-                          db.prepare('INSERT INTO watch_history (tmdb_id, type, season_number, episode_number, watched_at, runtime) VALUES (?, ?, ?, ?, ?, ?)').run(show.tmdb_id, 'episode', seasonNum, epNum, watchedAt, episode.runtime || null);
-                        }
-                      } catch { /* non-critical */ }
-                      simklService.pushToSimklOnWatched(show.tmdb_id, 'show', true, seasonNum, epNum).catch(() => {});
-                    }
-                    console.log(`[WatcherService] Auto-marked episode "${session.title}" as watched at ${Math.round(session.progress)}% for ${session.user}`);
-                  }
                 }
+              }
+
+              if (session.progress >= 80 && !this.autoWatchedSet.has(session.id)) {
+                this.autoWatchedSet.add(session.id);
+                const watchedAt = new Date().toISOString();
+
+                if (episode) {
+                  db.prepare('UPDATE episodes SET watched = 1, watched_at = ?, watch_progress = 0 WHERE id = ?').run(watchedAt, episode.id);
+                }
+
+                let tmdbId = show?.tmdb_id || session.tmdb_id;
+                let epRuntime = episode?.runtime || null;
+
+                if (!tmdbId) {
+                  try {
+                    const tmdbResults = await tmdbService.searchShows(cleanedShowTitle);
+                    if (tmdbResults && tmdbResults.length > 0) {
+                      tmdbId = tmdbResults[0].id;
+                    }
+                  } catch { /* ignore TMDB lookup error */ }
+                }
+
+                if (tmdbId) {
+                  try {
+                    const existing = db.prepare('SELECT id FROM watch_history WHERE tmdb_id = ? AND type = ? AND season_number = ? AND episode_number = ?').get(tmdbId, 'episode', seasonNum, epNum);
+                    if (!existing) {
+                      db.prepare('INSERT INTO watch_history (tmdb_id, type, season_number, episode_number, watched_at, runtime) VALUES (?, ?, ?, ?, ?, ?)').run(tmdbId, 'episode', seasonNum, epNum, watchedAt, epRuntime);
+                    } else {
+                      db.prepare('UPDATE watch_history SET watched_at = ? WHERE id = ?').run(watchedAt, existing.id);
+                    }
+                  } catch (err) {
+                    console.error('[WatcherService] Failed to write watch_history for episode:', err.message);
+                  }
+                  simklService.pushToSimklOnWatched(tmdbId, 'show', true, seasonNum, epNum).catch(() => {});
+                }
+
+                console.log(`[WatcherService] Auto-marked episode "${session.title}" (TMDB: ${tmdbId || 'N/A'}) as watched at ${Math.round(session.progress)}% for ${session.user}`);
               }
             }
           }
