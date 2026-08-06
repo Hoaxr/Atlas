@@ -448,7 +448,8 @@ router.get('/up-next', (req, res) => {
           AND (
             e.status = 'downloaded' 
             OR (
-              e.air_date IS NOT NULL AND e.air_date <= date('now') AND 
+              e.air_date IS NOT NULL AND 
+              datetime(CASE WHEN INSTR(e.air_date, 'T') > 0 THEN e.air_date ELSE e.air_date || 'T21:00:00-04:00' END) <= datetime('now') AND 
               (e.status = 'monitored' OR e.show_id IN (SELECT show_id FROM episodes WHERE watched = 1))
             )
           )
@@ -470,7 +471,8 @@ router.get('/up-next', (req, res) => {
           AND (
             e2.status = 'downloaded' 
             OR (
-              e2.air_date IS NOT NULL AND e2.air_date <= date('now') AND 
+              e2.air_date IS NOT NULL AND 
+              datetime(CASE WHEN INSTR(e2.air_date, 'T') > 0 THEN e2.air_date ELSE e2.air_date || 'T21:00:00-04:00' END) <= datetime('now') AND 
               (e2.status = 'monitored' OR e2.show_id IN (SELECT show_id FROM episodes WHERE watched = 1))
             )
           )
@@ -678,30 +680,33 @@ router.get('/this-week', (req, res) => {
         s.poster_path
       FROM episodes e
       JOIN shows s ON e.show_id = s.id
-      WHERE e.air_date >= ? AND e.air_date <= ? AND e.watched = 0
+      WHERE e.air_date >= date(?, '-1 day') AND e.air_date <= ? AND e.watched = 0
       ORDER BY e.air_date ASC, s.title, e.season_number, e.episode_number
     `).all(fromStr, toStr);
 
-    // Day labels offset by +1 for European timezones:
-    // US evening broadcasts are effectively next-day in EU.
     const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
-    const getDayLabel = (dateStr) => {
+    const getDayLabel = (dateStr, type = 'episode') => {
       if (!dateStr) return { dayName: 'Unknown', isToday: false, isTomorrow: false };
-      const [year, month, day] = dateStr.split('-').map(Number);
-      if (!year || !month || !day) return { dayName: 'Unknown', isToday: false, isTomorrow: false };
+      
+      let raw = dateStr;
+      if (!raw.includes('T')) {
+        if (type === 'episode') {
+          // Assume 21:00 US Eastern broadcast air time for TV episodes
+          raw = `${dateStr}T21:00:00-04:00`;
+        } else {
+          raw = `${dateStr}T00:00:00Z`;
+        }
+      }
 
-      const d = new Date(year, month - 1, day);
-      // Shift by +1 day: US air date + 1 day for EU availability
-      d.setDate(d.getDate() + 1);
+      const d = new Date(raw);
+      if (isNaN(d.getTime())) return { dayName: 'Unknown', isToday: false, isTomorrow: false };
 
       const today = new Date();
-      today.setHours(0, 0, 0, 0);
+      const targetDateObj = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+      const todayDateObj = new Date(today.getFullYear(), today.getMonth(), today.getDate());
 
-      const target = new Date(d);
-      target.setHours(0, 0, 0, 0);
-
-      const diffDays = Math.round((target.getTime() - today.getTime()) / (1000 * 3600 * 24));
+      const diffDays = Math.round((targetDateObj.getTime() - todayDateObj.getTime()) / (1000 * 3600 * 24));
 
       return {
         dayName: dayNames[d.getDay()],
@@ -713,8 +718,8 @@ router.get('/this-week', (req, res) => {
     res.json({
       success: true,
       weekRange: { from: fromStr, to: toStr },
-      movies: movies.map(m => ({ ...m, ...getDayLabel(m.release_date) })),
-      episodes: episodes.map(ep => ({ ...ep, ...getDayLabel(ep.air_date) }))
+      movies: movies.map(m => ({ ...m, ...getDayLabel(m.release_date, 'movie') })),
+      episodes: episodes.map(ep => ({ ...ep, ...getDayLabel(ep.air_date, 'episode') }))
     });
   } catch (error) {
     console.error('[Tracker] /this-week error:', error);
