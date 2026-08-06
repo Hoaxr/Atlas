@@ -251,32 +251,50 @@ export default function Calendar() {
               const colIndex = i % 7;
               const isLastRow = i >= calendarGrid.flat().length - 7;
               const weekend = isWeekend(colIndex);
+              const posterItem = cell?.episodes?.find(e => e.poster_path);
+              const posterUrl = posterItem ? tmdbImgUrl(posterItem.poster_path, 'w500') : null;
 
               return (
                 <div
                   key={`cell-${i}`}
-                  className={`min-h-[110px] sm:min-h-[130px] p-2 sm:p-2.5 border-r border-b transition-colors duration-200 flex flex-col
+                  className={`min-h-[110px] sm:min-h-[130px] p-2 sm:p-2.5 border-r border-b transition-all duration-300 flex flex-col relative overflow-hidden group
                     ${!isLastRow ? 'border-b-white/5' : 'border-b-transparent'}
                     ${colIndex < 6 ? 'border-r-white/5' : 'border-r-transparent'}
-                    ${!cell ? `${weekend ? 'bg-slate-950/30' : 'bg-slate-950/10'}` : ''}
-                    ${cell ? `${weekend ? 'bg-slate-900/30' : 'bg-slate-900/10'} hover:bg-slate-800/30 cursor-pointer group` : ''}
-                    ${cell?.isToday ? '!bg-cyan-500/5 ring-1 ring-inset ring-cyan-500/20' : ''}
+                    ${!cell ? `${weekend ? 'bg-slate-950/40' : 'bg-slate-950/20'}` : ''}
+                    ${cell ? `${weekend ? 'bg-slate-900/40' : 'bg-slate-900/20'} hover:bg-slate-800/50 cursor-pointer` : ''}
+                    ${cell?.isToday ? '!bg-cyan-500/5 ring-1 ring-inset ring-cyan-500/30' : ''}
                   `}
                   onClick={() => { if (cell) setCurrentDate(new Date(cell.date + 'T00:00:00')); }}
                 >
                   {cell && (
                     <>
+                      {/* Background poster with right side fade */}
+                      {posterUrl && (
+                        <div className="absolute inset-0 pointer-events-none overflow-hidden z-0">
+                          <img
+                            src={posterUrl}
+                            alt=""
+                            className="w-full h-full object-cover object-left opacity-35 group-hover:opacity-55 group-hover:scale-105 transition-all duration-500"
+                            style={{
+                              maskImage: 'linear-gradient(to right, rgba(0,0,0,1) 0%, rgba(0,0,0,0.6) 45%, rgba(0,0,0,0) 85%)',
+                              WebkitMaskImage: 'linear-gradient(to right, rgba(0,0,0,1) 0%, rgba(0,0,0,0.6) 45%, rgba(0,0,0,0) 85%)'
+                            }}
+                          />
+                          <div className="absolute inset-0 bg-gradient-to-r from-slate-950/60 via-slate-950/40 to-slate-950/85" />
+                        </div>
+                      )}
+
                       {/* Day number */}
-                      <div className="flex items-center justify-between mb-1.5">
+                      <div className="flex items-center justify-between mb-1.5 relative z-10">
                         <span className={`text-xs font-bold ${
                           cell.isToday
-                            ? 'bg-cyan-500 text-slate-900 w-6 h-6 rounded-full flex items-center justify-center shadow-lg shadow-cyan-500/30'
-                            : weekend ? 'text-slate-600' : 'text-slate-400'
+                            ? 'bg-cyan-500 text-slate-950 w-6 h-6 rounded-full flex items-center justify-center shadow-lg shadow-cyan-500/30 font-black'
+                            : weekend ? 'text-slate-400 drop-shadow' : 'text-slate-200 drop-shadow'
                         }`}>
                           {cell.day}
                         </span>
                         {cell.episodes.length > 0 && (
-                          <span className="text-[10px] font-bold text-slate-600 bg-slate-800/50 px-1.5 py-0.5 rounded-full">
+                          <span className="text-[10px] font-bold text-slate-200 bg-slate-950/80 backdrop-blur-md px-1.5 py-0.5 rounded-full border border-white/15 shadow-sm">
                             {cell.episodes.length}
                           </span>
                         )}
@@ -300,7 +318,7 @@ export default function Calendar() {
                         if (movies.length === 0 && showEntries.length === 0) return null;
 
                         return (
-                          <div className="space-y-1 flex-1 overflow-hidden">
+                          <div className="space-y-1 flex-1 overflow-hidden relative z-10">
                             {/* Show posters + movie posters mixed, up to maxVisible */}
                             {[...visibleShows.map(([showId, eps]) => ({ type: 'show', eps, showId })), ...movies.slice(0, maxVisible - visibleShows.length).map(m => ({ type: 'movie', item: m }))].map((entry, j) => {
                               if (entry.type === 'show') {
@@ -309,21 +327,15 @@ export default function Calendar() {
                                   <div
                                     key={`show-${j}`}
                                     onClick={(e) => { e.stopPropagation(); navigate(`/shows/${ep.show_id}`); }}
-                                    className="flex items-center gap-2 group/item cursor-pointer rounded-lg hover:bg-white/5 p-1 -mx-1 transition-colors"
+                                    className="flex items-center gap-1.5 group/item cursor-pointer rounded-lg hover:bg-white/15 py-1 px-1.5 transition-all backdrop-blur-xs hover:shadow-md"
                                     title={`${ep.show_title}${entry.eps.length > 1 ? ` (${entry.eps.length} eps)` : ''}`}
                                   >
-                                    <div className="w-8 h-12 rounded-md overflow-hidden bg-slate-800 shrink-0 shadow-md">
-                                      {ep.poster_path ? (
-                                        <img src={tmdbImgUrl(ep.poster_path, 'w92')} alt="" className="w-full h-full object-cover" />
-                                      ) : (
-                                        <div className="w-full h-full flex items-center justify-center text-slate-600"><Tv className="w-3.5 h-3.5" /></div>
-                                      )}
-                                    </div>
+                                    <Tv className="w-3.5 h-3.5 text-purple-400 shrink-0 filter drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]" />
                                     <div className="flex-1 min-w-0">
-                                      <p className="text-[11px] leading-tight font-medium truncate text-slate-300 group-hover/item:text-purple-300 transition-colors">
+                                      <p className="text-[11px] leading-tight font-bold truncate text-slate-100 group-hover/item:text-purple-300 transition-colors filter drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)]">
                                         {ep.show_title}
                                       </p>
-                                      <p className="text-[10px] text-slate-500 truncate">
+                                      <p className="text-[10px] text-slate-300 font-medium truncate filter drop-shadow">
                                         {entry.eps.length === 1
                                           ? `S${String(ep.season_number).padStart(2,'0')}E${String(ep.episode_number).padStart(2,'0')}`
                                           : `${entry.eps.length} episodes`}
@@ -337,24 +349,18 @@ export default function Calendar() {
                                 <div
                                   key={`movie-${j}`}
                                   onClick={(e) => { e.stopPropagation(); navigate(`/movies/${entry.item.show_id}`); }}
-                                  className="flex items-center gap-2 group/item cursor-pointer rounded-lg hover:bg-white/5 p-1 -mx-1 transition-colors"
+                                  className="flex items-center gap-1.5 group/item cursor-pointer rounded-lg hover:bg-white/15 py-1 px-1.5 transition-all backdrop-blur-xs hover:shadow-md"
                                   title={entry.item.title}
                                 >
-                                  <div className="w-8 h-12 rounded-md overflow-hidden bg-slate-800 shrink-0 shadow-md">
-                                    {entry.item.poster_path ? (
-                                      <img src={tmdbImgUrl(entry.item.poster_path, 'w92')} alt="" className="w-full h-full object-cover" />
-                                    ) : (
-                                      <div className="w-full h-full flex items-center justify-center text-slate-600"><Film className="w-3.5 h-3.5" /></div>
-                                    )}
-                                  </div>
-                                  <p className="text-[11px] leading-tight font-medium truncate text-slate-300 group-hover/item:text-emerald-300 transition-colors flex-1 min-w-0">
+                                  <Film className="w-3.5 h-3.5 text-emerald-400 shrink-0 filter drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]" />
+                                  <p className="text-[11px] leading-tight font-bold truncate text-slate-100 group-hover/item:text-emerald-300 transition-colors flex-1 min-w-0 filter drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)]">
                                     {entry.item.title}
                                   </p>
                                 </div>
                               );
                             })}
                             {(remainingShows > 0 || remainingMovies > 0) && (
-                              <p className="text-[10px] text-slate-600 font-medium pl-9">
+                              <p className="text-[10px] text-slate-300 font-bold pl-5 filter drop-shadow">
                                 +{remainingShows + remainingMovies} more
                               </p>
                             )}
@@ -370,18 +376,18 @@ export default function Calendar() {
         </div>
 
         {/* Legend */}
-        <div className="flex items-center justify-center gap-6 text-xs text-slate-500">
+        <div className="flex items-center justify-center gap-6 text-xs text-slate-400 font-medium pt-2">
           <div className="flex items-center gap-2">
-            <div className="w-3 h-4 rounded-sm bg-gradient-to-b from-emerald-400 to-emerald-600 shadow-sm shadow-emerald-500/20" />
+            <Film className="w-4 h-4 text-emerald-400" />
             <span>Movies</span>
           </div>
           <div className="flex items-center gap-2">
-            <div className="w-3 h-4 rounded-sm bg-gradient-to-b from-purple-400 to-purple-600 shadow-sm shadow-purple-500/20" />
+            <Tv className="w-4 h-4 text-purple-400" />
             <span>TV Shows</span>
           </div>
           <div className="flex items-center gap-2">
-            <div className="w-5 h-5 rounded-full bg-cyan-500 shadow-lg shadow-cyan-500/30 flex items-center justify-center">
-              <span className="text-[9px] font-black text-slate-900">?</span>
+            <div className="w-4 h-4 rounded-full bg-cyan-500 flex items-center justify-center shadow-md shadow-cyan-500/30">
+              <Sparkles className="w-2.5 h-2.5 text-slate-950" />
             </div>
             <span>Today</span>
           </div>
@@ -406,7 +412,7 @@ export default function Calendar() {
                 return (
                   <div key={date} className={`rounded-3xl overflow-hidden border backdrop-blur-xl shadow-xl transition-all ${
                     isToday
-                      ? 'border-cyan-500/30 bg-cyan-500/5 ring-1 ring-cyan-500/20'
+                      ? 'border-cyan-500/40 bg-cyan-500/5 ring-1 ring-cyan-500/20'
                       : 'border-slate-700/50 bg-slate-900/40'
                   }`}>
                     {/* Date header */}
@@ -414,25 +420,25 @@ export default function Calendar() {
                       isToday ? 'bg-cyan-500/10 border-b border-cyan-500/20' : 'bg-slate-800/40 border-b border-white/5'
                     }`}>
                       <div className={`text-center min-w-[44px] ${
-                        isToday ? 'bg-cyan-500 text-slate-900 rounded-xl px-2 py-1 shadow-lg shadow-cyan-500/30' : ''
+                        isToday ? 'bg-cyan-500 text-slate-950 rounded-xl px-2 py-1 shadow-lg shadow-cyan-500/30' : ''
                       }`}>
-                        <div className={`text-2xl font-black ${isToday ? 'text-slate-900' : 'text-slate-200'}`}>{d.getDate()}</div>
-                        <div className={`text-[10px] font-bold uppercase tracking-wider ${isToday ? 'text-slate-800' : 'text-slate-500'}`}>
+                        <div className={`text-2xl font-black ${isToday ? 'text-slate-950' : 'text-slate-100'}`}>{d.getDate()}</div>
+                        <div className={`text-[10px] font-bold uppercase tracking-wider ${isToday ? 'text-slate-900' : 'text-slate-400'}`}>
                           {MONTHS[d.getMonth()].substring(0, 3)}
                         </div>
                       </div>
                       <div>
-                        <p className={`text-sm font-bold ${isToday ? 'text-cyan-300' : 'text-slate-300'}`}>
+                        <p className={`text-sm font-bold ${isToday ? 'text-cyan-300' : 'text-slate-200'}`}>
                           {d.toLocaleDateString('en-US', { weekday: 'long' })}
                         </p>
-                        <p className="text-xs text-slate-500">
+                        <p className="text-xs text-slate-400">
                           {movies.length > 0 && `${movies.length} movie${movies.length > 1 ? 's' : ''}`}
                           {movies.length > 0 && tvEps.length > 0 && ' · '}
                           {tvEps.length > 0 && `${tvEps.length} episode${tvEps.length > 1 ? 's' : ''}`}
                         </p>
                       </div>
                       {isToday && (
-                        <span className="ml-auto px-2.5 py-1 rounded-full text-[10px] font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 flex items-center gap-1">
+                        <span className="ml-auto px-2.5 py-1 rounded-full text-[10px] font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 flex items-center gap-1 shadow-sm">
                           <Sparkles className="w-3 h-3" /> Today
                         </span>
                       )}
@@ -446,20 +452,16 @@ export default function Calendar() {
                             <div
                               key={`movie-${i}`}
                               onClick={() => navigate(`/movies/${item.show_id}`)}
-                              className="px-5 py-3 flex items-center gap-4 hover:bg-slate-800/30 transition-all cursor-pointer group/item"
+                              className="px-5 py-3.5 flex items-center gap-3.5 hover:bg-slate-800/40 transition-all cursor-pointer group/item"
                             >
-                              <div className="w-10 h-14 rounded-lg overflow-hidden bg-slate-800 shrink-0 shadow-md group-hover/item:shadow-emerald-500/10 transition-shadow">
-                                {item.poster_path ? (
-                                  <img src={tmdbImgUrl(item.poster_path, 'w92')} alt="" className="w-full h-full object-cover group-hover/item:scale-105 transition-transform duration-300" />
-                                ) : (
-                                  <div className="w-full h-full flex items-center justify-center text-slate-600"><Film className="w-4 h-4" /></div>
-                                )}
+                              <div className="p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 shrink-0">
+                                <Film className="w-4 h-4" />
                               </div>
                               <div className="flex-1 min-w-0">
-                                <p className="text-sm font-bold text-slate-200 truncate group-hover/item:text-emerald-300 transition-colors">{item.title}</p>
-                                <p className="text-xs text-slate-500 mt-0.5">Movie Release</p>
+                                <p className="text-sm font-bold text-slate-100 truncate group-hover/item:text-emerald-300 transition-colors">{item.title}</p>
+                                <p className="text-xs text-slate-400 mt-0.5">Movie Release</p>
                               </div>
-                              <span className="text-[10px] font-bold text-emerald-400/60 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20 shrink-0">Movie</span>
+                              <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-full border border-emerald-500/30 shrink-0">Movie</span>
                             </div>
                           );
                         }
@@ -467,23 +469,19 @@ export default function Calendar() {
                           <div
                             key={`ep-${i}`}
                             onClick={() => navigate(`/shows/${item.show_id}`)}
-                            className="px-5 py-3 flex items-center gap-4 hover:bg-slate-800/30 transition-all cursor-pointer group/item"
+                            className="px-5 py-3.5 flex items-center gap-3.5 hover:bg-slate-800/40 transition-all cursor-pointer group/item"
                           >
-                            <div className="w-10 h-14 rounded-lg overflow-hidden bg-slate-800 shrink-0 shadow-md group-hover/item:shadow-purple-500/10 transition-shadow">
-                              {item.poster_path ? (
-                                <img src={tmdbImgUrl(item.poster_path, 'w92')} alt="" className="w-full h-full object-cover group-hover/item:scale-105 transition-transform duration-300" />
-                              ) : (
-                                <div className="w-full h-full flex items-center justify-center text-slate-600"><Tv className="w-4 h-4" /></div>
-                              )}
+                            <div className="p-2 rounded-lg bg-purple-500/10 border border-purple-500/20 text-purple-400 shrink-0">
+                              <Tv className="w-4 h-4" />
                             </div>
                             <div className="flex-1 min-w-0">
-                              <p className="text-sm font-bold text-slate-200 truncate group-hover/item:text-purple-300 transition-colors">{item.show_title}</p>
-                              <p className="text-xs text-slate-500 mt-0.5">
+                              <p className="text-sm font-bold text-slate-100 truncate group-hover/item:text-purple-300 transition-colors">{item.show_title}</p>
+                              <p className="text-xs text-slate-400 mt-0.5">
                                 S{String(item.season_number).padStart(2, '0')}E{String(item.episode_number).padStart(2, '0')}
                                 {item.title && ` — ${item.title}`}
                               </p>
                             </div>
-                            <span className="text-[10px] font-bold text-purple-400/60 bg-purple-500/10 px-2 py-0.5 rounded-full border border-purple-500/20 shrink-0">TV</span>
+                            <span className="text-[10px] font-bold text-purple-400 bg-purple-500/10 px-2.5 py-1 rounded-full border border-purple-500/30 shrink-0">TV</span>
                           </div>
                         );
                       })}

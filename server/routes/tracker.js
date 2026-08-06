@@ -636,10 +636,15 @@ router.post('/mark-unwatched', async (req, res) => {
   }
 });
 
-// Next 7 days of releases — rolling window from today through today+6.
-// US evening broadcasts become available next day in European timezones.
 router.get('/this-week', (req, res) => {
   try {
+    const formatLocalDate = (d) => {
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${y}-${m}-${day}`;
+    };
+
     const now = new Date();
 
     // Rolling 7-day window: today through today+6
@@ -647,8 +652,8 @@ router.get('/this-week', (req, res) => {
     const toDate = new Date(now);
     toDate.setDate(now.getDate() + 6);
 
-    const fromStr = fromDate.toISOString().split('T')[0];
-    const toStr = toDate.toISOString().split('T')[0];
+    const fromStr = formatLocalDate(fromDate);
+    const toStr = formatLocalDate(toDate);
 
     // Movies releasing this week (not yet watched)
     const movies = db.prepare(`
@@ -679,28 +684,37 @@ router.get('/this-week', (req, res) => {
 
     // Day labels offset by +1 for European timezones:
     // US evening broadcasts are effectively next-day in EU.
-    // We shift the date forward by 1 day and use standard day names.
     const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
-    const euDayLabel = (dateStr) => {
-      if (!dateStr) return { dayName: 'Unknown', isToday: false };
-      const d = new Date(dateStr + 'T00:00:00');
-      if (isNaN(d.getTime())) return { dayName: 'Unknown', isToday: false };
-      // Shift by +1 day: US air date Sunday → EU availability Monday
+    const getDayLabel = (dateStr) => {
+      if (!dateStr) return { dayName: 'Unknown', isToday: false, isTomorrow: false };
+      const [year, month, day] = dateStr.split('-').map(Number);
+      if (!year || !month || !day) return { dayName: 'Unknown', isToday: false, isTomorrow: false };
+
+      const d = new Date(year, month - 1, day);
+      // Shift by +1 day: US air date + 1 day for EU availability
       d.setDate(d.getDate() + 1);
+
       const today = new Date();
-      const todayStr = today.toISOString().split('T')[0];
+      today.setHours(0, 0, 0, 0);
+
+      const target = new Date(d);
+      target.setHours(0, 0, 0, 0);
+
+      const diffDays = Math.round((target.getTime() - today.getTime()) / (1000 * 3600 * 24));
+
       return {
         dayName: dayNames[d.getDay()],
-        isToday: d.toISOString().split('T')[0] === todayStr
+        isToday: diffDays === 0,
+        isTomorrow: diffDays === 1
       };
     };
 
     res.json({
       success: true,
       weekRange: { from: fromStr, to: toStr },
-      movies: movies.map(m => ({ ...m, ...euDayLabel(m.release_date) })),
-      episodes: episodes.map(ep => ({ ...ep, ...euDayLabel(ep.air_date) }))
+      movies: movies.map(m => ({ ...m, ...getDayLabel(m.release_date) })),
+      episodes: episodes.map(ep => ({ ...ep, ...getDayLabel(ep.air_date) }))
     });
   } catch (error) {
     console.error('[Tracker] /this-week error:', error);

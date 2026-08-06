@@ -54,10 +54,12 @@ export function ThisWeekCard({ item, type }) {
         <div className={`absolute top-3 left-3 px-3 py-1 rounded-full text-xs font-bold backdrop-blur-md border shadow-lg flex items-center gap-1.5 ${
           item.isToday
             ? 'bg-emerald-500/30 text-emerald-200 border-emerald-400/50'
+            : item.isTomorrow
+            ? 'bg-cyan-500/30 text-cyan-200 border-cyan-400/50'
             : 'bg-slate-900/80 text-slate-200 border-slate-600/50'
         }`}>
           <Calendar className="w-3 h-3" />
-          {item.isToday ? 'Today' : item.dayName}
+          {item.isToday ? 'Today' : item.isTomorrow ? 'Tomorrow' : item.dayName}
         </div>
 
         {/* Type badge — top-right */}

@@ -70,15 +70,18 @@ class WatcherService {
     }
 
     // Default when autoWatchUser setting is empty:
-    // Match authUsername or ANY registered user username in the Atlas users table
+    // Match authUsername or the primary admin user in the Atlas users table
     const authUsername = getSetting('authUsername');
-    if (authUsername && authUsername.trim().toLowerCase() === sessionUser.trim().toLowerCase()) {
-      return true;
+    if (authUsername && authUsername.trim() !== '') {
+      if (authUsername.trim().toLowerCase() === sessionUser.trim().toLowerCase()) {
+        return true;
+      }
     }
 
     try {
-      const users = db.prepare("SELECT username FROM users").all();
-      if (users.some(u => u.username && u.username.trim().toLowerCase() === sessionUser.trim().toLowerCase())) {
+      const adminUser = db.prepare("SELECT username FROM users WHERE role = 'admin' ORDER BY id ASC LIMIT 1").get()
+                     || db.prepare("SELECT username FROM users ORDER BY id ASC LIMIT 1").get();
+      if (adminUser?.username && adminUser.username.trim().toLowerCase() === sessionUser.trim().toLowerCase()) {
         return true;
       }
     } catch { /* ignore */ }

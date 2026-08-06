@@ -178,6 +178,7 @@ const Tracker = () => {
       if (data.type === 'WATCHERS_UPDATE' && Array.isArray(data.sessions)) {
         api.get('/settings').then(res => {
           const autoWatchUser = res.data?.data?.autoWatchUser || '';
+          const authUsername = res.data?.data?.authUsername || '';
           
           let active = null;
           if (autoWatchUser && autoWatchUser.trim() !== '') {
@@ -187,12 +188,14 @@ const Tracker = () => {
               const allowed = autoWatchUser.split(',').map(u => u.trim().toLowerCase());
               active = data.sessions.find(s => s.user && allowed.includes(s.user.trim().toLowerCase())) || null;
             }
+          } else if (authUsername && authUsername.trim() !== '') {
+            active = data.sessions.find(s => s.user && s.user.trim().toLowerCase() === authUsername.trim().toLowerCase()) || null;
           } else {
             active = data.sessions[0] || null;
           }
           setLiveSession(active);
         }).catch(() => {
-          setLiveSession(data.sessions[0] || null);
+          setLiveSession(null);
         });
       }
     });
