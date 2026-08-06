@@ -59,6 +59,78 @@ class WatcherService {
     this.recentPlaybackNotifications = new Map(); // Cooldown map: key = `${user}:${title}`, value = timestamp
     this.pollInterval = null;
     this.startPolling();
+    setTimeout(() => this.backfillUnsyncedHistory(), 3000);
+  }
+
+  async backfillUnsyncedHistory() {
+    try {
+      const recentPlays = db.prepare("SELECT * FROM play_history ORDER BY id DESC LIMIT 50").all();
+      const cleanTitle = (raw) => (raw || '').replace(/\s*\(\d{4}\)\s*$/, '').trim();
+
+      for (const play of recentPlays) {
+        if (!play.title) continue;
+        const watchedAt = play.created_at ? (play.created_at.includes('T') ? play.created_at : play.created_at.replace(' ', 'T') + 'Z') : new Date().toISOString();
+
+        if (play.type === 'movie') {
+          const cleaned = cleanTitle(play.title);
+          let movie = db.prepare('SELECT id, tmdb_id, runtime FROM movies WHERE title = ? COLLATE NOCASE OR title = ? COLLATE NOCASE').get(play.title, cleaned);
+
+          let tmdbId = movie?.tmdb_id;
+          let runtime = movie?.runtime || null;
+
+          if (!tmdbId) {
+            try {
+              const tmdbResults = await tmdbService.searchMovies(cleaned);
+              if (tmdbResults && tmdbResults.length > 0) {
+                tmdbId = tmdbResults[0].id;
+              }
+            } catch { /* ignore */ }
+          }
+
+          if (tmdbId) {
+            try {
+              const existing = db.prepare('SELECT id FROM watch_history WHERE tmdb_id = ? AND type = ?').get(tmdbId, 'movie');
+              if (!existing) {
+                db.prepare('INSERT INTO watch_history (tmdb_id, type, watched_at, runtime) VALUES (?, ?, ?, ?)').run(tmdbId, 'movie', watchedAt, runtime);
+                console.log(`[WatcherService] Backfilled watch_history for movie "${play.title}" (TMDB: ${tmdbId})`);
+              }
+            } catch { /* ignore */ }
+          }
+        } else if (play.type === 'episode') {
+          const match = play.title.match(/^(.*) - S(\d+)E(\d+)$/i);
+          if (match) {
+            const [, rawShowTitle, seasonStr, epStr] = match;
+            const seasonNum = parseInt(seasonStr, 10);
+            const epNum = parseInt(epStr, 10);
+            const cleanedShowTitle = cleanTitle(rawShowTitle);
+
+            let show = db.prepare('SELECT id, tmdb_id FROM shows WHERE title = ? COLLATE NOCASE OR title = ? COLLATE NOCASE').get(rawShowTitle, cleanedShowTitle);
+            let tmdbId = show?.tmdb_id;
+
+            if (!tmdbId) {
+              try {
+                const tmdbResults = await tmdbService.searchShows(cleanedShowTitle);
+                if (tmdbResults && tmdbResults.length > 0) {
+                  tmdbId = tmdbResults[0].id;
+                }
+              } catch { /* ignore */ }
+            }
+
+            if (tmdbId) {
+              try {
+                const existing = db.prepare('SELECT id FROM watch_history WHERE tmdb_id = ? AND type = ? AND season_number = ? AND episode_number = ?').get(tmdbId, 'episode', seasonNum, epNum);
+                if (!existing) {
+                  db.prepare('INSERT INTO watch_history (tmdb_id, type, season_number, episode_number, watched_at, runtime) VALUES (?, ?, ?, ?, ?, ?)').run(tmdbId, 'episode', seasonNum, epNum, watchedAt, null);
+                  console.log(`[WatcherService] Backfilled watch_history for episode "${play.title}" (TMDB: ${tmdbId})`);
+                }
+              } catch { /* ignore */ }
+            }
+          }
+        }
+      }
+    } catch (err) {
+      console.error('[WatcherService] Failed backfillUnsyncedHistory:', err.message);
+    }
   }
 
   shouldTrackUser(sessionUser) {
