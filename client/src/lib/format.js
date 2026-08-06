@@ -27,7 +27,14 @@ export function parseResolution(title) {
  */
 export function formatRelativeTime(dateStr) {
   if (!dateStr) return '';
-  const diff = Date.now() - new Date(dateStr).getTime();
+  let str = dateStr;
+  if (typeof str === 'string' && !str.includes('Z') && !str.includes('+') && !str.includes('T')) {
+    str = str.replace(' ', 'T') + 'Z';
+  }
+  const d = new Date(str);
+  if (isNaN(d.getTime())) return '';
+  const diff = Date.now() - d.getTime();
+  if (diff < 0) return 'Just now';
   const mins = Math.floor(diff / 60000);
   if (mins < 1) return 'Just now';
   if (mins < 60) return `${mins}m ago`;
@@ -35,7 +42,7 @@ export function formatRelativeTime(dateStr) {
   if (hours < 24) return `${hours}h ago`;
   const days = Math.floor(hours / 24);
   if (days < 7) return `${days}d ago`;
-  return new Date(dateStr).toLocaleDateString();
+  return d.toLocaleDateString();
 }
 
 /** ISO 639-1 → display label for subtitle badges */
