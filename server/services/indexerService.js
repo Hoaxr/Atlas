@@ -198,14 +198,11 @@ const filterAndSortResults = (results, profile, type, currentQuality = null, isM
 
       if (matchIdx === -1) return false;
 
-      // For single-word titles, require match at position 0, or position 1 if
-      // preceded by a year or common article (the/a/an)
+      // For single-word titles (e.g. "Silo"), allow match within the first 2 positions.
+      // Torrent titles often have a year, resolution, or group prefix that survives
+      // the bracket-strip above, so a strict position-0 guard causes false rejections.
       if (expectedWords.length === 1) {
-        const firstWord = resultWords[0];
-        const firstIsYear = /^\d{4}$/.test(firstWord);
-        const firstIsArticle = ['the', 'a', 'an'].includes(firstWord);
-        const maxPos = (firstIsYear || firstIsArticle) ? 1 : 0;
-        if (matchIdx > maxPos) return false;
+        if (matchIdx > 2) return false;
       } else {
         // For multi-word titles, allow within first 3 positions
         if (matchIdx > 3) return false;
@@ -317,7 +314,7 @@ const searchMovie = async (title, year, profile = null, currentQuality = null, i
   return allResults;
 };
 
-const searchEpisode = async (showTitle, season, episode, profile = null, currentQuality = null, isManualSearch = false) => {
+const searchEpisode = async (showTitle, season, episode, profile = null, currentQuality = null, isManualSearch = false, tmdb_id = null) => {
   const s = season.toString().padStart(2, '0');
   const e = episode.toString().padStart(2, '0');
   const searchTerm = `${cleanTitle(showTitle)} S${s}E${e}`;
@@ -326,13 +323,13 @@ const searchEpisode = async (showTitle, season, episode, profile = null, current
   return filterAndSortResults(results, profile, 'shows', currentQuality, isManualSearch, showTitle);
 };
 
-const searchShowPack = async (showTitle, profile = null, currentQuality = null, isManualSearch = false) => {
+const searchShowPack = async (showTitle, profile = null, currentQuality = null, isManualSearch = false, tmdb_id = null) => {
   const searchTerm = cleanTitle(showTitle);
   const results = await searchProwlarr(searchTerm, 'tvsearch');
   return filterAndSortResults(results, profile, 'shows', currentQuality, isManualSearch, showTitle);
 };
 
-const searchSeasonPack = async (showTitle, seasonNumber, profile = null, currentQuality = null, isManualSearch = false) => {
+const searchSeasonPack = async (showTitle, seasonNumber, profile = null, currentQuality = null, isManualSearch = false, tmdb_id = null) => {
   const s = seasonNumber.toString().padStart(2, '0');
   const searchTerm = `${cleanTitle(showTitle)} S${s}`;
   const results = await searchProwlarr(searchTerm, 'tvsearch');
