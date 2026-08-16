@@ -81,6 +81,16 @@ const getTransferInfo = async (client) => {
   } catch { return null; }
 };
 
+const pauseTorrent = async (client, hash) => {
+  await rpc(client, 'torrent-stop', { ids: [hash] });
+  return true;
+};
+
+const resumeTorrent = async (client, hash) => {
+  await rpc(client, 'torrent-start', { ids: [hash] });
+  return true;
+};
+
 const deleteTorrent = async (client, hash, deleteFiles = false) => {
   await rpc(client, 'torrent-remove', {
     ids: [hash],
@@ -98,4 +108,4 @@ const testConnection = async (client) => {
   }
 };
 
-module.exports = { addTorrent, getTorrents, getTransferInfo, deleteTorrent, testConnection };
+module.exports = { addTorrent, getTorrents, getTransferInfo, pauseTorrent, resumeTorrent, deleteTorrent, testConnection };

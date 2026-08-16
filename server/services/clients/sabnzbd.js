@@ -58,6 +58,16 @@ const getTransferInfo = async (client) => {
   } catch { return null; }
 };
 
+const pauseTorrent = async (client, hash) => {
+  await apiCall(client, { mode: 'queue', name: 'pause', value: hash });
+  return true;
+};
+
+const resumeTorrent = async (client, hash) => {
+  await apiCall(client, { mode: 'queue', name: 'resume', value: hash });
+  return true;
+};
+
 const deleteTorrent = async (client, hash, deleteFiles = false) => {
   await apiCall(client, { mode: 'queue', name: 'delete', value: hash });
   return true;
@@ -73,4 +83,4 @@ const testConnection = async (client) => {
   }
 };
 
-module.exports = { addTorrent, getTorrents, getTransferInfo, deleteTorrent, testConnection };
+module.exports = { addTorrent, getTorrents, getTransferInfo, pauseTorrent, resumeTorrent, deleteTorrent, testConnection };

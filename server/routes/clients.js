@@ -28,6 +28,24 @@ router.get('/torrents', async (req, res) => {
   }
 });
 
+router.post('/torrents/:hash/pause', async (req, res) => {
+  try {
+    await downloadClientService.pauseTorrent(req.params.hash);
+    res.json({ status: 'success', message: 'Torrent paused' });
+  } catch (err) {
+    res.status(500).json({ status: 'error', message: err.message });
+  }
+});
+
+router.post('/torrents/:hash/resume', async (req, res) => {
+  try {
+    await downloadClientService.resumeTorrent(req.params.hash);
+    res.json({ status: 'success', message: 'Torrent resumed' });
+  } catch (err) {
+    res.status(500).json({ status: 'error', message: err.message });
+  }
+});
+
 router.delete('/torrents/:hash', async (req, res) => {
   try {
     const deleteFiles = req.query.deleteFiles === 'true';

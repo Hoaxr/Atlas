@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import api from '../lib/api';
-import { DownloadCloud, ArrowDown, ArrowUp, Activity, Film, Tv, X, Clock, HardDrive } from 'lucide-react';
+import { DownloadCloud, ArrowDown, ArrowUp, Activity, Film, Tv, Play, Pause, Trash2, Clock, HardDrive } from 'lucide-react';
 import { customAlert, customConfirm } from '../utils/alerts';
 import useWebSocket from '../lib/useWebSocket';
 import StickyBar from '../components/shared/StickyBar';
@@ -291,30 +291,69 @@ export default function Downloads() {
                       </p>
                     </div>
 
-                    <div className="flex items-center gap-2 shrink-0 pt-0.5">
+                    <div className="flex items-center gap-1.5 sm:gap-2 shrink-0 pt-0.5">
                       {t.dlspeed > 0 && (
                         <span className="flex items-center gap-1 text-xs font-mono font-bold text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-lg border border-emerald-500/20 shadow-sm">
                           <ArrowDown className="w-3.5 h-3.5" />
                           {formatSpeed(t.dlspeed)}
                         </span>
                       )}
+
+                      {/* Pause / Resume Button */}
+                      {(t.state || '').toLowerCase().includes('pause') || (t.state || '').toLowerCase().includes('stop') ? (
+                        <button
+                          onClick={async () => {
+                            try {
+                              await api.post(`/clients/torrents/${t.hash}/resume`);
+                              setDownloads(prev => prev.map(d => d.hash === t.hash ? { ...d, state: 'downloading' } : d));
+                              customAlert('Download resumed');
+                            } catch (e) {
+                              console.error('Failed to resume download', e);
+                              customAlert('Failed to resume download', 'error');
+                            }
+                          }}
+                          className="p-1.5 rounded-lg text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10 transition-all border border-emerald-500/20 hover:border-emerald-500/40"
+                          title="Resume Download"
+                        >
+                          <Play className="w-4 h-4 fill-emerald-400/20" />
+                        </button>
+                      ) : (
+                        <button
+                          onClick={async () => {
+                            try {
+                              await api.post(`/clients/torrents/${t.hash}/pause`);
+                              setDownloads(prev => prev.map(d => d.hash === t.hash ? { ...d, state: 'paused', dlspeed: 0 } : d));
+                              customAlert('Download paused');
+                            } catch (e) {
+                              console.error('Failed to pause download', e);
+                              customAlert('Failed to pause download', 'error');
+                            }
+                          }}
+                          className="p-1.5 rounded-lg text-amber-400 hover:text-amber-300 hover:bg-amber-500/10 transition-all border border-amber-500/20 hover:border-amber-500/40"
+                          title="Pause Download"
+                        >
+                          <Pause className="w-4 h-4" />
+                        </button>
+                      )}
+
+                      {/* Delete Button */}
                       <button 
                         onClick={async () => {
                           if (await customConfirm('Cancel and delete this download?')) {
                             try {
                               await api.delete(`/clients/torrents/${t.hash}?deleteFiles=true`);
                               setDownloads(prev => prev.filter(d => d.hash !== t.hash));
-                              customAlert('Download cancelled');
+                              customAlert('Download deleted');
                             } catch (e) {
                               console.error('Failed to delete download', e);
                               customAlert('Failed to cancel download', 'error');
                             }
                           }
                         }}
-                        className="p-1.5 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-all border border-transparent hover:border-rose-500/20"
-                        title="Cancel Download"
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-all border border-transparent hover:border-rose-500/20"
+                        title="Delete Download"
                       >
-                        <X className="w-4 h-4" />
+                        <Trash2 className="w-4 h-4" />
                       </button>
                     </div>
                   </div>

@@ -61,6 +61,40 @@ const getTransferInfo = async (client) => {
   return response.data;
 };
 
+const pauseTorrent = async (client, hash) => {
+  const cookie = await login(client);
+  if (!cookie) throw new Error('Failed to authenticate');
+  try {
+    await axios.post(`${client.host}:${client.port}/api/v2/torrents/pause`, 
+      `hashes=${hash}`, 
+      { headers: { 'Cookie': cookie, 'Content-Type': 'application/x-www-form-urlencoded' } }
+    );
+  } catch {
+    await axios.post(`${client.host}:${client.port}/api/v2/torrents/stop`, 
+      `hashes=${hash}`, 
+      { headers: { 'Cookie': cookie, 'Content-Type': 'application/x-www-form-urlencoded' } }
+    );
+  }
+  return true;
+};
+
+const resumeTorrent = async (client, hash) => {
+  const cookie = await login(client);
+  if (!cookie) throw new Error('Failed to authenticate');
+  try {
+    await axios.post(`${client.host}:${client.port}/api/v2/torrents/resume`, 
+      `hashes=${hash}`, 
+      { headers: { 'Cookie': cookie, 'Content-Type': 'application/x-www-form-urlencoded' } }
+    );
+  } catch {
+    await axios.post(`${client.host}:${client.port}/api/v2/torrents/start`, 
+      `hashes=${hash}`, 
+      { headers: { 'Cookie': cookie, 'Content-Type': 'application/x-www-form-urlencoded' } }
+    );
+  }
+  return true;
+};
+
 const deleteTorrent = async (client, hash, deleteFiles = false) => {
   const cookie = await login(client);
   if (!cookie) throw new Error('Failed to authenticate');
@@ -84,4 +118,4 @@ const testConnection = async (client) => {
   }
 };
 
-module.exports = { login, addTorrent, getTorrents, getTransferInfo, deleteTorrent, testConnection };
+module.exports = { login, addTorrent, getTorrents, getTransferInfo, pauseTorrent, resumeTorrent, deleteTorrent, testConnection };

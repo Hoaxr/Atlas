@@ -85,6 +85,26 @@ const getTransferInfo = async (client) => {
   } catch { return null; }
 };
 
+const pauseTorrent = async (client, hash) => {
+  const cookie = await login(client);
+  if (!cookie) throw new Error('Failed to authenticate');
+  await axios({
+    ...rpcCall(client, 'core.pause_torrent', [hash]),
+    headers: { 'Cookie': cookie }
+  });
+  return true;
+};
+
+const resumeTorrent = async (client, hash) => {
+  const cookie = await login(client);
+  if (!cookie) throw new Error('Failed to authenticate');
+  await axios({
+    ...rpcCall(client, 'core.resume_torrent', [hash]),
+    headers: { 'Cookie': cookie }
+  });
+  return true;
+};
+
 const deleteTorrent = async (client, hash, deleteFiles = false) => {
   const cookie = await login(client);
   if (!cookie) throw new Error('Failed to authenticate');
@@ -110,4 +130,4 @@ const testConnection = async (client) => {
   }
 };
 
-module.exports = { addTorrent, getTorrents, getTransferInfo, deleteTorrent, testConnection };
+module.exports = { addTorrent, getTorrents, getTransferInfo, pauseTorrent, resumeTorrent, deleteTorrent, testConnection };

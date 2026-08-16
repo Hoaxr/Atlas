@@ -43,6 +43,18 @@ const getTransferInfo = async () => {
   return getAdapter(client).getTransferInfo(client);
 };
 
+const pauseTorrent = async (hash) => {
+  const client = getClient();
+  if (!client) throw new Error('No download client configured');
+  return getAdapter(client).pauseTorrent(client, hash);
+};
+
+const resumeTorrent = async (hash) => {
+  const client = getClient();
+  if (!client) throw new Error('No download client configured');
+  return getAdapter(client).resumeTorrent(client, hash);
+};
+
 const deleteTorrent = async (hash, deleteFiles = false) => {
   const client = getClient();
   if (!client) throw new Error('No download client configured');
@@ -56,5 +68,5 @@ const testClientConnection = async (client) => {
 };
 
 module.exports = {
-  addTorrent, getTorrents, getTransferInfo, deleteTorrent, testClientConnection
+  addTorrent, getTorrents, getTransferInfo, pauseTorrent, resumeTorrent, deleteTorrent, testClientConnection
 };

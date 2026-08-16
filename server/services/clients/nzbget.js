@@ -60,8 +60,18 @@ const getTransferInfo = async (client) => {
   } catch { return null; }
 };
 
+const pauseTorrent = async (client, hash) => {
+  await rpc(client, 'editqueue', ['GroupPause', 0, '', [parseInt(hash, 10)]]);
+  return true;
+};
+
+const resumeTorrent = async (client, hash) => {
+  await rpc(client, 'editqueue', ['GroupResume', 0, '', [parseInt(hash, 10)]]);
+  return true;
+};
+
 const deleteTorrent = async (client, hash, deleteFiles = false) => {
-  await rpc(client, 'delete', [parseInt(hash), deleteFiles]);
+  await rpc(client, 'editqueue', ['GroupDelete', 0, '', [parseInt(hash, 10)]]);
   return true;
 };
 
@@ -74,4 +84,4 @@ const testConnection = async (client) => {
   }
 };
 
-module.exports = { addTorrent, getTorrents, getTransferInfo, deleteTorrent, testConnection };
+module.exports = { addTorrent, getTorrents, getTransferInfo, pauseTorrent, resumeTorrent, deleteTorrent, testConnection };

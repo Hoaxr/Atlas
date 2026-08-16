@@ -113,6 +113,16 @@ const getTransferInfo = async (client) => {
   } catch { return null; }
 };
 
+const pauseTorrent = async (client, hash) => {
+  await scgiCall(client, 'd.stop', [hash]);
+  return true;
+};
+
+const resumeTorrent = async (client, hash) => {
+  await scgiCall(client, 'd.start', [hash]);
+  return true;
+};
+
 const deleteTorrent = async (client, hash, deleteFiles = false) => {
   if (deleteFiles) {
     await scgiCall(client, 'd.delete_tied', [hash]);
@@ -131,4 +141,4 @@ const testConnection = async (client) => {
   }
 };
 
-module.exports = { addTorrent, getTorrents, getTransferInfo, deleteTorrent, testConnection };
+module.exports = { addTorrent, getTorrents, getTransferInfo, pauseTorrent, resumeTorrent, deleteTorrent, testConnection };
