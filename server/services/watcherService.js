@@ -495,8 +495,8 @@ class WatcherService {
               db.prepare('UPDATE movies SET watch_progress = ? WHERE id = ? AND watched = 0').run(Math.round(session.progress), movie.id);
             }
 
-            if (session.progress >= 80 && !this.autoWatchedSet.has(session.id)) {
-              this.autoWatchedSet.add(session.id);
+            if (session.progress >= 80 && !this.autoWatchedSet.has(`${session.id}:${session.title}`)) {
+              this.autoWatchedSet.add(`${session.id}:${session.title}`);
               const watchedAt = new Date().toISOString();
 
               if (movie) {
@@ -550,8 +550,8 @@ class WatcherService {
                 }
               }
 
-              if (session.progress >= 80 && !this.autoWatchedSet.has(session.id)) {
-                this.autoWatchedSet.add(session.id);
+              if (session.progress >= 80 && !this.autoWatchedSet.has(`${session.id}:${session.title}`)) {
+                this.autoWatchedSet.add(`${session.id}:${session.title}`);
                 const watchedAt = new Date().toISOString();
 
                 if (episode) {
@@ -595,9 +595,12 @@ class WatcherService {
     }
 
     // Clean up stale session keys from autoWatchedSet and recordedPlaySet
-    for (const id of this.autoWatchedSet) {
-      if (!currentSessionIds.has(id)) {
-        this.autoWatchedSet.delete(id);
+    // Keys are composite: `${sessionId}:${title}` — strip the title suffix to get the base session id
+    for (const key of this.autoWatchedSet) {
+      const baseId = key.split(':').slice(0, 1).join(':'); // 'plex_1' part
+      // Keep the key if ANY session with this base ID is still active
+      if (!currentSessionIds.has(baseId)) {
+        this.autoWatchedSet.delete(key);
       }
     }
 
