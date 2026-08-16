@@ -31,6 +31,7 @@ export default function ShowDetails() {
   const [downloadingSubs, setDownloadingSubs] = useState({});
   const [openLangMenu, setOpenLangMenu] = useState(null);
   const [updatingQuality, setUpdatingQuality] = useState(false);
+  const [updatingOffset, setUpdatingOffset] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [deleteMenuOpen, setDeleteMenuOpen] = useState(false);
   const deleteMenuRef = useOutsideClick(() => setDeleteMenuOpen(false), deleteMenuOpen);
@@ -44,9 +45,15 @@ export default function ShowDetails() {
   // Use cached library data for sibling navigation — avoids a full re-fetch on every detail page visit.
   // Falls back to a lightweight fetch only when cache is cold.
   useEffect(() => {
-    if (cachedShows && cachedShows.length > 0) {
-      setSiblingIds(cachedShows.map(s => s.id));
-      return;
+    const cached = sessionStorage.getItem('library_shows_cache');
+    if (cached) {
+      try {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setSiblingIds(parsed.map(s => s.id));
+          return;
+        }
+      } catch { /* use live fetch */ }
     }
     api.get('/library/shows').then(res => {
       if (res.data?.data) setSiblingIds(res.data.data.map(s => s.id));
@@ -110,13 +117,15 @@ export default function ShowDetails() {
 
   const { tmdbDetails, trailerKey, refetch: refetchTMDB } = useTMDBDetails('show', show?.tmdb_id);
 
-  const fetchShowData = useCallback(async (silent = true) => {
+  const fetchShowData = useCallback(async (silent = false) => {
     try {
-      const res = await api.get(`/library/shows/${id}`);
+      const [res, epRes] = await Promise.all([
+        api.get(`/library/shows/${id}`),
+        api.get(`/library/shows/${id}/episodes`)
+      ]);
       if (res.data.status === 'success') {
         setShow(res.data.data);
       }
-      const epRes = await api.get(`/library/shows/${id}/episodes`);
       if (epRes.data.status === 'success') {
         setEpisodes(epRes.data.data);
       }
@@ -158,6 +167,20 @@ export default function ShowDetails() {
       console.error('Failed to update quality profile', err);
     } finally {
       setUpdatingQuality(false);
+    }
+  };
+
+  const handleOffsetChange = async (offsetVal) => {
+    setUpdatingOffset(true);
+    try {
+      const res = await api.put(`/library/shows/${show.id}/offset`, { offset: offsetVal });
+      if (res.data.status === 'success') {
+        setShow(prev => ({ ...prev, calendar_day_offset: offsetVal }));
+      }
+    } catch (err) {
+      console.error('Failed to update air date offset', err);
+    } finally {
+      setUpdatingOffset(false);
     }
   };
 
@@ -701,8 +724,8 @@ export default function ShowDetails() {
                   </div>
                 </div>
 
-                {/* QUALITY PROFILE */}
-                <div className="py-3">
+                {/* QUALITY PROFILE & CALENDAR RELEASE DAY */}
+                <div className="py-3 flex flex-wrap gap-4 sm:gap-6 items-center">
                   <div>
                     <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500 block mb-1">Quality Profile</span>
                     {updatingQuality ? (
@@ -711,7 +734,7 @@ export default function ShowDetails() {
                         <span className="text-xs text-slate-400">Updating...</span>
                       </div>
                     ) : (
-                      <div className="max-w-[200px]">
+                      <div className="min-w-[180px]">
                         <CustomSelect
                           theme="purple"
                           value={show.quality_profile_id || ''}
@@ -722,6 +745,30 @@ export default function ShowDetails() {
                               label: p.name,
                               value: p.id
                             }))
+                          ]}
+                        />
+                      </div>
+                    )}
+                  </div>
+
+                  <div>
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500 block mb-1">Calendar Day Offset</span>
+                    {updatingOffset ? (
+                      <div className="flex items-center gap-2">
+                        <Loader2 className="w-3.5 h-3.5 animate-spin text-purple-400" />
+                        <span className="text-xs text-slate-400">Updating...</span>
+                      </div>
+                    ) : (
+                      <div className="min-w-[210px]">
+                        <CustomSelect
+                          theme="purple"
+                          value={show.calendar_day_offset ?? 0}
+                          onChange={(e) => handleOffsetChange(parseInt(e.target.value, 10))}
+                          options={[
+                            { label: 'Same Day (+0 Days / Streaming)', value: 0 },
+                            { label: 'Next Day (+1 Day / US Primetime)', value: 1 },
+                            { label: '+2 Days', value: 2 },
+                            { label: 'Previous Day (-1 Day)', value: -1 }
                           ]}
                         />
                       </div>

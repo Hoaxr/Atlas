@@ -671,6 +671,17 @@ router.put('/shows/:id/quality', (req, res, next) => {
   }
 });
 
+router.put('/shows/:id/offset', (req, res, next) => {
+  try {
+    const { offset } = req.body;
+    const numOffset = parseInt(offset, 10) || 0;
+    db.prepare('UPDATE shows SET calendar_day_offset = ? WHERE id = ?').run(numOffset, req.params.id);
+    res.json({ status: 'success', message: 'Calendar air date offset updated', offset: numOffset });
+  } catch (err) {
+    next(err);
+  }
+});
+
 router.post('/shows/:id/toggle-monitor', async (req, res, next) => {
   try {
     const show = db.prepare('SELECT monitored, folder_path, status FROM shows WHERE id = ?').get(req.params.id);

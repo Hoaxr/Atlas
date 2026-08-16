@@ -673,14 +673,16 @@ router.get('/this-week', (req, res) => {
         e.episode_number,
         e.title as episode_title,
         e.runtime,
-        e.air_date,
+        DATE(e.air_date, '+' || COALESCE(s.calendar_day_offset, 0) || ' day') as air_date,
         s.tmdb_id,
         s.title as show_title,
         s.poster_path
       FROM episodes e
       JOIN shows s ON e.show_id = s.id
-      WHERE e.air_date >= date(?, '-1 day') AND e.air_date <= ? AND e.watched = 0
-      ORDER BY e.air_date ASC, s.title, e.season_number, e.episode_number
+      WHERE DATE(e.air_date, '+' || COALESCE(s.calendar_day_offset, 0) || ' day') >= date(?, '-1 day') 
+        AND DATE(e.air_date, '+' || COALESCE(s.calendar_day_offset, 0) || ' day') <= ? 
+        AND e.watched = 0
+      ORDER BY air_date ASC, s.title, e.season_number, e.episode_number
     `).all(fromStr, toStr);
 
     const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
