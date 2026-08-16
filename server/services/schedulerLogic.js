@@ -138,10 +138,10 @@ const scheduleEpisode = (retryCount, diffHours, config, currentDate, isDownloade
   let state;
   let nextMs = currentDate.getTime();
 
-  // Start searching 48 hours BEFORE the official TMDB air date
-  // This accounts for timezone differences, early streaming drops (e.g. AMC+, Max), and early web-rips
-  // 48h covers episodes that release up to 2 days ahead of the official TMDB air date
-  const preReleaseHours = -48; 
+  // Start searching 36 hours BEFORE the official TMDB air date.
+  // This covers episodes that drop up to 1.5 days early (e.g. AMC+, Max Sunday drops for a Monday air date)
+  // without reaching back unnecessarily far (Saturday for a Monday air date).
+  const preReleaseHours = -36; 
 
   if (diffHours < preReleaseHours) {
     // Not aired yet and not in early-drop window
