@@ -614,7 +614,7 @@ export default function ShowDetails() {
                 </div>
 
                 {/* RESOLUTION | SIZE | LANGUAGE | WATCHED | AUDIO */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2 sm:gap-3 w-full">
+                <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-2 sm:gap-3 w-full">
                   <div className="flex items-center gap-2.5 sm:gap-3 bg-slate-800/30 dark:bg-slate-900/35 border border-slate-700/30 dark:border-white/5 rounded-xl p-2.5 sm:p-3">
                     <Film className="w-4 h-4 sm:w-5 sm:h-5 text-purple-400 shrink-0" />
                     <div className="min-w-0 flex-1">
@@ -635,8 +635,8 @@ export default function ShowDetails() {
                         }
                         if (res === 'Unknown') return <span className="text-xs sm:text-sm font-semibold text-slate-200 truncate">—</span>;
                         return (
-                          <div className="flex items-center gap-1.5 mt-0.5 flex-nowrap overflow-hidden">
-                            <span className="text-xs sm:text-sm font-semibold text-slate-200 truncate">{res}</span>
+                          <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                            <span className="text-xs sm:text-sm font-semibold text-slate-200 whitespace-nowrap">{res}</span>
                             {codec !== 'Unknown' && (
                               <span className="text-[10px] sm:text-xs font-bold text-slate-300 uppercase bg-slate-800/80 px-1.5 sm:px-2 py-0.5 rounded sm:rounded-md border border-white/10 whitespace-nowrap shrink-0">
                                 {codec}

@@ -665,13 +665,13 @@ export default function MovieDetails() {
                   </p>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2 sm:gap-3 w-full">
+                <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-2 sm:gap-3 w-full">
                   <div className="flex items-center gap-2.5 sm:gap-3 bg-slate-800/30 dark:bg-slate-900/35 border border-slate-700/30 dark:border-white/5 rounded-xl p-2.5 sm:p-3">
                     <Film className="w-4 h-4 sm:w-5 sm:h-5 text-cyan-400 shrink-0" />
                     <div className="min-w-0 flex-1">
                       <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-widest text-slate-500 block truncate">Resolution</span>
-                      <div className="flex items-center gap-1.5 mt-0.5 flex-nowrap overflow-hidden">
-                        <span className="text-xs sm:text-sm font-semibold text-slate-200 truncate">
+                      <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                        <span className="text-xs sm:text-sm font-semibold text-slate-200 whitespace-nowrap">
                           {resolution !== 'Unknown' ? resolution : 'Any (1080p+)'}
                         </span>
                         {resolution !== 'Unknown' && codec !== 'Unknown' && (
