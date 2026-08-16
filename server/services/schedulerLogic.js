@@ -67,7 +67,20 @@ const calculateNextSearchAt = (item, type, options = {}, currentDate = new Date(
     return fallbackSchedule(item.retry_count, config, currentDate);
   }
 
-  const releaseDate = new Date(releaseDateStr);
+  // Plain date strings (YYYY-MM-DD) are parsed as UTC midnight by the JS engine.
+  // On servers east of UTC this shifts the boundary into the next local day, causing
+  // episodes that aired "today" to appear scheduled for "tomorrow".
+  // Parsing as local noon is timezone-safe: it stays on the correct calendar day
+  // regardless of the server's UTC offset (±12 h worst case).
+  const parseDateSafe = (str) => {
+    if (!str) return new Date(str);
+    // If already has a time component (contains 'T' or a space), use as-is
+    if (str.includes('T') || str.includes(' ')) return new Date(str);
+    // Plain date: interpret as local noon to avoid UTC midnight boundary issues
+    const [year, month, day] = str.split('-').map(Number);
+    return new Date(year, month - 1, day, 12, 0, 0);
+  };
+  const releaseDate = parseDateSafe(releaseDateStr);
   const diffHours = (currentDate - releaseDate) / (1000 * 60 * 60);
   
   if (type === 'movie') {

@@ -185,7 +185,7 @@ db.exec(`
 
   CREATE TABLE IF NOT EXISTS play_history (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    session_id TEXT UNIQUE,
+    session_id TEXT,
     user TEXT,
     title TEXT,
     type TEXT,

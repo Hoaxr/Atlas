@@ -221,7 +221,10 @@ export default function Discover() {
     setError('');
     try {
       const endpoint = mode === 'movies' ? '/tmdb/search/movie' : '/tmdb/search/show';
-      const res = await api.get(`${endpoint}?query=${encodeURIComponent(searchQuery)}`);
+      const [res] = await Promise.all([
+        api.get(`${endpoint}?query=${encodeURIComponent(searchQuery)}`),
+        fetchLibrary(),
+      ]);
       if (res.data.status === 'success') {
         setResults(res.data.data);
       }

@@ -161,7 +161,16 @@ const runSearchCycle = async () => {
       e.priority = calculatePriority(e, 'episode');
       // Boost recently aired episodes (air date within last 7 days or today) to guarantee top queue placement
       if (e.air_date) {
-        const airDiffDays = (Date.now() - new Date(e.air_date).getTime()) / (86400 * 1000);
+        // Parse plain YYYY-MM-DD as local noon to avoid UTC midnight shifting the boundary into
+        // the next local day on servers east of UTC (same fix as schedulerLogic.js)
+        let airDate;
+        if (e.air_date.includes('T') || e.air_date.includes(' ')) {
+          airDate = new Date(e.air_date);
+        } else {
+          const [y, m, d] = e.air_date.split('-').map(Number);
+          airDate = new Date(y, m - 1, d, 12, 0, 0);
+        }
+        const airDiffDays = (Date.now() - airDate.getTime()) / (86400 * 1000);
         if (airDiffDays >= -1 && airDiffDays <= 7) {
           e.priority += 500;
         }

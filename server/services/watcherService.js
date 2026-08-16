@@ -56,6 +56,7 @@ class WatcherService {
     
     this.activeSessions = new Set();
     this.autoWatchedSet = new Set(); // Track sessions already auto-marked to avoid duplicate calls
+    this.recordedPlaySet = new Set(); // Track session+title already recorded in play_history
     this.recentPlaybackNotifications = new Map(); // Cooldown map: key = `${user}:${title}`, value = timestamp
     this.pollInterval = null;
     this.startPolling();
@@ -416,6 +417,7 @@ class WatcherService {
   async pollSessions() {
     const sessions = await this.getAllSessions();
     const currentSessionIds = new Set(sessions.map(s => s.id));
+    const currentPlayKeys = new Set(sessions.map(s => `${s.id}:${s.title}`));
     const notifyOnPlayback = getSetting('notifyOnPlaybackStart') === 'true';
 
     const now = Date.now();
@@ -461,17 +463,22 @@ class WatcherService {
       }
 
       if (session.progress >= 80) {
-        try {
-          db.prepare('INSERT OR IGNORE INTO play_history (session_id, user, title, type, server, player) VALUES (?, ?, ?, ?, ?, ?)').run(
-            session.id,
-            session.user,
-            session.title,
-            session.type,
-            session.server,
-            session.platform || session.player || null
-          );
-        } catch (err) {
-          console.error('[WatcherService] Failed to record play history:', err.message);
+        const playKey = `${session.id}:${session.title}`;
+        if (!this.recordedPlaySet.has(playKey)) {
+          this.recordedPlaySet.add(playKey);
+          try {
+            const uniqueSessionId = `${session.id}_${Date.now()}`;
+            db.prepare('INSERT INTO play_history (session_id, user, title, type, server, player) VALUES (?, ?, ?, ?, ?, ?)').run(
+              uniqueSessionId,
+              session.user,
+              session.title,
+              session.type,
+              session.server,
+              session.platform || session.player || null
+            );
+          } catch (err) {
+            console.error('[WatcherService] Failed to record play history:', err.message);
+          }
         }
       }
 
@@ -587,10 +594,16 @@ class WatcherService {
       }
     }
 
-    // Clean up stale session keys from autoWatchedSet
+    // Clean up stale session keys from autoWatchedSet and recordedPlaySet
     for (const id of this.autoWatchedSet) {
       if (!currentSessionIds.has(id)) {
         this.autoWatchedSet.delete(id);
+      }
+    }
+
+    for (const playKey of this.recordedPlaySet) {
+      if (!currentPlayKeys.has(playKey)) {
+        this.recordedPlaySet.delete(playKey);
       }
     }
 
