@@ -83,13 +83,20 @@ router.get('/image', async (req, res, next) => {
     const headers = {};
 
     if (server === 'plex') {
-      if (!path || typeof path !== 'string' || !path.startsWith('/') || path.includes('..')) {
+      const rawPath = req.query.path;
+      let decodedPath;
+      try {
+        decodedPath = decodeURIComponent(rawPath || '');
+      } catch {
+        return res.status(400).send('Invalid path');
+      }
+      if (!decodedPath || typeof decodedPath !== 'string' || !decodedPath.startsWith('/') || decodedPath.includes('..')) {
         return res.status(400).send('Invalid path');
       }
       const plexUrl = getSetting('plexUrl')?.replace(/\/$/, '');
       const plexToken = getSetting('plexToken');
       if (!plexUrl || !plexToken) return res.status(404).send('Not configured');
-      url = `${plexUrl}${path}`;
+      url = `${plexUrl}${decodedPath}`;
       headers['X-Plex-Token'] = plexToken;
     } else if (server === 'jellyfin') {
       if (!id || typeof id !== 'string' || !/^[a-zA-Z0-9-]+$/.test(id)) {

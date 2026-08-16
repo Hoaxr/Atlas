@@ -226,7 +226,18 @@ const addShow = async (tmdbId, rootFolderPath = null, monitorLevel = 'all') => {
           } else if (monitorLevel === 'latest') {
             isMonitored = ep.season_number === latestSeasonNumber ? 1 : 0;
           } else if (monitorLevel === 'future') {
-            const isFuture = !ep.air_date || new Date(ep.air_date) > new Date();
+            // Parse plain YYYY-MM-DD as local noon to avoid UTC midnight shifting the
+            // boundary into the next local day on servers east of UTC.
+            let airDateObj = null;
+            if (ep.air_date) {
+              if (ep.air_date.includes('T') || ep.air_date.includes(' ')) {
+                airDateObj = new Date(ep.air_date);
+              } else {
+                const [y, m, d] = ep.air_date.split('-').map(Number);
+                airDateObj = new Date(y, m - 1, d, 12, 0, 0);
+              }
+            }
+            const isFuture = !airDateObj || airDateObj > new Date();
             isMonitored = isFuture ? 1 : 0;
           }
 
@@ -348,7 +359,7 @@ const getShows = (limit = 0, offset = 0, sort = 'added_desc', filters = {}) => {
             AND (e.file_path IS NULL OR e.file_path = '')
             AND e.status != 'downloaded'
             AND e.air_date IS NOT NULL
-            AND e.air_date <= date('now')
+            AND e.air_date <= date('now', 'localtime')
           THEN 1 END)                                                    AS missing_episodes,
         (SELECT COALESCE(e2.scene_name, e2.file_path)
            FROM episodes e2

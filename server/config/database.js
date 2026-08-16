@@ -703,7 +703,7 @@ const MIGRATIONS = [
         -- Insert deduplicated data into the new table
         -- We group by the unique identifiers and keep the most recent watched_at date
         INSERT INTO watch_history_new (id, tmdb_id, type, season_number, episode_number, watched_at, runtime)
-        SELECT MIN(id), tmdb_id, type, season_number, episode_number, MAX(watched_at), runtime
+        SELECT MIN(id), tmdb_id, type, season_number, episode_number, MAX(watched_at), MAX(runtime) as runtime
         FROM watch_history
         GROUP BY tmdb_id, type, IFNULL(season_number, -1), IFNULL(episode_number, -1);
 

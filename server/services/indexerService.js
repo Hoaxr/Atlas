@@ -275,7 +275,7 @@ const filterAndSortResults = (results, profile, type, currentQuality = null, isM
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
-const searchMovie = async (title, year, profile = null, currentQuality = null, isManualSearch = false) => {
+const searchMovie = async (title, year, profile = null, currentQuality = null, isManualSearch = false, tmdb_id = null) => {
   const cleanedTitle = cleanTitle(title);
   
   let allResults;

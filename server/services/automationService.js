@@ -857,7 +857,7 @@ const runReleaseMonitoring = async () => {
     SET next_search_at = datetime('now'), search_state = 'PENDING'
     WHERE status = 'monitored' 
       AND release_date IS NOT NULL 
-      AND release_date <= date('now')
+      AND release_date <= date('now', 'localtime')
       AND (last_searched_at IS NULL OR last_searched_at < datetime(release_date))
   `).run();
 
@@ -866,7 +866,7 @@ const runReleaseMonitoring = async () => {
     SET next_search_at = datetime('now'), search_state = 'PENDING'
     WHERE status = 'monitored' 
       AND air_date IS NOT NULL 
-      AND air_date <= date('now')
+      AND air_date <= date('now', 'localtime')
       AND (last_searched_at IS NULL OR last_searched_at < datetime(air_date))
   `).run();
 

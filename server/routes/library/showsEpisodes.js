@@ -490,7 +490,7 @@ router.post('/shows/:id/auto-search', async (req, res, next) => {
     const episodes = db.prepare(`
       SELECT * FROM episodes 
       WHERE show_id = ? AND status = 'monitored' 
-        AND (air_date IS NULL OR date(air_date) <= date('now'))
+        AND (air_date IS NULL OR date(air_date) <= date('now', 'localtime'))
     `).all(req.params.id);
     
     // Run the search asynchronously in the background so the UI doesn't freeze
@@ -558,7 +558,9 @@ router.get('/shows/:id/seasons/:season/search', async (req, res, next) => {
 router.post('/shows/:id/seasons/:season/download', async (req, res, next) => {
   try {
     const torrentUrl = req.body.link || req.body.torrentUrl;
-    if (!torrentUrl) return res.status(400).json({ status: 'error', message: 'torrentUrl is required' });
+    if (!torrentUrl || typeof torrentUrl !== 'string' || !/^(https?:\/\/|magnet:)/.test(torrentUrl)) {
+      return res.status(400).json({ status: 'error', message: 'Valid torrent URL or magnet link is required' });
+    }
 
     const seasonNumber = parseInt(req.params.season, 10);
     
@@ -592,7 +594,7 @@ router.post('/shows', async (req, res, next) => {
             const episodes = db.prepare(`
               SELECT * FROM episodes 
               WHERE show_id = ? AND status = 'monitored' 
-                AND (air_date IS NULL OR date(air_date) <= date('now'))
+                AND (air_date IS NULL OR date(air_date) <= date('now', 'localtime'))
             `).all(result.id);
             eventBus.info('Auto-search started', { title: show.title, type: 'show', episodes: episodes.length });
             let sentCount = 0;
@@ -732,6 +734,11 @@ router.delete('/shows/:id', async (req, res, next) => {
       }
     }
 
+    // Clean up watch_history for this show before deleting rows
+    if (show.tmdb_id) {
+      db.prepare('DELETE FROM watch_history WHERE tmdb_id = ? AND type = "episode"').run(show.tmdb_id);
+    }
+
     db.prepare('DELETE FROM episodes WHERE show_id = ?').run(req.params.id);
     db.prepare('DELETE FROM shows WHERE id = ?').run(req.params.id);
     res.json({ status: 'success', message: 'Show removed from library' });
@@ -814,7 +821,10 @@ router.post('/episodes/:id/reset', async (req, res, next) => {
 router.post('/episodes/:id/download', async (req, res, next) => {
   try {
     const { torrentUrl } = req.body;
-    
+    if (!torrentUrl || typeof torrentUrl !== 'string' || !/^(https?:\/\/|magnet:)/.test(torrentUrl)) {
+      return res.status(400).json({ status: 'error', message: 'Valid torrent URL or magnet link is required' });
+    }
+
     await downloadClientService.addTorrent(torrentUrl, 'tv');
     db.prepare("UPDATE episodes SET status = 'downloading', scene_name = ? WHERE id = ?").run(null, req.params.id);
     
