@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Search, Settings as SettingsIcon, Film, Activity, Tv as TvIcon, DownloadCloud, ArrowDown, ArrowUp, Heart, Menu, Calendar as CalendarIcon, BarChart3, Keyboard, Key, LogOut, Eye, X, HeartPulse, Clock, TrendingUp } from 'lucide-react';
+import { Search, Settings as SettingsIcon, Film, Activity, Tv as TvIcon, DownloadCloud, Heart, Calendar as CalendarIcon, BarChart3, Keyboard, Key, LogOut, Eye, X, HeartPulse, Clock, TrendingUp } from 'lucide-react';
 import Logo from './Logo';
 import clsx from 'clsx';
 import api from '../../lib/api';
@@ -43,18 +43,7 @@ export default function Layout() {
   const { onEvent } = useWebSocket(); // Connect to real-time event stream
   const navigate = useNavigate();
   const location = useLocation();
-  const isDetailPage = /^\/(movies|shows)\/\d+$/.test(location.pathname);
-  const isLibraryPage = /^\/(movies|shows)$/.test(location.pathname);
-  const isDiscoverPage = location.pathname === '/discover';
-  const isCalendarPage = location.pathname === '/calendar';
-  const isDownloadsPage = location.pathname === '/downloads';
-  const isStatsPage = location.pathname === '/stats';
-  const isRequestsPage = location.pathname === '/requests';
-  const isTasksPage = location.pathname === '/tasks';
-  const isWatcherPage = location.pathname === '/watcher';
-  const isSettingsPage = location.pathname === '/settings';
   const [libStats, setLibStats] = useState({ movies: 0, shows: 0 });
-  const [clientStats, setClientStats] = useState({ dl_info_speed: 0, up_info_speed: 0 });
   const [downloads, setDownloads] = useState([]);
   const [clientConnected, setClientConnected] = useState(null);
   const [systemIssues, setSystemIssues] = useState([]);
@@ -206,14 +195,6 @@ export default function Layout() {
     window.addEventListener('atlas-toggle-sidebar', handler);
     return () => window.removeEventListener('atlas-toggle-sidebar', handler);
   }, []);
-
-  const formatSpeed = (bytes) => {
-    if (!bytes || bytes === 0) return '0 B/s';
-    const k = 1024;
-    const sizes = ['B/s', 'KB/s', 'MB/s', 'GB/s'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
-  };
 
   return (
     <div className="flex h-screen overflow-hidden bg-slate-50 dark:bg-slate-950">
@@ -452,30 +433,6 @@ export default function Layout() {
 
       {/* Main Content */}
       <main className="flex-1 min-w-0 w-full overflow-y-auto overflow-x-hidden relative z-10">
-        {/* Mobile header */}
-        <div className={`lg:hidden flex items-center justify-between p-4 glass-panel ${isDetailPage || isLibraryPage || isDiscoverPage || isCalendarPage || isDownloadsPage || isStatsPage || isRequestsPage || isTasksPage || isWatcherPage || isSettingsPage ? 'hidden' : ''}`}>
-          <button
-            onClick={() => setSidebarOpen(true)}
-            className="p-2 rounded-xl hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors"
-            aria-label="Open navigation menu"
-          >
-            <Menu className="w-6 h-6 text-slate-600 dark:text-slate-300" />
-          </button>
-          <span className="text-xl font-black bg-gradient-to-r from-cyan-300 via-cyan-400 to-sky-400 bg-clip-text text-transparent">
-            Atlas
-          </span>
-        </div>
-
-        {/* Download speed indicator - mobile */}
-        <div className={`lg:hidden px-4 py-2 flex items-center gap-4 text-xs text-slate-500 ${isDetailPage || isLibraryPage || isDiscoverPage || isCalendarPage || isDownloadsPage || isStatsPage || isRequestsPage || isTasksPage || isWatcherPage || isSettingsPage ? 'hidden' : ''}`}>
-          {downloads.length > 0 && (
-            <>
-              <span className="flex items-center gap-1"><ArrowDown className="w-3 h-3 text-emerald-400" /> {formatSpeed(clientStats.dl_info_speed)}</span>
-              <span className="flex items-center gap-1"><ArrowUp className="w-3 h-3 text-slate-400" /> {formatSpeed(clientStats.up_info_speed)}</span>
-            </>
-          )}
-        </div>
-
         <div className="p-3 sm:p-4 md:p-6 lg:p-8 w-full max-w-full overflow-x-hidden">
           <Outlet />
         </div>

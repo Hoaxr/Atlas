@@ -10,6 +10,8 @@ import useWebSocket from '../lib/useWebSocket';
 import EmptyState from '../components/shared/EmptyState';
 import HealthWidget from '../components/shared/HealthWidget';
 import Spinner from '../components/shared/Spinner';
+import StickyBar from '../components/shared/StickyBar';
+import { useStickyBar } from '../lib/useStickyBar';
 
 const statusIcons = {
   tmdb: Database,
@@ -70,6 +72,7 @@ function ServiceCard({ name, service }) {
 }
 
 export default function Status() {
+  const { headerRef, stickyVisible } = useStickyBar();
   const [statusData, setStatusData] = useState(null);
   const [issues, setIssues] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -159,8 +162,9 @@ export default function Status() {
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto">
+      <StickyBar visible={stickyVisible} />
       {/* Header with tabs */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div ref={headerRef} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-xl sm:text-3xl font-black text-slate-100 dark:text-slate-100 text-slate-800 flex items-center gap-2 sm:gap-3">
             {hasIssues ? (

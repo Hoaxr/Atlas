@@ -9,6 +9,8 @@ import {
   Flame, Award, Calendar, Sparkles, Compass, CheckCircle2, TrendingUp, Zap, Moon, Sun, Star, MonitorPlay, Loader2
 } from 'lucide-react';
 import { tmdbImgUrl } from '../lib/posterUrl';
+import StickyBar from '../components/shared/StickyBar';
+import { useStickyBar } from '../lib/useStickyBar';
 
 const formatRuntime = (minutes) => {
   if (!minutes) return null;
@@ -164,6 +166,7 @@ const TimelineHistoryCard = ({ item, handleMarkUnwatched, handleDeleteHistory })
 };
 
 const Tracker = () => {
+  const { headerRef, stickyVisible } = useStickyBar();
   const navigate = useNavigate();
   const { onEvent } = useWebSocket();
   const [stats, setStats] = useState(null);
@@ -354,9 +357,10 @@ const Tracker = () => {
 
   return (
     <div className="w-full space-y-6 sm:space-y-8 md:space-y-10 pb-12 sm:pb-16 animate-in fade-in duration-500">
+      <StickyBar visible={stickyVisible} />
       
       {/* ── HERO HEADER ── */}
-      <div className="relative rounded-2xl sm:rounded-3xl overflow-hidden border border-slate-700/50 bg-slate-900/80 backdrop-blur-xl shadow-2xl p-4 sm:p-6 md:p-10">
+      <div ref={headerRef} className="relative rounded-2xl sm:rounded-3xl overflow-hidden border border-slate-700/50 bg-slate-900/80 backdrop-blur-xl shadow-2xl p-4 sm:p-6 md:p-10">
         {(activeWatching?.poster || currently?.backdrop) && (
           <div className="absolute inset-0 z-0 opacity-20 filter blur-2xl scale-110 pointer-events-none">
             <img src={tmdbImgUrl(activeWatching?.poster || currently?.backdrop, 'w1280')} alt="" className="w-full h-full object-cover" />

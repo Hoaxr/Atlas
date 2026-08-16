@@ -506,7 +506,7 @@ router.get('/calendar', async (req, res, next) => {
         e.title, 
         e.season_number, 
         e.episode_number, 
-        DATE(e.air_date, '+' || COALESCE(s.calendar_day_offset, 0) || ' day') AS date, 
+        DATE(e.air_date, printf('%+d day', COALESCE(s.calendar_day_offset, 0))) AS date, 
         e.overview, 
         s.title as show_title, 
         s.id as show_id, 

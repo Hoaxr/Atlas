@@ -112,6 +112,7 @@ db.exec(`
     status TEXT DEFAULT 'monitored',
     folder_path TEXT,
     quality_profile_id INTEGER,
+    calendar_day_offset INTEGER DEFAULT 0,
     added_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     runtime INTEGER
   );
@@ -827,6 +828,15 @@ const MIGRATIONS = [
         SELECT COUNT(*) as count FROM watch_history WHERE runtime IS NULL
       `).get();
       console.log(`[DB Migration 29] Remaining NULL runtimes: ${remainingNull.count}`);
+    }
+  },
+  {
+    id: 30,
+    name: 'add_calendar_day_offset_to_shows',
+    run: (db) => {
+      if (!hasColumn('shows', 'calendar_day_offset')) {
+        db.exec('ALTER TABLE shows ADD COLUMN calendar_day_offset INTEGER DEFAULT 0;');
+      }
     }
   }
 ];
