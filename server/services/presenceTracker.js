@@ -38,9 +38,17 @@ function handleAuthMessage(ws, data) {
   try {
     if (!data.token) return false;
     const decoded = jwt.verify(data.token, JWT_SECRET);
-    ws._userId = decoded.id;
-    ws._username = decoded.username;
-    addConnection(decoded.id, ws);
+    if (!decoded || !decoded.id) return false;
+
+    const db = require('../config/database');
+    const dbUser = db.prepare('SELECT id, username, role, jwt_version FROM users WHERE id = ?').get(decoded.id);
+    if (!dbUser || dbUser.jwt_version !== decoded.jwt_version) {
+      return false;
+    }
+
+    ws._userId = dbUser.id;
+    ws._username = dbUser.username;
+    addConnection(dbUser.id, ws);
     return true;
   } catch {
     return false;

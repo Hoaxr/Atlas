@@ -17,6 +17,7 @@ const { isWatchedSyncEnabled, getSubtitlesInDir, extractLang, translateSrt, LANG
 const { USER_AGENT } = require('../../utils/constants');
 const { isRootLibraryPath, findLargestVideoFile } = require('../../utils/fileUtils');
 const { scanSubtitleLangs } = require('../../services/scanner/fileScanner');
+const requireAdmin = require('../../middleware/requireAdmin');
 
 // In-memory cache for network mount directory scans — movies are on a CIFS/SMB
 // mount with actimeo=1, so every fresh request hits the NAS. Cache avoids that.
@@ -663,7 +664,7 @@ router.post('/:id/collections', (req, res, next) => {
 });
 
 // Browse directories for manual folder import
-router.get('/:id/browse', async (req, res, next) => {
+router.get('/:id/browse', requireAdmin, async (req, res, next) => {
   try {
     const dirPath = req.query.path || null;
 
@@ -714,7 +715,7 @@ router.get('/:id/browse', async (req, res, next) => {
 });
 
 // Set folder path for a movie and trigger re-scan
-router.post('/:id/set-path', async (req, res, next) => {
+router.post('/:id/set-path', requireAdmin, async (req, res, next) => {
   try {
     const { folderPath } = req.body;
     if (!folderPath) return res.status(400).json({ status: 'error', message: 'folderPath is required' });

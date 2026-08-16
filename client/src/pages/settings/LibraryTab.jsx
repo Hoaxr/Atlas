@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState } from 'react';
 import api from '../../lib/api';
 import { Plus, Trash2, RefreshCw, CheckCircle2, AlertCircle, FolderTree, ChevronDown } from 'lucide-react';
 import { customAlert } from '../../utils/alerts';

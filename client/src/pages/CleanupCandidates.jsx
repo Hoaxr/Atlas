@@ -7,6 +7,7 @@ import StickyBar from '../components/shared/StickyBar';
 import { useStickyBar } from '../lib/useStickyBar';
 import DeletableCard from '../components/shared/DeletableCard';
 import ModalShell from '../components/shared/ModalShell';
+import { customAlert } from '../utils/alerts';
 
 export default function CleanupCandidates() {
   const navigate = useNavigate();
@@ -64,7 +65,7 @@ export default function CleanupCandidates() {
       }
     } catch (err) {
       console.error('Failed to unignore all', err);
-      alert('Unignore failed');
+      customAlert('Unignore failed');
     } finally {
       setUnignoring(false);
     }

@@ -192,11 +192,14 @@ class UserProvisioningService {
 
     // Save to database
     let importCount = 0;
-    const defaultPassword = await bcrypt.hash('atlas123', 12);
+    const crypto = require('crypto');
 
     for (const [username, origin] of importedUsers.entries()) {
-      const existing = db.prepare('SELECT id FROM users WHERE username = ?').get(username);
+      const existing = db.prepare('SELECT id FROM users WHERE username = ? AND origin = ?').get(username, origin);
       if (!existing) {
+        // Random unguessable hash ensures account can only authenticate via media server SSO / OAuth
+        const randomPass = crypto.randomBytes(32).toString('hex');
+        const defaultPassword = await bcrypt.hash(randomPass, 12);
         db.prepare('INSERT INTO users (username, password, role, origin) VALUES (?, ?, ?, ?)').run(
           username, defaultPassword, 'user', origin
         );

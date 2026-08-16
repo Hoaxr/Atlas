@@ -65,17 +65,13 @@ export default function SubtitleLanguageBadge({
             onOpenMenu(code);
           }
         }}
-        className={`inline-flex items-center gap-1 text-xs uppercase font-bold px-2 py-1 rounded-md transition-colors cursor-pointer ${
+        className={`inline-flex items-center gap-1 text-[10px] uppercase font-semibold px-1.5 py-0.5 rounded transition-colors cursor-pointer leading-tight ${
           exists
-            ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/25 hover:text-emerald-300'
-            : 'bg-rose-500/15 text-rose-400 border border-rose-500/20 hover:bg-rose-500/25 hover:text-rose-300'
+            ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/25 hover:bg-emerald-500/25 hover:text-emerald-300'
+            : 'bg-slate-800/70 text-slate-500 border border-white/5 hover:bg-slate-700/60 hover:text-slate-300 hover:border-white/10'
         }`}
       >
-        {exists ? (
-          <Check className="w-3 h-3" />
-        ) : (
-          <X className="w-3 h-3" />
-        )}
+        {exists && <Check className="w-2.5 h-2.5" />}
         {LANG_LABEL[code] || code}
       </span>
       {isOpen && menuStyle && createPortal(

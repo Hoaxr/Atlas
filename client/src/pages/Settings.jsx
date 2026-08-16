@@ -481,62 +481,6 @@ export default function Settings() {
     }
   };
 
-  // Trakt helpers
-  const pollTrakt = (deviceCode, interval) => {
-    let attempts = 0;
-    const poll = async () => {
-      attempts++;
-      try {
-        const res = await api.post('/auth/trakt/device-token', { deviceCode });
-        if (res.data.status === 'success') {
-          setTraktPolling(false);
-          setTraktDeviceCode(null);
-          customAlert('Trakt account linked successfully!');
-          fetchSettings();
-          return;
-        }
-        if (res.data.status === 'pending' && attempts < 60) {
-          setTimeout(poll, interval * 1000);
-          return;
-        }
-        // Server returned an error message
-        if (res.data.status === 'error') {
-          customAlert(res.data.message || 'Trakt authorization failed', 'error');
-        }
-      } catch (err) {
-        const msg = err.response?.data?.message || err.message || 'Connection failed';
-        customAlert(`Trakt error: ${msg}`, 'error');
-      }
-      setTraktPolling(false);
-      setTraktDeviceCode(null);
-    };
-    setTimeout(poll, interval * 1000);
-  };
-
-  const connectTrakt = async () => {
-    try {
-      const res = await api.post('/settings', settings);
-      if (res.data.status === 'error') {
-        customAlert('Failed to save settings: ' + (res.data.message || ''), 'error');
-        return;
-      }
-      const dcRes = await api.post('/auth/trakt/device-code');
-      if (dcRes.data.status !== 'success') {
-        customAlert(dcRes.data.message || 'Failed to get Trakt device code', 'error');
-        return;
-      }
-      const { device_code, user_code, verification_url, interval } = dcRes.data.data;
-      setTraktDeviceCode(device_code);
-      setTraktUserCode(user_code);
-      setTraktVerificationUrl(verification_url);
-      setTraktPolling(true);
-      pollTrakt(device_code, interval || 5);
-    } catch (err) {
-      const msg = err.response?.data?.message || err.message || 'Failed to start Trakt authorization';
-      customAlert(msg, 'error');
-    }
-  };
-
   const handleAddReleaseProfile = async (profile) => {
     try {
       await api.post('/release-profiles', profile);
@@ -596,21 +540,25 @@ export default function Settings() {
 
       <StickyBar visible={stickyVisible} />
 
-      <div className="flex flex-col lg:flex-row gap-8">
-        {/* Sidebar Menu */}
+      <div className="flex flex-col lg:flex-row gap-6">
+        {/* Sidebar / Top Pill Menu */}
         <div className="lg:w-72 flex-shrink-0">
-          <div className="glass-panel p-4 rounded-2xl sticky top-8 shadow-2xl">
-            <nav className="space-y-1">
+          <div className="glass-panel p-2.5 sm:p-4 rounded-2xl lg:sticky lg:top-8 shadow-xl">
+            <nav className="flex lg:flex-col overflow-x-auto lg:overflow-visible gap-1.5 p-1 hide-scrollbar">
               {TABS.map(tab => (
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
-                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 font-medium text-sm outline-none focus-visible:ring-2 focus-visible:ring-cyan-500 ${activeTab === tab.id ? 'bg-cyan-500/20 text-cyan-400 shadow-sm border border-cyan-500/20' : 'text-slate-400 hover:bg-white/5 hover:text-slate-200 border border-transparent'}`}
+                  className={`flex items-center gap-2 sm:gap-3 px-3.5 py-2.5 lg:py-3 rounded-xl transition-all duration-200 font-medium text-xs sm:text-sm whitespace-nowrap outline-none focus-visible:ring-2 focus-visible:ring-cyan-500 ${
+                    activeTab === tab.id
+                      ? 'bg-cyan-500/20 text-cyan-400 font-semibold shadow-sm border border-cyan-500/30'
+                      : 'text-slate-400 hover:bg-white/5 hover:text-slate-200 border border-transparent'
+                  }`}
                 >
-                  <div className={activeTab === tab.id ? 'text-cyan-400' : 'text-slate-500'}>
+                  <div className={`shrink-0 ${activeTab === tab.id ? 'text-cyan-400' : 'text-slate-500'}`}>
                     {tab.icon}
                   </div>
-                  {tab.label}
+                  <span>{tab.label}</span>
                 </button>
               ))}
             </nav>

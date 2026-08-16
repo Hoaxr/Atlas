@@ -16,9 +16,9 @@ export default function ProtectedRoute() {
       .then(res => {
         if (!isMounted) return;
         if (res.data.status === 'success') {
-          const { authEnabled, isPrivate } = res.data.data;
-          // If auth is disabled or request is from private/bypassed IP or user has token
-          if (!authEnabled || isPrivate || localStorage.getItem('atlas_token')) {
+          const { authEnabled } = res.data.data;
+          // If auth is disabled or user has token
+          if (!authEnabled || localStorage.getItem('atlas_token')) {
             setAuthState({ checking: false, allowed: true });
           } else {
             setAuthState({ checking: false, allowed: false });

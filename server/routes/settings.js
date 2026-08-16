@@ -60,7 +60,11 @@ router.get('/', (req, res, next) => {
     
     const defaultQualityProfileId = getSetting('defaultQualityProfileId');
     
-    const mask = (val) => val || '';
+    const isAdmin = req.user && req.user.role === 'admin';
+    const mask = (val) => {
+      if (!val) return '';
+      return isAdmin ? val : '';
+    };
     
     const clients = db.prepare('SELECT id, name, host, port, type, username FROM download_clients').all();
     const profiles = db.prepare('SELECT * FROM quality_profiles').all();
@@ -107,7 +111,6 @@ router.get('/', (req, res, next) => {
         profiles,
         libraryPaths,
         authEnabled: getSetting('authEnabled') || 'false',
-        authBypassLocalhost: getSetting('authBypassLocalhost') || 'true',
         authUsername: getSetting('authUsername'),
         plexUrl: getSetting('plexUrl'),
         plexToken: mask(getSetting('plexToken')),
@@ -171,7 +174,6 @@ const SETTING_SCHEMA = {
   hideCompletedDownloads:   { type: 'boolean' },
   downloadPathMapping:      { type: 'json' },
   authEnabled:              { type: 'string' },
-  authBypassLocalhost:      { type: 'string' },
   authUsername:             { type: 'string' },
   plexUrl:                  { type: 'url' },
   plexToken:                { type: 'apiKey' },
@@ -313,7 +315,7 @@ router.post('/', async (req, res, next) => {
     }
 
     // Invalidate auth middleware caches after any auth-related settings change
-    if (body.authEnabled !== undefined || body.authBypassLocalhost !== undefined || body.authUsername !== undefined || body.authPassword !== undefined) {
+    if (body.authEnabled !== undefined || body.authUsername !== undefined || body.authPassword !== undefined) {
       invalidateAuthCache();
     }
     if (errors.length > 0) {
@@ -1084,6 +1086,9 @@ router.post('/restore', (req, res, next) => {
     
     // Write uploaded data
     const buffer = Buffer.from(data, 'base64');
+    if (buffer.length < 16 || buffer.toString('utf8', 0, 15) !== 'SQLite format 3') {
+      return res.status(400).json({ status: 'error', message: 'Invalid SQLite database file header' });
+    }
     fs.writeFileSync(dbPath, buffer);
     
     res.json({ status: 'success', message: 'Database restored successfully. Previous database backed up.' });

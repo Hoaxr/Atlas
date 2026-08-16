@@ -78,36 +78,13 @@ const authMiddleware = (req, res, next) => {
     }
   }
 
-  // If no valid token, check bypass rules.
+  // If no valid token, check if auth is disabled.
   // `authEnabled` defaults to true when the setting is unset (fresh install safe-default).
   const authEnabled = getCachedSetting('authEnabled') !== 'false';
 
   if (!authEnabled) {
     attachDefaultAdmin();
     return next();
-  }
-
-  // Check if bypass for localhost is enabled (must be explicitly enabled in settings)
-  const bypassLocalhost = getCachedSetting('authBypassLocalhost') === 'true'; // default false
-
-  if (bypassLocalhost) {
-    // Use the raw socket peer address rather than req.ip — req.ip can be derived from
-    // client-controlled headers (X-Forwarded-For) when 'trust proxy' is enabled, which
-    // would let a remote client spoof a localhost IP and bypass authentication.
-    const ip = req.socket?.remoteAddress || req.connection?.remoteAddress || '';
-
-    const isPrivate = (addr) => {
-      // Strip IPv6 prefix if present
-      const clean = addr.replace(/^::ffff:/, '');
-      // Localhost
-      if (clean === '127.0.0.1' || clean === '::1') return true;
-      return false;
-    };
-
-    if (isPrivate(ip)) {
-      attachDefaultAdmin();
-      return next();
-    }
   }
 
   return res.status(401).json({ status: 'error', message: 'Unauthorized: No valid token provided' });

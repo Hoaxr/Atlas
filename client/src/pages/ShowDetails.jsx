@@ -5,7 +5,7 @@ import api from '../lib/api';
 import { formatSize, parseResolution, parseCodec, parseAudio, LANG_LABEL, LANG_NAME } from '../lib/format';
 import { useSettings } from '../lib/useSettings';
 import { useTMDBDetails } from '../lib/useTMDBDetails';
-import { ArrowLeft, HardDrive, Tv, PlayCircle, ChevronDown, ChevronRight, ChevronLeft, Bookmark, BookmarkMinus, Search, Star, X, RefreshCw, Loader2, Download, CheckSquare, Square, Film, Trash2, Globe, Eye, Volume2 } from 'lucide-react';
+import { ArrowLeft, HardDrive, Tv, PlayCircle, ChevronDown, ChevronRight, ChevronLeft, Bookmark, BookmarkMinus, Search, Star, X, RefreshCw, Loader2, Download, CheckSquare, Square, Film, Trash2, Globe, Eye, Volume2, CheckCircle2 } from 'lucide-react';
 import { customAlert, customConfirm } from '../utils/alerts';
 import { useOutsideClick } from '../lib/useOutsideClick';
 import { cachedShows, setCachedShows } from '../lib/libraryCache';
@@ -34,6 +34,9 @@ export default function ShowDetails() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [deleteMenuOpen, setDeleteMenuOpen] = useState(false);
   const deleteMenuRef = useOutsideClick(() => setDeleteMenuOpen(false), deleteMenuOpen);
+  const [mobileDeleteMenuOpen, setMobileDeleteMenuOpen] = useState(false);
+  const mobileDeleteMenuRef = useOutsideClick(() => setMobileDeleteMenuOpen(false), mobileDeleteMenuOpen);
+  const [isOverviewExpanded, setIsOverviewExpanded] = useState(false);
 
   // Prev/next navigation
   const [siblingIds, setSiblingIds] = useState([]);
@@ -248,17 +251,85 @@ export default function ShowDetails() {
         initial={{ opacity: 0, y: 20 }} 
         animate={{ opacity: 1, y: 0 }} 
         transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }} 
-        className="relative z-10 max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 space-y-4"
+        className="relative z-10 max-w-6xl mx-auto w-full space-y-4"
       >
         {/* ── Top Navigation ── */}
         <div className="flex items-center justify-between">
           <button
             onClick={() => navigate('/shows')}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-slate-800/70 hover:bg-slate-700/80 text-slate-300 hover:text-white rounded-xl border border-white/10 hover:border-white/20 transition-all duration-200 text-sm font-medium backdrop-blur-xl"
+            className="inline-flex items-center gap-2 px-3 sm:px-4 py-2 bg-slate-800/70 hover:bg-slate-700/80 text-slate-300 hover:text-white rounded-xl border border-white/10 hover:border-white/20 transition-all duration-200 text-sm font-medium backdrop-blur-xl shrink-0"
           >
             <ArrowLeft className="w-4 h-4" /> Back
           </button>
-          <div className="flex items-center gap-1.5">
+
+          {/* Center action buttons on mobile */}
+          <div className="flex items-center gap-1.5 md:hidden">
+            <button
+              onClick={refreshAll}
+              disabled={isRefreshing}
+              className="p-2.5 bg-slate-800/70 hover:bg-slate-700/80 rounded-xl transition-colors text-slate-300 hover:text-purple-400 disabled:opacity-40 border border-white/10 backdrop-blur-xl"
+              title="Refresh metadata"
+            >
+              <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+            </button>
+            <div ref={mobileDeleteMenuRef} className="relative">
+              <button
+                onClick={() => setMobileDeleteMenuOpen(!mobileDeleteMenuOpen)}
+                className="p-2.5 bg-red-500/10 hover:bg-red-500/20 rounded-xl transition-colors text-red-400 border border-red-500/20 hover:border-red-500/30 backdrop-blur-xl"
+                title="Delete show"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+              {mobileDeleteMenuOpen && (
+                <div className="absolute left-1/2 -translate-x-1/2 top-full mt-2 w-60 bg-slate-800 border border-white/10 rounded-2xl shadow-2xl z-50 overflow-hidden backdrop-blur-xl">
+                  <div className="px-4 py-3 border-b border-white/5">
+                    <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Remove from Library</p>
+                  </div>
+                  <button
+                    onClick={async () => {
+                      setMobileDeleteMenuOpen(false);
+                      try {
+                        await api.delete(`/library/shows/${show.id}?deleteFiles=true`);
+                        customAlert('Show and files removed.', 'success');
+                        navigate('/shows');
+                      } catch (err) {
+                        customAlert(err.response?.data?.message || 'Failed to remove show.', 'error');
+                      }
+                    }}
+                    className="w-full flex items-center gap-3 px-4 py-3 text-sm text-red-400 hover:bg-red-500/10 transition-colors text-left"
+                  >
+                    <Trash2 className="w-4 h-4 shrink-0" />
+                    <div>
+                      <p className="font-semibold">Delete + Files</p>
+                      <p className="text-xs text-slate-500">Remove from library and delete files</p>
+                    </div>
+                  </button>
+                  <div className="border-t border-white/5" />
+                  <button
+                    onClick={async () => {
+                      setMobileDeleteMenuOpen(false);
+                      try {
+                        await api.delete(`/library/shows/${show.id}?deleteFiles=false`);
+                        customAlert('Show removed from library.', 'success');
+                        navigate('/shows');
+                      } catch (err) {
+                        customAlert(err.response?.data?.message || 'Failed to remove show.', 'error');
+                      }
+                    }}
+                    className="w-full flex items-center gap-3 px-4 py-3 text-sm text-slate-300 hover:bg-white/5 transition-colors text-left"
+                  >
+                    <X className="w-4 h-4 shrink-0" />
+                    <div>
+                      <p className="font-semibold">Remove Only</p>
+                      <p className="text-xs text-slate-500">Remove from library, keep files</p>
+                    </div>
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="flex items-center gap-1.5 shrink-0">
             <button
               onClick={() => prevId && navigate(`/shows/${prevId}`)}
               disabled={!prevId}
@@ -279,17 +350,17 @@ export default function ShowDetails() {
         </div>
 
         {/* ── Main Card ── */}
-        <div className="bg-slate-900/50 backdrop-blur-2xl rounded-3xl border border-white/10 shadow-2xl shadow-black/50 overflow-hidden">
-          <div className="flex flex-col md:flex-row">
+        <div className="bg-slate-900/50 backdrop-blur-2xl rounded-3xl border border-white/10 shadow-2xl shadow-black/50 p-4 sm:p-6 lg:p-7">
+          <div className="flex flex-col md:flex-row gap-6 lg:gap-8 items-start">
 
             {/* ─── Left: Poster Column ─── */}
-            <div className="md:w-[260px] lg:w-[300px] shrink-0 flex flex-col">
+            <div className="w-full max-w-[280px] mx-auto md:max-w-none md:w-[260px] lg:w-[280px] shrink-0 flex flex-col gap-3">
               {/* Poster */}
-              <div className="relative group">
+              <div className="relative group rounded-2xl overflow-hidden shadow-2xl border border-white/10 aspect-[2/3]">
                 <img
                   src={posterUrl('shows', show.tmdb_id)}
                   alt={show.title}
-                  className="w-full aspect-[2/3] object-cover"
+                  className="w-full h-full object-cover"
                 />
                 <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-slate-900 to-transparent pointer-events-none" />
                 {trailerKey && (
@@ -342,17 +413,17 @@ export default function ShowDetails() {
               </div>
 
               {/* Rating + Status */}
-              <div className="grid grid-cols-2 gap-2 px-4 pt-4 pb-4 bg-slate-900/60">
-                <div className="bg-slate-800/50 rounded-xl p-3 text-center border border-white/5">
+              <div className="grid grid-cols-2 gap-2 bg-slate-950/40 border border-white/5 rounded-2xl p-2.5">
+                <div className="bg-slate-800/40 rounded-xl p-2.5 text-center border border-white/5">
                   <div className="flex items-center justify-center gap-1 mb-0.5">
                     <Star className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
-                    <span className="text-base font-bold text-white">{show.rating > 0 ? Number(show.rating).toFixed(1) : '—'}</span>
+                    <span className="text-sm font-bold text-white">{show.rating > 0 ? Number(show.rating).toFixed(1) : '—'}</span>
                     <span className="text-xs text-slate-500">/10</span>
                   </div>
-                  <p className="text-[10px] text-slate-500 uppercase tracking-wider">TMDB Rating</p>
+                  <p className="text-[9px] text-slate-500 uppercase tracking-wider font-semibold">TMDB Rating</p>
                 </div>
-                <div className="bg-slate-800/50 rounded-xl p-3 text-center border border-white/5">
-                  <p className={`text-sm font-bold capitalize mb-0.5 ${
+                <div className="bg-slate-800/40 rounded-xl p-2.5 text-center border border-white/5">
+                  <p className={`text-xs font-bold capitalize mb-0.5 ${
                     show.status === 'downloaded' ? 'text-emerald-400' : 
                     show.status === 'downloading' ? 'text-blue-400' : 
                     show.status === 'wanted' ? 'text-pink-400' : 
@@ -361,20 +432,18 @@ export default function ShowDetails() {
                   }`}>
                     {show.status === 'wanted' ? 'Watchlist' : show.status}
                   </p>
-                  <p className="text-[10px] text-slate-500 uppercase tracking-wider">Status</p>
+                  <p className="text-[9px] text-slate-500 uppercase tracking-wider font-semibold">Status</p>
                 </div>
               </div>
-
-              <div className="flex-1 bg-slate-900/60" />
             </div>
 
             {/* ─── Right: Content Column ─── */}
-            <div className="flex-1 min-w-0 p-6 sm:p-7 flex flex-col">
+            <div className="flex-1 min-w-0 w-full flex flex-col">
 
               {/* Title Row */}
-              <div className="flex items-start justify-between gap-4 mb-2">
+              <div className="flex items-start justify-between gap-3 mb-2 w-full">
                 <div className="flex-1 min-w-0">
-                  <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight leading-tight flex items-center gap-3">
+                  <div className="flex items-start gap-2.5 sm:gap-3">
                     <button 
                       onClick={async () => {
                         try {
@@ -387,53 +456,56 @@ export default function ShowDetails() {
                           customAlert('Failed to toggle monitor status', 'error');
                         }
                       }}
-                      className="shrink-0 hover:scale-110 transition-transform"
+                      className="shrink-0 mt-0.5 hover:scale-110 transition-transform"
                       title={show.monitored ? "Monitored" : "Unmonitored"}
                     >
                       {show.monitored ? (
-                        <Bookmark className="w-7 h-7 text-purple-400 fill-purple-400" />
+                        <Bookmark className="w-6 h-6 sm:w-7 sm:h-7 text-purple-400 fill-purple-400" />
                       ) : (
-                        <BookmarkMinus className="w-7 h-7 text-slate-500" />
+                        <BookmarkMinus className="w-6 h-6 sm:w-7 sm:h-7 text-slate-500" />
                       )}
                     </button>
-                    {show.title}
-                  </h1>
-                  {/* Meta Line */}
-                  <div className="flex flex-wrap items-center gap-1.5 mt-2 text-sm text-slate-400">
-                    <span>{show.year}</span>
-                    {tmdbDetails?.genres?.length > 0 && (
-                      <>
-                        <span className="text-slate-600">•</span>
-                        <span>{tmdbDetails.genres.map(g => g.name).join(', ')}</span>
-                      </>
-                    )}
+                    <h1 className="text-xl sm:text-2xl lg:text-3xl font-extrabold text-white tracking-tight leading-tight break-words min-w-0 flex-1">
+                      {show.title}
+                    </h1>
+                  </div>
+                  {/* Meta Details Line: Year, Seasons, Status, Network */}
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-2 text-xs sm:text-sm text-slate-400">
+                    <span className="font-semibold text-slate-300">{show.year}</span>
                     {tmdbDetails?.number_of_seasons > 0 && (
                       <>
-                        <span className="text-slate-600">•</span>
+                        <span className="text-slate-600 font-bold">•</span>
                         <span>{tmdbDetails.number_of_seasons} Season{tmdbDetails.number_of_seasons > 1 ? 's' : ''}</span>
                       </>
                     )}
                     {tmdbDetails?.networks?.[0]?.name && (
                       <>
-                        <span className="text-slate-600">•</span>
-                        <span>{tmdbDetails.networks[0].name}</span>
+                        <span className="text-slate-600 font-bold">•</span>
+                        <span className="text-slate-300 font-medium">{tmdbDetails.networks[0].name}</span>
                       </>
                     )}
                     {show.tmdb_status && (
                       <>
-                        <span className="text-slate-600">•</span>
-                        <span className={`px-1.5 py-0.5 rounded text-xs font-bold ${
-                          show.tmdb_status === 'Ended' ? 'text-rose-400 bg-rose-500/10' :
-                          show.tmdb_status === 'Returning Series' ? 'text-emerald-400 bg-emerald-500/10' :
-                          'text-slate-400 bg-slate-500/10'
+                        <span className="text-slate-600 font-bold">•</span>
+                        <span className={`px-1.5 py-0.5 rounded text-[10px] sm:text-xs font-bold ${
+                          show.tmdb_status === 'Ended' ? 'text-rose-400 bg-rose-500/10 border border-rose-500/20' :
+                          show.tmdb_status === 'Returning Series' ? 'text-emerald-400 bg-emerald-500/10 border border-emerald-500/20' :
+                          'text-slate-400 bg-slate-500/10 border border-slate-500/20'
                         }`}>{show.tmdb_status}</span>
                       </>
                     )}
                   </div>
+
+                  {/* Genres text */}
+                  {tmdbDetails?.genres?.length > 0 && (
+                    <p className="text-xs text-slate-400/80 mt-1 font-medium tracking-wide">
+                      {tmdbDetails.genres.map(g => g.name).join(' · ')}
+                    </p>
+                  )}
                 </div>
 
-                {/* Action Icons */}
-                <div className="flex items-center gap-1.5 shrink-0">
+                {/* Action Icons (Desktop) */}
+                <div className="hidden md:flex items-center gap-1.5 shrink-0">
                   <button
                     onClick={refreshAll}
                     disabled={isRefreshing}
@@ -500,10 +572,31 @@ export default function ShowDetails() {
                 </div>
               </div>
 
-              {/* Overview */}
-              <p className="text-slate-300 text-sm leading-relaxed mb-5 max-w-2xl">
-                {show.overview || 'No overview available.'}
-              </p>
+              {/* Tagline & Overview */}
+              {tmdbDetails?.tagline && (
+                <p className="text-sm font-medium italic text-purple-400/90 mb-2 max-w-2xl tracking-wide">
+                  &ldquo;{tmdbDetails.tagline}&rdquo;
+                </p>
+              )}
+              {show.overview ? (
+                <div className="mb-5 max-w-2xl">
+                  <p className={`text-slate-300 text-sm leading-relaxed ${!isOverviewExpanded ? 'line-clamp-3 sm:line-clamp-none' : ''}`}>
+                    {show.overview}
+                  </p>
+                  {show.overview.length > 160 && (
+                    <button
+                      onClick={() => setIsOverviewExpanded(!isOverviewExpanded)}
+                      className="sm:hidden text-xs font-semibold text-purple-400 hover:text-purple-300 mt-1 inline-flex items-center gap-1 transition-colors"
+                    >
+                      {isOverviewExpanded ? 'Show less' : 'Show more'}
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <p className="text-slate-500 italic text-sm leading-relaxed mb-5">
+                  No overview available.
+                </p>
+              )}
 
               {/* ── Metadata Section ── */}
               <div className="divide-y divide-white/5">
@@ -517,7 +610,7 @@ export default function ShowDetails() {
                 </div>
 
                 {/* RESOLUTION | SIZE | LANGUAGE | WATCHED | AUDIO */}
-                <div className="grid grid-cols-2 lg:grid-cols-[1.2fr_0.9fr_1.1fr_0.9fr_0.9fr] gap-2 sm:gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2 sm:gap-3 w-full">
                   <div className="flex items-center gap-2.5 sm:gap-3 bg-slate-800/30 dark:bg-slate-900/35 border border-slate-700/30 dark:border-white/5 rounded-xl p-2.5 sm:p-3">
                     <Film className="w-4 h-4 sm:w-5 sm:h-5 text-purple-400 shrink-0" />
                     <div className="min-w-0 flex-1">
@@ -661,6 +754,9 @@ export default function ShowDetails() {
                               )}
                             </div>
                             <p className="text-xs font-semibold text-slate-300 group-hover:text-purple-400 text-center leading-tight whitespace-nowrap transition-colors">{person.name}</p>
+                            {person.character && (
+                              <p className="text-[11px] text-slate-500 text-center leading-tight truncate max-w-[96px]">{person.character}</p>
+                            )}
                           </Link>
                         ))}
                       </div>
@@ -812,7 +908,7 @@ export default function ShowDetails() {
                                     }
                                   }}
                                   className={`p-1.5 rounded-lg transition-all flex items-center justify-center ${
-                                    Boolean(ep.watched)
+                                    ep.watched
                                       ? 'text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20'
                                       : 'text-slate-500 bg-slate-800/80 hover:bg-slate-700/80 hover:text-slate-300'
                                   }`}
@@ -989,99 +1085,107 @@ export default function ShowDetails() {
                       {(() => {
                         const seasonHasDownloads = seasons[season].some(e => e.file_path || e.status === 'downloaded');
                         const maxEpNumber = Math.max(...seasons[season].map(e => e.episode_number));
-                        return seasons[season].map(ep => (
-                          <div
-                            key={ep.id}
-                            className="flex items-start gap-3 px-4 py-3.5 border-b border-white/5 last:border-b-0 hover:bg-slate-800/30 transition-colors cursor-pointer"
-                            onClick={() => setDetailsModalEpisode(ep)}
-                          >
-                            <div className="flex flex-col items-center gap-1 shrink-0 mt-1 w-6">
-                              <span className="font-mono text-xs text-slate-500 text-center">{ep.episode_number}</span>
-                              <button
-                                onClick={async (e) => {
-                                  e.stopPropagation(); e.preventDefault();
-                                  const isCurrentlyWatched = Boolean(ep.watched);
-                                  const newWatched = isCurrentlyWatched ? 0 : 1;
-                                  setEpisodes(prev => prev.map(item => item.id === ep.id ? { ...item, watched: newWatched } : item));
-                                  if (detailsModalEpisode?.id === ep.id) {
-                                    setDetailsModalEpisode(prev => prev ? { ...prev, watched: newWatched } : null);
-                                  }
-                                  try {
-                                    await api.post(`/library/episodes/${ep.id}/watched`, { watched: newWatched });
-                                    sessionStorage.setItem('tracker-stale', 'true');
-                                  } catch (err) {
-                                    console.error(err);
-                                    setEpisodes(prev => prev.map(item => item.id === ep.id ? { ...item, watched: ep.watched } : item));
-                                    if (detailsModalEpisode?.id === ep.id) {
-                                      setDetailsModalEpisode(prev => prev ? { ...prev, watched: ep.watched } : null);
-                                    }
-                                  }
-                                }}
-                                className={`p-1.5 rounded-lg transition-all flex items-center justify-center ${
-                                  Boolean(ep.watched)
-                                    ? 'text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20'
-                                    : 'text-slate-500 bg-slate-800/80 hover:bg-slate-700/80 hover:text-slate-300'
-                                }`}
-                                title={ep.watched ? 'Mark unwatched' : 'Mark watched'}
-                              >
-                                <CheckSquare className="w-3.5 h-3.5" />
-                              </button>
-                            </div>
-                            <div className="min-w-0 flex-1">
-                              <div className="flex items-center justify-between gap-2">
-                                <div className="flex items-center gap-2 truncate pr-2">
-                                  <p className="text-sm font-bold text-slate-200 truncate">{ep.title}</p>
+                        return seasons[season].map(ep => {
+                          const isDownloaded = Boolean(ep.file_path || ep.status === 'downloaded');
+                          const isDownloading = ep.status === 'downloading';
+                          const isUnmonitored = !ep.monitored;
+
+                          return (
+                            <div
+                              key={ep.id}
+                              className={`p-3 sm:px-4 sm:py-3.5 border-b border-white/5 last:border-b-0 transition-colors cursor-pointer space-y-2 ${
+                                isDownloading
+                                  ? 'bg-blue-500/[0.07] hover:bg-blue-500/[0.12]'
+                                  : isDownloaded
+                                  ? 'bg-emerald-500/[0.04] hover:bg-emerald-500/[0.08]'
+                                  : isUnmonitored
+                                  ? 'bg-rose-500/[0.03] hover:bg-rose-500/[0.07]'
+                                  : 'hover:bg-slate-800/40'
+                              }`}
+                              onClick={() => setDetailsModalEpisode(ep)}
+                            >
+                              {/* Top Line: Episode Number + Full Title + Status (only if downloading/unmonitored) */}
+                              <div className="flex items-center justify-between gap-2 min-w-0">
+                                <div className="flex items-center gap-2 min-w-0 flex-1">
+                                  <span className={`font-mono text-xs font-bold w-5 shrink-0 text-center ${
+                                    isDownloaded ? 'text-emerald-400' : isDownloading ? 'text-blue-400' : 'text-slate-400'
+                                  }`}>
+                                    {ep.episode_number}
+                                  </span>
+                                  <p className="text-sm font-bold text-slate-200 truncate">
+                                    {ep.title}
+                                  </p>
                                   {ep.episode_number === 1 && (
-                                    <span className="shrink-0 px-1.5 py-0.5 rounded text-[8px] uppercase font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                                    <span className="shrink-0 px-1.5 py-0.2 rounded text-[8px] uppercase font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
                                       Premiere
                                     </span>
                                   )}
                                   {ep.episode_number === maxEpNumber && maxEpNumber > 1 && (
-                                    <span className="shrink-0 px-1.5 py-0.5 rounded text-[8px] uppercase font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                                    <span className="shrink-0 px-1.5 py-0.2 rounded text-[8px] uppercase font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30">
                                       Finale
                                     </span>
                                   )}
                                 </div>
-                                <button
-                                  onClick={async (e) => {
-                                    e.stopPropagation(); e.preventDefault();
-                                    if (ep.status === 'downloading') {
-                                      if (await customConfirm("Reset status to monitored?")) {
-                                        try {
-                                          await api.post(`/library/episodes/${ep.id}/reset`);
-                                          fetchShowData();
-                                          customAlert('Status reset to monitored');
-                                        } catch (e) {
-                                          customAlert('Failed to reset status', 'error');
-                                        }
-                                      }
-                                    } else {
-                                      try {
-                                        await api.post(`/library/episodes/${ep.id}/toggle-monitor`);
-                                        fetchShowData();
-                                      } catch (e) {
-                                        customAlert('Failed to toggle monitor status', 'error');
-                                      }
-                                    }
-                                  }}
-                                  className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded-full shrink-0 transition-colors whitespace-nowrap ${
-                                    ep.status === 'downloading' ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30' :
-                                    ep.status === 'downloaded' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' :
-                                    !ep.monitored ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30' :
-                                    (!ep.file_path && !ep.air_date && !seasonHasDownloads) || (ep.air_date && new Date(ep.air_date) > new Date()) ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30' :
-                                    'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-                                  }`}
-                                >
-                                  {ep.status === 'downloading' ? 'Downloading' : ep.status === 'downloaded' ? 'Downloaded' : !ep.monitored ? 'Unmonitored' : (!ep.file_path && !ep.air_date && !seasonHasDownloads) || (ep.air_date && new Date(ep.air_date) > new Date()) ? 'Not released' : 'Monitored'}
-                                </button>
+
+                                {isDownloaded ? (
+                                  <div className="shrink-0 flex items-center text-emerald-400" title="Downloaded">
+                                    <CheckCircle2 className="w-4 h-4" />
+                                  </div>
+                                ) : isDownloading ? (
+                                  <div className="shrink-0 flex items-center gap-1 text-blue-400 text-[10px] font-bold uppercase bg-blue-500/20 border border-blue-500/30 px-2 py-0.5 rounded-full" title="Downloading">
+                                    <Loader2 className="w-3 h-3 animate-spin" />
+                                    <span>DL</span>
+                                  </div>
+                                ) : isUnmonitored ? (
+                                  <span className="text-[9px] uppercase font-bold px-1.5 py-0.5 rounded-full bg-rose-500/20 text-rose-400 border border-rose-500/30 shrink-0">
+                                    Unmonitored
+                                  </span>
+                                ) : null}
                               </div>
+
                               {ep.watch_progress > 0 && !ep.watched && (
-                                <div className="w-full h-1 bg-slate-800 rounded-full mt-2 overflow-hidden">
+                                <div className="w-full h-1 bg-slate-800 rounded-full overflow-hidden">
                                   <div className="h-full bg-purple-500 rounded-full" style={{ width: `${ep.watch_progress}%` }}></div>
                                 </div>
                               )}
-                              <div className="flex items-center gap-2 mt-1.5">
-                                <div className="flex items-center gap-1 flex-wrap min-w-0 flex-1">
+
+                            {/* Bottom Line: Watched Checkbox + Air Date + Subtitles on Left, Search Actions on Right */}
+                            <div className="flex items-center justify-between gap-2 pt-0.5">
+                              <div className="flex items-center gap-2.5 flex-wrap min-w-0">
+                                <button
+                                  onClick={async (e) => {
+                                    e.stopPropagation(); e.preventDefault();
+                                    const isCurrentlyWatched = Boolean(ep.watched);
+                                    const newWatched = isCurrentlyWatched ? 0 : 1;
+                                    setEpisodes(prev => prev.map(item => item.id === ep.id ? { ...item, watched: newWatched } : item));
+                                    if (detailsModalEpisode?.id === ep.id) {
+                                      setDetailsModalEpisode(prev => prev ? { ...prev, watched: newWatched } : null);
+                                    }
+                                    try {
+                                      await api.post(`/library/episodes/${ep.id}/watched`, { watched: newWatched });
+                                      sessionStorage.setItem('tracker-stale', 'true');
+                                    } catch (err) {
+                                      console.error(err);
+                                      setEpisodes(prev => prev.map(item => item.id === ep.id ? { ...item, watched: ep.watched } : item));
+                                      if (detailsModalEpisode?.id === ep.id) {
+                                        setDetailsModalEpisode(prev => prev ? { ...prev, watched: ep.watched } : null);
+                                      }
+                                    }
+                                  }}
+                                  className="p-1 -ml-1 rounded-lg transition-all flex items-center justify-center text-slate-500 hover:text-slate-300"
+                                  title={ep.watched ? 'Mark unwatched' : 'Mark watched'}
+                                >
+                                  {ep.watched ? (
+                                    <div className="w-4 h-4 rounded bg-emerald-500/20 border border-emerald-500/50 flex items-center justify-center">
+                                      <CheckSquare className="w-3 h-3 text-emerald-400" />
+                                    </div>
+                                  ) : (
+                                    <div className="w-4 h-4 rounded bg-slate-900/80 border border-slate-600/60 hover:border-slate-400 transition-colors" />
+                                  )}
+                                </button>
+
+                                {/* Subtitles */}
+                                <div className="flex items-center gap-1 flex-wrap min-w-0">
                                   {!ep.file_path ? (
                                     <span className="text-[10px] text-slate-600">—</span>
                                   ) : (
@@ -1135,43 +1239,46 @@ export default function ShowDetails() {
                                     })()
                                   )}
                                 </div>
-                                <div className="flex items-center gap-1 shrink-0">
-                                  <button
-                                    onClick={async (e) => {
-                                      e.stopPropagation(); e.preventDefault();
-                                      customAlert(`Starting auto-search for S${ep.season_number}E${ep.episode_number}...`);
-                                      try {
-                                        const res = await api.post(`/library/episodes/${ep.id}/auto-search`);
-                                        if (res.data.status === 'success') {
-                                          customAlert(`Found & downloading: ${res.data.data.title}`);
-                                          fetchShowData();
-                                        }
-                                      } catch (err) {
-                                        customAlert('Auto-search failed', 'error');
+                              </div>
+
+                              {/* Search buttons */}
+                              <div className="flex items-center gap-1 shrink-0">
+                                <button
+                                  onClick={async (e) => {
+                                    e.stopPropagation(); e.preventDefault();
+                                    customAlert(`Starting auto-search for S${ep.season_number}E${ep.episode_number}...`);
+                                    try {
+                                      const res = await api.post(`/library/episodes/${ep.id}/auto-search`);
+                                      if (res.data.status === 'success') {
+                                        customAlert(`Found & downloading: ${res.data.data.title}`);
+                                        fetchShowData();
                                       }
-                                    }}
-                                    className="bg-emerald-500/15 hover:bg-emerald-500/30 text-emerald-400 border border-emerald-500/25 p-1.5 rounded-lg transition-colors"
-                                    title="Auto Search"
-                                  >
-                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/></svg>
-                                  </button>
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation(); e.preventDefault();
-                                      setSelectedEpisode(ep);
-                                      setSearchModalOpen(true);
-                                    }}
-                                    className="bg-purple-500/15 hover:bg-purple-500/30 text-purple-400 border border-purple-500/25 p-1.5 rounded-lg transition-colors"
-                                    title="Manual Search"
-                                  >
-                                    <Search className="w-3.5 h-3.5" />
-                                  </button>
-                                </div>
+                                    } catch (err) {
+                                      customAlert('Auto-search failed', 'error');
+                                    }
+                                  }}
+                                  className="bg-emerald-500/15 hover:bg-emerald-500/30 text-emerald-400 border border-emerald-500/25 p-1.5 rounded-lg transition-colors"
+                                  title="Auto Search"
+                                >
+                                  <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/></svg>
+                                </button>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation(); e.preventDefault();
+                                    setSelectedEpisode(ep);
+                                    setSearchModalOpen(true);
+                                  }}
+                                  className="bg-purple-500/15 hover:bg-purple-500/30 text-purple-400 border border-purple-500/25 p-1.5 rounded-lg transition-colors"
+                                  title="Manual Search"
+                                >
+                                  <Search className="w-3.5 h-3.5" />
+                                </button>
                               </div>
                             </div>
                           </div>
-                        ));
-                      })()}
+                        );
+                      });
+                    })()}
                     </div>
                     </motion.div>
                   )}

@@ -1,4 +1,4 @@
-import { Plus, Trash2, Download, Save, Info, CheckSquare, Square, Search } from 'lucide-react';
+import { Plus, Trash2, Download, Save, CheckSquare, Square } from 'lucide-react';
 import api from '../../lib/api';
 import { customAlert } from '../../utils/alerts';
 import CustomSelect from '../../components/shared/CustomSelect';

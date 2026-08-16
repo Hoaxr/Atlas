@@ -93,25 +93,11 @@ wss.on('connection', (ws, req) => {
 
   try {
     const authEnabled = getSetting('authEnabled') !== 'false';
-    
-    let isBypassed = !authEnabled;
-    
-    if (authEnabled) {
-      const bypassLocalhost = getSetting('authBypassLocalhost') === 'true';
-      
-      if (bypassLocalhost) {
-        const ip = (req.socket?.remoteAddress || req.connection?.remoteAddress || '').replace(/^::ffff:/, '');
-        if (ip === '127.0.0.1' || ip === '::1') {
-          isBypassed = true;
-        }
-      }
-    }
-    
-    if (isBypassed) {
+    if (!authEnabled) {
       setupAuth();
     }
   } catch (err) {
-    console.error('[WS] Error checking auth bypass:', err.message);
+    console.error('[WS] Error checking auth enabled status:', err.message);
   }
 
   // Handle incoming messages (for auth)

@@ -238,7 +238,7 @@ export function AnimatedUpNextCard({ item, type, onMarkWatched }) {
               <span className="text-[10px] sm:text-[11px] font-semibold text-white bg-cyan-600/80 px-1.5 sm:px-2 py-0.5 rounded-full whitespace-nowrap shrink-0">
                 {isEpisode
                   ? `${item.episodes_left || 1} left${item.total_time_left ? ` · ${formatRuntime(item.total_time_left)}` : ''}`
-                  : item.watch_progress != null ? `${item.watch_progress}%` : 'In Progress'}
+                  : item.watch_progress !== null && item.watch_progress !== undefined ? `${item.watch_progress}%` : 'In Progress'}
               </span>
             )}
           </div>

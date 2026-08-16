@@ -1,10 +1,28 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Shield, Lock, User, ArrowRight, PlaySquare, Server, Smartphone, X } from 'lucide-react';
+import { Shield, Lock, User, ArrowRight, X } from 'lucide-react';
 import api from '../lib/api';
 import { customAlert } from '../utils/alerts';
 import PasswordInput from '../components/shared/PasswordInput';
+import Logo from '../components/layout/Logo';
+
+function PlexLogo({ className = "w-5 h-5" }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className={className} xmlns="http://www.w3.org/2000/svg">
+      <path d="M3.5 3h5.2l5.8 9-5.8 9H3.5l5.8-9-5.8-9z" fill="currentColor" />
+      <path d="M12.5 3h5.2l5.8 9-5.8 9h-5.2l5.8-9-5.8-9z" fill="currentColor" opacity="0.8" />
+    </svg>
+  );
+}
+
+function JellyfinLogo({ className = "w-5 h-5" }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="currentColor" className={className} xmlns="http://www.w3.org/2000/svg">
+      <path d="M12 2.25C9.07 2.25 3 14.53 3 17.88c0 2.21 4.03 4 9 4s9-1.79 9-4c0-3.35-6.07-15.63-9-15.63zm0 3.65c2.08 0 6.07 8.5 6.07 10.82 0 1.41-2.72 2.55-6.07 2.55s-6.07-1.14-6.07-2.55C5.93 14.4 9.92 5.9 12 5.9z" />
+    </svg>
+  );
+}
 
 export default function Login() {
   const [username, setUsername] = useState('');
@@ -33,8 +51,8 @@ export default function Login() {
 
     api.get('/auth/status').then(res => {
       if (res.data.status === 'success') {
-        const { authEnabled, isPrivate, plexConfigured, jellyfinConfigured } = res.data.data;
-        if (!authEnabled || isPrivate) {
+        const { authEnabled, plexConfigured, jellyfinConfigured } = res.data.data;
+        if (!authEnabled) {
           navigate('/');
         } else {
           setAuthOptions({ plexConfigured, jellyfinConfigured });
@@ -237,10 +255,16 @@ export default function Login() {
           <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-cyan-500 via-sky-500 to-blue-500"></div>
           
           <div className="text-center mb-8">
-            <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-slate-900 to-slate-950 shadow-inner mb-4 border border-slate-800">
-              <Shield className="w-8 h-8 text-cyan-400 drop-shadow-[0_0_8px_rgba(34,211,238,0.4)]" />
+            <div className="flex items-center justify-center mb-4">
+              <div className="w-18 h-18 p-2 rounded-2xl bg-gradient-to-br from-slate-900/90 to-slate-950/90 shadow-xl border border-cyan-500/20 ring-1 ring-white/5 flex items-center justify-center group/logo hover:border-cyan-400/40 transition-all duration-300">
+                <Logo className="w-14 h-14 drop-shadow-[0_0_12px_rgba(34,211,238,0.45)] group-hover/logo:scale-105 transition-transform duration-300" />
+              </div>
             </div>
-            <h1 className="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-white via-slate-100 to-slate-350 tracking-tight font-display">Atlas Login</h1>
+            <h1 className="text-3xl font-display font-black uppercase tracking-widest drop-shadow-atlas-glow">
+              <span className="bg-gradient-to-r from-cyan-300 via-cyan-400 to-sky-400 bg-clip-text text-transparent">
+                Atlas
+              </span>
+            </h1>
             <p className="text-slate-400 mt-2 text-sm font-medium">Sign in to access your media manager</p>
           </div>
 
@@ -251,13 +275,13 @@ export default function Login() {
                   type="button"
                   onClick={handleJellyfinQCInit}
                   disabled={loading}
-                  className="w-full py-3 px-4 font-bold rounded-xl shadow-lg flex items-center justify-center gap-2 transition-all hover:scale-[1.01] hover:brightness-105 active:scale-[0.99] disabled:opacity-50 group bg-gradient-to-r from-[#00a4dc] to-[#0085b2] text-white shadow-[#00a4dc]/20"
+                  className="w-full py-3 px-4 font-bold rounded-xl shadow-lg flex items-center justify-center gap-2.5 transition-all hover:scale-[1.01] hover:brightness-105 active:scale-[0.99] disabled:opacity-50 group bg-gradient-to-r from-[#00a4dc] to-[#0085b2] text-white shadow-[#00a4dc]/20"
                 >
                   {loadingMethod === 'jellyfin' ? (
                     <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                   ) : (
                     <>
-                      <Smartphone className="w-5 h-5" />
+                      <JellyfinLogo className="w-5 h-5 drop-shadow" />
                       Sign In with Jellyfin
                     </>
                   )}
@@ -269,13 +293,13 @@ export default function Login() {
                   type="button"
                   onClick={handlePlexLogin}
                   disabled={loading}
-                  className="w-full py-3 px-4 bg-[#e5a00d] hover:bg-[#cc8e0c] text-slate-900 font-bold rounded-xl shadow-lg shadow-orange-500/20 flex items-center justify-center gap-2 transition-all hover:scale-[1.01] active:scale-[0.99] disabled:opacity-50"
+                  className="w-full py-3 px-4 bg-[#e5a00d] hover:bg-[#cc8e0c] text-slate-900 font-bold rounded-xl shadow-lg shadow-orange-500/20 flex items-center justify-center gap-2.5 transition-all hover:scale-[1.01] active:scale-[0.99] disabled:opacity-50"
                 >
                   {loadingMethod === 'plex' ? (
                     <span className="w-5 h-5 border-2 border-slate-900/30 border-t-slate-900 rounded-full animate-spin" />
                   ) : (
                     <>
-                      <PlaySquare className="w-5 h-5" />
+                      <PlexLogo className="w-5 h-5 drop-shadow" />
                       Sign In with Plex
                     </>
                   )}

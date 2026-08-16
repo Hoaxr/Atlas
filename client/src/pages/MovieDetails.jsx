@@ -59,10 +59,13 @@ export default function MovieDetails() {
   const [folderBrowserOpen, setFolderBrowserOpen] = useState(false);
   const [deleteMenuOpen, setDeleteMenuOpen] = useState(false);
   const deleteMenuRef = useOutsideClick(() => setDeleteMenuOpen(false), deleteMenuOpen);
+  const [mobileDeleteMenuOpen, setMobileDeleteMenuOpen] = useState(false);
+  const mobileDeleteMenuRef = useOutsideClick(() => setMobileDeleteMenuOpen(false), mobileDeleteMenuOpen);
 
   // Similar movies modal state
   const [similarModal, setSimilarModal] = useState({ open: false, mediaId: null, isInLibrary: false, libraryId: null });
   const [libraryMovieMap, setLibraryMovieMap] = useState(new Map()); // tmdb_id → library id
+  const [isOverviewExpanded, setIsOverviewExpanded] = useState(false);
 
   // Prev/next navigation
   const [siblingIds, setSiblingIds] = useState([]);
@@ -273,17 +276,85 @@ export default function MovieDetails() {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
-        className="relative z-10 max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 space-y-4"
+        className="relative z-10 max-w-6xl mx-auto w-full space-y-4"
       >
         {/* ── Top Navigation ── */}
         <div className="flex items-center justify-between">
           <button
             onClick={() => navigate('/movies')}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-slate-800/70 hover:bg-slate-700/80 text-slate-300 hover:text-white rounded-xl border border-white/10 hover:border-white/20 transition-all duration-200 text-sm font-medium backdrop-blur-xl"
+            className="inline-flex items-center gap-2 px-3 sm:px-4 py-2 bg-slate-800/70 hover:bg-slate-700/80 text-slate-300 hover:text-white rounded-xl border border-white/10 hover:border-white/20 transition-all duration-200 text-sm font-medium backdrop-blur-xl shrink-0"
           >
             <ArrowLeft className="w-4 h-4" /> Back
           </button>
-          <div className="flex items-center gap-1.5">
+
+          {/* Center action buttons on mobile */}
+          <div className="flex items-center gap-1.5 md:hidden">
+            <button
+              onClick={refreshAll}
+              disabled={isRefreshing}
+              className="p-2.5 bg-slate-800/70 hover:bg-slate-700/80 rounded-xl transition-colors text-slate-300 hover:text-cyan-400 disabled:opacity-40 border border-white/10 backdrop-blur-xl"
+              title="Refresh metadata"
+            >
+              <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+            </button>
+            <div ref={mobileDeleteMenuRef} className="relative">
+              <button
+                onClick={() => setMobileDeleteMenuOpen(!mobileDeleteMenuOpen)}
+                className="p-2.5 bg-red-500/10 hover:bg-red-500/20 rounded-xl transition-colors text-red-400 border border-red-500/20 hover:border-red-500/30 backdrop-blur-xl"
+                title="Delete movie"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+              {mobileDeleteMenuOpen && (
+                <div className="absolute left-1/2 -translate-x-1/2 top-full mt-2 w-60 bg-slate-800 border border-white/10 rounded-2xl shadow-2xl z-50 overflow-hidden backdrop-blur-xl">
+                  <div className="px-4 py-3 border-b border-white/5">
+                    <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Remove from Library</p>
+                  </div>
+                  <button
+                    onClick={async () => {
+                      setMobileDeleteMenuOpen(false);
+                      try {
+                        await api.delete(`/library/movies/${movie.id}?deleteFiles=true`);
+                        customAlert('Movie and files removed.', 'success');
+                        navigate('/movies');
+                      } catch (err) {
+                        customAlert(err.response?.data?.message || 'Failed to remove movie.', 'error');
+                      }
+                    }}
+                    className="w-full flex items-center gap-3 px-4 py-3 text-sm text-red-400 hover:bg-red-500/10 transition-colors text-left"
+                  >
+                    <Trash2 className="w-4 h-4 shrink-0" />
+                    <div>
+                      <p className="font-semibold">Delete + Files</p>
+                      <p className="text-xs text-slate-500">Remove from library and delete files</p>
+                    </div>
+                  </button>
+                  <div className="border-t border-white/5" />
+                  <button
+                    onClick={async () => {
+                      setMobileDeleteMenuOpen(false);
+                      try {
+                        await api.delete(`/library/movies/${movie.id}?deleteFiles=false`);
+                        customAlert('Movie removed from library.', 'success');
+                        navigate('/movies');
+                      } catch (err) {
+                        customAlert(err.response?.data?.message || 'Failed to remove movie.', 'error');
+                      }
+                    }}
+                    className="w-full flex items-center gap-3 px-4 py-3 text-sm text-slate-300 hover:bg-white/5 transition-colors text-left"
+                  >
+                    <X className="w-4 h-4 shrink-0" />
+                    <div>
+                      <p className="font-semibold">Remove Only</p>
+                      <p className="text-xs text-slate-500">Remove from library, keep files</p>
+                    </div>
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="flex items-center gap-1.5 shrink-0">
             <button
               onClick={() => prevId && navigate(`/movies/${prevId}`)}
               disabled={!prevId}
@@ -304,17 +375,17 @@ export default function MovieDetails() {
         </div>
 
         {/* ── Main Card ── */}
-        <div className="bg-slate-900/50 backdrop-blur-2xl rounded-3xl border border-white/10 shadow-2xl shadow-black/50 overflow-hidden">
-          <div className="flex flex-col md:flex-row">
+        <div className="bg-slate-900/50 backdrop-blur-2xl rounded-3xl border border-white/10 shadow-2xl shadow-black/50 p-4 sm:p-6 lg:p-7">
+          <div className="flex flex-col md:flex-row gap-6 lg:gap-8 items-start">
 
             {/* ─── Left: Poster Column ─── */}
-            <div className="md:w-[260px] lg:w-[300px] shrink-0 flex flex-col">
+            <div className="w-full max-w-[280px] mx-auto md:max-w-none md:w-[260px] lg:w-[280px] shrink-0 flex flex-col gap-3">
               {/* Poster */}
-              <div className="relative group">
+              <div className="relative group rounded-2xl overflow-hidden shadow-2xl border border-white/10 aspect-[2/3]">
                 <img
                   src={posterUrl('movies', movie.tmdb_id)}
                   alt={movie.title}
-                  className="w-full aspect-[2/3] object-cover"
+                  className="w-full h-full object-cover"
                 />
                 <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-slate-900 to-transparent pointer-events-none" />
                 {trailerKey && (
@@ -367,58 +438,63 @@ export default function MovieDetails() {
               </div>
 
               {/* IMDb Rating + Status */}
-              <div className="grid grid-cols-2 gap-2 px-4 pt-4 pb-3 bg-slate-900/60">
-                <div className="bg-slate-800/50 rounded-xl p-3 text-center border border-white/5">
+              <div className="grid grid-cols-2 gap-2 bg-slate-950/40 border border-white/5 rounded-2xl p-2.5">
+                <div className="bg-slate-800/40 rounded-xl p-2.5 text-center border border-white/5">
                   <div className="flex items-center justify-center gap-1 mb-0.5">
                     <Star className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
-                    <span className="text-base font-bold text-white">{movie.rating > 0 ? Number(movie.rating).toFixed(1) : '—'}</span>
+                    <span className="text-sm font-bold text-white">{movie.rating > 0 ? Number(movie.rating).toFixed(1) : '—'}</span>
                     <span className="text-xs text-slate-500">/10</span>
                   </div>
-                  <p className="text-[10px] text-slate-500 uppercase tracking-wider">TMDB Rating</p>
+                  <p className="text-[9px] text-slate-500 uppercase tracking-wider font-semibold">TMDB Rating</p>
                 </div>
-                <div className="bg-slate-800/50 rounded-xl p-3 text-center border border-white/5">
-                  <p className={`text-sm font-bold capitalize mb-0.5 ${statusColorClass}`}>
+                <div className="bg-slate-800/40 rounded-xl p-2.5 text-center border border-white/5">
+                  <p className={`text-xs font-bold capitalize mb-0.5 ${statusColorClass}`}>
                     {statusLabel}
                   </p>
-                  <p className="text-[10px] text-slate-500 uppercase tracking-wider">Status</p>
+                  <p className="text-[9px] text-slate-500 uppercase tracking-wider font-semibold">Status</p>
                 </div>
               </div>
 
-              {/* Search Buttons */}
-              <div className="px-4 pb-4 space-y-1.5 bg-slate-900/60">
+              {/* Action buttons below poster */}
+              <div className="grid grid-cols-2 gap-2">
                 <button
                   onClick={async () => {
-                    if (await customConfirm(`Start auto-search for ${movie.title}?`)) {
+                    if (await customConfirm(`Auto-search releases for "${movie.title}"?`)) {
                       try {
-                        await api.post(`/library/movies/${movie.id}/auto-search`);
-                        customAlert('Search initiated', 'info');
+                        const res = await api.post(`/library/movies/${movie.id}/search`);
+                        if (res.data.status === 'success') {
+                          customAlert(`Found and grabbed: ${res.data.data.title}`);
+                        } else {
+                          customAlert(res.data.message || 'No suitable release found', 'error');
+                        }
                         fetchMovieData();
                       } catch (err) {
                         customAlert('Search failed.', 'error');
                       }
                     }
                   }}
-                  className="w-full flex items-center justify-center gap-2 bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 border border-cyan-500/20 hover:border-cyan-500/30 px-3 py-2 rounded-xl text-xs font-semibold transition-colors"
+                  className="flex items-center justify-center gap-1.5 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-bold py-2.5 px-3 rounded-xl shadow-lg shadow-cyan-500/20 active:scale-[0.98] transition-all text-xs group"
                 >
-                  <Zap className="w-3.5 h-3.5" /> Auto Search
+                  <Zap className="w-3.5 h-3.5 fill-current group-hover:scale-110 transition-transform" />
+                  <span>Auto Search</span>
                 </button>
                 <button
                   onClick={() => setSearchModalOpen(true)}
-                  className="w-full flex items-center justify-center gap-2 bg-purple-500/10 hover:bg-purple-500/20 text-purple-400 border border-purple-500/20 hover:border-purple-500/30 px-3 py-2 rounded-xl text-xs font-semibold transition-colors"
+                  className="flex items-center justify-center gap-1.5 bg-slate-800/80 hover:bg-slate-700/80 text-slate-200 hover:text-white border border-white/10 hover:border-white/20 font-semibold py-2.5 px-3 rounded-xl active:scale-[0.98] transition-all text-xs group shadow-sm"
                 >
-                  <Search className="w-3.5 h-3.5" /> Manual Search
+                  <Search className="w-3.5 h-3.5 text-slate-400 group-hover:text-white transition-colors" />
+                  <span>Manual</span>
                 </button>
               </div>
-              <div className="flex-1 bg-slate-900/60" />
             </div>
 
             {/* ─── Right: Content Column ─── */}
-            <div className="flex-1 min-w-0 p-6 sm:p-7 flex flex-col">
+            <div className="flex-1 min-w-0 w-full flex flex-col">
 
               {/* Title Row */}
-              <div className="flex items-start justify-between gap-4 mb-2">
+              <div className="flex items-start justify-between gap-3 mb-2 w-full">
                 <div className="flex-1 min-w-0">
-                  <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight leading-tight flex items-center gap-3">
+                  <div className="flex items-start gap-2.5 sm:gap-3">
                     <button 
                       onClick={async () => {
                         try {
@@ -431,45 +507,48 @@ export default function MovieDetails() {
                           customAlert('Failed to toggle monitor status', 'error');
                         }
                       }}
-                      className="shrink-0 hover:scale-110 transition-transform"
+                      className="shrink-0 mt-0.5 hover:scale-110 transition-transform"
                       title={movie.monitored ? "Monitored" : "Unmonitored"}
                     >
                       {movie.monitored ? (
-                        <Bookmark className="w-7 h-7 text-cyan-400 fill-cyan-400" />
+                        <Bookmark className="w-6 h-6 sm:w-7 sm:h-7 text-cyan-400 fill-cyan-400" />
                       ) : (
-                        <BookmarkMinus className="w-7 h-7 text-slate-500" />
+                        <BookmarkMinus className="w-6 h-6 sm:w-7 sm:h-7 text-slate-500" />
                       )}
                     </button>
-                    {movie.title}
-                  </h1>
-                  {/* Meta Line */}
-                  <div className="flex flex-wrap items-center gap-1.5 mt-2 text-sm text-slate-400">
-                    <span>{movie.year}</span>
-                    {genres.length > 0 && (
-                      <>
-                        <span className="text-slate-600">•</span>
-                        <span>{genres.map(g => g.name).join(', ')}</span>
-                      </>
-                    )}
+                    <h1 className="text-xl sm:text-2xl lg:text-3xl font-extrabold text-white tracking-tight leading-tight break-words min-w-0 flex-1">
+                      {movie.title}
+                    </h1>
+                  </div>
+                  {/* Meta Details Line: Year, Runtime, Certification */}
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-2 text-xs sm:text-sm text-slate-400">
+                    <span className="font-semibold text-slate-300">{movie.year}</span>
                     {runtime && (
                       <>
-                        <span className="text-slate-600">•</span>
+                        <span className="text-slate-600 font-bold">•</span>
                         <span>{runtime}</span>
                       </>
                     )}
                     {certification && (
                       <>
-                        {runtime && <span className="text-slate-600">•</span>}
-                        <span className="px-1.5 py-0.5 border border-slate-500 rounded text-xs font-bold text-slate-400">
+                        <span className="text-slate-600 font-bold">•</span>
+                        <span className="px-1.5 py-0.5 border border-slate-600/70 bg-slate-800/40 rounded text-[10px] sm:text-xs font-bold text-slate-300">
                           {certification}
                         </span>
                       </>
                     )}
                   </div>
+
+                  {/* Genres text */}
+                  {genres.length > 0 && (
+                    <p className="text-xs text-slate-400/80 mt-1 font-medium tracking-wide">
+                      {genres.map(g => g.name).join(' · ')}
+                    </p>
+                  )}
                 </div>
 
-                {/* Action Icons */}
-                <div className="flex items-center gap-1.5 shrink-0">
+                {/* Action Icons (Desktop) */}
+                <div className="hidden md:flex items-center gap-1.5 shrink-0">
                   <button
                     onClick={refreshAll}
                     disabled={isRefreshing}
@@ -536,10 +615,31 @@ export default function MovieDetails() {
                 </div>
               </div>
 
-              {/* Overview */}
-              <p className="text-slate-300 text-sm leading-relaxed mb-5 max-w-2xl">
-                {movie.overview || 'No overview available.'}
-              </p>
+              {/* Tagline & Overview */}
+              {tmdbDetails?.tagline && (
+                <p className="text-sm font-medium italic text-cyan-400/90 mb-2 max-w-2xl tracking-wide">
+                  &ldquo;{tmdbDetails.tagline}&rdquo;
+                </p>
+              )}
+              {movie.overview ? (
+                <div className="mb-5 max-w-2xl">
+                  <p className={`text-slate-300 text-sm leading-relaxed ${!isOverviewExpanded ? 'line-clamp-3 sm:line-clamp-none' : ''}`}>
+                    {movie.overview}
+                  </p>
+                  {movie.overview.length > 160 && (
+                    <button
+                      onClick={() => setIsOverviewExpanded(!isOverviewExpanded)}
+                      className="sm:hidden text-xs font-semibold text-cyan-400 hover:text-cyan-300 mt-1 inline-flex items-center gap-1 transition-colors"
+                    >
+                      {isOverviewExpanded ? 'Show less' : 'Show more'}
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <p className="text-slate-500 italic text-sm leading-relaxed mb-5">
+                  No overview available.
+                </p>
+              )}
 
               {/* ── Metadata Section ── */}
               <div className="divide-y divide-white/5">
@@ -561,7 +661,7 @@ export default function MovieDetails() {
                   </p>
                 </div>
 
-                <div className="grid grid-cols-2 lg:grid-cols-[1.2fr_0.9fr_1.1fr_0.9fr_0.9fr] gap-2 sm:gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2 sm:gap-3 w-full">
                   <div className="flex items-center gap-2.5 sm:gap-3 bg-slate-800/30 dark:bg-slate-900/35 border border-slate-700/30 dark:border-white/5 rounded-xl p-2.5 sm:p-3">
                     <Film className="w-4 h-4 sm:w-5 sm:h-5 text-cyan-400 shrink-0" />
                     <div className="min-w-0 flex-1">
@@ -625,7 +725,7 @@ export default function MovieDetails() {
                 </div>
 
                 {/* GRABBED RELEASE | QUALITY PROFILE */}
-                <div className="grid grid-cols-2 py-3 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 py-3 gap-3 sm:gap-4">
                   <div>
                     <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500 block mb-1">Grabbed Release</span>
                     {(movie.scene_name || movie.file_path) ? (
@@ -663,7 +763,7 @@ export default function MovieDetails() {
                 </div>
 
                 {/* STUDIO | SUBTITLES */}
-                <div className="grid grid-cols-2 py-3 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 py-3 gap-3 sm:gap-4">
                   <div>
                     <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500 block mb-1">Studio</span>
                     <p className="text-sm font-semibold text-slate-200 truncate">
@@ -768,6 +868,9 @@ export default function MovieDetails() {
                             )}
                           </div>
                           <p className="text-xs font-semibold text-slate-300 group-hover:text-cyan-400 text-center leading-tight whitespace-nowrap transition-colors">{person.name}</p>
+                          {person.character && (
+                            <p className="text-[11px] text-slate-500 text-center leading-tight truncate max-w-[96px]">{person.character}</p>
+                          )}
                         </Link>
                       ))}
                     </div>
@@ -838,7 +941,7 @@ export default function MovieDetails() {
                                     const lang = parts.length >= 3 ? parts[parts.length - 2] : null;
                                     if (lang && movie.subtitles) {
                                       let currentSubs = [];
-                                      try { currentSubs = JSON.parse(movie.subtitles); } catch {}
+                                      try { currentSubs = JSON.parse(movie.subtitles); } catch { /* ignore malformed JSON */ }
                                       const newSubs = currentSubs.filter(l => l !== lang);
                                       setMovie({ ...movie, subtitles: JSON.stringify(newSubs) });
                                     }

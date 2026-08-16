@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Network, Server, BellRing, Save, CheckSquare, Square, Link, Loader2, Key } from 'lucide-react';
+import { Server, BellRing, Save, CheckSquare, Square, Link, Loader2, Key } from 'lucide-react';
 import api from '../../lib/api';
 import { customAlert, customConfirm } from '../../utils/alerts';
 import PasswordInput from '../../components/shared/PasswordInput';

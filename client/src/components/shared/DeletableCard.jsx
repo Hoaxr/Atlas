@@ -3,6 +3,7 @@ import { Trash2, Film, AlertTriangle, ShieldAlert, ShieldCheck, CheckCircle2, Ch
 import ModalShell from './ModalShell';
 import { formatSize } from '../../lib/format';
 import api from '../../lib/api';
+import { customAlert } from '../../utils/alerts';
 
 export default function DeletableCard({ movie, onDeleted, priority }) {
   const [deleting, setDeleting] = useState(false);
@@ -19,7 +20,7 @@ export default function DeletableCard({ movie, onDeleted, priority }) {
       onDeleted(movie.id);
     } catch (err) {
       console.error('Failed to delete movie', err);
-      alert('Delete failed');
+      customAlert('Delete failed');
       setDeleting(false);
     }
   };
@@ -31,7 +32,7 @@ export default function DeletableCard({ movie, onDeleted, priority }) {
       onDeleted(movie.id); // reuse onDeleted to remove from UI list
     } catch (err) {
       console.error('Failed to ignore movie', err);
-      alert('Ignore failed');
+      customAlert('Ignore failed');
       setIgnoring(false);
     }
   };

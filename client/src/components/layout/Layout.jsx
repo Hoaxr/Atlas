@@ -451,7 +451,7 @@ export default function Layout() {
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 overflow-y-auto relative z-10">
+      <main className="flex-1 min-w-0 w-full overflow-y-auto overflow-x-hidden relative z-10">
         {/* Mobile header */}
         <div className={`lg:hidden flex items-center justify-between p-4 glass-panel ${isDetailPage || isLibraryPage || isDiscoverPage || isCalendarPage || isDownloadsPage || isStatsPage || isRequestsPage || isTasksPage || isWatcherPage || isSettingsPage ? 'hidden' : ''}`}>
           <button
@@ -476,7 +476,7 @@ export default function Layout() {
           )}
         </div>
 
-        <div className="p-4 md:p-6 lg:p-8 w-full">
+        <div className="p-3 sm:p-4 md:p-6 lg:p-8 w-full max-w-full overflow-x-hidden">
           <Outlet />
         </div>
       </main>

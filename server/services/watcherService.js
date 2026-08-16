@@ -74,10 +74,10 @@ class WatcherService {
 
         if (play.type === 'movie') {
           const cleaned = cleanTitle(play.title);
-          let movie = db.prepare('SELECT id, tmdb_id, runtime FROM movies WHERE title = ? COLLATE NOCASE OR title = ? COLLATE NOCASE').get(play.title, cleaned);
+          const movie = db.prepare('SELECT id, tmdb_id, runtime FROM movies WHERE title = ? COLLATE NOCASE OR title = ? COLLATE NOCASE').get(play.title, cleaned);
 
           let tmdbId = movie?.tmdb_id;
-          let runtime = movie?.runtime || null;
+          const runtime = movie?.runtime || null;
 
           if (!tmdbId) {
             try {
@@ -105,7 +105,7 @@ class WatcherService {
             const epNum = parseInt(epStr, 10);
             const cleanedShowTitle = cleanTitle(rawShowTitle);
 
-            let show = db.prepare('SELECT id, tmdb_id FROM shows WHERE title = ? COLLATE NOCASE OR title = ? COLLATE NOCASE').get(rawShowTitle, cleanedShowTitle);
+            const show = db.prepare('SELECT id, tmdb_id FROM shows WHERE title = ? COLLATE NOCASE OR title = ? COLLATE NOCASE').get(rawShowTitle, cleanedShowTitle);
             let tmdbId = show?.tmdb_id;
 
             if (!tmdbId) {
@@ -489,7 +489,7 @@ class WatcherService {
 
           if (session.type === 'movie') {
             const cleaned = cleanTitle(session.title);
-            let movie = db.prepare('SELECT id, tmdb_id, runtime FROM movies WHERE title = ? COLLATE NOCASE OR title = ? COLLATE NOCASE').get(session.title, cleaned);
+            const movie = db.prepare('SELECT id, tmdb_id, runtime FROM movies WHERE title = ? COLLATE NOCASE OR title = ? COLLATE NOCASE').get(session.title, cleaned);
 
             if (movie) {
               db.prepare('UPDATE movies SET watch_progress = ? WHERE id = ? AND watched = 0').run(Math.round(session.progress), movie.id);
@@ -505,7 +505,7 @@ class WatcherService {
 
               // Resolve TMDB ID if movie record wasn't found
               let tmdbId = movie?.tmdb_id || session.tmdb_id;
-              let runtime = movie?.runtime || null;
+              const runtime = movie?.runtime || null;
 
               if (!tmdbId) {
                 try {
@@ -540,7 +540,7 @@ class WatcherService {
               const epNum = parseInt(epStr, 10);
               const cleanedShowTitle = cleanTitle(rawShowTitle);
 
-              let show = db.prepare('SELECT id, tmdb_id FROM shows WHERE title = ? COLLATE NOCASE OR title = ? COLLATE NOCASE').get(rawShowTitle, cleanedShowTitle);
+              const show = db.prepare('SELECT id, tmdb_id FROM shows WHERE title = ? COLLATE NOCASE OR title = ? COLLATE NOCASE').get(rawShowTitle, cleanedShowTitle);
               let episode = null;
 
               if (show) {
@@ -559,7 +559,7 @@ class WatcherService {
                 }
 
                 let tmdbId = show?.tmdb_id || session.tmdb_id;
-                let epRuntime = episode?.runtime || null;
+                const epRuntime = episode?.runtime || null;
 
                 if (!tmdbId) {
                   try {

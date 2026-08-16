@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../lib/api';
 import useWebSocket from '../lib/useWebSocket';
-import { Play, Pause, Tv, Film, User, Activity, Trophy, Monitor, Zap, Wifi, Clock, Subtitles, HardDrive, Volume2, Video, TrendingUp, Hash, Eye, MonitorPlay, RotateCcw, History } from 'lucide-react';
+import { Play, Pause, Tv, Film, User, Trophy, Monitor, Zap, Wifi, Clock, Subtitles, HardDrive, Volume2, Video, TrendingUp, Hash, Eye, MonitorPlay, RotateCcw, History } from 'lucide-react';
 import { customAlert } from '../utils/alerts';
 import { formatRelativeTime } from '../lib/format';
 import Spinner from '../components/shared/Spinner';

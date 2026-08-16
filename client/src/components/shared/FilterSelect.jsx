@@ -9,7 +9,7 @@ export const SortIcon = memo(function SortIcon({ field, sort }) {
     : <ChevronDown className="w-3.5 h-3.5 inline ml-1" />;
 });
 
-export const FilterSelect = memo(function FilterSelect({ value, onChange, label, children, accentColor, hideAll }) {
+export const FilterSelect = memo(function FilterSelect({ value, onChange, label, children, accentColor, hideAll, className = '' }) {
   const [isOpen, setIsOpen] = useState(false);
   const ref = useRef(null);
 
@@ -35,22 +35,22 @@ export const FilterSelect = memo(function FilterSelect({ value, onChange, label,
   const selected = options.find(o => String(o.value) === String(value)) || options[0] || { value: 'all', label };
 
   return (
-    <div className="relative" ref={ref}>
+    <div className={`relative ${className}`} ref={ref}>
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className={`flex items-center gap-1.5 text-xs font-medium px-3 py-2 rounded-lg border transition-colors ${
+        className={`w-full flex items-center justify-between gap-1.5 text-xs font-medium px-3 py-2 rounded-xl border transition-colors ${
           isOpen || value !== 'all'
             ? 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30'
             : 'bg-slate-900/50 text-slate-400 border-white/5 hover:bg-slate-800/50 hover:text-slate-200 shadow-[inset_0_1px_3px_rgba(0,0,0,0.4)]'
         }`}
       >
-        {selected.label}
-        <ChevronDown className={`w-3 h-3 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+        <span className="truncate">{selected.label}</span>
+        <ChevronDown className={`w-3 h-3 shrink-0 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
       </button>
 
       {isOpen && (
-        <div className="absolute left-0 top-full mt-1 w-48 bg-slate-800 border border-white/10 rounded-xl shadow-xl z-[60] overflow-hidden py-1">
+        <div className="absolute left-0 top-full mt-1 w-48 max-w-[calc(100vw-2rem)] bg-slate-800 border border-white/10 rounded-xl shadow-xl z-[60] overflow-hidden py-1 max-h-64 overflow-y-auto custom-scrollbar">
           {options.map(opt => (
             <button
               key={opt.value}
@@ -75,7 +75,7 @@ export const FilterSelect = memo(function FilterSelect({ value, onChange, label,
   );
 });
 
-export const MultiFilterSelect = memo(function MultiFilterSelect({ values, onChange, label, children }) {
+export const MultiFilterSelect = memo(function MultiFilterSelect({ values, onChange, label, children, className = '' }) {
   const [isOpen, setIsOpen] = useState(false);
   const ref = useRef(null);
 
@@ -98,22 +98,22 @@ export const MultiFilterSelect = memo(function MultiFilterSelect({ values, onCha
   const selectedCount = values.length;
   
   return (
-    <div className="relative" ref={ref}>
+    <div className={`relative ${className}`} ref={ref}>
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className={`flex items-center gap-1.5 text-xs font-medium px-3 py-2 rounded-lg border transition-colors ${
+        className={`w-full flex items-center justify-between gap-1.5 text-xs font-medium px-3 py-2 rounded-xl border transition-colors ${
           isOpen || selectedCount > 0
             ? 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30'
             : 'bg-slate-900/50 text-slate-400 border-white/5 hover:bg-slate-800/50 hover:text-slate-200 shadow-[inset_0_1px_3px_rgba(0,0,0,0.4)]'
         }`}
       >
-        {label} {selectedCount > 0 && `(${selectedCount})`}
-        <ChevronDown className={`w-3 h-3 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+        <span className="truncate">{label} {selectedCount > 0 && `(${selectedCount})`}</span>
+        <ChevronDown className={`w-3 h-3 shrink-0 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
       </button>
 
       {isOpen && (
-        <div className="absolute left-0 top-full mt-1 w-56 max-h-64 overflow-y-auto bg-slate-800 border border-white/10 rounded-xl shadow-xl z-[60] py-1 custom-scrollbar">
+        <div className="absolute left-0 top-full mt-1 w-56 max-w-[calc(100vw-2rem)] max-h-64 overflow-y-auto bg-slate-800 border border-white/10 rounded-xl shadow-xl z-[60] py-1 custom-scrollbar">
           {options.map(opt => {
             const isSelected = values.includes(opt.value);
             return (

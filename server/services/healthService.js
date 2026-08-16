@@ -1,5 +1,5 @@
 const cron = require('node-cron');
-const { exec } = require('child_process');
+const { execFile } = require('child_process');
 const util = require('util');
 const path = require('path');
 const fsp = require('fs/promises');
@@ -11,12 +11,17 @@ const eventBus = require('./eventBus');
 const { isVideoFile } = require('../utils/fileUtils');
 const { runWithConcurrency } = require('../utils/concurrency');
 
-const execPromise = util.promisify(exec);
+const execFilePromise = util.promisify(execFile);
 
 const checkFileIntegrity = async (filePath) => {
   try {
     // ffprobe checks for stream info and format. If it's a corrupt/empty file, it fails.
-    const { stdout, stderr } = await execPromise(`ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "${filePath}"`);
+    const { stdout } = await execFilePromise('ffprobe', [
+      '-v', 'error',
+      '-show_entries', 'format=duration',
+      '-of', 'default=noprint_wrappers=1:nokey=1',
+      filePath
+    ]);
     return stdout.trim().length > 0;
   } catch (err) {
     console.error(`[HealthCheck] ffprobe failed for ${filePath}: ${err.message}`);

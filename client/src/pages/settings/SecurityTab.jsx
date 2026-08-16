@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Shield, Key, Loader2, Save, Eye, EyeOff, CheckSquare, Square } from 'lucide-react';
+import { Shield, Save, CheckSquare, Square } from 'lucide-react';
 import api from '../../lib/api';
 import { customAlert } from '../../utils/alerts';
 import PasswordInput from '../../components/shared/PasswordInput';
@@ -7,7 +7,6 @@ import PasswordInput from '../../components/shared/PasswordInput';
 export default function SecurityTab() {
   const [settings, setSettings] = useState({
     authEnabled: false,
-    authBypassLocalhost: true,
     authUsername: '',
     authPassword: '' // Write-only
   });
@@ -25,7 +24,6 @@ export default function SecurityTab() {
         const data = res.data.data;
         setSettings({
           authEnabled: data.authEnabled === 'true',
-          authBypassLocalhost: data.authBypassLocalhost === 'true',
           authUsername: data.authUsername || '',
           authPassword: '' // Do not fetch the password
         });
@@ -51,7 +49,6 @@ export default function SecurityTab() {
     try {
       const payload = {
         authEnabled: settings.authEnabled.toString(),
-        authBypassLocalhost: settings.authBypassLocalhost.toString(),
         authUsername: settings.authUsername
       };
       if (settings.authPassword) {
@@ -101,23 +98,6 @@ export default function SecurityTab() {
 
           {settings.authEnabled && (
             <div className="pl-8 space-y-6 border-l-2 border-slate-700/50">
-              <label className="flex items-start gap-3 cursor-pointer p-4 rounded-xl bg-slate-900/50 border border-white/5 hover:border-emerald-500/30 transition-colors group">
-                <div className="mt-0.5">
-                  <input
-                    type="checkbox"
-                    name="authBypassLocalhost"
-                    checked={settings.authBypassLocalhost}
-                    onChange={handleChange}
-                    className="sr-only"
-                  />
-                  {settings.authBypassLocalhost ? <CheckSquare className="w-5 h-5 text-emerald-400" /> : <Square className="w-5 h-5 text-slate-500" />}
-                </div>
-                <div>
-                  <p className="text-sm font-bold text-slate-200 group-hover:text-emerald-400 transition-colors">Bypass Authentication for Localhost</p>
-                  <p className="text-xs text-slate-400 mt-1">Don't require login when accessing via 127.0.0.1 or localhost</p>
-                </div>
-              </label>
-
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
                 <div>
                   <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Username</label>
