@@ -1,10 +1,84 @@
 import { useState, useEffect } from 'react';
 import api from '../lib/api';
-import { DownloadCloud, ArrowDown, ArrowUp, Activity } from 'lucide-react';
+import { DownloadCloud, ArrowDown, ArrowUp, Activity, Film, Tv, X, Clock, HardDrive } from 'lucide-react';
 import { customAlert, customConfirm } from '../utils/alerts';
 import useWebSocket from '../lib/useWebSocket';
 import StickyBar from '../components/shared/StickyBar';
 import { useStickyBar } from '../lib/useStickyBar';
+import { parseResolution, parseCodec, parseAudio } from '../lib/format';
+
+const parseReleaseInfo = (rawName) => {
+  if (!rawName) return { title: 'Unknown', resolution: null, source: null, codec: null, audio: null, hdr: null, isTv: false, raw: '' };
+  
+  const name = rawName.replace(/\.(mp4|mkv|avi|mov)$/i, '');
+
+  const resolution = parseResolution(name);
+  const codec = parseCodec(name);
+  const audio = parseAudio(name);
+
+  let source = null;
+  if (/web-?dl/i.test(name)) source = 'WEB-DL';
+  else if (/web-?rip/i.test(name)) source = 'WEBRip';
+  else if (/bluray|bdrip/i.test(name)) source = 'BluRay';
+  else if (/hdtv/i.test(name)) source = 'HDTV';
+
+  let hdr = null;
+  if (/10-?bit/i.test(name)) hdr = '10-Bit';
+  else if (/hdr10\+/i.test(name)) hdr = 'HDR10+';
+  else if (/hdr/i.test(name)) hdr = 'HDR';
+  else if (/dv|dovi|dolby\s*vision/i.test(name)) hdr = 'DV';
+
+  // TV format check
+  const tvMatch = name.match(/(.*?)\b(S\d{1,2}[._\s-]*E\d{1,3}(?:[-_E\s]+(?:S\d{1,2})?E?\d{1,3})*|Season\s*\d+|\d+x\d+)\b/i);
+  if (tvMatch) {
+    const showTitle = tvMatch[1].replace(/[._()[\]-]/g, ' ').trim();
+    const epString = tvMatch[2].replace(/[._]/g, ' ').toUpperCase().trim();
+    return {
+      title: `${showTitle} — ${epString}`,
+      resolution: resolution !== 'Unknown' ? resolution : null,
+      source,
+      codec: codec !== 'Unknown' ? codec : null,
+      audio: audio !== 'Unknown' ? audio : null,
+      hdr,
+      isTv: true,
+      raw: rawName
+    };
+  }
+
+  // Movie format with year
+  const movieMatch = name.match(/(.*?)\b(19\d{2}|20\d{2})\b/);
+  if (movieMatch) {
+    const movieTitle = movieMatch[1].replace(/[._()[\]-]/g, ' ').trim();
+    const year = movieMatch[2];
+    return {
+      title: `${movieTitle} (${year})`,
+      resolution: resolution !== 'Unknown' ? resolution : null,
+      source,
+      codec: codec !== 'Unknown' ? codec : null,
+      audio: audio !== 'Unknown' ? audio : null,
+      hdr,
+      isTv: false,
+      raw: rawName
+    };
+  }
+
+  // Clean title fallback
+  const cleanTitle = name
+    .replace(/\b(1080p|720p|4k|2160p|bluray|web-?dl|web-?rip|x264|x265|hevc|ddp5?\.?1?|aac)\b.*/i, '')
+    .replace(/[._()[\]-]/g, ' ')
+    .trim();
+
+  return {
+    title: cleanTitle || rawName,
+    resolution: resolution !== 'Unknown' ? resolution : null,
+    source,
+    codec: codec !== 'Unknown' ? codec : null,
+    audio: audio !== 'Unknown' ? audio : null,
+    hdr,
+    isTv: false,
+    raw: rawName
+  };
+};
 
 export default function Downloads() {
   const { headerRef, stickyVisible } = useStickyBar();
@@ -66,31 +140,31 @@ export default function Downloads() {
     if (!speed || speed <= 0 || !totalSize || progress >= 1) return null;
     const remainingBytes = totalSize * (1 - progress);
     const seconds = Math.floor(remainingBytes / speed);
-    if (seconds <= 0) return 'Few seconds left';
-    if (seconds < 60) return `${seconds}s left`;
+    if (seconds <= 0) return 'Few seconds remaining';
+    if (seconds < 60) return `${seconds}s remaining`;
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
-    if (mins < 60) return `${mins}m ${secs}s left`;
+    if (mins < 60) return `${mins}m ${secs}s remaining`;
     const hours = Math.floor(mins / 60);
     const remMins = mins % 60;
-    return `${hours}h ${remMins}m left`;
+    return `${hours}h ${remMins}m remaining`;
   };
 
   const getStateBadge = (state) => {
     const s = (state || '').toLowerCase();
     if (s.includes('download') || s.includes('dl')) {
-      return 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30';
+      return { class: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30', dot: 'bg-emerald-400' };
     }
     if (s.includes('upload') || s.includes('seed') || s.includes('up')) {
-      return 'bg-cyan-500/15 text-cyan-400 border-cyan-500/30';
+      return { class: 'bg-cyan-500/15 text-cyan-400 border-cyan-500/30', dot: 'bg-cyan-400' };
     }
     if (s.includes('pause') || s.includes('stop')) {
-      return 'bg-amber-500/15 text-amber-400 border-amber-500/30';
+      return { class: 'bg-amber-500/15 text-amber-400 border-amber-500/30', dot: 'bg-amber-400' };
     }
     if (s.includes('error') || s.includes('stall')) {
-      return 'bg-rose-500/15 text-rose-400 border-rose-500/30';
+      return { class: 'bg-rose-500/15 text-rose-400 border-rose-500/30', dot: 'bg-rose-400' };
     }
-    return 'bg-slate-700/30 text-slate-400 border-slate-700/50';
+    return { class: 'bg-slate-700/30 text-slate-400 border-slate-700/50', dot: 'bg-slate-400' };
   };
 
   return (
@@ -138,8 +212,7 @@ export default function Downloads() {
             <div className="flex items-center justify-between mt-1">
               <p className="text-sm font-semibold text-slate-400">Total Traffic</p>
               <div className="flex flex-col text-xs font-mono text-cyan-400 text-right space-y-0.5">
-                <span className="flex items-center justify-end gap-1.5 font-bold"><ArrowDown className="w-3.5 h-3.5" /> {formatBytes(stats.dl_info_data)}</span>
-                <span className="flex items-center justify-end gap-1.5 text-slate-400"><ArrowUp className="w-3.5 h-3.5" /> {formatBytes(stats.up_info_data)}</span>
+                <span className="flex items-center justify-end gap-1.5 text-slate-400">Ratio: <strong>{((stats.dl_info_speed && stats.up_info_speed) ? (stats.up_info_speed / stats.dl_info_speed).toFixed(2) : '1.00')}</strong></span>
               </div>
             </div>
           </div>
@@ -147,32 +220,81 @@ export default function Downloads() {
       </div>
 
       {downloads.length > 0 ? (
-        <div className="glass-panel p-6 rounded-2xl border border-white/5 shadow-xl">
+        <div className="glass-panel p-4 sm:p-6 rounded-2xl border border-white/5 shadow-xl">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-bold text-slate-100 flex items-center gap-2">
+            <h2 className="text-base sm:text-lg font-bold text-slate-100 flex items-center gap-2">
               <DownloadCloud className="w-5 h-5 text-emerald-400" /> Live Queue
             </h2>
-            <span className="text-xs font-medium text-slate-400 bg-slate-800/80 px-2.5 py-1 rounded-lg border border-white/5">
+            <span className="text-xs font-semibold text-slate-400 bg-slate-800/80 px-2.5 py-1 rounded-lg border border-white/5">
               {downloads.length} {downloads.length === 1 ? 'task' : 'tasks'} running
             </span>
           </div>
-          <div className="space-y-3.5">
+
+          <div className="space-y-3">
             {downloads.map(t => {
               const totalSize = t.total_size || t.size || 0;
               const progressPct = Math.min(100, Math.max(0, Math.round((t.progress || 0) * 100)));
               const eta = formatEta(totalSize, t.progress || 0, t.dlspeed || 0);
+              const info = parseReleaseInfo(t.name);
+              const stateBadge = getStateBadge(t.state);
 
               return (
-                <div key={t.hash} className="bg-slate-900/60 hover:bg-slate-900/90 transition-colors p-4.5 rounded-xl border border-white/5 space-y-2.5">
-                  <div className="flex justify-between items-center gap-3">
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-bold text-slate-100 truncate hover:text-cyan-300 transition-colors" title={t.name}>
+                <div 
+                  key={t.hash} 
+                  className="bg-slate-900/60 hover:bg-slate-900/85 transition-all p-4 sm:p-4.5 rounded-xl border border-white/5 hover:border-cyan-500/20 shadow-md space-y-3 group"
+                >
+                  <div className="flex justify-between items-start gap-3">
+                    <div className="min-w-0 flex-1 space-y-1.5">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {info.isTv ? (
+                          <Tv className="w-4 h-4 text-purple-400 shrink-0" />
+                        ) : (
+                          <Film className="w-4 h-4 text-cyan-400 shrink-0" />
+                        )}
+                        <h3 className="text-sm sm:text-base font-bold text-slate-100 group-hover:text-cyan-300 transition-colors">
+                          {info.title}
+                        </h3>
+
+                        {/* Quality & Media Badges */}
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          {info.resolution && (
+                            <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-cyan-500/10 text-cyan-400 border border-cyan-500/25">
+                              {info.resolution}
+                            </span>
+                          )}
+                          {info.source && (
+                            <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 border border-white/10">
+                              {info.source}
+                            </span>
+                          )}
+                          {info.codec && (
+                            <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-300 border border-purple-500/25">
+                              {info.codec}
+                            </span>
+                          )}
+                          {info.audio && (
+                            <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/25">
+                              {info.audio}
+                            </span>
+                          )}
+                          {info.hdr && (
+                            <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/25">
+                              {info.hdr}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Raw Release Title Subtext */}
+                      <p className="text-[11px] font-mono text-slate-500 truncate select-all" title={t.name}>
                         {t.name}
                       </p>
                     </div>
-                    <div className="flex items-center gap-3 shrink-0">
+
+                    <div className="flex items-center gap-2 shrink-0 pt-0.5">
                       {t.dlspeed > 0 && (
-                        <span className="text-xs font-mono font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+                        <span className="flex items-center gap-1 text-xs font-mono font-bold text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-lg border border-emerald-500/20 shadow-sm">
+                          <ArrowDown className="w-3.5 h-3.5" />
                           {formatSpeed(t.dlspeed)}
                         </span>
                       )}
@@ -192,32 +314,41 @@ export default function Downloads() {
                         className="p-1.5 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-all border border-transparent hover:border-rose-500/20"
                         title="Cancel Download"
                       >
-                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                        <X className="w-4 h-4" />
                       </button>
                     </div>
                   </div>
 
                   {/* Progress Bar with Gradient & Shimmer */}
-                  <div className="w-full bg-slate-800/80 rounded-full h-2.5 overflow-hidden ring-1 ring-white/5 relative">
+                  <div className="w-full bg-slate-800/80 rounded-full h-2 overflow-hidden ring-1 ring-white/5 relative">
                     <div 
-                      className="bg-gradient-to-r from-emerald-500 via-teal-400 to-cyan-400 h-2.5 rounded-full transition-all duration-500 relative" 
+                      className="bg-gradient-to-r from-emerald-500 via-teal-400 to-cyan-400 h-2 rounded-full transition-all duration-500 relative" 
                       style={{ width: `${progressPct}%` }}
                     >
                       {t.dlspeed > 0 && (
-                        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent animate-pulse" />
+                        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/25 to-transparent animate-pulse" />
                       )}
                     </div>
                   </div>
 
+                  {/* Bottom Stats Meta Row */}
                   <div className="flex flex-wrap items-center justify-between text-xs text-slate-400 gap-2">
-                    <div className="flex items-center gap-2">
-                      <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-md border ${getStateBadge(t.state)}`}>
+                    <div className="flex items-center gap-2.5 flex-wrap">
+                      <span className={`inline-flex items-center gap-1.5 text-[10px] font-bold uppercase px-2 py-0.5 rounded-md border ${stateBadge.class}`}>
+                        <span className={`w-1.5 h-1.5 rounded-full ${stateBadge.dot} ${t.dlspeed > 0 ? 'animate-ping' : ''}`} />
                         {t.state || 'Active'}
                       </span>
-                      <span>Size: <strong className="text-slate-300 font-mono">{formatBytes(totalSize)}</strong></span>
-                      {eta && <span className="text-cyan-400 font-medium">· {eta}</span>}
+                      <span className="flex items-center gap-1 text-slate-400">
+                        <HardDrive className="w-3 h-3 text-slate-500" />
+                        Size: <strong className="text-slate-200 font-mono">{formatBytes(totalSize)}</strong>
+                      </span>
+                      {eta && (
+                        <span className="text-cyan-400 font-medium flex items-center gap-1">
+                          <Clock className="w-3 h-3 text-cyan-500/70" /> {eta}
+                        </span>
+                      )}
                     </div>
-                    <span className="font-mono font-bold text-slate-200">{progressPct}%</span>
+                    <span className="font-mono font-bold text-slate-100">{progressPct}%</span>
                   </div>
                 </div>
               );
