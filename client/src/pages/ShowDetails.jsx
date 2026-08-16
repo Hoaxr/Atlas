@@ -121,10 +121,14 @@ export default function ShowDetails() {
         setEpisodes(epRes.data.data);
       }
     } catch (e) {
+      if (e.response?.status === 404) {
+        navigate('/');
+        return;
+      }
       console.error(e);
       if (!silent) customAlert('Failed to load show details', 'error');
     }
-  }, [id]);
+  }, [id, navigate]);
 
   useEffect(() => {
     fetchShowData(false);
@@ -990,7 +994,7 @@ export default function ShowDetails() {
                                     {(() => {
                                       const subsData = (() => { const raw = ep.subtitles; if (!raw) return []; if (Array.isArray(raw)) return raw; try { return JSON.parse(raw); } catch { return []; } })(); const existingCodes = subsData.map(s => typeof s === 'string' ? s : s.lang).filter(Boolean);
                                       const hasExistingSub = subsData.length > 0;
-                                      const subKey = `${ep.id}`;
+                                      const subKey = `tbl-${ep.id}`;
                                       return providerLangs.map(code => (
                                         <SubtitleLanguageBadge
                                           key={code}
@@ -1404,7 +1408,7 @@ export default function ShowDetails() {
           const subsData = (() => { const raw = ep.subtitles; if (!raw) return []; if (Array.isArray(raw)) return raw; try { return JSON.parse(raw); } catch { return []; } })(); 
           const existingCodes = subsData.map(s => typeof s === 'string' ? s : s.lang).filter(Boolean);
           const hasExistingSub = subsData.length > 0;
-          const subKey = `${ep.id}`;
+          const subKey = `modal-${ep.id}`;
           return providerLangs.map(code => (
             <SubtitleLanguageBadge
               key={code}

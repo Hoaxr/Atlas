@@ -423,7 +423,7 @@ export default function Discover() {
             onChange={(e) => setQuery(e.target.value)}
           />
           <div className="absolute right-2 sm:right-3 flex items-center gap-2">
-            {(loading || isTyping) && (
+            {query && (loading || isTyping) && (
               <Loader2 className="w-4 h-4 sm:w-5 sm:h-5 text-slate-400 animate-spin" />
             )}
             {query && !(loading || isTyping) && (
@@ -444,9 +444,9 @@ export default function Discover() {
         visible={stickySearchVisible}
         searchQuery={query}
         onSearchChange={setQuery}
-        searchPlaceholder="Search by title, IMDb ID, or TMDB ID..."
+        searchPlaceholder="Search..."
         showSearch
-        isTyping={loading || isTyping}
+        isTyping={Boolean(query && (loading || isTyping))}
       />
 
       {error && (

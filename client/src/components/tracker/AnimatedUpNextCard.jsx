@@ -87,7 +87,7 @@ export function AnimatedUpNextCard({ item, type, onMarkWatched }) {
           : { opacity: 1, scale: 1, y: 0, filter: 'blur(0px)' }
       }
       transition={{ duration: 0.35, ease: [0.4, 0, 0.2, 1] }}
-      className={`w-64 sm:w-72 md:w-80 shrink-0 snap-start bg-slate-800/60 border rounded-2xl overflow-hidden transition-all duration-500 flex flex-col group relative ${
+      className={`w-48 sm:w-72 md:w-80 shrink-0 snap-start bg-slate-800/60 border rounded-xl sm:rounded-2xl overflow-hidden transition-all duration-500 flex flex-col group relative ${
         isCompleted
           ? 'border-cyan-500/40 ring-1 ring-cyan-500/20 shadow-lg shadow-cyan-500/10'
           : 'border-slate-700/50 shadow-xl hover:border-cyan-500/40 hover:-translate-y-1'
@@ -109,7 +109,7 @@ export function AnimatedUpNextCard({ item, type, onMarkWatched }) {
       {/* THUMBNAIL CONTAINER */}
       <div 
         onClick={handleTitleClick}
-        className="relative h-32 sm:h-36 md:h-40 bg-slate-900 overflow-hidden z-10 cursor-pointer"
+        className="relative h-28 sm:h-36 md:h-40 bg-slate-900 overflow-hidden z-10 cursor-pointer"
       >
         {item.poster_path ? (
           <motion.img
@@ -124,7 +124,7 @@ export function AnimatedUpNextCard({ item, type, onMarkWatched }) {
           />
         ) : (
           <div className="w-full h-full flex items-center justify-center text-slate-600">
-            {isEpisode ? <Tv className="w-10 h-10" /> : <Film className="w-10 h-10" />}
+            {isEpisode ? <Tv className="w-8 h-8 sm:w-10 sm:h-10" /> : <Film className="w-8 h-8 sm:w-10 sm:h-10" />}
           </div>
         )}
 
@@ -135,13 +135,13 @@ export function AnimatedUpNextCard({ item, type, onMarkWatched }) {
         />
 
         {/* SEASON / EPISODE OR MOVIE BADGE */}
-        <span className="absolute top-3 left-3 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-cyan-600/80 text-white backdrop-blur-md shadow">
+        <span className="absolute top-2 left-2 sm:top-3 sm:left-3 px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-full text-[9px] sm:text-[10px] font-bold uppercase tracking-wider bg-cyan-600/80 text-white backdrop-blur-md shadow">
           {isEpisode ? `S${item.season_number} E${item.episode_number}` : 'Movie'}
         </span>
 
         {/* RUNTIME PILL (bottom-left of poster) */}
         {item.runtime && (
-          <span className="absolute bottom-6 left-3 px-2 py-0.5 rounded-md text-[10px] font-semibold bg-black/70 text-white backdrop-blur-sm">
+          <span className="absolute bottom-4 sm:bottom-6 left-2 sm:left-3 px-1.5 sm:px-2 py-0.5 rounded-md text-[9px] sm:text-[10px] font-semibold bg-black/70 text-white backdrop-blur-sm">
             {formatRuntime(item.runtime)}
           </span>
         )}
@@ -157,7 +157,7 @@ export function AnimatedUpNextCard({ item, type, onMarkWatched }) {
         </div>
 
         {/* ── SATISFYING CHECKMARK BUTTON & CELEBRATION EFFECTS ── */}
-        <div className="absolute bottom-3 right-3 z-20 flex items-center justify-center">
+        <div className="absolute bottom-2 sm:bottom-3 right-2 sm:right-3 z-20 flex items-center justify-center">
           
           {/* RIPPLE EFFECT */}
           <AnimatePresence>
@@ -202,7 +202,7 @@ export function AnimatedUpNextCard({ item, type, onMarkWatched }) {
                 : {}
             }
             transition={{ type: 'spring', stiffness: 400, damping: 17 }}
-            className={`p-2 rounded-xl backdrop-blur-md transition-colors duration-300 shadow-lg cursor-pointer flex items-center gap-1.5 ${
+            className={`p-1.5 sm:p-2 rounded-lg sm:rounded-xl backdrop-blur-md transition-colors duration-300 shadow-lg cursor-pointer flex items-center gap-1.5 ${
               isCompleted
                 ? 'bg-emerald-500 text-white border-emerald-400'
                 : 'bg-slate-900/80 text-slate-300 hover:bg-emerald-500 hover:text-white border border-white/10 hover:border-emerald-400'
@@ -215,34 +215,34 @@ export function AnimatedUpNextCard({ item, type, onMarkWatched }) {
                 animate={{ scale: 1, rotate: 0 }}
                 transition={{ type: 'spring', stiffness: 500, damping: 20 }}
               >
-                <Check className="w-4 h-4 stroke-[3]" />
+                <Check className="w-3.5 h-3.5 sm:w-4 sm:h-4 stroke-[3]" />
               </motion.div>
             ) : (
-              <CheckCircle2 className="w-4 h-4" />
+              <CheckCircle2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             )}
           </motion.button>
         </div>
       </div>
 
       {/* CARD CONTENT */}
-      <div className="p-3 sm:p-4 flex-1 flex flex-col justify-between space-y-2 sm:space-y-3 z-10">
+      <div className="p-2.5 sm:p-4 flex-1 flex flex-col justify-between space-y-1.5 sm:space-y-3 z-10">
         <div>
-          <div className="flex items-start justify-between gap-2">
+          <div className="flex items-start justify-between gap-1.5 sm:gap-2">
             <h3 
               onClick={handleTitleClick}
-              className="font-bold text-slate-100 text-sm sm:text-base md:text-lg truncate hover:text-cyan-400 transition-colors cursor-pointer min-w-0"
+              className="font-bold text-slate-100 text-xs sm:text-base md:text-lg truncate hover:text-cyan-400 transition-colors cursor-pointer min-w-0"
             >
               {isEpisode ? item.show_title : item.title}
             </h3>
             {!isCompleted && (
-              <span className="text-[10px] sm:text-[11px] font-semibold text-white bg-cyan-600/80 px-1.5 sm:px-2 py-0.5 rounded-full whitespace-nowrap shrink-0">
+              <span className="text-[9px] sm:text-[11px] font-semibold text-white bg-cyan-600/80 px-1.5 sm:px-2 py-0.5 rounded-full whitespace-nowrap shrink-0">
                 {isEpisode
                   ? `${item.episodes_left || 1} left${item.total_time_left ? ` · ${formatRuntime(item.total_time_left)}` : ''}`
                   : item.watch_progress !== null && item.watch_progress !== undefined ? `${item.watch_progress}%` : 'In Progress'}
               </span>
             )}
           </div>
-          <p className="text-[11px] sm:text-xs text-slate-400 truncate mt-0.5">
+          <p className="text-[10px] sm:text-xs text-slate-400 truncate mt-0.5">
             {isEpisode
               ? item.episode_title || `Episode ${item.episode_number}`
               : item.runtime
@@ -252,8 +252,8 @@ export function AnimatedUpNextCard({ item, type, onMarkWatched }) {
         </div>
 
         {/* PROGRESS BAR */}
-        <div className="space-y-1.5">
-          <div className="w-full h-6 bg-white/10 rounded-full overflow-hidden relative">
+        <div className="space-y-1">
+          <div className="w-full h-4 sm:h-6 bg-white/10 rounded-full overflow-hidden relative">
             <motion.div
               className={`h-full rounded-full absolute left-0 top-0 ${isCompleted ? 'bg-emerald-400' : 'bg-cyan-400'}`}
               initial={false}
@@ -266,7 +266,7 @@ export function AnimatedUpNextCard({ item, type, onMarkWatched }) {
               }}
               transition={{ duration: 0.5, ease: 'easeOut' }}
             />
-            <div className="absolute inset-0 flex items-center justify-center px-2 z-10">
+            <div className="absolute inset-0 flex items-center justify-center px-1.5 sm:px-2 z-10">
               <AnimatePresence mode="wait">
                 {isCompleted ? (
                   <motion.span
@@ -275,7 +275,7 @@ export function AnimatedUpNextCard({ item, type, onMarkWatched }) {
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -4 }}
                     transition={{ duration: 0.25 }}
-                    className="text-[11px] font-bold text-white drop-shadow-md"
+                    className="text-[9px] sm:text-[11px] font-bold text-white drop-shadow-md"
                   >
                     Watched ✓
                   </motion.span>
@@ -286,7 +286,7 @@ export function AnimatedUpNextCard({ item, type, onMarkWatched }) {
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -4 }}
                     transition={{ duration: 0.25 }}
-                    className="text-[11px] font-bold text-white drop-shadow-md tracking-wider"
+                    className="text-[9px] sm:text-[11px] font-bold text-white drop-shadow-md tracking-wider"
                   >
                     {item.total_episodes - (item.episodes_left || 0)} / {item.total_episodes}
                   </motion.span>

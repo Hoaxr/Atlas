@@ -109,7 +109,7 @@ const searchMovies = async (query) => {
   }
 };
 
-const searchShows = async (query) => {
+const searchShows = async (query, firstAirDateYear = null) => {
   try {
     const trimmedQuery = query.trim();
     
@@ -160,10 +160,20 @@ const searchShows = async (query) => {
     }
 
     // Also run a text search for plain numbers
-    const response = await tmdbApi.get('/search/tv', {
-      params: { query: trimmedQuery, page: 1 }
-    });
-    const textResults = response.data.results || [];
+    const params = { query: trimmedQuery, page: 1 };
+    if (firstAirDateYear) {
+      params.first_air_date_year = firstAirDateYear;
+    }
+    const response = await tmdbApi.get('/search/tv', { params });
+    let textResults = response.data.results || [];
+
+    // If year filter yielded 0 results, fallback to search without year
+    if (textResults.length === 0 && firstAirDateYear) {
+      const fallbackResponse = await tmdbApi.get('/search/tv', {
+        params: { query: trimmedQuery, page: 1 }
+      });
+      textResults = fallbackResponse.data.results || [];
+    }
 
     // Prepend exact ID match if found and not already in results
     if (idResult) {

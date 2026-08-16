@@ -109,10 +109,14 @@ export default function MovieDetails() {
         if (data.files) setMovieFiles(data.files);
       }
     } catch (e) {
+      if (e.response?.status === 404) {
+        navigate('/');
+        return;
+      }
       console.error(e);
       if (!silent) customAlert('Failed to load movie details', 'error');
     }
-  }, [id]);
+  }, [id, navigate]);
 
   const toggleFiles = () => setFilesExpanded(prev => !prev);
 

@@ -292,7 +292,7 @@ export default function Dashboard() {
             const topItems = sortedData.slice(0, 50);
             
             const minLoadTime = new Promise(resolve => setTimeout(resolve, 600));
-            const imagePreloads = Promise.all(topItems.map(item => {
+            const imagePreloads = Promise.all(topItems.filter(item => item.poster_path && item.tmdb_id).map(item => {
               return new Promise(resolve => {
                 const img = new window.Image();
                 img.src = posterUrl(mode, item.tmdb_id);

@@ -4,11 +4,13 @@ const execFileAsync = util.promisify(execFile);
 const { parseAudio } = require('./mediaParsing');
 
 
+const { VALID_LANGUAGES } = require('./languages');
+
 const getMediaMetadata = async (filePath) => {
   try {
     const { stdout } = await execFileAsync('ffprobe', [
       '-v', 'error',
-      '-show_entries', 'stream=codec_type,codec_name,width,height,channels,channel_layout:format=duration',
+      '-show_entries', 'stream=codec_type,codec_name,width,height,channels,channel_layout:stream_tags=language:format=duration',
       '-of', 'json',
       filePath
     ]);
@@ -17,7 +19,23 @@ const getMediaMetadata = async (filePath) => {
     const format = info.format || {};
     
     const videoStream = streams.find(s => s.codec_type === 'video') || {};
-    const audioStream = streams.find(s => s.codec_type === 'audio') || {};
+    const audioStreams = streams.filter(s => s.codec_type === 'audio');
+    const audioStream = audioStreams[0] || {};
+    const subStreams = streams.filter(s => s.codec_type === 'subtitle');
+
+    // Extract embedded subtitle language codes
+    const embeddedSubtitles = [...new Set(
+      subStreams
+        .map(s => (s.tags?.language || '').toLowerCase().trim())
+        .filter(lang => lang && VALID_LANGUAGES.has(lang))
+    )];
+
+    // Extract audio language codes
+    const audioLangs = [...new Set(
+      audioStreams
+        .map(s => (s.tags?.language || '').toLowerCase().trim())
+        .filter(lang => lang && VALID_LANGUAGES.has(lang))
+    )];
 
     // Determine runtime in minutes from ffprobe duration (seconds)
     let runtime = null;
@@ -68,9 +86,9 @@ const getMediaMetadata = async (filePath) => {
       }
     }
 
-    return { resolution, codec, audio, runtime };
+    return { resolution, codec, audio, runtime, embeddedSubtitles, audioLangs };
   } catch (err) {
-    return { resolution: null, codec: null, audio: null, runtime: null };
+    return { resolution: null, codec: null, audio: null, runtime: null, embeddedSubtitles: [], audioLangs: [] };
   }
 };
 

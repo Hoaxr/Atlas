@@ -54,61 +54,129 @@ const scanSubtitleLangs = async (filePath) => {
   }
 };
 
+const extractIds = (text) => {
+  let tmdbId = null;
+  let imdbId = null;
+  if (!text) return { tmdbId, imdbId };
+
+  // Match tmdb: [tmdb-12345], {tmdb-12345}, [tmdbid:12345], tmdbid=12345, tmdb-12345
+  const tmdbMatch = text.match(/(?:\[|\{)?\btmdb(?:id)?[-=:\s]+(\d+)(?:\]|\})?/i);
+  if (tmdbMatch) {
+    tmdbId = parseInt(tmdbMatch[1], 10);
+  }
+
+  // Match imdb: [imdb-tt1234567], {imdb:tt1234567}, (tt1234567), tt1234567
+  const imdbMatch = text.match(/(?:\[|\{)?\b(?:imdb[-=:\s]+)?(tt\d{7,10})\b(?:\]|\})?/i);
+  if (imdbMatch) {
+    imdbId = imdbMatch[1].toLowerCase();
+  }
+
+  return { tmdbId, imdbId };
+};
+
 const parseMediaTitle = (filename, folderPath) => {
   const cleanName = filename.replace(/\.(mp4|mkv|avi|mov|wmv|webm|ts|m2ts|mpg|mpeg)$/i, '');
-  
-  const tvShowMatch = cleanName.match(/(S\d{1,2}E\d{1,2}(?:[-]E?\d{1,2})*|Season \d+)/i);
-  if (tvShowMatch) {
-    let title = cleanName.substring(0, tvShowMatch.index).replace(/[._()[\]-]/g, ' ').trim();
+  const combinedContext = `${folderPath || ''} ${cleanName}`;
+  const { tmdbId, imdbId } = extractIds(combinedContext);
+
+  // Strip explicit ID tags from cleanName so they don't pollute the parsed title
+  const strippedName = cleanName
+    .replace(/(?:\[|\{)?\btmdb(?:id)?[-=:\s]+\d+(?:\]|\})?/gi, '')
+    .replace(/(?:\[|\{)?\b(?:imdb[-=:\s]+)?tt\d{7,10}\b(?:\]|\})?/gi, '')
+    .trim();
+
+  // Check for S01E01 / S01E01E02 / S01E01-E02 / S01E01-02
+  const sxxExxMatch = strippedName.match(/\bS(\d{1,2})[._\s-]*E(\d{1,3})(?:[-_E\s]+(?:S\d{1,2})?E?(\d{1,3}))*\b/i);
+  // Check for classic scene format 1x01 / 01x02 / 1x01-02
+  const sceneMatch = !sxxExxMatch ? strippedName.match(/\b(\d{1,2})x(\d{1,3})(?:[-_x]+(\d{1,3}))*\b/i) : null;
+  // Check for Season folder or Specials / Season 0
+  const seasonWordMatch = !sxxExxMatch && !sceneMatch ? strippedName.match(/(Season\s*\d+|Specials|Season\s*0+)/i) : null;
+
+  const isTvShow = Boolean(sxxExxMatch || sceneMatch || seasonWordMatch || (folderPath && /(?:Season\s*\d+|Specials)/i.test(folderPath)));
+
+  if (isTvShow) {
+    let title = '';
     let seasonNumber = 1;
     let episodeNumber = 1;
     let episodeEnd = null;
-    
-    const sMatch = tvShowMatch[0].match(/S(\d{1,2})/i);
-    if (sMatch) seasonNumber = parseInt(sMatch[1], 10);
 
-    const epBlock = tvShowMatch[0].replace(/^S\d{1,2}/i, '');
-    const epNumbers = [...epBlock.matchAll(/(\d{1,3})/g)].map(m => parseInt(m[1], 10));
-    if (epNumbers.length > 0) {
-      episodeNumber = epNumbers[0];
-      if (epNumbers.length > 1) {
-        episodeEnd = epNumbers[epNumbers.length - 1];
+    if (sxxExxMatch) {
+      title = strippedName.substring(0, sxxExxMatch.index).replace(/[._()[\]-]/g, ' ').trim();
+      seasonNumber = parseInt(sxxExxMatch[1], 10);
+      episodeNumber = parseInt(sxxExxMatch[2], 10);
+
+      // Multi-episode end check
+      const epBlock = sxxExxMatch[0].replace(/^S\d{1,2}[._\s-]*E\d{1,3}/i, '');
+      const extraNumbers = [...epBlock.matchAll(/(\d{1,3})/g)].map(m => parseInt(m[1], 10));
+      if (extraNumbers.length > 0) {
+        episodeEnd = extraNumbers[extraNumbers.length - 1];
       }
-    }
-    
-    if (!sMatch && epNumbers.length === 0) {
-      const seasonWordMatch = tvShowMatch[0].match(/Season\s+(\d+)/i);
-      if (seasonWordMatch) seasonNumber = parseInt(seasonWordMatch[1], 10);
-      const epWordMatch = cleanName.match(/Episode\s+(\d+)/i);
+    } else if (sceneMatch) {
+      title = strippedName.substring(0, sceneMatch.index).replace(/[._()[\]-]/g, ' ').trim();
+      seasonNumber = parseInt(sceneMatch[1], 10);
+      episodeNumber = parseInt(sceneMatch[2], 10);
+      if (sceneMatch[3]) {
+        episodeEnd = parseInt(sceneMatch[3], 10);
+      }
+    } else {
+      const epWordMatch = strippedName.match(/Episode\s*(\d+)/i) || strippedName.match(/\bE(\d{1,3})\b/i);
       if (epWordMatch) episodeNumber = parseInt(epWordMatch[1], 10);
+
+      const sFolder = (folderPath || '').match(/Season\s*(\d+)/i);
+      if (sFolder) seasonNumber = parseInt(sFolder[1], 10);
+      else if (/(?:Specials|Season\s*0+)/i.test(folderPath || '')) seasonNumber = 0;
     }
 
     if (!title && folderPath) {
       const parts = folderPath.split(path.sep);
       const parent = parts[parts.length - 1];
-      if (parent.match(/Season\s*\d+/i)) {
-        title = parts[parts.length - 2];
+      if (parent.match(/(?:Season\s*\d+|Specials)/i)) {
+        title = parts[parts.length - 2] || parent;
       } else {
         title = parent;
       }
     }
-    
+
+    // Clean title of tags
+    title = title
+      .replace(/(?:\[|\{)?\btmdb(?:id)?[-=:\s]+\d+(?:\]|\})?/gi, '')
+      .replace(/(?:\[|\{)?\b(?:imdb[-=:\s]+)?tt\d{7,10}\b(?:\]|\})?/gi, '')
+      .replace(/\b(1080p|720p|4k|2160p|bluray|webdl|web-dl|x264|x265|dvdrip|hdtv)\b.*/i, '')
+      .replace(/[._()[\]-]/g, ' ')
+      .trim();
+
+    let year = null;
+    const yearMatch = title.match(/\b(19\d{2}|20\d{2})\b/);
+    if (yearMatch) {
+      year = parseInt(yearMatch[1], 10);
+    } else if (folderPath) {
+      const folderYearMatch = folderPath.match(/\b(19\d{2}|20\d{2})\b/);
+      if (folderYearMatch) {
+        year = parseInt(folderYearMatch[1], 10);
+      }
+    }
+
     title = title.replace(/\s*(19\d{2}|20\d{2})\s*$/, '').trim();
-    return { title, seasonNumber, episodeNumber, episodeEnd, isShow: true };
+    return { title, year, seasonNumber, episodeNumber, episodeEnd, isShow: true, tmdbId, imdbId };
   }
 
-  const yearMatch = cleanName.match(/(19\d{2}|20\d{2})/);
-  const year = yearMatch ? parseInt(yearMatch[0]) : null;
+  // Movie parsing
+  const yearMatch = strippedName.match(/(19\d{2}|20\d{2})/);
+  const year = yearMatch ? parseInt(yearMatch[0], 10) : null;
   
-  let titlePart = cleanName;
+  let titlePart = strippedName;
   if (yearMatch) {
-    titlePart = cleanName.substring(0, yearMatch.index);
+    titlePart = strippedName.substring(0, yearMatch.index);
   }
 
-  let title = titlePart.replace(/[._()[\]-]/g, ' ').trim();
-  title = title.replace(/\b(1080p|720p|4k|2160p|bluray|webdl|web-dl|x264|x265)\b.*/i, '').trim();
+  let title = titlePart
+    .replace(/(?:\[|\{)?\btmdb(?:id)?[-=:\s]+\d+(?:\]|\})?/gi, '')
+    .replace(/(?:\[|\{)?\b(?:imdb[-=:\s]+)?tt\d{7,10}\b(?:\]|\})?/gi, '')
+    .replace(/[._()[\]-]/g, ' ')
+    .trim();
+  title = title.replace(/\b(1080p|720p|4k|2160p|bluray|webdl|web-dl|x264|x265|dvdrip|hdtv)\b.*/i, '').trim();
   
-  return { title, year, isShow: false, episodeEnd: null };
+  return { title, year, isShow: false, episodeEnd: null, tmdbId, imdbId };
 };
 
 const gatherFilesFromPaths = async (paths, scanProgress) => {

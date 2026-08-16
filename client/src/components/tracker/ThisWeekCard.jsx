@@ -34,7 +34,7 @@ export function ThisWeekCard({ item, type }) {
   return (
     <div
       onClick={handleClick}
-      className="w-64 sm:w-72 md:w-80 shrink-0 snap-start bg-slate-800/60 border border-slate-700/50 rounded-2xl overflow-hidden transition-all duration-300 flex flex-col group cursor-pointer hover:border-cyan-500/40 hover:-translate-y-1 shadow-xl"
+      className="w-48 sm:w-72 md:w-80 shrink-0 snap-start bg-slate-800/60 border border-slate-700/50 rounded-xl sm:rounded-2xl overflow-hidden transition-all duration-300 flex flex-col group cursor-pointer hover:border-cyan-500/40 hover:-translate-y-1 shadow-xl"
     >
       {/* Poster + Day Badge */}
       <div className="relative aspect-[16/9] bg-slate-900 overflow-hidden">
@@ -46,25 +46,25 @@ export function ThisWeekCard({ item, type }) {
           />
         ) : (
           <div className="w-full h-full flex items-center justify-center text-slate-600">
-            {isEpisode ? <Tv className="w-10 h-10" /> : <Film className="w-10 h-10" />}
+            {isEpisode ? <Tv className="w-8 h-8 sm:w-10 sm:h-10" /> : <Film className="w-8 h-8 sm:w-10 sm:h-10" />}
           </div>
         )}
 
         {/* Day badge — top-left */}
-        <div className={`absolute top-3 left-3 px-3 py-1 rounded-full text-xs font-bold backdrop-blur-md border shadow-lg flex items-center gap-1.5 ${
+        <div className={`absolute top-2 left-2 sm:top-3 sm:left-3 px-2 sm:px-3 py-0.5 sm:py-1 rounded-full text-[10px] sm:text-xs font-bold backdrop-blur-md border shadow-lg flex items-center gap-1 sm:gap-1.5 ${
           item.isToday
             ? 'bg-emerald-500/30 text-emerald-200 border-emerald-400/50'
             : item.isTomorrow
             ? 'bg-cyan-500/30 text-cyan-200 border-cyan-400/50'
             : 'bg-slate-900/80 text-slate-200 border-slate-600/50'
         }`}>
-          <Calendar className="w-3 h-3" />
+          <Calendar className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
           {item.isToday ? 'Today' : item.isTomorrow ? 'Tomorrow' : item.dayName}
         </div>
 
         {/* Type badge — top-right */}
-        <div className="absolute top-3 right-3">
-          <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded-full backdrop-blur-md border ${
+        <div className="absolute top-2 right-2 sm:top-3 sm:right-3">
+          <span className={`text-[9px] sm:text-[10px] uppercase font-bold px-1.5 sm:px-2 py-0.5 rounded-full backdrop-blur-md border ${
             isEpisode
               ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30'
               : 'bg-purple-500/20 text-purple-300 border-purple-500/30'
@@ -74,23 +74,23 @@ export function ThisWeekCard({ item, type }) {
         </div>
 
         {/* Gradient overlay at bottom */}
-        <div className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-slate-900/90 via-slate-900/40 to-transparent pointer-events-none" />
+        <div className="absolute inset-x-0 bottom-0 h-16 sm:h-20 bg-gradient-to-t from-slate-900/90 via-slate-900/40 to-transparent pointer-events-none" />
       </div>
 
       {/* Card body */}
-      <div className="p-3.5 space-y-1.5 flex-1 flex flex-col justify-between">
+      <div className="p-2.5 sm:p-3.5 space-y-1 sm:space-y-1.5 flex-1 flex flex-col justify-between">
         <div>
           <h3 className="text-slate-100 font-bold text-xs sm:text-sm truncate group-hover:text-cyan-400 transition-colors">
             {title}
           </h3>
-          <p className="text-[11px] sm:text-xs text-slate-400 truncate mt-0.5">
+          <p className="text-[10px] sm:text-xs text-slate-400 truncate mt-0.5">
             {subtitle}
           </p>
         </div>
 
-        <div className="flex items-center gap-2 pt-1">
+        <div className="flex items-center gap-2 pt-0.5 sm:pt-1">
           {item.runtime && (
-            <span className="text-[11px] text-slate-500 font-mono">{formatRuntime(item.runtime)}</span>
+            <span className="text-[10px] sm:text-[11px] text-slate-500 font-mono">{formatRuntime(item.runtime)}</span>
           )}
         </div>
       </div>

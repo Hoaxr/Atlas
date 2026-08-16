@@ -6,7 +6,7 @@ import api from '../lib/api';
 import useWebSocket from '../lib/useWebSocket';
 import { 
   Clock, Film, Tv, Play, ChevronRight, ChevronLeft, Trash2, Undo2, Eye, 
-  Flame, Award, Calendar, Sparkles, Compass, CheckCircle2, TrendingUp, Zap, Moon, Sun, Star, MonitorPlay
+  Flame, Award, Calendar, Sparkles, Compass, CheckCircle2, TrendingUp, Zap, Moon, Sun, Star, MonitorPlay, Loader2
 } from 'lucide-react';
 import { tmdbImgUrl } from '../lib/posterUrl';
 
@@ -124,33 +124,37 @@ const TimelineHistoryCard = ({ item, handleMarkUnwatched, handleDeleteHistory })
           {!isMovie && (item.season_number !== null && item.season_number !== undefined || item.episode_number !== null && item.episode_number !== undefined) && (
             <p className="text-[10px] sm:text-xs text-cyan-300/90 font-medium truncate">
               S{String(item.season_number || 1).padStart(2, '0')} E{String(item.episode_number || 1).padStart(2, '0')}
-              {item.episode_title ? ` — ${item.episode_title}` : ''}
             </p>
           )}
         </div>
 
         {/* Right-side metadata & actions */}
-        <div className="shrink-0 flex flex-col items-end gap-0.5 sm:gap-1.5 ml-1 sm:ml-2">
-          <span className="flex items-center gap-0.5 sm:gap-1 text-emerald-400 font-semibold text-[10px] sm:text-[11px]">
-            <CheckCircle2 className="w-3 h-3" /> <span className="hidden sm:inline">Watched</span>
-          </span>
-          {runtimeMin && (
-            <span className="text-slate-500 font-mono text-[10px] sm:text-[11px] hidden sm:inline">{formatRuntime(runtimeMin)}</span>
-          )}
-          <div className="flex sm:flex-row flex-col items-center gap-0.5 sm:gap-1 pt-0.5 sm:pt-1">
+        <div className="shrink-0 flex flex-col items-end justify-between self-stretch gap-1.5 ml-1.5 sm:ml-3">
+          <div className="flex items-center gap-1.5">
+            {runtimeMin && (
+              <span className="text-slate-500 font-mono text-[10px] sm:text-xs">{formatRuntime(runtimeMin)}</span>
+            )}
+            <span className="flex items-center gap-1 text-emerald-400 font-semibold text-xs" title="Watched">
+              <CheckCircle2 className="w-4 h-4" />
+            </span>
+          </div>
+
+          <div className="flex items-center gap-1.5">
             <button
               onClick={() => handleMarkUnwatched(item)}
-              className="p-1 rounded-md bg-slate-800 hover:bg-amber-500/20 text-slate-500 hover:text-amber-300 border border-white/10 transition-all"
+              className="p-1.5 sm:p-2 rounded-lg bg-slate-800/90 hover:bg-amber-500/20 text-slate-400 hover:text-amber-300 border border-white/10 transition-all active:scale-95"
               title="Mark unwatched"
+              aria-label="Mark unwatched"
             >
-              <Undo2 className="w-3 h-3" />
+              <Undo2 className="w-4 h-4" />
             </button>
             <button
               onClick={() => handleDeleteHistory(item.history_id)}
-              className="p-1 rounded-md bg-slate-800 hover:bg-red-500/20 text-slate-500 hover:text-red-300 border border-white/10 transition-all"
+              className="p-1.5 sm:p-2 rounded-lg bg-slate-800/90 hover:bg-red-500/20 text-slate-400 hover:text-red-300 border border-white/10 transition-all active:scale-95"
               title="Remove from history"
+              aria-label="Remove from history"
             >
-              <Trash2 className="w-3 h-3" />
+              <Trash2 className="w-4 h-4" />
             </button>
           </div>
         </div>
@@ -204,8 +208,8 @@ const Tracker = () => {
 
   const scrollContainer = (dir) => {
     if (scrollRef.current) {
-      const cardWidth = scrollRef.current.firstElementChild?.offsetWidth || 280;
-      const gap = 20; // matches gap-5
+      const cardWidth = scrollRef.current.firstElementChild?.offsetWidth || 200;
+      const gap = window.innerWidth < 640 ? 12 : 20;
       const amount = cardWidth + gap;
       scrollRef.current.scrollBy({ left: dir === 'left' ? -amount : amount, behavior: 'smooth' });
     }
@@ -213,8 +217,8 @@ const Tracker = () => {
 
   const scrollContainerWeek = (dir) => {
     if (weekScrollRef.current) {
-      const cardWidth = weekScrollRef.current.firstElementChild?.offsetWidth || 280;
-      const gap = 20;
+      const cardWidth = weekScrollRef.current.firstElementChild?.offsetWidth || 200;
+      const gap = window.innerWidth < 640 ? 12 : 20;
       const amount = cardWidth + gap;
       weekScrollRef.current.scrollBy({ left: dir === 'left' ? -amount : amount, behavior: 'smooth' });
     }
@@ -334,9 +338,8 @@ const Tracker = () => {
 
   if (loading && !stats) {
     return (
-      <div className="flex flex-col justify-center items-center min-h-[60vh] text-slate-400 gap-4">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-cyan-500"></div>
-        <p className="font-medium animate-pulse text-slate-300">Loading Watch Tracker Analytics Dashboard...</p>
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <Loader2 className="w-8 h-8 animate-spin text-cyan-500" />
       </div>
     );
   }
@@ -519,7 +522,7 @@ const Tracker = () => {
             </div>
           </div>
 
-          <div ref={scrollRef} className="flex gap-5 overflow-x-auto scrollbar-none pb-4 pt-1 snap-x">
+          <div ref={scrollRef} className="flex gap-3 sm:gap-5 overflow-x-auto scrollbar-none pb-4 pt-1 snap-x">
             {upNextEpisodes.map(ep => (
               <AnimatedUpNextCard 
                 key={`ep-${ep.episode_id}`}
@@ -552,7 +555,7 @@ const Tracker = () => {
             </div>
           </div>
 
-          <div ref={weekScrollRef} className="flex gap-5 overflow-x-auto scrollbar-none pb-4 pt-1 snap-x">
+          <div ref={weekScrollRef} className="flex gap-3 sm:gap-5 overflow-x-auto scrollbar-none pb-4 pt-1 snap-x">
             {thisWeekCombined.map(item => (
               <ThisWeekCard
                 key={item._type === 'episode' ? `wk-ep-${item.episode_id}` : `wk-movie-${item.id}`}
