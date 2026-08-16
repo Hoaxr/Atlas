@@ -537,13 +537,8 @@ router.get('/calendar', async (req, res, next) => {
 
     const formatted = upcoming.map(item => {
       let dateStr = item.date;
-      if (dateStr && !dateStr.includes('T')) {
-        // Plain YYYY-MM-DD date: attach standard broadcast airtime (21:00 US Eastern EDT)
-        if (item.type === 'episode') {
-          dateStr = `${item.date}T21:00:00-04:00`;
-        } else {
-          dateStr = `${item.date}T00:00:00Z`;
-        }
+      if (dateStr && dateStr.includes('T')) {
+        dateStr = dateStr.split('T')[0];
       }
       return { ...item, date: dateStr };
     });

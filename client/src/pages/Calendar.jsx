@@ -12,29 +12,12 @@ const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 /**
- * Converts a release UTC ISO timestamp or airtime string into the user's local YYYY-MM-DD date key.
+ * Converts a release date or timestamp into the YYYY-MM-DD calendar key.
  */
-export function getLocalDateKey(dateStr, type = 'episode') {
+export function getLocalDateKey(dateStr) {
   if (!dateStr) return null;
-  try {
-    let raw = dateStr;
-    if (!raw.includes('T')) {
-      if (type === 'episode') {
-        // Assume standard US Eastern broadcast air time (21:00 EDT / UTC-4) for TV episodes
-        raw = `${dateStr}T21:00:00-04:00`;
-      } else {
-        return dateStr;
-      }
-    }
-    const d = new Date(raw);
-    if (isNaN(d.getTime())) return dateStr.split('T')[0];
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    return `${y}-${m}-${day}`;
-  } catch (_) {
-    return dateStr.split('T')[0];
-  }
+  // If ISO string with T, extract the date portion directly to maintain broadcast release day
+  return dateStr.split('T')[0];
 }
 
 export default function Calendar() {

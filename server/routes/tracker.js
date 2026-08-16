@@ -446,10 +446,9 @@ router.get('/up-next', (req, res) => {
         JOIN shows s ON e.show_id = s.id
         WHERE e.watched = 0 
           AND (
-            e.status = 'downloaded' 
-            OR (
+            e.status = 'downloaded' OR (
               e.air_date IS NOT NULL AND 
-              datetime(CASE WHEN INSTR(e.air_date, 'T') > 0 THEN e.air_date ELSE e.air_date || 'T21:00:00-04:00' END) <= datetime('now') AND 
+              date(e.air_date) <= date('now') AND 
               (e.status = 'monitored' OR e.show_id IN (SELECT show_id FROM episodes WHERE watched = 1))
             )
           )
@@ -472,7 +471,7 @@ router.get('/up-next', (req, res) => {
             e2.status = 'downloaded' 
             OR (
               e2.air_date IS NOT NULL AND 
-              datetime(CASE WHEN INSTR(e2.air_date, 'T') > 0 THEN e2.air_date ELSE e2.air_date || 'T21:00:00-04:00' END) <= datetime('now') AND 
+              date(e2.air_date) <= date('now') AND 
               (e2.status = 'monitored' OR e2.show_id IN (SELECT show_id FROM episodes WHERE watched = 1))
             )
           )
@@ -686,30 +685,22 @@ router.get('/this-week', (req, res) => {
 
     const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
-    const getDayLabel = (dateStr, type = 'episode') => {
+    const getDayLabel = (dateStr) => {
       if (!dateStr) return { dayName: 'Unknown', isToday: false, isTomorrow: false };
       
-      let raw = dateStr;
-      if (!raw.includes('T')) {
-        if (type === 'episode') {
-          // Assume 21:00 US Eastern broadcast air time for TV episodes
-          raw = `${dateStr}T21:00:00-04:00`;
-        } else {
-          raw = `${dateStr}T00:00:00Z`;
-        }
-      }
+      const cleanDate = dateStr.split('T')[0];
+      const parts = cleanDate.split('-').map(Number);
+      if (parts.length !== 3 || parts.some(isNaN)) return { dayName: 'Unknown', isToday: false, isTomorrow: false };
 
-      const d = new Date(raw);
-      if (isNaN(d.getTime())) return { dayName: 'Unknown', isToday: false, isTomorrow: false };
-
-      const today = new Date();
-      const targetDateObj = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-      const todayDateObj = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+      const [y, m, d] = parts;
+      const targetDateObj = new Date(y, m - 1, d);
+      const now = new Date();
+      const todayDateObj = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
       const diffDays = Math.round((targetDateObj.getTime() - todayDateObj.getTime()) / (1000 * 3600 * 24));
 
       return {
-        dayName: dayNames[d.getDay()],
+        dayName: dayNames[targetDateObj.getDay()],
         isToday: diffDays === 0,
         isTomorrow: diffDays === 1
       };
