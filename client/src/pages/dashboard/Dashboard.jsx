@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useRef, forwardRef } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { VirtuosoGrid } from 'react-virtuoso';
 import api from '../../lib/api';
-import { Activity, Film, Tv, Search, CheckCircle2, AlertCircle, Bookmark, BookmarkMinus, LayoutGrid, List, Star, ArrowRight, Zap, X, RotateCcw, Filter as FilterIcon, CheckSquare, Square, Columns, Plus } from 'lucide-react';
+import { Activity, Film, Tv, Search, CheckCircle2, AlertCircle, Bookmark, BookmarkMinus, LayoutGrid, List, Star, ArrowRight, Zap, Eye, EyeOff, X, RotateCcw, Filter as FilterIcon, CheckSquare, Square, Columns, Plus } from 'lucide-react';
 import { customAlert, customConfirm } from '../../utils/alerts';
 import { cachedMovies, cachedShows, setCachedMovies, setCachedShows } from '../../lib/libraryCache';
 import { parseResolution, parseCodec } from '../../lib/format';
@@ -939,7 +939,7 @@ export default function Dashboard() {
                       else navigate(`/movies/${item.id}`);
                     }
                   }}
-                  className={`cursor-pointer glass-panel interactive-glow-card rounded-xl overflow-hidden group hover:scale-[1.02] transition-transform duration-300 relative flex flex-col focus:outline-none focus:ring-2 focus:ring-cyan-500/50`}
+                  className={`cursor-pointer glass-panel interactive-glow-card rounded-xl overflow-hidden group hover:scale-[1.02] transition-all duration-300 relative flex flex-col focus:outline-none focus:ring-2 focus:ring-cyan-500/50 hover:shadow-[0_0_30px_-5px_rgba(6,182,212,0.25)] hover:border-cyan-500/40`}
                 >
                   <div className="absolute top-2 left-2 z-20 group-hover:opacity-0 transition-opacity duration-200">
                     <button 
@@ -1026,7 +1026,7 @@ export default function Dashboard() {
                       className="w-full h-full object-cover relative"
                     />
                     <div className="absolute inset-0 bg-slate-950/80 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-between p-3 z-10 pointer-events-none">
-                      {/* Top Header: Progress pill */}
+                      {/* Top Header: Progress pill for shows only */}
                       {viewMode === 'shows' && item.episode_count > 0 ? (
                         <div className="w-full bg-slate-900/90 backdrop-blur-md px-3 py-1.5 rounded-lg border border-white/10 shadow-lg flex flex-col gap-1">
                           <div className="flex justify-between items-center w-full text-[11px] font-semibold">
@@ -1048,51 +1048,76 @@ export default function Dashboard() {
                             />
                           </div>
                         </div>
-                      ) : <div />}
-
-                      {/* Center Floating Mini-Dock Actions */}
-                      {item.status === 'monitored' ? (
-                        <div className="self-center flex items-center gap-2 p-1.5 rounded-full bg-slate-900/90 backdrop-blur-md border border-white/10 shadow-2xl pointer-events-auto">
-                          <button 
-                            onClick={async (e) => { 
-                              e.stopPropagation(); e.preventDefault(); 
-                              customAlert(`Starting auto-search for ${item.title}...`);
-                              try {
-                                const endpoint = viewMode === 'movies' ? `/library/movies/${item.id}/auto-search` : `/library/shows/${item.id}/auto-search`;
-                                const res = await api.post(endpoint);
-                                if (res.data.status === 'success') {
-                                  customAlert(res.data.message || `Found & downloading: ${res.data.data?.title || 'torrents'}`);
-                                  refreshLibrary();
-                                }
-                              } catch (err) {
-                                console.error(err);
-                                customAlert('Auto-search failed to find any results', 'error');
-                              }
-                            }}
-                            className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 w-9 h-9 rounded-full font-bold flex items-center justify-center transition-transform hover:scale-110 shadow-lg"
-                            title="Auto Search"
-                          >
-                            <Zap className="w-4 h-4 fill-current" />
-                          </button>
-                          <button 
-                            onClick={(e) => { 
-                              e.stopPropagation(); e.preventDefault(); 
-                              setSearchMediaId(item.id);
-                              setSearchMediaType(viewMode === 'movies' ? 'movie' : 'show');
-                              setSearchMediaTitle(item.title);
-                              setSearchModalOpen(true);
-                            }}
-                            className="bg-purple-500 hover:bg-purple-400 text-slate-950 w-9 h-9 rounded-full font-bold flex items-center justify-center transition-transform hover:scale-110 shadow-lg"
-                            title="Manual Search"
-                          >
-                            <Search className="w-4 h-4" />
-                          </button>
-                        </div>
                       ) : (
                         <div />
                       )}
 
-                      {/* Bottom placeholder keeping poster view clean & open */}
+                      {/* Center Floating Action Dock */}
+                      <div className="self-center flex items-center gap-2 p-1.5 rounded-full bg-slate-900/90 backdrop-blur-md border border-white/10 shadow-2xl pointer-events-auto">
+                        <button 
+                          onClick={async (e) => { 
+                            e.stopPropagation(); e.preventDefault(); 
+                            customAlert(`Starting auto-search for ${item.title}...`);
+                            try {
+                              const endpoint = viewMode === 'movies' ? `/library/movies/${item.id}/auto-search` : `/library/shows/${item.id}/auto-search`;
+                              const res = await api.post(endpoint);
+                              if (res.data.status === 'success') {
+                                customAlert(res.data.message || `Found & downloading: ${res.data.data?.title || 'torrents'}`);
+                                refreshLibrary();
+                              }
+                            } catch (err) {
+                              console.error(err);
+                              customAlert('Auto-search failed to find any results', 'error');
+                            }
+                          }}
+                          className="bg-amber-400 hover:bg-amber-300 text-slate-950 w-9 h-9 rounded-full font-bold flex items-center justify-center transition-transform hover:scale-110 shadow-lg"
+                          title="Auto Search"
+                        >
+                          <Zap className="w-4 h-4 fill-current" />
+                        </button>
+                        <button 
+                          onClick={(e) => { 
+                            e.stopPropagation(); e.preventDefault(); 
+                            setSearchMediaId(item.id);
+                            setSearchMediaType(viewMode === 'movies' ? 'movie' : 'show');
+                            setSearchMediaTitle(item.title);
+                            setSearchModalOpen(true);
+                          }}
+                          className="bg-cyan-500 hover:bg-cyan-400 text-slate-950 w-9 h-9 rounded-full font-bold flex items-center justify-center transition-transform hover:scale-110 shadow-lg"
+                          title="Manual Search"
+                        >
+                          <Search className="w-4 h-4" />
+                        </button>
+                        <button 
+                          onClick={async (e) => {
+                            e.stopPropagation(); e.preventDefault();
+                            try {
+                              const newWatched = !item.watched;
+                              const endpoint = viewMode === 'movies' 
+                                ? `/library/movies/${item.id}/watched` 
+                                : `/library/shows/${item.id}/watched`;
+                              const res = await api.post(endpoint, { watched: newWatched });
+                              if (res.data.status === 'success') {
+                                customAlert(newWatched ? 'Marked as watched' : 'Marked as unwatched');
+                                refreshLibrary();
+                              }
+                            } catch (err) {
+                              console.error(err);
+                              customAlert('Failed to update watch status', 'error');
+                            }
+                          }}
+                          className={`w-9 h-9 rounded-full font-bold flex items-center justify-center transition-transform hover:scale-110 shadow-lg ${
+                            item.watched 
+                              ? 'bg-emerald-500 hover:bg-emerald-400 text-slate-950' 
+                              : 'bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-white/10'
+                          }`}
+                          title={item.watched ? 'Mark as Unwatched' : 'Mark as Watched'}
+                        >
+                          {item.watched ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+                        </button>
+                      </div>
+
+                      {/* Bottom spacing keeping poster view clean & open */}
                       <div />
                     </div>
                   </div>
