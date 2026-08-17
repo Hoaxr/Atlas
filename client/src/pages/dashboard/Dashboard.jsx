@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useRef, forwardRef } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { VirtuosoGrid } from 'react-virtuoso';
 import api from '../../lib/api';
-import { Activity, Film, Tv, Search, CheckCircle2, AlertCircle, Bookmark, BookmarkMinus, LayoutGrid, List, Star, Info, X, RotateCcw, Filter as FilterIcon, CheckSquare, Square, Columns, Plus } from 'lucide-react';
+import { Activity, Film, Tv, Search, CheckCircle2, AlertCircle, Bookmark, BookmarkMinus, LayoutGrid, List, Star, ArrowRight, Zap, X, RotateCcw, Filter as FilterIcon, CheckSquare, Square, Columns, Plus } from 'lucide-react';
 import { customAlert, customConfirm } from '../../utils/alerts';
 import { cachedMovies, cachedShows, setCachedMovies, setCachedShows } from '../../lib/libraryCache';
 import { parseResolution, parseCodec } from '../../lib/format';
@@ -941,7 +941,7 @@ export default function Dashboard() {
                   }}
                   className={`cursor-pointer glass-panel interactive-glow-card rounded-xl overflow-hidden group hover:scale-[1.02] transition-transform duration-300 relative flex flex-col focus:outline-none focus:ring-2 focus:ring-cyan-500/50`}
                 >
-                  <div className="absolute top-2 left-2 z-20">
+                  <div className="absolute top-2 left-2 z-20 group-hover:opacity-0 transition-opacity duration-200">
                     <button 
                       onClick={async (e) => {
                         e.stopPropagation(); e.preventDefault();
@@ -967,7 +967,7 @@ export default function Dashboard() {
                     </button>
                   </div>
 
-                  <div className="absolute top-2 right-2 z-20 flex gap-2">
+                  <div className="absolute top-2 right-2 z-20 flex gap-2 group-hover:opacity-0 transition-opacity duration-200">
                     {(item.status === 'downloading' || (viewMode === 'shows' && item.downloading_episodes > 0)) && (
                       <div className="bg-slate-900/80 rounded-full shadow-lg p-1.5" title="Downloading">
                         <Activity className="w-5 h-5 text-blue-400 animate-pulse" />
@@ -1006,13 +1006,13 @@ export default function Dashboard() {
 
                   <div className="aspect-[2/3] relative bg-slate-800 min-h-[200px] flex-shrink-0">
                     {item.watched ? (
-                      <div className="absolute bottom-2 left-2 z-20 flex items-center gap-1 bg-slate-950/80 backdrop-blur px-2 py-1 rounded-md border border-emerald-500/30 shadow-lg">
+                      <div className="absolute bottom-2 left-2 z-20 flex items-center gap-1 bg-slate-950/80 backdrop-blur px-2 py-1 rounded-md border border-emerald-500/30 shadow-lg group-hover:opacity-0 transition-opacity duration-200">
                         <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#34d399" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
                         <span className="text-[10px] font-bold text-emerald-400">Watched</span>
                       </div>
                     ) : null}
                     {viewMode === 'shows' && item.season_count > 0 && (
-                      <div className="absolute bottom-2 right-2 z-20 flex items-center gap-1 bg-slate-950/80 backdrop-blur px-2 py-1 rounded-md border border-purple-500/30 shadow-lg">
+                      <div className="absolute bottom-2 right-2 z-20 flex items-center gap-1 bg-slate-950/80 backdrop-blur px-2 py-1 rounded-md border border-purple-500/30 shadow-lg group-hover:opacity-0 transition-opacity duration-200">
                         <Tv className="w-3 h-3 text-purple-400" />
                         <span className="text-[10px] font-bold text-purple-400">{item.season_count}</span>
                       </div>
@@ -1025,62 +1025,85 @@ export default function Dashboard() {
                       height="750"
                       className="w-full h-full object-cover relative"
                     />
-                    <div className="absolute inset-0 bg-slate-950/80 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col items-center justify-center gap-3 p-4 z-10">
-                      <div className="flex flex-col gap-2 w-full">
-                        {item.status === 'monitored' && (
-                          <div className="flex gap-2 justify-center">
-                            <button 
-                              onClick={async (e) => { 
-                                e.stopPropagation(); e.preventDefault(); 
-                                customAlert(`Starting auto-search for ${item.title}...`);
-                                try {
-                                  const endpoint = viewMode === 'movies' ? `/library/movies/${item.id}/auto-search` : `/library/shows/${item.id}/auto-search`;
-                                  const res = await api.post(endpoint);
-                                  if (res.data.status === 'success') {
-                                    customAlert(res.data.message || `Found & downloading: ${res.data.data?.title || 'torrents'}`);
-                                    refreshLibrary();
-                                  }
-                                } catch (err) {
-                                  console.error(err);
-                                  customAlert('Auto-search failed to find any results', 'error');
-                                }
-                              }}
-                              className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 w-12 h-12 rounded-full font-bold flex items-center justify-center transition-transform hover:scale-110 shadow-lg"
-                              title="Auto Search"
-                            >
-                              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/></svg>
-                            </button>
-                            <button 
-                              onClick={(e) => { 
-                                e.stopPropagation(); e.preventDefault(); 
-                                setSearchMediaId(item.id);
-                                setSearchMediaType(viewMode === 'movies' ? 'movie' : 'show');
-                                setSearchMediaTitle(item.title);
-                                setSearchModalOpen(true);
-                              }}
-                              className="bg-purple-500 hover:bg-purple-400 text-slate-950 w-12 h-12 rounded-full font-bold flex items-center justify-center transition-transform hover:scale-110 shadow-lg"
-                              title="Manual Search"
-                            >
-                              <Search className="w-5 h-5" />
-                            </button>
+                    <div className="absolute inset-0 bg-slate-950/80 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-between p-3 z-10 pointer-events-none">
+                      {/* Top Header: Progress pill */}
+                      {viewMode === 'shows' && item.episode_count > 0 ? (
+                        <div className="w-full bg-slate-900/90 backdrop-blur-md px-3 py-1.5 rounded-lg border border-white/10 shadow-lg flex flex-col gap-1">
+                          <div className="flex justify-between items-center w-full text-[11px] font-semibold">
+                            <span className="text-slate-400">Episodes</span>
+                            <span className="text-slate-200">
+                              <span className={item.watched_episodes === item.episode_count ? 'text-emerald-400 font-bold' : 'text-cyan-400 font-bold'}>
+                                {item.watched_episodes || 0}
+                              </span>
+                              <span className="text-slate-500"> / </span>
+                              {item.episode_count}
+                            </span>
                           </div>
-                        )}
-                        <button 
-                          onClick={(e) => {
-                            e.stopPropagation(); e.preventDefault();
-                            if (viewMode === 'shows') navigate(`/shows/${item.id}`);
-                            else navigate(`/movies/${item.id}`);
-                          }}
-                          className="bg-white/10 hover:bg-white/20 text-white w-full py-2 rounded-lg font-bold flex items-center justify-center gap-2 transition-colors mt-2"
-                        >
-                          <Info className="w-4 h-4" /> Details
-                        </button>
-                      </div>
+                          <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
+                            <div 
+                              className={`h-full rounded-full transition-all duration-300 ${
+                                item.watched_episodes === item.episode_count ? 'bg-emerald-400' : 'bg-gradient-to-r from-cyan-500 to-purple-500'
+                              }`}
+                              style={{ width: `${Math.min(100, Math.round(((item.watched_episodes || 0) / (item.episode_count || 1)) * 100))}%` }}
+                            />
+                          </div>
+                        </div>
+                      ) : <div />}
+
+                      {/* Center Floating Mini-Dock Actions */}
+                      {item.status === 'monitored' ? (
+                        <div className="self-center flex items-center gap-2 p-1.5 rounded-full bg-slate-900/90 backdrop-blur-md border border-white/10 shadow-2xl pointer-events-auto">
+                          <button 
+                            onClick={async (e) => { 
+                              e.stopPropagation(); e.preventDefault(); 
+                              customAlert(`Starting auto-search for ${item.title}...`);
+                              try {
+                                const endpoint = viewMode === 'movies' ? `/library/movies/${item.id}/auto-search` : `/library/shows/${item.id}/auto-search`;
+                                const res = await api.post(endpoint);
+                                if (res.data.status === 'success') {
+                                  customAlert(res.data.message || `Found & downloading: ${res.data.data?.title || 'torrents'}`);
+                                  refreshLibrary();
+                                }
+                              } catch (err) {
+                                console.error(err);
+                                customAlert('Auto-search failed to find any results', 'error');
+                              }
+                            }}
+                            className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 w-9 h-9 rounded-full font-bold flex items-center justify-center transition-transform hover:scale-110 shadow-lg"
+                            title="Auto Search"
+                          >
+                            <Zap className="w-4 h-4 fill-current" />
+                          </button>
+                          <button 
+                            onClick={(e) => { 
+                              e.stopPropagation(); e.preventDefault(); 
+                              setSearchMediaId(item.id);
+                              setSearchMediaType(viewMode === 'movies' ? 'movie' : 'show');
+                              setSearchMediaTitle(item.title);
+                              setSearchModalOpen(true);
+                            }}
+                            className="bg-purple-500 hover:bg-purple-400 text-slate-950 w-9 h-9 rounded-full font-bold flex items-center justify-center transition-transform hover:scale-110 shadow-lg"
+                            title="Manual Search"
+                          >
+                            <Search className="w-4 h-4" />
+                          </button>
+                        </div>
+                      ) : (
+                        <div />
+                      )}
+
+                      {/* Bottom placeholder keeping poster view clean & open */}
+                      <div />
                     </div>
                   </div>
 
-                  <div className="p-4 relative z-20 bg-gradient-to-b from-slate-800/95 to-slate-900/95 border-t border-white/10">
-                    <h3 className="font-semibold text-sm text-slate-100 truncate tracking-wide" title={item.title}>{item.title}</h3>
+                  <div className="p-4 relative z-20 bg-gradient-to-b from-slate-800/95 to-slate-900/95 border-t border-white/10 group-hover:border-cyan-500/30 transition-colors">
+                    <div className="flex items-center justify-between gap-1">
+                      <h3 className="font-semibold text-sm text-slate-100 group-hover:text-cyan-400 transition-colors truncate tracking-wide flex-1" title={item.title}>
+                        {item.title}
+                      </h3>
+                      <ArrowRight className="w-3.5 h-3.5 text-cyan-400 opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-200 flex-shrink-0" />
+                    </div>
                     <div className="flex justify-between items-center mt-2">
                       <span className="text-xs text-slate-500 font-medium tracking-wider uppercase">{item.year}</span>
                       <div className="flex items-center gap-2">
