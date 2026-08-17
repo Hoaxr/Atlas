@@ -70,9 +70,22 @@ router.get('/shows', (req, res, next) => {
 router.get('/shows/:id', async (req, res, next) => {
   try {
     const paramId = req.params.id;
-    let show = db.prepare('SELECT s.*, qp.name as quality_profile_name FROM shows s LEFT JOIN quality_profiles qp ON s.quality_profile_id = qp.id WHERE s.id = ?').get(paramId);
+    const query = `
+      SELECT s.*,
+        CASE
+          WHEN s.status = 'downloading' OR (SELECT COUNT(*) FROM episodes WHERE show_id = s.id AND status = 'downloading') > 0 THEN 'downloading'
+          WHEN s.monitored = 0 THEN 'unmonitored'
+          WHEN (SELECT COUNT(*) FROM episodes WHERE show_id = s.id AND monitored = 1 AND (file_path IS NULL OR file_path = '') AND status != 'downloaded' AND air_date IS NOT NULL AND air_date <= date('now', 'localtime')) > 0 THEN 'monitored'
+          WHEN (SELECT COUNT(*) FROM episodes WHERE show_id = s.id AND status = 'downloaded') > 0 THEN 'downloaded'
+          ELSE s.status
+        END as status,
+        qp.name as quality_profile_name 
+      FROM shows s 
+      LEFT JOIN quality_profiles qp ON s.quality_profile_id = qp.id 
+    `;
+    let show = db.prepare(`${query} WHERE s.id = ?`).get(paramId);
     if (!show) {
-      show = db.prepare('SELECT s.*, qp.name as quality_profile_name FROM shows s LEFT JOIN quality_profiles qp ON s.quality_profile_id = qp.id WHERE s.tmdb_id = ?').get(paramId);
+      show = db.prepare(`${query} WHERE s.tmdb_id = ?`).get(paramId);
     }
     if (!show) return res.status(404).json({ status: 'error', message: 'Show not found' });
     if (!isWatchedSyncEnabled()) show.watched = 0;

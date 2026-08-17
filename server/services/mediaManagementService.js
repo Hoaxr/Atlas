@@ -213,10 +213,10 @@ const runMediaManagement = async () => {
     // Recalculate status for downloading shows
     const downloadingShows = db.prepare("SELECT id FROM shows WHERE status = 'downloading'").all();
     for (const show of downloadingShows) {
-      const activeEps = db.prepare("SELECT COUNT(*) as count FROM episodes WHERE show_id = ? AND status = 'downloading'").get().count;
+      const activeEps = db.prepare("SELECT COUNT(*) as count FROM episodes WHERE show_id = ? AND status = 'downloading'").get(show.id).count;
       if (activeEps === 0) {
         // No active downloads left for this show
-        const missingMonitored = db.prepare("SELECT COUNT(*) as count FROM episodes WHERE show_id = ? AND monitored = 1 AND (file_path IS NULL OR file_path = '')").get().count;
+        const missingMonitored = db.prepare("SELECT COUNT(*) as count FROM episodes WHERE show_id = ? AND monitored = 1 AND (file_path IS NULL OR file_path = '')").get(show.id).count;
         const newStatus = missingMonitored > 0 ? 'monitored' : 'downloaded';
         db.prepare("UPDATE shows SET status = ? WHERE id = ?").run(newStatus, show.id);
         console.log(`[MediaManagement] Show ID ${show.id} all downloads finished. Status updated to ${newStatus}.`);

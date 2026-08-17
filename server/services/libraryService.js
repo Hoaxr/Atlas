@@ -381,6 +381,7 @@ const getShows = (limit = 0, offset = 0, sort = 'added_desc', filters = {}) => {
         COUNT(*)                                                         AS episode_count,
         COUNT(DISTINCT e.season_number)                                  AS season_count,
         COUNT(CASE WHEN e.status = 'downloaded' THEN 1 END)             AS downloaded_episodes,
+        COUNT(CASE WHEN e.status = 'downloading' THEN 1 END)            AS downloading_episodes,
         COUNT(CASE
           WHEN e.monitored = 1
             AND (e.file_path IS NULL OR e.file_path = '')
@@ -405,9 +406,17 @@ const getShows = (limit = 0, offset = 0, sort = 'added_desc', filters = {}) => {
     )
     SELECT
       s.*,
+      CASE
+        WHEN s.status = 'downloading' OR COALESCE(es.downloading_episodes, 0) > 0 THEN 'downloading'
+        WHEN s.monitored = 0 THEN 'unmonitored'
+        WHEN COALESCE(es.missing_episodes, 0) > 0 THEN 'monitored'
+        WHEN COALESCE(es.downloaded_episodes, 0) > 0 THEN 'downloaded'
+        ELSE s.status
+      END                                   AS status,
       qp.name                               AS quality_profile_name,
       COALESCE(es.episode_count, 0)         AS episode_count,
       COALESCE(es.downloaded_episodes, 0)   AS downloaded_episodes,
+      COALESCE(es.downloading_episodes, 0)  AS downloading_episodes,
       COALESCE(es.missing_episodes, 0)      AS missing_episodes,
       COALESCE(es.season_count, 0)          AS season_count,
       es.sample_episode_path,

@@ -968,26 +968,40 @@ export default function Dashboard() {
                   </div>
 
                   <div className="absolute top-2 right-2 z-20 flex gap-2">
-                    {item.status === 'downloaded' && (
-                      <div className="bg-slate-900/80 rounded-full shadow-lg p-1.5" title="Available">
-                        <CheckCircle2 className="w-5 h-5 text-emerald-400 fill-emerald-400/20" />
-                      </div>
-                    )}
-                    {item.status === 'downloading' && (
+                    {(item.status === 'downloading' || (viewMode === 'shows' && item.downloading_episodes > 0)) && (
                       <div className="bg-slate-900/80 rounded-full shadow-lg p-1.5" title="Downloading">
                         <Activity className="w-5 h-5 text-blue-400 animate-pulse" />
                       </div>
                     )}
-                    {item.status === 'monitored' && (
-                      <div className="bg-slate-900/80 rounded-full shadow-lg p-1.5" title={
-                        item.release_date && new Date(item.release_date) > new Date()
-                          ? 'Missing / Not Released Yet'
-                          : 'Missing'
-                      }>
-                        <AlertCircle className={`w-5 h-5 ${item.release_date && new Date(item.release_date) > new Date() ? 'text-amber-400' : 'text-amber-500'}`} />
-                      </div>
+                    {viewMode === 'shows' && item.status !== 'downloading' && !item.downloading_episodes && (
+                      item.missing_episodes > 0 ? (
+                        <div className="bg-slate-900/80 rounded-full shadow-lg p-1.5" title={`${item.missing_episodes} Missing Episode${item.missing_episodes > 1 ? 's' : ''}`}>
+                          <AlertCircle className="w-5 h-5 text-amber-500" />
+                        </div>
+                      ) : (item.downloaded_episodes > 0 || item.status === 'downloaded') ? (
+                        <div className="bg-slate-900/80 rounded-full shadow-lg p-1.5" title="Available">
+                          <CheckCircle2 className="w-5 h-5 text-emerald-400 fill-emerald-400/20" />
+                        </div>
+                      ) : null
                     )}
-
+                    {viewMode === 'movies' && item.status !== 'downloading' && (
+                      <>
+                        {item.status === 'downloaded' && (
+                          <div className="bg-slate-900/80 rounded-full shadow-lg p-1.5" title="Available">
+                            <CheckCircle2 className="w-5 h-5 text-emerald-400 fill-emerald-400/20" />
+                          </div>
+                        )}
+                        {item.status === 'monitored' && (
+                          <div className="bg-slate-900/80 rounded-full shadow-lg p-1.5" title={
+                            item.release_date && new Date(item.release_date) > new Date()
+                              ? 'Missing / Not Released Yet'
+                              : 'Missing'
+                          }>
+                            <AlertCircle className={`w-5 h-5 ${item.release_date && new Date(item.release_date) > new Date() ? 'text-amber-400' : 'text-amber-500'}`} />
+                          </div>
+                        )}
+                      </>
+                    )}
                   </div>
 
                   <div className="aspect-[2/3] relative bg-slate-800 min-h-[200px] flex-shrink-0">

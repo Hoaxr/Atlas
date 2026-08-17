@@ -454,7 +454,8 @@ export default function ShowDetails() {
                     show.status === 'downloaded' ? 'text-emerald-400' : 
                     show.status === 'downloading' ? 'text-blue-400' : 
                     show.status === 'wanted' ? 'text-pink-400' : 
-                    show.status === 'monitored' ? 'text-emerald-400' : 
+                    show.status === 'monitored' ? 'text-amber-400' : 
+                    show.status === 'unmonitored' ? 'text-slate-400' : 
                     'text-rose-400'
                   }`}>
                     {show.status === 'wanted' ? 'Watchlist' : show.status}

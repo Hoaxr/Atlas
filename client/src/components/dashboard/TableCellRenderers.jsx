@@ -125,7 +125,8 @@ const StatusCell = ({ item }) => {
     ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
     : item.status === 'downloaded' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
     : item.status === 'downloading' ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
-    : item.status === 'monitored' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+    : item.status === 'monitored' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+    : item.status === 'unmonitored' ? 'bg-slate-500/20 text-slate-400 border border-slate-500/30'
     : 'bg-rose-500/20 text-rose-400 border border-rose-500/30';
   return (
     <td className="py-2.5 px-4">
