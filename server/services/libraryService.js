@@ -256,6 +256,33 @@ const addShow = async (tmdbId, rootFolderPath = null, monitorLevel = 'all') => {
       
       if (epsToInsert.length > 0) {
         insertEpSync(epsToInsert);
+
+        // Sync watched status from existing watch_history
+        try {
+          db.prepare(`
+            UPDATE episodes
+            SET watched = 1,
+                watched_at = COALESCE(episodes.watched_at, (
+                  SELECT w.watched_at 
+                  FROM watch_history w 
+                  WHERE w.tmdb_id = ? 
+                    AND (
+                      (w.type = 'episode' AND w.season_number = episodes.season_number AND w.episode_number = episodes.episode_number)
+                      OR (w.type = 'show')
+                    )
+                  LIMIT 1
+                ))
+            WHERE show_id = ? AND watched = 0 AND EXISTS (
+              SELECT 1 
+              FROM watch_history w 
+              WHERE w.tmdb_id = ? 
+                AND (
+                  (w.type = 'episode' AND w.season_number = episodes.season_number AND w.episode_number = episodes.episode_number)
+                  OR (w.type = 'show')
+                )
+            )
+          `).run(tmdbId, internalShowId, tmdbId);
+        } catch { /* ignore */ }
       }
 
       // Clear the syncing flag and broadcast completion so UI can refresh episode list

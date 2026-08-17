@@ -838,6 +838,94 @@ const MIGRATIONS = [
         db.exec('ALTER TABLE shows ADD COLUMN calendar_day_offset INTEGER DEFAULT 0;');
       }
     }
+  },
+  {
+    id: 31,
+    name: 'sync_episodes_watched_from_watch_history',
+    run: (db) => {
+      // 1. Sync episode watched state from episode-level watch_history
+      db.prepare(`
+        UPDATE episodes
+        SET watched = 1,
+            watched_at = COALESCE(episodes.watched_at, (
+              SELECT w.watched_at 
+              FROM watch_history w 
+              JOIN shows s ON s.tmdb_id = w.tmdb_id
+              WHERE s.id = episodes.show_id 
+                AND w.type = 'episode' 
+                AND w.season_number = episodes.season_number 
+                AND w.episode_number = episodes.episode_number
+              LIMIT 1
+            ))
+        WHERE watched = 0 AND EXISTS (
+          SELECT 1 
+          FROM watch_history w 
+          JOIN shows s ON s.tmdb_id = w.tmdb_id
+          WHERE s.id = episodes.show_id 
+            AND w.type = 'episode' 
+            AND w.season_number = episodes.season_number 
+            AND w.episode_number = episodes.episode_number
+        )
+      `).run();
+
+      // 2. Sync episode watched state from show-level watch_history (completed shows)
+      db.prepare(`
+        UPDATE episodes
+        SET watched = 1,
+            watched_at = COALESCE(episodes.watched_at, (
+              SELECT w.watched_at 
+              FROM watch_history w 
+              JOIN shows s ON s.tmdb_id = w.tmdb_id
+              WHERE s.id = episodes.show_id 
+                AND w.type = 'show'
+              LIMIT 1
+            ))
+        WHERE watched = 0 AND EXISTS (
+          SELECT 1 
+          FROM watch_history w 
+          JOIN shows s ON s.tmdb_id = w.tmdb_id
+          WHERE s.id = episodes.show_id 
+            AND w.type = 'show'
+        )
+      `).run();
+
+      // 3. Backfill individual episode watch_history rows for show-level completed shows
+      const showsWithShowLevel = db.prepare(`
+        SELECT s.id, s.tmdb_id, w.watched_at 
+        FROM shows s
+        JOIN watch_history w ON s.tmdb_id = w.tmdb_id AND w.type = 'show'
+      `).all();
+
+      const insertHistory = db.prepare('INSERT OR IGNORE INTO watch_history (tmdb_id, type, season_number, episode_number, watched_at, runtime) VALUES (?, ?, ?, ?, ?, ?)');
+      for (const s of showsWithShowLevel) {
+        const eps = db.prepare('SELECT season_number, episode_number, runtime FROM episodes WHERE show_id = ?').all(s.id);
+        for (const ep of eps) {
+          insertHistory.run(s.tmdb_id, 'episode', ep.season_number, ep.episode_number, s.watched_at, ep.runtime || null);
+        }
+      }
+
+      // 4. Mark shows as watched where all episodes are watched
+      db.prepare(`
+        UPDATE shows
+        SET watched = 1
+        WHERE watched = 0 
+          AND id IN (
+            SELECT show_id FROM episodes GROUP BY show_id HAVING COUNT(*) > 0 AND MIN(watched) = 1
+          )
+      `).run();
+
+      // 5. Sync movie watched state from watch_history
+      db.prepare(`
+        UPDATE movies
+        SET watched = 1,
+            watched_at = COALESCE(movies.watched_at, (
+              SELECT w.watched_at FROM watch_history w WHERE w.tmdb_id = movies.tmdb_id AND w.type = 'movie' LIMIT 1
+            ))
+        WHERE watched = 0 AND EXISTS (
+          SELECT 1 FROM watch_history w WHERE w.tmdb_id = movies.tmdb_id AND w.type = 'movie'
+        )
+      `).run();
+    }
   }
 ];
 

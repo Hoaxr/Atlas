@@ -146,7 +146,7 @@ const syncWatchedShows = async () => {
           updateShowWatched.run(show.id);
         }
           
-        if (Array.isArray(item.seasons)) {
+        if (Array.isArray(item.seasons) && item.seasons.length > 0) {
           for (const season of item.seasons) {
             const seasonNum = season.number;
             if (Array.isArray(season.episodes)) {
@@ -166,8 +166,17 @@ const syncWatchedShows = async () => {
               }
             }
           }
-        } else if (item.status === 'completed') {
-           insertHistory.run(tmdbId, 'show', null, null, showWatchedAt, show ? show.runtime : null);
+        }
+        
+        if (item.status === 'completed') {
+          insertHistory.run(tmdbId, 'show', null, null, showWatchedAt, show ? show.runtime : null);
+          if (show) {
+            updateAllEpsWatched.run(showWatchedAt, show.id);
+            const eps = db.prepare('SELECT season_number, episode_number, runtime FROM episodes WHERE show_id = ?').all(show.id);
+            for (const ep of eps) {
+              insertHistory.run(tmdbId, 'episode', ep.season_number, ep.episode_number, showWatchedAt, ep.runtime || show.runtime || null);
+            }
+          }
         }
         
         if (show) localCount++;

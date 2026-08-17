@@ -235,6 +235,31 @@ const processScannedFiles = async (allFiles, scanProgress, mode, nextStage) => {
               if (isWatchedSyncEnabled()) {
                 db.prepare("UPDATE shows SET watched = 1 WHERE tmdb_id = ? AND EXISTS (SELECT 1 FROM watched_tmdb WHERE tmdb_id = ? AND type = 'show')").run(tmdbId, tmdbId);
               }
+              db.prepare(`
+                UPDATE episodes
+                SET watched = 1,
+                    watched_at = COALESCE(episodes.watched_at, (
+                      SELECT w.watched_at 
+                      FROM watch_history w 
+                      JOIN shows s ON s.tmdb_id = w.tmdb_id
+                      WHERE s.id = episodes.show_id 
+                        AND (
+                          (w.type = 'episode' AND w.season_number = episodes.season_number AND w.episode_number = episodes.episode_number)
+                          OR (w.type = 'show')
+                        )
+                      LIMIT 1
+                    ))
+                WHERE show_id = ? AND watched = 0 AND EXISTS (
+                  SELECT 1 
+                  FROM watch_history w 
+                  JOIN shows s ON s.tmdb_id = w.tmdb_id
+                  WHERE s.id = episodes.show_id 
+                    AND (
+                      (w.type = 'episode' AND w.season_number = episodes.season_number AND w.episode_number = episodes.episode_number)
+                      OR (w.type = 'show')
+                    )
+                )
+              `).run(showId);
             } catch { /* non-critical */ }
           }
         } catch (tmdbErr) {
