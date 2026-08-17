@@ -45,6 +45,7 @@ export default function Layout() {
   const location = useLocation();
   const [libStats, setLibStats] = useState({ movies: 0, shows: 0 });
   const [downloads, setDownloads] = useState([]);
+  const [clientStats, setClientStats] = useState({ dl_info_speed: 0, up_info_speed: 0 });
   const [clientConnected, setClientConnected] = useState(null);
   const [systemIssues, setSystemIssues] = useState([]);
   const [pendingRequests, setPendingRequests] = useState(0);

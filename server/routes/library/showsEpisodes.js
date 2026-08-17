@@ -40,7 +40,7 @@ router.post('/shows/:id/watched', async (req, res, next) => {
         })();
         db.exec('PRAGMA wal_checkpoint(TRUNCATE);');
       } else {
-        db.prepare('DELETE FROM watch_history WHERE tmdb_id = ? AND type = "episode"').run(show.tmdb_id);
+        db.prepare("DELETE FROM watch_history WHERE tmdb_id = ? AND (type = 'episode' OR type = 'show')").run(show.tmdb_id);
         db.exec('PRAGMA wal_checkpoint(TRUNCATE);');
       }
       simklService.pushToSimklOnWatched(show.tmdb_id, 'show', isWatched).catch(e => console.error('[SimklSync] Direct push error:', e.message));
@@ -747,7 +747,7 @@ router.delete('/shows/:id', async (req, res, next) => {
 
     // Clean up watch_history for this show before deleting rows
     if (show.tmdb_id) {
-      db.prepare('DELETE FROM watch_history WHERE tmdb_id = ? AND type = "episode"').run(show.tmdb_id);
+      db.prepare("DELETE FROM watch_history WHERE tmdb_id = ? AND (type = 'episode' OR type = 'show')").run(show.tmdb_id);
     }
 
     db.prepare('DELETE FROM episodes WHERE show_id = ?').run(req.params.id);

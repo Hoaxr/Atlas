@@ -58,6 +58,7 @@ const isPathContainedInLibrary = (targetPath) => {
  * @param {string} folderPath — absolute path to delete
  */
 const deleteFolderRecursive = async (folderPath) => {
+  if (!folderPath) return;
   if (isRootLibraryPath(folderPath)) {
     throw new Error(`Cannot delete root library path: ${folderPath}`);
   }
@@ -65,12 +66,7 @@ const deleteFolderRecursive = async (folderPath) => {
     throw new Error(`Deletion target is outside configured media library paths: ${folderPath}`);
   }
 
-  const entries = await fsp.readdir(folderPath, { withFileTypes: true });
-  await Promise.all(entries.map(entry => {
-    const full = path.join(folderPath, entry.name);
-    return entry.isDirectory() ? deleteFolderRecursive(full) : fsp.unlink(full).catch(() => {});
-  }));
-  await fsp.rmdir(folderPath).catch(() => {});
+  await fsp.rm(folderPath, { recursive: true, force: true }).catch(() => {});
 };
 
 /**
