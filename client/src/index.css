@@ -28,11 +28,13 @@
     box-shadow: 0 0 0 3px rgba(6,182,212,0.08);
   }
   .hide-scrollbar {
-    -ms-overflow-style: none;
-    scrollbar-width: none;
+    -ms-overflow-style: none !important;
+    scrollbar-width: none !important;
   }
   .hide-scrollbar::-webkit-scrollbar {
-    display: none;
+    display: none !important;
+    width: 0 !important;
+    height: 0 !important;
   }
 }
 
@@ -52,6 +54,19 @@ body::selection {
 @keyframes toast-shrink {
   from { width: 100%; }
   to   { width: 0%; }
+}
+
+@keyframes scrollbar-pulse {
+  0% {
+    transform: translateY(-100%);
+  }
+  50%, 100% {
+    transform: translateY(200%);
+  }
+}
+
+.animate-scrollbar-pulse {
+  animation: scrollbar-pulse 2.5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
 
 .dark body::selection {

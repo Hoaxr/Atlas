@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Search, Settings as SettingsIcon, Film, Activity, Tv as TvIcon, DownloadCloud, Heart, Calendar as CalendarIcon, BarChart3, Keyboard, Key, LogOut, Eye, X, HeartPulse, Clock, TrendingUp } from 'lucide-react';
@@ -197,6 +197,42 @@ export default function Layout() {
     return () => window.removeEventListener('atlas-toggle-sidebar', handler);
   }, []);
 
+  const navRef = useRef(null);
+  const scrollTimerRef = useRef(null);
+  const [isScrolling, setIsScrolling] = useState(false);
+  const [scrollState, setScrollState] = useState({ canScroll: false, thumbTop: 0, thumbHeight: 20 });
+
+  const updateScrollState = () => {
+    if (!navRef.current) return;
+    const { scrollTop, scrollHeight, clientHeight } = navRef.current;
+    if (scrollHeight > clientHeight + 5) {
+      const heightPercent = Math.max(15, Math.min(80, (clientHeight / scrollHeight) * 100));
+      const maxScroll = scrollHeight - clientHeight;
+      const topPercent = maxScroll > 0 ? (scrollTop / maxScroll) * (100 - heightPercent) : 0;
+      setScrollState({
+        canScroll: true,
+        thumbTop: topPercent,
+        thumbHeight: heightPercent,
+      });
+      setIsScrolling(true);
+      if (scrollTimerRef.current) clearTimeout(scrollTimerRef.current);
+      scrollTimerRef.current = setTimeout(() => setIsScrolling(false), 800);
+    } else {
+      setScrollState(prev => prev.canScroll ? { ...prev, canScroll: false } : prev);
+    }
+  };
+
+  useEffect(() => {
+    updateScrollState();
+    const timer = setTimeout(updateScrollState, 200);
+    window.addEventListener('resize', updateScrollState);
+    return () => {
+      clearTimeout(timer);
+      if (scrollTimerRef.current) clearTimeout(scrollTimerRef.current);
+      window.removeEventListener('resize', updateScrollState);
+    };
+  }, [sidebarOpen]);
+
   return (
     <div className="flex h-screen overflow-hidden bg-slate-50 dark:bg-slate-950">
       {shortcutsOpen && <ShortcutsModal onClose={() => setShortcutsOpen(false)} />}
@@ -276,82 +312,115 @@ export default function Layout() {
         </div>
 
 
-        <nav className="flex-1 px-3 py-2 space-y-4 overflow-y-auto hide-scrollbar">
-          {navSections.map((section) => (
-            <div key={section.title} className="space-y-1">
-              <div className="flex items-center px-4 mb-2">
-                <h3 className="text-[10px] font-black text-slate-800 dark:text-white uppercase tracking-widest opacity-90">
-                  {section.title}
-                </h3>
-                <div className="flex-1 h-px bg-gradient-to-r from-slate-400/50 dark:from-white/30 to-transparent mt-0.5"></div>
+        <div className="relative flex-1 overflow-hidden flex flex-col min-h-0">
+          <nav 
+            ref={navRef}
+            onScroll={updateScrollState}
+            className="flex-1 px-3 py-2 space-y-4 overflow-y-auto hide-scrollbar"
+          >
+            {navSections.map((section) => (
+              <div key={section.title} className="space-y-1">
+                <div className="flex items-center px-4 mb-2">
+                  <h3 className="text-[10px] font-black text-slate-800 dark:text-white uppercase tracking-widest opacity-90">
+                    {section.title}
+                  </h3>
+                  <div className="flex-1 h-px bg-gradient-to-r from-slate-400/50 dark:from-white/30 to-transparent mt-0.5"></div>
+                </div>
+                <div className="space-y-0.5">
+                  {section.items.map((item) => (
+                    <NavLink
+                      key={item.name}
+                      to={item.path}
+                      onClick={() => setSidebarOpen(false)}
+                      className={({ isActive }) =>
+                        clsx(
+                          'group relative flex items-center justify-between px-4 py-2.5 rounded-xl transition-all duration-300 outline-none focus-visible:ring-2 focus-visible:ring-cyan-500',
+                          isActive
+                            ? 'text-cyan-600 dark:text-cyan-400 font-semibold'
+                            : 'text-slate-500 hover:text-slate-700 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-slate-200 dark:hover:bg-white/5'
+                        )
+                      }
+                    >
+                      {({ isActive }) => (
+                        <>
+                          {isActive && (
+                            <>
+                              {/* Sliding left accent bar */}
+                              <motion.div
+                                layoutId="active-nav-line"
+                                className="absolute left-0 top-1.5 bottom-1.5 w-1 bg-gradient-to-b from-cyan-400 to-sky-500 rounded-r-full"
+                                transition={{ type: 'spring', stiffness: 350, damping: 28 }}
+                              />
+                              {/* Subtle background glow with drifting particles */}
+                              <motion.div
+                                layoutId="active-nav-bg"
+                                className="absolute inset-0 bg-gradient-to-r from-cyan-500/8 via-cyan-500/2 to-transparent rounded-xl overflow-hidden active-nav-glow-container"
+                                transition={{ type: 'spring', stiffness: 350, damping: 28 }}
+                              >
+                                <span className="absolute top-2 w-1.5 h-1.5 bg-cyan-400/60 rounded-full blur-[0.4px] animate-particle-1" />
+                                <span className="absolute top-5.5 w-1 h-1 bg-sky-400/50 rounded-full blur-[0.4px] animate-particle-2" />
+                                <span className="absolute top-3.5 w-1.5 h-1.5 bg-blue-450/40 rounded-full blur-[0.4px] animate-particle-3" />
+                                <span className="absolute top-7 w-1 h-1 bg-cyan-400/30 rounded-full blur-[0.4px] animate-particle-4" />
+                              </motion.div>
+                            </>
+                          )}
+                          <div className="relative z-10 flex items-center space-x-3 group-hover:translate-x-0.5 transition-transform duration-205">
+                            <item.icon className={clsx("w-5 h-5 transition-transform duration-300", isActive ? "scale-105" : "group-hover:scale-110")} />
+                            <span className="text-sm font-medium">{item.name}</span>
+                          </div>
+                          <div className="relative z-10 flex items-center space-x-2">
+                            {item.name === 'Requests' && pendingRequests > 0 && (
+                              <span className="bg-amber-500/20 text-amber-400 text-[10px] font-bold px-2 py-0.5 rounded-full border border-amber-500/30">
+                                {pendingRequests}
+                              </span>
+                            )}
+                            {item.name === 'Downloads' && downloads.length > 0 && (
+                              <span className="bg-emerald-500/20 text-emerald-400 text-[10px] font-bold px-2 py-0.5 rounded-full border border-emerald-500/30">
+                                {downloads.length}
+                              </span>
+                            )}
+                            {item.name === 'Watchers' && watcherCount > 0 && (
+                              <span className="bg-cyan-500/20 text-cyan-400 text-[10px] font-bold px-2 py-0.5 rounded-full border border-cyan-500/30">
+                                {watcherCount}
+                              </span>
+                            )}
+                          </div>
+                        </>
+                      )}
+                    </NavLink>
+                  ))}
+                </div>
               </div>
-              <div className="space-y-0.5">
-                {section.items.map((item) => (
-                  <NavLink
-                    key={item.name}
-                    to={item.path}
-                    onClick={() => setSidebarOpen(false)}
-                    className={({ isActive }) =>
-                      clsx(
-                        'group relative flex items-center justify-between px-4 py-2.5 rounded-xl transition-all duration-300 outline-none focus-visible:ring-2 focus-visible:ring-cyan-500',
-                        isActive
-                          ? 'text-cyan-600 dark:text-cyan-400 font-semibold'
-                          : 'text-slate-500 hover:text-slate-700 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-slate-200 dark:hover:bg-white/5'
-                      )
-                    }
-                  >
-                    {({ isActive }) => (
-                      <>
-                        {isActive && (
-                          <>
-                            {/* Sliding left accent bar */}
-                            <motion.div
-                              layoutId="active-nav-line"
-                              className="absolute left-0 top-1.5 bottom-1.5 w-1 bg-gradient-to-b from-cyan-400 to-sky-500 rounded-r-full"
-                              transition={{ type: 'spring', stiffness: 350, damping: 28 }}
-                            />
-                            {/* Subtle background glow with drifting particles */}
-                            <motion.div
-                              layoutId="active-nav-bg"
-                              className="absolute inset-0 bg-gradient-to-r from-cyan-500/8 via-cyan-500/2 to-transparent rounded-xl overflow-hidden active-nav-glow-container"
-                              transition={{ type: 'spring', stiffness: 350, damping: 28 }}
-                            >
-                              <span className="absolute top-2 w-1.5 h-1.5 bg-cyan-400/60 rounded-full blur-[0.4px] animate-particle-1" />
-                              <span className="absolute top-5.5 w-1 h-1 bg-sky-400/50 rounded-full blur-[0.4px] animate-particle-2" />
-                              <span className="absolute top-3.5 w-1.5 h-1.5 bg-blue-450/40 rounded-full blur-[0.4px] animate-particle-3" />
-                              <span className="absolute top-7 w-1 h-1 bg-cyan-400/30 rounded-full blur-[0.4px] animate-particle-4" />
-                            </motion.div>
-                          </>
-                        )}
-                        <div className="relative z-10 flex items-center space-x-3 group-hover:translate-x-0.5 transition-transform duration-205">
-                          <item.icon className={clsx("w-5 h-5 transition-transform duration-300", isActive ? "scale-105" : "group-hover:scale-110")} />
-                          <span className="text-sm font-medium">{item.name}</span>
-                        </div>
-                        <div className="relative z-10 flex items-center space-x-2">
-                          {item.name === 'Requests' && pendingRequests > 0 && (
-                            <span className="bg-amber-500/20 text-amber-400 text-[10px] font-bold px-2 py-0.5 rounded-full border border-amber-500/30">
-                              {pendingRequests}
-                            </span>
-                          )}
-                          {item.name === 'Downloads' && downloads.length > 0 && (
-                            <span className="bg-emerald-500/20 text-emerald-400 text-[10px] font-bold px-2 py-0.5 rounded-full border border-emerald-500/30">
-                              {downloads.length}
-                            </span>
-                          )}
-                          {item.name === 'Watchers' && watcherCount > 0 && (
-                            <span className="bg-cyan-500/20 text-cyan-400 text-[10px] font-bold px-2 py-0.5 rounded-full border border-cyan-500/30">
-                              {watcherCount}
-                            </span>
-                          )}
-                        </div>
-                      </>
-                    )}
-                  </NavLink>
-                ))}
-              </div>
+            ))}
+          </nav>
+
+          {/* Subtle Slate/Cyan custom scrollbar */}
+          {scrollState.canScroll && (
+            <div className="absolute right-1 top-2 bottom-2 w-1 bg-slate-800/20 dark:bg-white/5 rounded-full pointer-events-none z-30">
+              <div 
+                className={clsx(
+                  "w-full rounded-full absolute transition-colors duration-300",
+                  isScrolling 
+                    ? "bg-cyan-500 shadow-[0_0_6px_rgba(6,182,212,0.5)]" 
+                    : "bg-slate-400/50 dark:bg-slate-600/70"
+                )}
+                style={{
+                  top: `${scrollState.thumbTop}%`,
+                  height: `${scrollState.thumbHeight}%`
+                }}
+              />
+
+              {/* Bottom animated chevron indicator when more content is below */}
+              {scrollState.thumbTop + scrollState.thumbHeight < 96 && (
+                <div className="absolute -bottom-3 -left-1 flex justify-center w-3 animate-bounce opacity-80">
+                  <svg className="w-2.5 h-2.5 text-cyan-500/80 dark:text-cyan-400/80" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="6 9 12 15 18 9" />
+                  </svg>
+                </div>
+              )}
             </div>
-          ))}
-        </nav>
+          )}
+        </div>
 
         <div className="px-3 mt-auto pb-4">
           <div className="space-y-1">
