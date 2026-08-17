@@ -483,7 +483,7 @@ const processScannedFiles = async (allFiles, scanProgress, mode, nextStage) => {
 
           allSubtitles = [...new Set(allSubtitles)];
 
-          db.prepare('UPDATE movies SET resolution = ?, codec = ?, audio = ?, scene_name = COALESCE(NULLIF(scene_name, \'\'), ?) WHERE tmdb_id = ?')
+          db.prepare("UPDATE movies SET resolution = ?, codec = ?, audio = ?, scene_name = COALESCE(NULLIF(scene_name, ''), ?) WHERE tmdb_id = ?")
             .run(resolution || null, codec || null, audio || null, 'Unknown ' + (resolution || '1080p'), matchedMovie.id);
 
           if (allSubtitles.length > 0) {

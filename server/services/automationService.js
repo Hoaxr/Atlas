@@ -300,11 +300,11 @@ const runRefreshMetadata = async () => {
     try {
       const tmdbData = await tmdbService.getMovieById(movie.tmdb_id);
       if (tmdbData) {
-        db.prepare('UPDATE movies SET rating = ?, poster_path = ?, overview = ?, last_refreshed_at = datetime("now") WHERE id = ?')
+        db.prepare("UPDATE movies SET rating = ?, poster_path = ?, overview = ?, last_refreshed_at = datetime('now') WHERE id = ?")
           .run(tmdbData.vote_average || 0, tmdbData.poster_path, tmdbData.overview, movie.id);
         moviesUpdated++;
       } else {
-        db.prepare('UPDATE movies SET last_refreshed_at = datetime("now") WHERE id = ?').run(movie.id);
+        db.prepare("UPDATE movies SET last_refreshed_at = datetime('now') WHERE id = ?").run(movie.id);
       }
     } catch (err) {
       console.error(`[Automation] Failed to refresh metadata for movie ${movie.title}: ${err.message}`);
@@ -319,7 +319,7 @@ const runRefreshMetadata = async () => {
     try {
       const data = await tmdbService.getShowById(show.tmdb_id);
       if (data) {
-        db.prepare('UPDATE shows SET rating = ?, poster_path = ?, overview = ?, tmdb_status = ?, last_refreshed_at = datetime("now") WHERE id = ?')
+        db.prepare("UPDATE shows SET rating = ?, poster_path = ?, overview = ?, tmdb_status = ?, last_refreshed_at = datetime('now') WHERE id = ?")
           .run(data.vote_average || 0, data.poster_path, data.overview, data.status || '', show.id);
 
         const seasons = await tmdbService.getShowSeasons(show.tmdb_id);
@@ -364,7 +364,7 @@ const runRefreshMetadata = async () => {
         runStaleDeletion();
         showsUpdated++;
       } else {
-        db.prepare('UPDATE shows SET last_refreshed_at = datetime("now") WHERE id = ?').run(show.id);
+        db.prepare("UPDATE shows SET last_refreshed_at = datetime('now') WHERE id = ?").run(show.id);
       }
     } catch (err) {
       console.error(`[Automation] Failed to refresh metadata for show ${show.title}: ${err.message}`);
@@ -774,11 +774,11 @@ const runDeepMetadataRefresh = async () => {
     try {
       const tmdbData = await tmdbService.getMovieById(movie.tmdb_id);
       if (tmdbData) {
-        db.prepare('UPDATE movies SET rating = ?, poster_path = ?, overview = ?, last_refreshed_at = datetime("now") WHERE id = ?')
+        db.prepare("UPDATE movies SET rating = ?, poster_path = ?, overview = ?, last_refreshed_at = datetime('now') WHERE id = ?")
           .run(tmdbData.vote_average || 0, tmdbData.poster_path, tmdbData.overview, movie.id);
         moviesUpdated++;
       } else {
-        db.prepare('UPDATE movies SET last_refreshed_at = datetime("now") WHERE id = ?').run(movie.id);
+        db.prepare("UPDATE movies SET last_refreshed_at = datetime('now') WHERE id = ?").run(movie.id);
       }
     } catch (err) {
       console.error(`[Automation] Failed to deep refresh metadata for movie ${movie.title}: ${err.message}`);
@@ -798,7 +798,7 @@ const runDeepMetadataRefresh = async () => {
     try {
       const data = await tmdbService.getShowById(show.tmdb_id);
       if (data) {
-        db.prepare('UPDATE shows SET rating = ?, poster_path = ?, overview = ?, tmdb_status = ?, last_refreshed_at = datetime("now") WHERE id = ?')
+        db.prepare("UPDATE shows SET rating = ?, poster_path = ?, overview = ?, tmdb_status = ?, last_refreshed_at = datetime('now') WHERE id = ?")
           .run(data.vote_average || 0, data.poster_path, data.overview, data.status || '', show.id);
 
         const seasons = await tmdbService.getShowSeasons(show.tmdb_id);
@@ -839,7 +839,7 @@ const runDeepMetadataRefresh = async () => {
 
         showsUpdated++;
       } else {
-        db.prepare('UPDATE shows SET last_refreshed_at = datetime("now") WHERE id = ?').run(show.id);
+        db.prepare("UPDATE shows SET last_refreshed_at = datetime('now') WHERE id = ?").run(show.id);
       }
     } catch (err) {
       console.error(`[Automation] Failed to deep refresh metadata for show ${show.title}: ${err.message}`);

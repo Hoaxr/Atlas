@@ -83,7 +83,7 @@ router.post('/', (req, res, next) => {
       return res.status(400).json({ status: 'error', message: 'This item has already been requested by another user' });
     }
 
-    const result = db.prepare('INSERT INTO requests (user_id, tmdb_id, type, title, status, release_date, poster_path) VALUES (?, ?, ?, ?, \'pending\', ?, ?)').run(
+    const result = db.prepare("INSERT INTO requests (user_id, tmdb_id, type, title, status, release_date, poster_path) VALUES (?, ?, ?, ?, 'pending', ?, ?)").run(
       user_id, tmdb_id, type, title, release_date || null, poster_path || null
     );
 

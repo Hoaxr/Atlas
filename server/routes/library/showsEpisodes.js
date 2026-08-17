@@ -25,7 +25,7 @@ router.post('/shows/:id/watched', async (req, res, next) => {
     const updateEpSql = isWatched
       ? 'UPDATE episodes SET watched = ?, watched_at = ?, watch_progress = 0 WHERE show_id = ?'
       : 'UPDATE episodes SET watched = ?, watched_at = ? WHERE show_id = ?';
-    db.prepare('UPDATE shows SET watched = ?, watched_at = ? WHERE id = ?').run(isWatched ? 1 : 0, watchedAt, req.params.id);
+    db.prepare('UPDATE shows SET watched = ? WHERE id = ?').run(isWatched ? 1 : 0, req.params.id);
     db.prepare(updateEpSql).run(isWatched ? 1 : 0, watchedAt, req.params.id);
     const show = db.prepare('SELECT tmdb_id FROM shows WHERE id = ?').get(req.params.id);
     if (show?.tmdb_id) {

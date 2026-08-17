@@ -37,7 +37,9 @@ function detectShowCalendarOffset(showId) {
           if (dayDiff > 3) dayDiff -= 7;
           offsets.push(dayDiff);
         }
-      } catch (_) {}
+      } catch {
+        /* ignore invalid date parse */
+      }
     }
 
     if (offsets.length === 0) return 0;
