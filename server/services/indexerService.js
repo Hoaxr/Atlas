@@ -55,6 +55,13 @@ const extractReleaseYear = (title) => {
   return match ? parseInt(match[1], 10) : null;
 };
 
+// A release is an individual episode (rather than a full season pack) when its
+// title carries an SxxExx or xxXxx episode marker.
+const isEpisodeRelease = (title) => {
+  const t = (title || '').toLowerCase();
+  return /\bs\d{1,2}e\d{1,2}/.test(t) || /\b\d{1,2}x\d{1,2}\b/.test(t);
+};
+
 // ─── Prowlarr JSON Search ─────────────────────────────────────────────
 
 const searchProwlarr = async (query, type = 'search') => {
@@ -329,11 +336,30 @@ const searchShowPack = async (showTitle, profile = null, currentQuality = null, 
   return filterAndSortResults(results, profile, 'shows', currentQuality, isManualSearch, showTitle);
 };
 
-const searchSeasonPack = async (showTitle, seasonNumber, profile = null, currentQuality = null, isManualSearch = false, tmdb_id = null) => {
+const searchSeasonPack = async (showTitle, seasonNumber, _profile = null, _currentQuality = null, _isManualSearch = false, _tmdb_id = null) => {
   const s = seasonNumber.toString().padStart(2, '0');
   const searchTerm = `${cleanTitle(showTitle)} S${s}`;
   const results = await searchProwlarr(searchTerm, 'tvsearch');
-  return filterAndSortResults(results, profile, 'shows', currentQuality, isManualSearch, showTitle);
+
+  // Season pack search is a manual browse: show every available full-season
+  // pack option and skip release-profile / quality / CAM filters. Individual
+  // episode releases (SxxExx / xxXxx) are excluded.
+  const dangerousExts = /\.(exe|bat|cmd|com|msi|scr|pif|vbs|ps1|jar|lnk|url|app|dmg|sh|bin|reg|hta|jse|wsf|wsh|msc|cpl)\b/i;
+  const packs = (results || [])
+    .filter(r => !isEpisodeRelease(r.title) && !dangerousExts.test(r.title))
+    .sort((a, b) => b.seeders - a.seeders);
+
+  // Deduplicate on normalized title stem
+  const seen = new Set();
+  const deduplicated = [];
+  for (const r of packs) {
+    const key = r.title.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+    if (!seen.has(key)) {
+      seen.add(key);
+      deduplicated.push(r);
+    }
+  }
+  return deduplicated;
 };
 
 const searchGeneric = async (query) => {

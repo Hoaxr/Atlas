@@ -177,16 +177,17 @@ const refreshShowData = async (id) => {
       }
     };
 
-    // Reset all downloaded/downloading episodes to missing/monitored and clear their paths before scanning
+    // Reset downloaded episodes to missing and clear their paths before scanning.
+    // 'downloading' episodes are left untouched — they are still in the download
+    // client and would otherwise be reset to 'monitored' whenever a sibling
+    // episode triggers a refresh (e.g. via auto-search).
     db.prepare(`
       UPDATE episodes 
-      SET status = CASE WHEN status = 'downloaded' THEN 'missing'
-                        WHEN status = 'downloading' THEN 'monitored'
-                        ELSE status END,
+      SET status = 'missing',
           file_path = NULL,
           file_size = NULL,
           scene_name = NULL
-      WHERE show_id = ?
+      WHERE show_id = ? AND status = 'downloaded'
     `).run(show.id);
 
     await calculateSize(show.folder_path);
