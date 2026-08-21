@@ -516,7 +516,7 @@ router.post('/shows/:id/auto-search', async (req, res, next) => {
           if (results && results.length > 0) {
             const bestResult = results.sort((a, b) => b.seeders - a.seeders)[0];
             await downloadClientService.addTorrent(bestResult.link, 'tv');
-            db.prepare("UPDATE episodes SET status = 'downloading', scene_name = ? WHERE id = ?").run(bestResult.title, ep.id);
+            db.prepare("UPDATE episodes SET status = 'downloading', scene_name = COALESCE(NULLIF(scene_name, ''), ?) WHERE id = ?").run(bestResult.title, ep.id);
             sentCount++;
           }
         } catch (e) {
@@ -579,7 +579,11 @@ router.post('/shows/:id/seasons/:season/download', async (req, res, next) => {
     const seasonNumber = parseInt(req.params.season, 10);
     
     await downloadClientService.addTorrent(torrentUrl, 'tv');
-    db.prepare("UPDATE episodes SET status = 'downloading' WHERE show_id = ? AND season_number = ? AND status = 'monitored'").run(req.params.id, seasonNumber);
+    // Mark every episode in the season as downloading so the whole pack is
+    // tracked and imported once it finishes. Already-downloaded episodes are
+    // overwritten by the new pack.
+    db.prepare("UPDATE episodes SET status = 'downloading' WHERE show_id = ? AND season_number = ?").run(req.params.id, seasonNumber);
+    db.prepare("UPDATE shows SET status = 'downloading' WHERE id = ?").run(req.params.id);
     
     res.json({ status: 'success', message: `Season ${seasonNumber} pack sent to download client` });
   } catch (err) {
@@ -621,7 +625,7 @@ router.post('/shows', async (req, res, next) => {
                 if (results && results.length > 0) {
                   const bestResult = results[0];
                   await downloadClientService.addTorrent(bestResult.link);
-                  db.prepare("UPDATE episodes SET status = 'downloading', scene_name = ? WHERE id = ?").run(typeof bestResult !== "undefined" ? bestResult.title : (typeof result !== "undefined" ? result.title : null), ep.id);
+                  db.prepare("UPDATE episodes SET status = 'downloading', scene_name = COALESCE(NULLIF(scene_name, ''), ?) WHERE id = ?").run(typeof bestResult !== "undefined" ? bestResult.title : (typeof result !== "undefined" ? result.title : null), ep.id);
                   sentCount++;
                 }
               } catch (e) {
@@ -826,7 +830,7 @@ router.post('/episodes/:id/auto-search', async (req, res, next) => {
     const bestResult = results.sort((a, b) => b.seeders - a.seeders)[0];
     
     await downloadClientService.addTorrent(bestResult.link, 'tv');
-    db.prepare("UPDATE episodes SET status = 'downloading', scene_name = ? WHERE id = ?").run(bestResult.title, req.params.id);
+    db.prepare("UPDATE episodes SET status = 'downloading', scene_name = COALESCE(NULLIF(scene_name, ''), ?) WHERE id = ?").run(bestResult.title, req.params.id);
     
     res.json({ status: 'success', message: 'Best result sent to download client', data: bestResult });
   } catch (err) {
@@ -851,7 +855,7 @@ router.post('/episodes/:id/download', async (req, res, next) => {
     }
 
     await downloadClientService.addTorrent(torrentUrl, 'tv');
-    db.prepare("UPDATE episodes SET status = 'downloading', scene_name = ? WHERE id = ?").run(null, req.params.id);
+    db.prepare("UPDATE episodes SET status = 'downloading', scene_name = COALESCE(NULLIF(scene_name, ''), ?) WHERE id = ?").run(null, req.params.id);
     
     res.json({ status: 'success', message: 'Sent to download client' });
   } catch (err) {
@@ -945,7 +949,7 @@ router.post('/episodes/:id/grab', async (req, res, next) => {
     const { link, title } = req.body;
     if (!link) return res.status(400).json({ status: 'error', message: 'link is required' });
     await downloadClientService.addTorrent(link);
-    db.prepare("UPDATE episodes SET status = 'downloading', scene_name = ? WHERE id = ?").run(title || null, req.params.id);
+    db.prepare("UPDATE episodes SET status = 'downloading', scene_name = COALESCE(NULLIF(scene_name, ''), ?) WHERE id = ?").run(title || null, req.params.id);
     eventBus.info('Manual grab started', { title: title || 'Unknown', type: 'episode' });
     res.json({ status: 'success', message: 'Download started' });
   } catch (err) { next(err); }

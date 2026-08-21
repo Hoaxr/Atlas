@@ -88,6 +88,87 @@ const parseEpisodeFromFilename = (filePath) => {
   return null;
 };
 
+const normalizeForMatching = (s) => (s || '').toLowerCase().replace(/'/g, '').replace(/[^a-z0-9]/g, ' ').replace(/\s+/g, ' ').trim();
+
+// Reset any 'downloading' movies/episodes that are no longer present in the
+// download client. If the item already had a file on disk (e.g. a cancelled
+// upgrade) it is restored to 'downloaded'; otherwise it goes back to
+// 'monitored'. Used after a torrent is removed and by the periodic
+// post-processing cycle. Also recalculates show status when a show has no more
+// active downloads.
+const resetDownloadsNotInClient = async (torrentList) => {
+  let list = torrentList;
+  if (!list) {
+    try {
+      list = await downloadClientService.getTorrents() || [];
+    } catch {
+      list = [];
+    }
+  }
+
+  const downloadingMovies = db.prepare("SELECT * FROM movies WHERE status = 'downloading'").all();
+  const downloadingEpisodes = db.prepare(`
+    SELECT e.*, s.title as show_title 
+    FROM episodes e 
+    JOIN shows s ON e.show_id = s.id 
+    WHERE e.status = 'downloading'
+  `).all();
+
+  for (const movie of downloadingMovies) {
+    const movieTitle = normalizeForMatching(movie.title);
+    const isStillInQueue = list.some(t => normalizeForMatching(t.name).includes(movieTitle));
+    if (!isStillInQueue) {
+      if (movie.file_path && fs.existsSync(movie.file_path)) {
+        console.log(`[MediaManagement] Movie ${movie.title} removed from client but its file exists. Restoring to downloaded.`);
+        db.prepare("UPDATE movies SET status = 'downloaded' WHERE id = ?").run(movie.id);
+      } else {
+        console.log(`[MediaManagement] Movie ${movie.title} no longer in download client. Resetting to monitored.`);
+        db.prepare("UPDATE movies SET status = 'monitored', file_path = NULL, file_size = 0, scene_name = NULL WHERE id = ?").run(movie.id);
+      }
+    }
+  }
+
+  for (const ep of downloadingEpisodes) {
+    const showTitle = normalizeForMatching(ep.show_title);
+    const s = ep.season_number.toString().padStart(2, '0');
+    const e = ep.episode_number.toString().padStart(2, '0');
+    const epString1 = `s${s}e${e}`;
+    const epString2 = `${s}x${e}`;
+    const seasonStr = `s${s}`;
+
+    const isStillInQueue = list.some(t => {
+      const tName = normalizeForMatching(t.name);
+      // Match individual episode (S01E01) or season pack (S01 without episode IDs)
+      const hasShow = tName.includes(showTitle);
+      const hasEpisode = tName.includes(epString1) || tName.includes(epString2);
+      const hasSeasonPack = tName.includes(seasonStr) && !/\bs\d{2}e\d{2}\b/i.test(tName) && !/\b\d{1,2}x\d{1,2}\b/i.test(tName);
+      return hasShow && (hasEpisode || hasSeasonPack);
+    });
+
+    if (!isStillInQueue) {
+      if (ep.file_path && fs.existsSync(ep.file_path)) {
+        console.log(`[MediaManagement] Episode ${ep.show_title} S${s}E${e} removed from client but its file exists. Restoring to downloaded.`);
+        db.prepare("UPDATE episodes SET status = 'downloaded' WHERE id = ?").run(ep.id);
+      } else {
+        console.log(`[MediaManagement] Episode ${ep.show_title} S${s}E${e} no longer in download client. Resetting to monitored.`);
+        db.prepare("UPDATE episodes SET status = 'monitored', file_path = NULL, file_size = NULL, scene_name = NULL WHERE id = ?").run(ep.id);
+      }
+    }
+  }
+
+  // Recalculate status for shows that were marked as downloading
+  const downloadingShows = db.prepare("SELECT id FROM shows WHERE status = 'downloading'").all();
+  for (const show of downloadingShows) {
+    const activeEps = db.prepare("SELECT COUNT(*) as count FROM episodes WHERE show_id = ? AND status = 'downloading'").get(show.id).count;
+    if (activeEps === 0) {
+      const missingMonitored = db.prepare("SELECT COUNT(*) as count FROM episodes WHERE show_id = ? AND monitored = 1 AND (file_path IS NULL OR file_path = '')").get(show.id).count;
+      const newStatus = missingMonitored > 0 ? 'monitored' : 'downloaded';
+      db.prepare("UPDATE shows SET status = ? WHERE id = ?").run(newStatus, show.id);
+      console.log(`[MediaManagement] Show ID ${show.id} all downloads finished. Status updated to ${newStatus}.`);
+    }
+  }
+};
+
 const runMediaManagement = async () => {
   const pendingMoviesCount = db.prepare("SELECT COUNT(*) as count FROM movies WHERE status IN ('downloading', 'monitored')").get().count;
   const pendingEpisodesCount = db.prepare(`
@@ -165,63 +246,9 @@ const runMediaManagement = async () => {
       }
     }
 
-    // Re-fetch to see what's STILL downloading after imports
-    const downloadingMovies = db.prepare("SELECT * FROM movies WHERE status = 'downloading'").all();
-    const downloadingEpisodes = db.prepare(`
-      SELECT e.*, s.title as show_title 
-      FROM episodes e 
-      JOIN shows s ON e.show_id = s.id 
-      WHERE e.status = 'downloading'
-    `).all();
-
-    // Reset items that are missing from the torrent client
-    for (const movie of downloadingMovies) {
-      const movieTitle = movie.title.toLowerCase().replace(/'/g, '').replace(/[^a-z0-9]/g, ' ').replace(/\s+/g, ' ').trim();
-      const isStillInQueue = torrentList.some(t => {
-        const tName = t.name.toLowerCase().replace(/'/g, '').replace(/[^a-z0-9]/g, ' ').replace(/\s+/g, ' ').trim();
-        return tName.includes(movieTitle);
-      });
-      if (!isStillInQueue) {
-        console.log(`[MediaManagement] Movie ${movie.title} no longer in download client. Resetting to monitored.`);
-        db.prepare("UPDATE movies SET status = 'monitored' WHERE id = ?").run(movie.id);
-      }
-    }
-
-    for (const ep of downloadingEpisodes) {
-      const showTitle = ep.show_title.toLowerCase().replace(/'/g, '').replace(/[^a-z0-9]/g, ' ').replace(/\s+/g, ' ').trim();
-      const s = ep.season_number.toString().padStart(2, '0');
-      const e = ep.episode_number.toString().padStart(2, '0');
-      const epString1 = `s${s}e${e}`;
-      const epString2 = `${s}x${e}`;
-      const seasonStr = `s${s}`; 
-
-      const isStillInQueue = torrentList.some(t => {
-        const tName = t.name.toLowerCase().replace(/'/g, '').replace(/[^a-z0-9]/g, ' ').replace(/\s+/g, ' ').trim();
-        // Match individual episode (S01E01) or season pack (S01 without episode IDs)
-        const hasShow = tName.includes(showTitle);
-        const hasEpisode = tName.includes(epString1) || tName.includes(epString2);
-        const hasSeasonPack = tName.includes(seasonStr) && !/\bs\d{2}e\d{2}\b/i.test(tName) && !/\b\d{1,2}x\d{1,2}\b/i.test(tName);
-        return hasShow && (hasEpisode || hasSeasonPack);
-      });
-
-      if (!isStillInQueue) {
-        console.log(`[MediaManagement] Episode ${ep.show_title} S${s}E${e} no longer in download client. Resetting to monitored.`);
-        db.prepare("UPDATE episodes SET status = 'monitored' WHERE id = ?").run(ep.id);
-      }
-    }
-
-    // Recalculate status for downloading shows
-    const downloadingShows = db.prepare("SELECT id FROM shows WHERE status = 'downloading'").all();
-    for (const show of downloadingShows) {
-      const activeEps = db.prepare("SELECT COUNT(*) as count FROM episodes WHERE show_id = ? AND status = 'downloading'").get(show.id).count;
-      if (activeEps === 0) {
-        // No active downloads left for this show
-        const missingMonitored = db.prepare("SELECT COUNT(*) as count FROM episodes WHERE show_id = ? AND monitored = 1 AND (file_path IS NULL OR file_path = '')").get(show.id).count;
-        const newStatus = missingMonitored > 0 ? 'monitored' : 'downloaded';
-        db.prepare("UPDATE shows SET status = ? WHERE id = ?").run(newStatus, show.id);
-        console.log(`[MediaManagement] Show ID ${show.id} all downloads finished. Status updated to ${newStatus}.`);
-      }
-    }
+    // Re-fetch what's STILL downloading after imports and reset anything no
+    // longer in the torrent client back to monitored (also fixes show status).
+    await resetDownloadsNotInClient(torrentList);
 
     if (importedAnything) {
       console.log('[MediaManagement] New media imported. Triggering subtitle downloader task immediately.');
@@ -776,5 +803,6 @@ const init = () => {
 module.exports = {
   init,
   getNamingConfig,
-  sanitizeTitle
+  sanitizeTitle,
+  resetDownloadsNotInClient
 };

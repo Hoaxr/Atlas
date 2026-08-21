@@ -127,7 +127,7 @@ const runSearchCycle = async () => {
         if (results.length > 0) {
           const bestRelease = results[0]; 
           await downloadClientService.addTorrent(bestRelease.link);
-          db.prepare("UPDATE movies SET status = 'downloading', scene_name = ?, search_state = 'COMPLETED', retry_count = 0, last_success_at = datetime('now'), next_search_at = NULL WHERE id = ?").run(bestRelease.title, movie.id);
+          db.prepare("UPDATE movies SET status = 'downloading', scene_name = COALESCE(NULLIF(scene_name, ''), ?), search_state = 'COMPLETED', retry_count = 0, last_success_at = datetime('now'), next_search_at = NULL WHERE id = ?").run(bestRelease.title, movie.id);
           eventBus.info('Download started', { title: movie.title, type: 'movie', release: bestRelease.title });
         } else {
           movie.retry_count = (movie.retry_count || 0) + 1;
@@ -256,7 +256,7 @@ const runSearchCycle = async () => {
         if (results.length > 0) {
           const bestRelease = results[0];
           await downloadClientService.addTorrent(bestRelease.link);
-          db.prepare("UPDATE episodes SET status = 'downloading', scene_name = ?, search_state = 'COMPLETED', retry_count = 0, last_success_at = datetime('now'), next_search_at = NULL WHERE id = ?").run(bestRelease.title, ep.id);
+          db.prepare("UPDATE episodes SET status = 'downloading', scene_name = COALESCE(NULLIF(scene_name, ''), ?), search_state = 'COMPLETED', retry_count = 0, last_success_at = datetime('now'), next_search_at = NULL WHERE id = ?").run(bestRelease.title, ep.id);
           eventBus.info('Download started', { title: epLabel, type: 'episode', release: bestRelease.title });
         } else {
           ep.retry_count = (ep.retry_count || 0) + 1;

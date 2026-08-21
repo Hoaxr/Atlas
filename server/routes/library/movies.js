@@ -381,7 +381,7 @@ router.post('/:id/download', async (req, res, next) => {
     }
     
     await downloadClientService.addTorrent(torrentUrl);
-    db.prepare("UPDATE movies SET status = 'downloading', scene_name = ? WHERE id = ?").run(null, req.params.id);
+    db.prepare("UPDATE movies SET status = 'downloading', scene_name = COALESCE(NULLIF(scene_name, ''), ?) WHERE id = ?").run(null, req.params.id);
     
     res.json({ status: 'success', message: 'Sent to download client' });
   } catch (err) {
@@ -406,7 +406,7 @@ router.post('/:id/auto-search', async (req, res, next) => {
 
     const bestResult = results[0];
     await downloadClientService.addTorrent(bestResult.link, 'movie');
-    db.prepare("UPDATE movies SET status = 'downloading', scene_name = ? WHERE id = ?").run(bestResult.title, req.params.id);
+    db.prepare("UPDATE movies SET status = 'downloading', scene_name = COALESCE(NULLIF(scene_name, ''), ?) WHERE id = ?").run(bestResult.title, req.params.id);
     
     res.json({ status: 'success', message: 'Best result sent to download client', data: bestResult });
   } catch (err) {
@@ -631,7 +631,7 @@ router.post('/:id/grab', async (req, res, next) => {
     const { link, title } = req.body;
     if (!link) return res.status(400).json({ status: 'error', message: 'link is required' });
     await downloadClientService.addTorrent(link);
-    db.prepare("UPDATE movies SET status = 'downloading', scene_name = ? WHERE id = ?").run(title || null, req.params.id);
+    db.prepare("UPDATE movies SET status = 'downloading', scene_name = COALESCE(NULLIF(scene_name, ''), ?) WHERE id = ?").run(title || null, req.params.id);
     eventBus.info('Manual grab started', { title: title || 'Unknown', type: 'movie' });
     res.json({ status: 'success', message: 'Download started' });
   } catch (err) { next(err); }
