@@ -128,7 +128,6 @@ const syncWatchedShows = async () => {
       const updateShowWatched = db.prepare('UPDATE shows SET watched = 1 WHERE id = ?');
       const getEpRuntime = db.prepare('SELECT runtime FROM episodes WHERE show_id = ? AND season_number = ? AND episode_number = ?');
       const updateEpWatched = db.prepare('UPDATE episodes SET watched = 1, watched_at = COALESCE(watched_at, ?) WHERE show_id = ? AND season_number = ? AND episode_number = ?');
-      const updateAllEpsWatched = db.prepare('UPDATE episodes SET watched = 1, watched_at = COALESCE(watched_at, ?) WHERE show_id = ?');
 
       for (const item of list) {
         const tmdbId = item.ids?.tmdb || item.show?.ids?.tmdb;
@@ -172,11 +171,14 @@ const syncWatchedShows = async () => {
         if (item.status === 'completed') {
           insertHistory.run(tmdbId, 'show', null, null, showWatchedAt, show ? show.runtime : null);
           if (show) {
-            updateAllEpsWatched.run(showWatchedAt, show.id);
-            const eps = db.prepare('SELECT season_number, episode_number, runtime FROM episodes WHERE show_id = ?').all(show.id);
-            for (const ep of eps) {
+            // Only mark episodes that have actually aired (or are on disk) as
+            // watched — unaired placeholders from TMDB must stay unwatched.
+            const airedOrOnDisk = "AND (file_path IS NOT NULL OR (air_date IS NOT NULL AND air_date <= date('now','localtime')))";
+            const allEps = db.prepare(`SELECT season_number, episode_number, runtime FROM episodes WHERE show_id = ? ${airedOrOnDisk}`).all(show.id);
+            for (const ep of allEps) {
               insertHistory.run(tmdbId, 'episode', ep.season_number, ep.episode_number, showWatchedAt, ep.runtime || show.runtime || null);
             }
+            db.prepare(`UPDATE episodes SET watched = 1, watched_at = COALESCE(watched_at, ?) WHERE show_id = ? ${airedOrOnDisk}`).run(showWatchedAt, show.id);
           }
         }
 
@@ -215,7 +217,7 @@ const syncWatchedShows = async () => {
         const lastEpisode = parseInt(m[2], 10);
         const watchedAt = info.last_watched_at || new Date().toISOString();
 
-        const eps = db.prepare('SELECT id, season_number, episode_number, runtime, watched FROM episodes WHERE show_id = ? ORDER BY season_number ASC, episode_number ASC').all(entry.showId);
+        const eps = db.prepare("SELECT id, season_number, episode_number, runtime, watched FROM episodes WHERE show_id = ? AND (file_path IS NOT NULL OR (air_date IS NOT NULL AND air_date <= date('now','localtime'))) ORDER BY season_number ASC, episode_number ASC").all(entry.showId);
         const cutoff = eps.findIndex(e => e.season_number === lastSeason && e.episode_number === lastEpisode);
         if (cutoff === -1) continue;
 

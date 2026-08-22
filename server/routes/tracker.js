@@ -524,9 +524,12 @@ router.get('/up-next', (req, res) => {
         FROM episodes WHERE watched = 1
       ),
       TotalCount AS (
+        -- Count only episodes that are actually watchable (aired or downloaded)
+        -- so unaired placeholders don't create phantom progress in the bar
         SELECT show_id, COUNT(*) as total_episodes
         FROM episodes
         WHERE season_number > 0
+          AND (status = 'downloaded' OR (air_date IS NOT NULL AND air_date <= ${getAiredCutoffSql()}))
         GROUP BY show_id
       )
       SELECT 
