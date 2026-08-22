@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../lib/api';
 import { Calendar as CalendarIcon, Tv, Film, ChevronLeft, ChevronRight, Sparkles } from 'lucide-react';

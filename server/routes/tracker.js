@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../config/database');
+const { localizeAirDate, getAiredCutoffSql } = require('../utils/airDate');
 const tmdbService = require('../services/tmdbService');
 const watcherService = require('../services/watcherService');
 
@@ -396,7 +397,7 @@ router.get('/history', async (req, res) => {
               item.show_poster = tmdbData.poster_path;
             }
           }
-        } catch (e) {
+        } catch {
           // ignore lookup errors
         }
       }
@@ -448,7 +449,7 @@ router.get('/up-next', (req, res) => {
           AND (
             e.status = 'downloaded' OR (
               e.air_date IS NOT NULL AND 
-              date(e.air_date) <= date('now') AND 
+              date(e.air_date) <= ${getAiredCutoffSql()} AND 
               (e.status = 'monitored' OR e.show_id IN (SELECT show_id FROM episodes WHERE watched = 1))
             )
           )
@@ -471,7 +472,7 @@ router.get('/up-next', (req, res) => {
             e2.status = 'downloaded' 
             OR (
               e2.air_date IS NOT NULL AND 
-              date(e2.air_date) <= date('now') AND 
+              date(e2.air_date) <= ${getAiredCutoffSql()} AND 
               (e2.status = 'monitored' OR e2.show_id IN (SELECT show_id FROM episodes WHERE watched = 1))
             )
           )
@@ -602,7 +603,7 @@ router.post('/mark-watched', async (req, res) => {
     try {
       const simklService = require('../services/simklService');
       simklService.pushToSimklOnWatched(tmdbId, type, true, season, episode).catch(e => console.error('[SimklSync] background push error:', e.message));
-    } catch (e) {
+    } catch {
       // ignore
     }
 
@@ -673,14 +674,14 @@ router.get('/this-week', (req, res) => {
         e.episode_number,
         e.title as episode_title,
         e.runtime,
-        DATE(e.air_date, printf('%+d day', COALESCE(s.calendar_day_offset, 0))) as air_date,
+        e.air_date,
         s.tmdb_id,
         s.title as show_title,
         s.poster_path
       FROM episodes e
       JOIN shows s ON e.show_id = s.id
-      WHERE DATE(e.air_date, printf('%+d day', COALESCE(s.calendar_day_offset, 0))) >= date(?, '-1 day') 
-        AND DATE(e.air_date, printf('%+d day', COALESCE(s.calendar_day_offset, 0))) <= ? 
+      WHERE e.air_date >= date(?, '-1 day') 
+        AND e.air_date <= ? 
         AND e.watched = 0
       ORDER BY air_date ASC, s.title, e.season_number, e.episode_number
     `).all(fromStr, toStr);
@@ -712,7 +713,10 @@ router.get('/this-week', (req, res) => {
       success: true,
       weekRange: { from: fromStr, to: toStr },
       movies: movies.map(m => ({ ...m, ...getDayLabel(m.release_date, 'movie') })),
-      episodes: episodes.map(ep => ({ ...ep, ...getDayLabel(ep.air_date, 'episode') }))
+      episodes: episodes.map(ep => {
+        const localized = localizeAirDate(ep.air_date);
+        return { ...ep, air_date: localized, ...getDayLabel(localized, 'episode') };
+      })
     });
   } catch (error) {
     console.error('[Tracker] /this-week error:', error);

@@ -73,7 +73,7 @@ export default function Settings() {
   const [scanResults, setScanResults] = useState(null);
   const [clientStatuses, setClientStatuses] = useState({});
   const [keyStatuses, setKeyStatuses] = useState({});
-  const [checkingKeys, setCheckingKeys] = useState(false);
+  const [, setCheckingKeys] = useState(false);
   const [simklDeviceCode, setSimklDeviceCode] = useState(null);
   const [simklUserCode, setSimklUserCode] = useState('');
   const [simklVerificationUrl, setSimklVerificationUrl] = useState('');
@@ -371,7 +371,7 @@ export default function Settings() {
       if (settings.simklWatchedSync && settings.simklAccessToken) {
         api.post('/tasks/simkl_watched_sync/run').catch(() => {});
       }
-    } catch (err) {
+    } catch {
       customAlert('Failed to save settings.', 'error');
     }
   };
@@ -381,7 +381,7 @@ export default function Settings() {
       await api.post(`/settings/${endpoint}`, payload);
       fetchSettings();
       customAlert('Added successfully!', 'success');
-    } catch (err) {
+    } catch {
       customAlert('Failed to add.', 'error');
     }
   };
@@ -391,7 +391,7 @@ export default function Settings() {
       await api.delete(`/settings/${endpoint}/${id}`);
       fetchSettings();
       customAlert('Deleted successfully!', 'success');
-    } catch (err) {
+    } catch {
       customAlert('Failed to delete.', 'error');
     }
   };
@@ -414,7 +414,7 @@ export default function Settings() {
     setStatus({ type: '', message: '' });
     try {
       await api.post('/library/scan', { mode });
-    } catch (err) {
+    } catch {
       setStatus({ type: 'error', message: 'Failed to start library scan.' });
       setIsScanning(false);
     }
@@ -487,7 +487,7 @@ export default function Settings() {
       fetchReleaseProfiles();
       customAlert('Release profile added!', 'success');
       setNewReleaseProfile({ name: '', enabled: true, must_contain: [], must_not_contain: [], indexer_id: null });
-    } catch (err) {
+    } catch {
       customAlert('Failed to add release profile', 'error');
     }
   };
@@ -498,7 +498,7 @@ export default function Settings() {
       setEditingReleaseProfile(null);
       fetchReleaseProfiles();
       customAlert('Release profile updated!', 'success');
-    } catch (err) {
+    } catch {
       customAlert('Failed to update release profile', 'error');
     }
   };
@@ -508,7 +508,7 @@ export default function Settings() {
       await api.delete(`/release-profiles/${id}`);
       fetchReleaseProfiles();
       customAlert('Release profile deleted!', 'success');
-    } catch (err) {
+    } catch {
       customAlert('Failed to delete release profile', 'error');
     }
   };

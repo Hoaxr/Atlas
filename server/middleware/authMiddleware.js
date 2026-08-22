@@ -73,7 +73,7 @@ const authMiddleware = (req, res, next) => {
       }
       
       return next();
-    } catch (err) {
+    } catch {
       // Invalid token, we'll fall through to check bypass
     }
   }

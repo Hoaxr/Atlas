@@ -9,7 +9,7 @@ const taskRegistry = require('../services/taskRegistry');
  */
 router.post('/download-client', async (req, res, next) => {
   try {
-    const { name, category } = req.body || {};
+    const { name } = req.body || {};
     console.log(`[Webhook] Received download client notification${name ? ` for: ${name}` : ''}`);
     
     // We can fire-and-forget the media_mover task

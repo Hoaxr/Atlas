@@ -87,7 +87,7 @@ const getMediaMetadata = async (filePath) => {
     }
 
     return { resolution, codec, audio, runtime, embeddedSubtitles, audioLangs };
-  } catch (err) {
+  } catch {
     return { resolution: null, codec: null, audio: null, runtime: null, embeddedSubtitles: [], audioLangs: [] };
   }
 };

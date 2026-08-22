@@ -2,20 +2,18 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import api from '../lib/api';
-import { formatSize, parseResolution, parseCodec, parseAudio, LANG_LABEL, LANG_NAME } from '../lib/format';
+import { formatSize, parseResolution, parseCodec, parseAudio, LANG_NAME } from '../lib/format';
 import { useSettings } from '../lib/useSettings';
 import { useTMDBDetails } from '../lib/useTMDBDetails';
-import { ArrowLeft, HardDrive, Tv, PlayCircle, ChevronDown, ChevronRight, ChevronLeft, Bookmark, BookmarkMinus, Search, Star, X, RefreshCw, Loader2, Download, CheckSquare, Square, Film, Trash2, Globe, Eye, Volume2, CheckCircle2 } from 'lucide-react';
+import { ArrowLeft, HardDrive, PlayCircle, ChevronDown, ChevronRight, ChevronLeft, Bookmark, BookmarkMinus, Search, Star, X, RefreshCw, Loader2, Download, CheckSquare, Film, Trash2, Globe, Eye, Volume2, CheckCircle2 } from 'lucide-react';
 import { customAlert, customConfirm } from '../utils/alerts';
 import { useOutsideClick } from '../lib/useOutsideClick';
-import { cachedShows, setCachedShows } from '../lib/libraryCache';
 import TrailerModal from '../components/TrailerModal';
 import ManualSearchModal from '../components/ManualSearchModal';
 import EpisodeDetailsModal from '../components/EpisodeDetailsModal';
 import RemapModal from '../components/RemapModal';
 import { posterUrl, tmdbImgUrl } from '../lib/posterUrl';
 
-import SubSearchModal from '../components/SubSearchModal';
 import SubtitleLanguageBadge from '../components/shared/SubtitleLanguageBadge';
 import { ProviderLabel } from '../utils/providerColors';
 import CustomSelect from '../components/shared/CustomSelect';
@@ -29,9 +27,10 @@ export default function ShowDetails() {
   const [episodes, setEpisodes] = useState([]);
   const { providerLangs, profiles } = useSettings();
   const [downloadingSubs, setDownloadingSubs] = useState({});
+  const [autoSearchingEpId, setAutoSearchingEpId] = useState(null);
   const [openLangMenu, setOpenLangMenu] = useState(null);
   const [updatingQuality, setUpdatingQuality] = useState(false);
-  const [updatingOffset, setUpdatingOffset] = useState(false);
+
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [deleteMenuOpen, setDeleteMenuOpen] = useState(false);
   const deleteMenuRef = useOutsideClick(() => setDeleteMenuOpen(false), deleteMenuOpen);
@@ -41,6 +40,7 @@ export default function ShowDetails() {
 
   // Prev/next navigation
   const [siblingIds, setSiblingIds] = useState([]);
+  const fetchRequestIdRef = useRef(0);
 
   // Use cached library data for sibling navigation — avoids a full re-fetch on every detail page visit.
   // Falls back to a lightweight fetch only when cache is cold.
@@ -76,7 +76,7 @@ export default function ShowDetails() {
   }, [openLangMenu]);
 
   // Subtitle Manual Search Modal
-  const [subSearchModal, setSubSearchModal] = useState({ open: false, code: '', label: '', episodeId: null });
+  const [subSearchModal, setSubSearchModal] = useState({ open: false, code: '', label: '', episodeId: null, subKey: null });
   const [subSearchResults, setSubSearchResults] = useState([]);
   const [subSearching, setSubSearching] = useState(false);
   const [subSearched, setSubSearched] = useState(false);
@@ -92,7 +92,7 @@ export default function ShowDetails() {
       if (res.data.status === 'success') {
         setSubSearchResults(res.data.data);
       }
-    } catch (err) {
+    } catch {
       customAlert('Search failed', 'error');
     } finally {
       setSubSearching(false);
@@ -118,11 +118,13 @@ export default function ShowDetails() {
   const { tmdbDetails, trailerKey, refetch: refetchTMDB } = useTMDBDetails('show', show?.tmdb_id);
 
   const fetchShowData = useCallback(async (silent = false) => {
+    const reqId = ++fetchRequestIdRef.current;
     try {
       const [res, epRes] = await Promise.all([
         api.get(`/library/shows/${id}`),
         api.get(`/library/shows/${id}/episodes`)
       ]);
+      if (reqId !== fetchRequestIdRef.current) return;
       if (res.data.status === 'success') {
         setShow(res.data.data);
       }
@@ -130,6 +132,7 @@ export default function ShowDetails() {
         setEpisodes(epRes.data.data);
       }
     } catch (e) {
+      if (reqId !== fetchRequestIdRef.current) return;
       if (e.response?.status === 404) {
         navigate('/');
         return;
@@ -147,13 +150,15 @@ export default function ShowDetails() {
     setIsRefreshing(true);
     try {
       await api.post(`/library/shows/${id}/refresh`);
+      await fetchShowData(true);
+      await refetchTMDB();
+      customAlert('Show refreshed!');
     } catch (e) {
       console.error('Failed to rescan folder', e);
+      customAlert('Failed to refresh show', 'error');
+    } finally {
+      setIsRefreshing(false);
     }
-    await fetchShowData(true);
-    await refetchTMDB();
-    setIsRefreshing(false);
-    customAlert('Show refreshed!');
   }, [fetchShowData, refetchTMDB, id]);
 
   const handleQualityChange = async (profileId) => {
@@ -170,20 +175,6 @@ export default function ShowDetails() {
     }
   };
 
-  const handleOffsetChange = async (offsetVal) => {
-    setUpdatingOffset(true);
-    try {
-      const res = await api.put(`/library/shows/${show.id}/offset`, { offset: offsetVal });
-      if (res.data.status === 'success') {
-        setShow(prev => ({ ...prev, calendar_day_offset: offsetVal }));
-      }
-    } catch (err) {
-      console.error('Failed to update air date offset', err);
-    } finally {
-      setUpdatingOffset(false);
-    }
-  };
-
   const handleRemapSearch = async () => {
     if (!remapQuery.trim()) return;
     setRemapSearching(true);
@@ -196,7 +187,7 @@ export default function ShowDetails() {
       if (res.data.status === 'success') {
         setRemapResults(res.data.data);
       }
-    } catch (err) {
+    } catch {
       customAlert('Search failed', 'error');
     } finally {
       setRemapSearching(false);
@@ -315,6 +306,7 @@ export default function ShowDetails() {
                   <button
                     onClick={async () => {
                       setMobileDeleteMenuOpen(false);
+                      if (!await customConfirm(`Delete "${show.title}" and permanently delete its files from disk?\n\nThis cannot be undone.`, { title: 'Delete Show + Files', type: 'warning', confirmText: 'Delete Files' })) return;
                       try {
                         await api.delete(`/library/shows/${show.id}?deleteFiles=true`);
                         customAlert('Show and files removed.', 'success');
@@ -335,6 +327,7 @@ export default function ShowDetails() {
                   <button
                     onClick={async () => {
                       setMobileDeleteMenuOpen(false);
+                      if (!await customConfirm(`Remove "${show.title}" from your library? Files on disk will be kept.`)) return;
                       try {
                         await api.delete(`/library/shows/${show.id}?deleteFiles=false`);
                         customAlert('Show removed from library.', 'success');
@@ -480,7 +473,7 @@ export default function ShowDetails() {
                             fetchShowData();
                             customAlert(res.data.data.monitored ? 'Show is now monitored' : 'Show is now unmonitored', 'success');
                           }
-                        } catch (err) {
+                        } catch {
                           customAlert('Failed to toggle monitor status', 'error');
                         }
                       }}
@@ -558,6 +551,7 @@ export default function ShowDetails() {
                         <button
                           onClick={async () => {
                             setDeleteMenuOpen(false);
+                            if (!await customConfirm(`Delete "${show.title}" and permanently delete its files from disk?\n\nThis cannot be undone.`, { title: 'Delete Show + Files', type: 'warning', confirmText: 'Delete Files' })) return;
                             try {
                               await api.delete(`/library/shows/${show.id}?deleteFiles=true`);
                               customAlert('Show and files removed.', 'success');
@@ -578,6 +572,7 @@ export default function ShowDetails() {
                         <button
                           onClick={async () => {
                             setDeleteMenuOpen(false);
+                            if (!await customConfirm(`Remove "${show.title}" from your library? Files on disk will be kept.`)) return;
                             try {
                               await api.delete(`/library/shows/${show.id}?deleteFiles=false`);
                               customAlert('Show removed from library.', 'success');
@@ -751,30 +746,6 @@ export default function ShowDetails() {
                       </div>
                     )}
                   </div>
-
-                  <div>
-                    <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500 block mb-1">Calendar Day Offset</span>
-                    {updatingOffset ? (
-                      <div className="flex items-center gap-2">
-                        <Loader2 className="w-3.5 h-3.5 animate-spin text-purple-400" />
-                        <span className="text-xs text-slate-400">Updating...</span>
-                      </div>
-                    ) : (
-                      <div className="min-w-[210px]">
-                        <CustomSelect
-                          theme="purple"
-                          value={show.calendar_day_offset ?? 0}
-                          onChange={(e) => handleOffsetChange(parseInt(e.target.value, 10))}
-                          options={[
-                            { label: 'Same Day (+0 Days / Streaming)', value: 0 },
-                            { label: 'Next Day (+1 Day / US Primetime)', value: 1 },
-                            { label: '+2 Days', value: 2 },
-                            { label: 'Previous Day (-1 Day)', value: -1 }
-                          ]}
-                        />
-                      </div>
-                    )}
-                  </div>
                 </div>
 
                 {/* CAST */}
@@ -849,7 +820,7 @@ export default function ShowDetails() {
                         try {
                           await api.post(`/library/shows/${show.id}/seasons/${season}/toggle-monitor`);
                           fetchShowData();
-                        } catch (err) {
+                        } catch {
                           customAlert('Failed to toggle season monitor', 'error');
                         }
                       }}
@@ -868,14 +839,15 @@ export default function ShowDetails() {
                         const sNum = Number(season);
                         const allWatched = seasons[season].every(ep => ep.watched);
                         const targetWatched = allWatched ? 0 : 1;
+                        const prevEpisodes = episodes;
                         setEpisodes(prev => prev.map(ep => ep.season_number === sNum ? { ...ep, watched: targetWatched } : ep));
                         try {
                           await api.post(`/library/shows/${show.id}/seasons/${season}/watched`, { watched: targetWatched });
                           sessionStorage.setItem('tracker-stale', 'true');
                           fetchShowData();
-                        } catch (err) {
+                        } catch {
                           customAlert('Failed to mark season as watched', 'error');
-                          setEpisodes(prev => prev.map(ep => ep.season_number === sNum ? { ...ep, watched: allWatched ? 1 : 0 } : ep));
+                          setEpisodes(prevEpisodes);
                         }
                       }}
                       className={`p-2 rounded-lg transition-all ${seasons[season].every(ep => ep.watched) ? 'bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20' : 'text-slate-500 bg-slate-800/80 hover:bg-slate-700/80 hover:text-slate-300'}`}
@@ -1016,7 +988,8 @@ export default function ShowDetails() {
                                     }
                                   }
                                 }}
-                                className={`text-[10px] uppercase font-bold px-3 py-1 rounded-full mx-auto inline-block cursor-pointer transition-colors whitespace-nowrap ${
+                                disabled={ep.monitored && ep.status !== 'downloading' && ep.status !== 'downloaded' && (((!ep.file_path && !ep.air_date && !seasonHasDownloads)) || (ep.air_date && new Date(ep.air_date) > new Date()))}
+                                className={`text-[10px] uppercase font-bold px-3 py-1 rounded-full mx-auto inline-block cursor-pointer transition-colors whitespace-nowrap disabled:cursor-default ${
                                   ep.status === 'downloading' ? 'hover:bg-red-500/20 hover:text-red-400 hover:border-red-500/30 bg-blue-500/20 text-blue-400 border border-blue-500/30' : 
                                   ep.status === 'downloaded' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 hover:bg-slate-700' : 
                                   !ep.monitored ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30 hover:bg-emerald-500/20 hover:text-emerald-400 hover:border-emerald-500/30' :
@@ -1067,7 +1040,7 @@ export default function ShowDetails() {
                                           }}
                                           onManualSearch={() => {
                                             setOpenLangMenu(null);
-                                            setSubSearchModal({ open: true, code, label: LANG_NAME[code] || code, episodeId: ep.id });
+                                            setSubSearchModal({ open: true, code, label: LANG_NAME[code] || code, episodeId: ep.id, subKey });
                                             setSubSearchResults([]);
                                             setSubSearched(false);
                                           }}
@@ -1096,22 +1069,31 @@ export default function ShowDetails() {
                                   <button 
                                     onClick={async (e) => {
                                       e.stopPropagation(); e.preventDefault();
+                                      if (autoSearchingEpId !== null) return;
+                                      setAutoSearchingEpId(ep.id);
                                       customAlert(`Starting auto-search for S${ep.season_number}E${ep.episode_number}...`);
                                       try {
                                         const res = await api.post(`/library/episodes/${ep.id}/auto-search`);
                                         if (res.data.status === 'success') {
-                                          customAlert(`Found & downloading: ${res.data.data.title}`);
+                                          customAlert(`Found & downloading: ${res.data.data?.title || res.data.message || 'Search started'}`);
                                           fetchShowData();
                                         }
                                       } catch (err) {
                                         console.error(err);
                                         customAlert('Auto-search failed to find any results', 'error');
+                                      } finally {
+                                        setAutoSearchingEpId(null);
                                       }
                                     }}
-                                    className="bg-emerald-500/20 hover:bg-emerald-500/40 text-emerald-400 border border-emerald-500/30 text-xs font-bold p-2 rounded-lg inline-flex items-center justify-center transition-colors tooltip"
+                                    disabled={autoSearchingEpId !== null}
+                                    className="bg-emerald-500/20 hover:bg-emerald-500/40 text-emerald-400 border border-emerald-500/30 text-xs font-bold p-2 rounded-lg inline-flex items-center justify-center transition-colors tooltip disabled:opacity-50 disabled:cursor-not-allowed"
                                     title="Auto Search & Download (Best Result)"
                                   >
-                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-zap"><path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/></svg>
+                                    {autoSearchingEpId === ep.id ? (
+                                      <Loader2 className="w-4 h-4 animate-spin" />
+                                    ) : (
+                                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-zap"><path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/></svg>
+                                    )}
                                   </button>
                                   <button 
                                     onClick={(e) => {
@@ -1135,7 +1117,6 @@ export default function ShowDetails() {
                     {/* Mobile episode cards */}
                     <div className="md:hidden">
                       {(() => {
-                        const seasonHasDownloads = seasons[season].some(e => e.file_path || e.status === 'downloaded');
                         const maxEpNumber = Math.max(...seasons[season].map(e => e.episode_number));
                         return seasons[season].map(ep => {
                           const isDownloaded = Boolean(ep.file_path || ep.status === 'downloaded');
@@ -1269,7 +1250,7 @@ export default function ShowDetails() {
                                           }}
                                           onManualSearch={() => {
                                             setOpenLangMenu(null);
-                                            setSubSearchModal({ open: true, code, label: LANG_NAME[code] || code, episodeId: ep.id });
+                                            setSubSearchModal({ open: true, code, label: LANG_NAME[code] || code, episodeId: ep.id, subKey });
                                             setSubSearchResults([]);
                                             setSubSearched(false);
                                           }}
@@ -1298,21 +1279,30 @@ export default function ShowDetails() {
                                 <button
                                   onClick={async (e) => {
                                     e.stopPropagation(); e.preventDefault();
+                                    if (autoSearchingEpId !== null) return;
+                                    setAutoSearchingEpId(ep.id);
                                     customAlert(`Starting auto-search for S${ep.season_number}E${ep.episode_number}...`);
                                     try {
                                       const res = await api.post(`/library/episodes/${ep.id}/auto-search`);
                                       if (res.data.status === 'success') {
-                                        customAlert(`Found & downloading: ${res.data.data.title}`);
+                                        customAlert(`Found & downloading: ${res.data.data?.title || res.data.message || 'Search started'}`);
                                         fetchShowData();
                                       }
-                                    } catch (err) {
+                                    } catch {
                                       customAlert('Auto-search failed', 'error');
+                                    } finally {
+                                      setAutoSearchingEpId(null);
                                     }
                                   }}
-                                  className="bg-emerald-500/15 hover:bg-emerald-500/30 text-emerald-400 border border-emerald-500/25 p-1.5 rounded-lg transition-colors"
+                                  disabled={autoSearchingEpId !== null}
+                                  className="bg-emerald-500/15 hover:bg-emerald-500/30 text-emerald-400 border border-emerald-500/25 p-1.5 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                   title="Auto Search"
                                 >
-                                  <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/></svg>
+                                  {autoSearchingEpId === ep.id ? (
+                                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                  ) : (
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/></svg>
+                                  )}
                                 </button>
                                 <button
                                   onClick={(e) => {
@@ -1367,6 +1357,7 @@ export default function ShowDetails() {
 
       {/* Episode Details Modal */}
       <EpisodeDetailsModal 
+        key={detailsModalEpisode?.id ?? 'none'}
         episode={detailsModalEpisode} 
         show={show} 
         onClose={() => setDetailsModalEpisode(null)}
@@ -1376,7 +1367,7 @@ export default function ShowDetails() {
           try {
             const res = await api.post(`/library/episodes/${ep.id}/auto-search`);
             if (res.data.status === 'success') {
-              customAlert(`Found & downloading: ${res.data.data.title}`);
+              customAlert(`Found & downloading: ${res.data.data?.title || res.data.message || 'Search started'}`);
               fetchShowData();
             }
           } catch (err) {
@@ -1414,11 +1405,11 @@ export default function ShowDetails() {
                 if (ep.status === 'downloading') {
                   if (await customConfirm("Reset status to monitored?")) {
                     try {
-                      await api.post(`/library/episodes/${ep.id}/reset-downloading`);
+                      await api.post(`/library/episodes/${ep.id}/reset`);
                       customAlert('Status reset to monitored');
                       fetchShowData();
                       setDetailsModalEpisode(prev => ({...prev, status: 'monitored', monitored: true}));
-                    } catch (e) {
+                    } catch {
                       customAlert('Failed to reset status', 'error');
                     }
                   }
@@ -1427,7 +1418,7 @@ export default function ShowDetails() {
                     await api.post(`/library/episodes/${ep.id}/toggle-monitor`);
                     fetchShowData();
                     setDetailsModalEpisode(prev => ({...prev, monitored: !prev.monitored}));
-                  } catch (e) {
+                  } catch {
                     customAlert('Failed to toggle monitor status', 'error');
                   }
                 }
@@ -1485,7 +1476,7 @@ export default function ShowDetails() {
               }}
               onManualSearch={() => {
                 setOpenLangMenu(null);
-                setSubSearchModal({ open: true, code, label: LANG_NAME[code] || code, episodeId: ep.id });
+                setSubSearchModal({ open: true, code, label: LANG_NAME[code] || code, episodeId: ep.id, subKey });
                 setSubSearchResults([]);
                 setSubSearched(false);
               }}
@@ -1623,17 +1614,18 @@ export default function ShowDetails() {
                                 </div>
                                 <button
                                   onClick={async () => {
-                                    const subKey = `${subSearchModal.episodeId}`;
+                                    const subKey = `${subSearchModal.subKey}`;
                                     setDownloadingSubs(prev => ({ ...prev, [`${subKey}-${subSearchModal.code}`]: true }));
                                     try {
                                       const res = await api.post(`/library/episodes/${subSearchModal.episodeId}/download-subs`, {
                                         langCode: subSearchModal.code,
                                         url: provider.provider === 'SubDL' ? (item.url || null) : null,
                                         fileId: item.fileId || null,
+                                        subId: item.subId || null,
                                         provider: provider.provider
                                       });
                                       customAlert(res.data.message);
-                                      setSubSearchModal({ open: false, code: '', label: '', episodeId: null });
+                                      setSubSearchModal({ open: false, code: '', label: '', episodeId: null, subKey: null });
                                       fetchShowData();
                                     } catch (err) {
                                       customAlert(err.response?.data?.message || 'Download failed', 'error');
@@ -1722,17 +1714,18 @@ export default function ShowDetails() {
                               {/* Download button */}
                               <button
                                 onClick={async () => {
-                                  const subKey = `${subSearchModal.episodeId}`;
+                                  const subKey = `${subSearchModal.subKey}`;
                                   setDownloadingSubs(prev => ({ ...prev, [`${subKey}-${subSearchModal.code}`]: true }));
                                   try {
                                     const res = await api.post(`/library/episodes/${subSearchModal.episodeId}/download-subs`, {
                                       langCode: subSearchModal.code,
                                       url: provider.provider === 'SubDL' ? (item.url || null) : null,
                                       fileId: item.fileId || null,
+                                      subId: item.subId || null,
                                       provider: provider.provider
                                     });
                                     customAlert(res.data.message);
-                                    setSubSearchModal({ open: false, code: '', label: '', episodeId: null });
+                                    setSubSearchModal({ open: false, code: '', label: '', episodeId: null, subKey: null });
                                     fetchShowData();
                                   } catch (err) {
                                     customAlert(err.response?.data?.message || 'Download failed', 'error');

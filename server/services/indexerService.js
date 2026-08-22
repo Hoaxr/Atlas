@@ -2,7 +2,6 @@ const axios = require('axios');
 const db = require('../config/database');
 const { getSetting } = require('../utils/settings');
 const { parseResolution: parseQuality } = require('../utils/mediaParsing');
-const { USER_AGENT } = require('../utils/constants');
 
 // ─── Circuit breaker for Prowlarr ─────────────────────────────────────
 
@@ -59,7 +58,7 @@ const extractReleaseYear = (title) => {
 // title carries an SxxExx or xxXxx episode marker.
 const isEpisodeRelease = (title) => {
   const t = (title || '').toLowerCase();
-  return /\bs\d{1,2}e\d{1,2}/.test(t) || /\b\d{1,2}x\d{1,2}\b/.test(t);
+  return /\bs\d{1,2}[._ -]?e\d{1,2}\b/.test(t) || /\b\d{1,2}x\d{1,2}\b/.test(t) || /\be[pp]?\d{1,3}\b/.test(t) && /s\d{1,2}/.test(t);
 };
 
 // ─── Prowlarr JSON Search ─────────────────────────────────────────────
@@ -147,7 +146,7 @@ const searchProwlarr = async (query, type = 'search') => {
     try {
       db.prepare('INSERT INTO indexer_stats (indexer_name, media_type, response_time_ms, success, results_count, error_message) VALUES (?, ?, ?, ?, ?, ?)')
         .run('Prowlarr (Aggregated)', type, elapsed, 0, 0, err.message);
-    } catch (e) {
+    } catch {
       // ignore db error
     }
     console.error(`[IndexerService] Prowlarr search failed:`, err.message);
@@ -282,7 +281,7 @@ const filterAndSortResults = (results, profile, type, currentQuality = null, isM
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
-const searchMovie = async (title, year, profile = null, currentQuality = null, isManualSearch = false, tmdb_id = null) => {
+const searchMovie = async (title, year, profile = null, currentQuality = null, isManualSearch = false, _tmdb_id = null) => {
   const cleanedTitle = cleanTitle(title);
   
   let allResults;
@@ -321,7 +320,7 @@ const searchMovie = async (title, year, profile = null, currentQuality = null, i
   return allResults;
 };
 
-const searchEpisode = async (showTitle, season, episode, profile = null, currentQuality = null, isManualSearch = false, tmdb_id = null) => {
+const searchEpisode = async (showTitle, season, episode, profile = null, currentQuality = null, isManualSearch = false, _tmdb_id = null) => {
   const s = season.toString().padStart(2, '0');
   const e = episode.toString().padStart(2, '0');
   const searchTerm = `${cleanTitle(showTitle)} S${s}E${e}`;
@@ -330,10 +329,12 @@ const searchEpisode = async (showTitle, season, episode, profile = null, current
   return filterAndSortResults(results, profile, 'shows', currentQuality, isManualSearch, showTitle);
 };
 
-const searchShowPack = async (showTitle, profile = null, currentQuality = null, isManualSearch = false, tmdb_id = null) => {
+const searchShowPack = async (showTitle, profile = null, currentQuality = null, isManualSearch = false, _tmdb_id = null) => {
   const searchTerm = cleanTitle(showTitle);
   const results = await searchProwlarr(searchTerm, 'tvsearch');
-  return filterAndSortResults(results, profile, 'shows', currentQuality, isManualSearch, showTitle);
+  const filtered = filterAndSortResults(results, profile, 'shows', currentQuality, isManualSearch, showTitle);
+  // Exclude individual episode releases — this search is for full-show packs
+  return filtered.filter(r => !isEpisodeRelease(r.title));
 };
 
 const searchSeasonPack = async (showTitle, seasonNumber, _profile = null, _currentQuality = null, _isManualSearch = false, _tmdb_id = null) => {

@@ -19,7 +19,6 @@ const connect = () => {
     const ws = new WebSocket(url);
 
     ws.onopen = () => {
-      console.log('[WS] Connected');
       isConnecting = false;
       // Send auth if logged in
       try {
@@ -60,7 +59,6 @@ const connect = () => {
     };
 
     ws.onclose = () => {
-      console.log('[WS] Disconnected, reconnecting in 5s...');
       isConnecting = false;
       clearTimeout(reconnectTimer);
       reconnectTimer = setTimeout(connect, 5000);

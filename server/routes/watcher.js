@@ -76,9 +76,9 @@ router.delete('/stats', (req, res, next) => {
   }
 });
 
-router.get('/image', async (req, res, next) => {
+router.get('/image', async (req, res) => {
   try {
-    const { server, path, id } = req.query;
+    const { server, id } = req.query;
     let url = '';
     const headers = {};
 
@@ -122,7 +122,7 @@ router.get('/image', async (req, res, next) => {
 
     const response = await axios.get(url, { headers, responseType: 'stream' });
     response.data.pipe(res);
-  } catch (err) {
+  } catch {
     res.status(404).send('Image not found');
   }
 });

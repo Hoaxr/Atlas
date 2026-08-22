@@ -1,5 +1,4 @@
 const axios = require('axios');
-const FormData = require('form-data');
 
 let requestId = 1;
 const rpcCall = (client, method, params = []) => {
@@ -31,10 +30,8 @@ const addTorrent = async (client, torrentUrl) => {
   const cookie = await login(client);
   if (!cookie) throw new Error('Failed to authenticate with Deluge');
 
-  let torrentData = null;
   if (torrentUrl.startsWith('http')) {
-    const res = await axios.get(torrentUrl, { responseType: 'arraybuffer', timeout: 15000 });
-    torrentData = res.data.toString('base64');
+    await axios.get(torrentUrl, { responseType: 'arraybuffer', timeout: 15000 });
   }
 
   await axios({

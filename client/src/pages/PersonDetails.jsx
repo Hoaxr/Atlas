@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Film, Tv, Star, User, Loader2, CheckCircle2, ExternalLink, Plus, Info } from 'lucide-react';
 import api from '../lib/api';
 import MediaDetailsModal from '../components/MediaDetailsModal';
@@ -16,7 +16,21 @@ export default function PersonDetails() {
   const [expanded, setExpanded] = useState(false);
   const [selectedMediaId, setSelectedMediaId] = useState(null);
   const [selectedMediaType, setSelectedMediaType] = useState(null);
-  const [selectedLibraryId, setSelectedLibraryId] = useState(null);
+
+  const updateCredit = (tmdbId, updates) => {
+    setPerson(prev => {
+      if (!prev) return prev;
+      const newCredits = { ...prev.combined_credits };
+      ['cast', 'crew'].forEach(list => {
+        if (newCredits[list]) {
+          newCredits[list] = newCredits[list].map(c =>
+            c.id === tmdbId ? { ...c, ...updates } : c
+          );
+        }
+      });
+      return { ...prev, combined_credits: newCredits };
+    });
+  };
 
   const handleAddMedia = async (tmdbId, type) => {
     try {
@@ -25,18 +39,7 @@ export default function PersonDetails() {
       if (res.data.status === 'success') {
         customAlert(`${type === 'movie' ? 'Movie' : 'Show'} added to library successfully!`);
         // Update person state to mark this credit as inLibrary
-        setPerson(prev => {
-          if (!prev) return prev;
-          const newCredits = { ...prev.combined_credits };
-          ['cast', 'crew'].forEach(list => {
-            if (newCredits[list]) {
-              newCredits[list] = newCredits[list].map(c => 
-                c.id === tmdbId ? { ...c, inLibrary: true } : c
-              );
-            }
-          });
-          return { ...prev, combined_credits: newCredits };
-        });
+        updateCredit(tmdbId, { inLibrary: true, libraryId: res.data.data?.id ?? null });
       }
     } catch (err) {
       customAlert(err.response?.data?.message || `Failed to add ${type} to library.`, 'error');
@@ -179,7 +182,6 @@ export default function PersonDetails() {
           const isMovie = credit.media_type === 'movie';
           const title = isMovie ? credit.title : credit.name;
           const year = (isMovie ? credit.release_date : credit.first_air_date || '').slice(0, 4);
-          const detailPath = isMovie ? `/movies/${credit.id}` : `/shows/${credit.id}`;
 
           return (
             <div
@@ -276,21 +278,12 @@ export default function PersonDetails() {
         mediaId={selectedMediaId}
         mediaType={selectedMediaType}
         isInLibrary={selectedMediaId ? displayed.find(c => c.id === selectedMediaId)?.inLibrary : false}
-        libraryId={selectedLibraryId}
-        onAdded={(tmdbId) => {
-          setPerson(prev => {
-            if (!prev) return prev;
-            const newCredits = { ...prev.combined_credits };
-            ['cast', 'crew'].forEach(list => {
-              if (newCredits[list]) {
-                newCredits[list] = newCredits[list].map(c => 
-                  c.id === tmdbId ? { ...c, inLibrary: true } : c
-                );
-              }
-            });
-            return { ...prev, combined_credits: newCredits };
-          });
-        }}
+        libraryId={
+          selectedMediaId
+            ? [...(credits.cast || []), ...(credits.crew || [])].find(c => c.id === selectedMediaId)?.libraryId ?? null
+            : null
+        }
+        onAdded={(tmdbId) => updateCredit(tmdbId, { inLibrary: true })}
       />
     </div>
   );

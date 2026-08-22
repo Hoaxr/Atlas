@@ -1,6 +1,5 @@
 const axios = require('axios');
 const db = require('../config/database');
-const tmdbService = require('./tmdbService');
 const eventBus = require('./eventBus');
 
 const getSimklClientId = () => {

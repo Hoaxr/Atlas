@@ -1,5 +1,4 @@
 const axios = require('axios');
-const querystring = require('querystring');
 
 // rTorrent uses XML-RPC over SCGI. We proxy through the HTTP-to-SCGI
 // endpoint that rTorrent provides (usually port 8000 or via nginx).

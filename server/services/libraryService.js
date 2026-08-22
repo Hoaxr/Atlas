@@ -1,4 +1,5 @@
 const db = require('../config/database');
+const { getAiredCutoffSql } = require('../utils/airDate');
 const tmdbService = require('./tmdbService');
 const fs = require('fs');
 const path = require('path');
@@ -388,7 +389,7 @@ const getShows = (limit = 0, offset = 0, sort = 'added_desc', filters = {}) => {
             AND (e.file_path IS NULL OR e.file_path = '')
             AND e.status != 'downloaded'
             AND e.air_date IS NOT NULL
-            AND e.air_date <= date('now', 'localtime')
+            AND e.air_date <= ${getAiredCutoffSql()}
           THEN 1 END)                                                    AS missing_episodes,
         (SELECT COALESCE(e2.scene_name, e2.file_path)
            FROM episodes e2
@@ -409,9 +410,10 @@ const getShows = (limit = 0, offset = 0, sort = 'added_desc', filters = {}) => {
       s.*,
       CASE
         WHEN s.status = 'downloading' OR COALESCE(es.downloading_episodes, 0) > 0 THEN 'downloading'
+        WHEN COALESCE(es.downloaded_episodes, 0) > 0 THEN
+          CASE WHEN s.monitored = 1 AND COALESCE(es.missing_episodes, 0) > 0 THEN 'monitored' ELSE 'downloaded' END
         WHEN s.monitored = 0 THEN 'unmonitored'
         WHEN COALESCE(es.missing_episodes, 0) > 0 THEN 'monitored'
-        WHEN COALESCE(es.downloaded_episodes, 0) > 0 THEN 'downloaded'
         ELSE s.status
       END                                   AS status,
       qp.name                               AS quality_profile_name,

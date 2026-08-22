@@ -99,7 +99,7 @@ export default function Downloads() {
     });
 
     return () => { if (cleanup) cleanup(); };
-  }, []);
+  }, [onEvent]);
 
   const fetchClientData = async () => {
     try {

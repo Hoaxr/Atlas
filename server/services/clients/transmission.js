@@ -1,11 +1,6 @@
 const axios = require('axios');
 
 let requestId = 1;
-const rpcCall = (method, args = {}) => ({
-  method: 'post',
-  data: { method, arguments: args, tag: requestId++ },
-  headers: { 'Content-Type': 'application/json' }
-});
 
 const getSessionId = async (client) => {
   try {

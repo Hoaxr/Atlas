@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState } from 'react';
 import { Trash2, ChevronDown } from 'lucide-react';
 import { useOutsideClick } from '../../lib/useOutsideClick';
 

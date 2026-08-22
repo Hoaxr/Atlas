@@ -110,14 +110,6 @@ router.put('/:id/approve', requireAdmin, async (req, res, next) => {
   try {
     const request = db.prepare('SELECT * FROM requests WHERE id = ?').get(req.params.id);
     if (!request) return res.status(404).json({ status: 'error', message: 'Request not found' });
-    
-    // Check if it's already in the library
-    let existingLibraryItem;
-    if (request.type === 'movie') {
-      existingLibraryItem = db.prepare('SELECT id FROM movies WHERE tmdb_id = ?').get(request.tmdb_id);
-    } else {
-      existingLibraryItem = db.prepare('SELECT id FROM shows WHERE tmdb_id = ?').get(request.tmdb_id);
-    }
 
     // If it's not in the library, we need to add it. But adding it requires quality profiles and path!
     // Often admins want to choose the path/profile when approving. 

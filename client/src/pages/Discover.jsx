@@ -67,7 +67,7 @@ export default function Discover() {
     if (!stickySearchVisible && query) {
       searchInputRef.current?.focus();
     }
-  }, [stickySearchVisible]);
+  }, [stickySearchVisible, query]);
 
   // Close rows menu on outside click — handled by useOutsideClick hook above
 
@@ -124,6 +124,8 @@ export default function Discover() {
       if (interval) clearInterval(interval);
       if (searchTimer) clearTimeout(searchTimer);
     };
+    // fetchLibrary/fetchAllData/executeSearch read only query & mode, both already deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query, mode]);
 
   const fetchLibrary = async () => {
@@ -233,17 +235,6 @@ export default function Discover() {
     } finally {
       setLoading(false);
     }
-  };
-
-  const searchMovies = (e) => {
-    e.preventDefault();
-    executeSearch(query);
-  };
-
-  const handleDetailsClick = (id, type) => {
-    setSelectedMediaId(id);
-    setSelectedMediaType(type);
-    setModalAction('details');
   };
 
   const handleAddMedia = (id, type) => {

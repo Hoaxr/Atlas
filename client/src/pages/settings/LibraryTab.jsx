@@ -227,7 +227,7 @@ export default function LibraryTab({
                           customAlert(`${stillUnreachable.length} path(s) still unreachable. Error: ${stillUnreachable[0].error}`, 'error');
                         }
                       }
-                    } catch (err) {
+                    } catch {
                       customAlert('Failed to retry paths', 'error');
                     }
                   }}

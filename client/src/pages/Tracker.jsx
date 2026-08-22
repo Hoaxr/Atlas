@@ -1,12 +1,12 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { AnimatedUpNextCard } from '../components/tracker/AnimatedUpNextCard';
 import { ThisWeekCard } from '../components/tracker/ThisWeekCard';
 import { useNavigate } from 'react-router-dom';
 import api from '../lib/api';
 import useWebSocket from '../lib/useWebSocket';
 import { 
-  Clock, Film, Tv, Play, ChevronRight, ChevronLeft, Trash2, Undo2, Eye, 
-  Flame, Award, Calendar, Sparkles, Compass, CheckCircle2, TrendingUp, Zap, Moon, Sun, Star, MonitorPlay, Loader2
+  Clock, Film, Tv, Play, ChevronRight, ChevronLeft, Trash2, Undo2, 
+  Calendar, CheckCircle2, TrendingUp, Zap, Loader2
 } from 'lucide-react';
 import { tmdbImgUrl } from '../lib/posterUrl';
 import StickyBar from '../components/shared/StickyBar';
@@ -26,7 +26,6 @@ const TimelineHistoryCard = ({ item, handleMarkUnwatched, handleDeleteHistory })
   const isMovie = item.type === 'movie';
   const [localTitle, setLocalTitle] = useState(isMovie ? item.movie_title : item.show_title);
   const [localPoster, setLocalPoster] = useState(isMovie ? item.movie_poster : item.show_poster);
-  const [showMenu, setShowMenu] = useState(false);
 
   useEffect(() => {
     setLocalTitle(isMovie ? item.movie_title : item.show_title);
@@ -66,7 +65,6 @@ const TimelineHistoryCard = ({ item, handleMarkUnwatched, handleDeleteHistory })
   const runtimeMin = item.history_runtime || item.movie_runtime || item.ep_runtime;
   const quality = item.movie_quality || item.ep_quality;
   const hdr = item.movie_hdr || item.ep_hdr;
-  const codec = item.movie_codec || item.ep_codec;
 
   return (
     <div className="relative group flex items-center gap-2 sm:gap-4 my-2 sm:my-2.5 w-full">

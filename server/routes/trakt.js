@@ -25,7 +25,7 @@ router.post('/import', authMiddleware, upload.array('files'), async (req, res) =
       let jsonData;
       try {
         jsonData = JSON.parse(fileContent);
-      } catch (e) {
+      } catch {
         fs.unlinkSync(filePath);
         return res.status(400).json({ error: `Invalid JSON file: ${file.originalname}` });
       }

@@ -1,4 +1,4 @@
-import React from 'react';
+
 import { useNavigate } from 'react-router-dom';
 import { Tv, Film, Calendar } from 'lucide-react';
 import { tmdbImgUrl } from '../../lib/posterUrl';

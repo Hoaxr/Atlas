@@ -68,7 +68,7 @@ const resumeTorrent = async (client, hash) => {
   return true;
 };
 
-const deleteTorrent = async (client, hash, deleteFiles = false) => {
+const deleteTorrent = async (client, hash, _deleteFiles = false) => {
   await apiCall(client, { mode: 'queue', name: 'delete', value: hash });
   return true;
 };

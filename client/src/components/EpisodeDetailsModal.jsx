@@ -1,10 +1,11 @@
 import ModalShell from './shared/ModalShell';
-import React, { useState } from 'react';
-import { X, HardDrive, Zap, Search, Trash2, Calendar, FileType, Hash, MonitorPlay, Volume2, Info, Eye } from 'lucide-react';
+import { useState } from 'react';
+import { X, HardDrive, Zap, Search, Trash2, Calendar, FileType, MonitorPlay, Volume2, Info, Eye, Loader2 } from 'lucide-react';
 import { formatSize, parseResolution, parseCodec, parseAudio, getReleaseTitleFromPath } from '../lib/format';
 
 const EpisodeDetailsModal = ({ episode, show, onClose, onAutoSearch, onManualSearch, onDeleteFile, renderSubtitles, renderMonitored }) => {
   const [isOverviewExpanded, setIsOverviewExpanded] = useState(false);
+  const [autoSearching, setAutoSearching] = useState(false);
   if (!episode) return null;
 
   const resolution = episode.resolution || parseResolution(episode.scene_name || episode.file_path);
@@ -182,11 +183,24 @@ const EpisodeDetailsModal = ({ episode, show, onClose, onAutoSearch, onManualSea
             )}
             
             <button
-              onClick={() => onAutoSearch && onAutoSearch(episode)}
-              className="flex items-center justify-center gap-1.5 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-bold py-2.5 px-4 rounded-xl shadow-lg shadow-cyan-500/20 active:scale-[0.98] transition-all text-xs group"
+              onClick={async () => {
+                if (!onAutoSearch || autoSearching) return;
+                setAutoSearching(true);
+                try {
+                  await onAutoSearch(episode);
+                } finally {
+                  setAutoSearching(false);
+                }
+              }}
+              disabled={autoSearching}
+              className="flex items-center justify-center gap-1.5 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-bold py-2.5 px-4 rounded-xl shadow-lg shadow-cyan-500/20 active:scale-[0.98] transition-all text-xs group disabled:opacity-60 disabled:cursor-not-allowed"
             >
-              <Zap className="w-3.5 h-3.5 fill-current group-hover:scale-110 transition-transform" /> 
-              <span>Auto Search</span>
+              {autoSearching ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Zap className="w-3.5 h-3.5 fill-current group-hover:scale-110 transition-transform" />
+              )}
+              <span>{autoSearching ? 'Searching...' : 'Auto Search'}</span>
             </button>
             
             <button

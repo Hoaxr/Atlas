@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useRef, forwardRef } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { VirtuosoGrid } from 'react-virtuoso';
 import api from '../../lib/api';
-import { Activity, Film, Tv, Search, CheckCircle2, AlertCircle, Bookmark, BookmarkMinus, LayoutGrid, List, Star, ArrowRight, Zap, Eye, EyeOff, X, RotateCcw, Filter as FilterIcon, CheckSquare, Square, Columns, Plus } from 'lucide-react';
+import { Activity, Film, Tv, Search, CheckCircle2, AlertCircle, Bookmark, LayoutGrid, List, Star, ArrowRight, Zap, Eye, EyeOff, X, RotateCcw, Filter as FilterIcon, CheckSquare, Square, Columns, Plus } from 'lucide-react';
 import { customAlert, customConfirm } from '../../utils/alerts';
 import { cachedMovies, cachedShows, setCachedMovies, setCachedShows } from '../../lib/libraryCache';
 import { parseResolution, parseCodec } from '../../lib/format';
@@ -82,6 +82,8 @@ export default function Dashboard() {
   useEffect(() => {
     localStorage.setItem(scopeKey('TableColumns'), JSON.stringify(tableColumns));
     localStorage.setItem(scopeKey('ColumnOrder'), JSON.stringify(columnOrder));
+    // scopeKey is derived from viewMode, which is already a dependency
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tableColumns, columnOrder, viewMode]);
 
   const [searchParams] = useSearchParams();
@@ -92,7 +94,7 @@ export default function Dashboard() {
     try {
       const stored = localStorage.getItem(scopeKey('GenreFilter'));
       if (stored && stored !== 'all') return JSON.parse(stored);
-    } catch (e) {
+    } catch {
       /* ignore parse error */
     }
     return [];
@@ -124,7 +126,7 @@ export default function Dashboard() {
     if (!stickySearchVisible && searchQuery) {
       searchInputRef.current?.focus();
     }
-  }, [stickySearchVisible]);
+  }, [stickySearchVisible, searchQuery]);
 
   const REORDER_FLASH_MS = 150;
 
@@ -202,6 +204,7 @@ export default function Dashboard() {
   useEffect(() => {
     const yearParam = searchParams.get('year');
     const ratingParam = searchParams.get('rating');
+    const genreParam = searchParams.get('genre');
     if (yearParam) {
       setYearFilter(yearParam);
       localStorage.setItem(scopeKey('YearFilter'), yearParam);
@@ -209,6 +212,12 @@ export default function Dashboard() {
     if (ratingParam) {
       setRatingFilter(ratingParam);
     }
+    if (genreParam) {
+      setGenreFilter([genreParam]);
+      localStorage.setItem(scopeKey('GenreFilter'), JSON.stringify([genreParam]));
+    }
+    // Intentionally mount-only; scopeKey/searchParams are stable for this purpose
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Only on mount
   useEffect(() => {
     localStorage.setItem('dashboardViewStyle', viewStyle);
@@ -220,6 +229,8 @@ export default function Dashboard() {
     localStorage.setItem(scopeKey('CodecFilter'), codecFilter);
     localStorage.setItem(scopeKey('YearFilter'), yearFilter);
     localStorage.setItem(scopeKey('Sort'), sort);
+    // scopeKey is derived from viewMode; persistence should not re-run per render
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [viewStyle, statusFilter, watchedFilter, genreFilter, qualityFilter, resolutionFilter, codecFilter, yearFilter, sort]);
 
   // Reset filters when switching between movies and shows
@@ -243,6 +254,8 @@ export default function Dashboard() {
     // Fetch data for the current view
     setLoading(true);
     fetchViewData(viewMode, false);
+    // scopeKey is derived from viewMode, which is already a dependency
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [viewMode]);
 
   // Reset pagination when filters/sort change and flash the reorder indicator
@@ -467,7 +480,7 @@ export default function Dashboard() {
     items = sortItems(items, sort);
 
     return items;
-  }, [movies, shows, searchQuery, statusFilter, watchedFilter, yearFilter, genreFilter, qualityFilter, resolutionFilter, codecFilter, ratingFilter, tmdbStatusFilter, alphaFilter, sort]);
+  }, [movies, shows, searchQuery, statusFilter, watchedFilter, yearFilter, genreFilter, qualityFilter, resolutionFilter, codecFilter, ratingFilter, tmdbStatusFilter, alphaFilter, sort, viewMode]);
 
   // --- Active filter chips ---
   const activeFilters = [];
@@ -952,7 +965,7 @@ export default function Dashboard() {
                             refreshLibrary();
                             customAlert(res.data.data.monitored ? 'Now monitored' : 'Now unmonitored');
                           }
-                        } catch (err) {
+                        } catch {
                           customAlert('Failed to toggle monitor status', 'error');
                         }
                       }}
@@ -1032,19 +1045,19 @@ export default function Dashboard() {
                           <div className="flex justify-between items-center w-full text-[11px] font-semibold">
                             <span className="text-slate-400">Episodes</span>
                             <span className="text-slate-200">
-                              <span className={item.watched_episodes === item.episode_count ? 'text-emerald-400 font-bold' : 'text-cyan-400 font-bold'}>
-                                {item.watched_episodes || 0}
+                              <span className={item.downloaded_episodes === item.episode_count ? 'text-emerald-400 font-bold' : 'text-cyan-400 font-bold'}>
+                                {item.downloaded_episodes || 0}
                               </span>
                               <span className="text-slate-500"> / </span>
                               {item.episode_count}
                             </span>
                           </div>
                           <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
-                            <div 
+                            <div
                               className={`h-full rounded-full transition-all duration-300 ${
-                                item.watched_episodes === item.episode_count ? 'bg-emerald-400' : 'bg-gradient-to-r from-cyan-500 to-purple-500'
+                                item.downloaded_episodes === item.episode_count ? 'bg-emerald-400' : 'bg-gradient-to-r from-cyan-500 to-purple-500'
                               }`}
-                              style={{ width: `${Math.min(100, Math.round(((item.watched_episodes || 0) / (item.episode_count || 1)) * 100))}%` }}
+                              style={{ width: `${Math.min(100, Math.round(((item.downloaded_episodes || 0) / (item.episode_count || 1)) * 100))}%` }}
                             />
                           </div>
                         </div>
@@ -1236,7 +1249,7 @@ export default function Dashboard() {
                                 refreshLibrary();
                                 customAlert(res.data.data.monitored ? 'Now monitored' : 'Now unmonitored');
                               }
-                            } catch (err) {
+                            } catch {
                               customAlert('Failed to toggle monitor status', 'error');
                             }
                           }}

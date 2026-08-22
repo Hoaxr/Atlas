@@ -70,7 +70,7 @@ const resumeTorrent = async (client, hash) => {
   return true;
 };
 
-const deleteTorrent = async (client, hash, deleteFiles = false) => {
+const deleteTorrent = async (client, hash, _deleteFiles = false) => {
   await rpc(client, 'editqueue', ['GroupDelete', 0, '', [parseInt(hash, 10)]]);
   return true;
 };

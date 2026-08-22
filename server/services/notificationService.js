@@ -1,5 +1,4 @@
 const axios = require('axios');
-const db = require('../config/database');
 const eventBus = require('./eventBus');
 const { getSetting } = require('../utils/settings');
 

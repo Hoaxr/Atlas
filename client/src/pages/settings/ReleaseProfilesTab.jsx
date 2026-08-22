@@ -56,17 +56,13 @@ const TagInput = ({ tags, setTags, placeholder, colorClass }) => {
   );
 };
 
-export default function ReleaseProfilesTab({ releaseProfiles, indexers, newProfile, setNewProfile, editingProfile, setEditingProfile, handleAddProfile, handleUpdateProfile, handleDeleteProfile }) {
+export default function ReleaseProfilesTab({ releaseProfiles, _indexers, newProfile, setNewProfile, editingProfile, setEditingProfile, handleAddProfile, handleUpdateProfile, handleDeleteProfile }) {
   const activeObj = editingProfile || newProfile;
   const updateObj = (updates) => {
     if (editingProfile) setEditingProfile({ ...editingProfile, ...updates });
     else setNewProfile({ ...newProfile, ...updates });
   };
 
-  const indexerOptions = [
-    { label: '(Any)', value: '' },
-    ...indexers.map(i => ({ label: i.name, value: i.id }))
-  ];
 
   return (
     <div className="max-w-5xl mx-auto space-y-8 animate-fade-in">

@@ -20,7 +20,7 @@ export default function Requests() {
     try {
       const res = await api.get('/requests');
       setRequests(res.data.data);
-    } catch (err) {
+    } catch {
       customAlert('Failed to load requests');
     } finally {
       setLoading(false);
@@ -43,7 +43,7 @@ export default function Requests() {
       await api.put(`/requests/${currentRequestId}/approve`);
       customAlert('Request marked as approved');
       fetchRequests();
-    } catch (err) {
+    } catch {
       customAlert('Failed to update request status');
     }
   };
@@ -56,7 +56,7 @@ export default function Requests() {
       await api.put(`/requests/${id}/deny`);
       customAlert('Request denied');
       fetchRequests();
-    } catch (err) {
+    } catch {
       customAlert('Failed to deny request');
     }
   };
@@ -69,7 +69,7 @@ export default function Requests() {
       await api.delete(`/requests/${id}`);
       customAlert('Request deleted');
       fetchRequests();
-    } catch (err) {
+    } catch {
       customAlert('Failed to delete request');
     }
   };

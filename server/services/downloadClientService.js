@@ -1,4 +1,3 @@
-const axios = require('axios');
 const db = require('../config/database');
 const adapters = {
   qbittorrent: require('./clients/qbittorrent'),

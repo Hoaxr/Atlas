@@ -4,6 +4,7 @@ import api from '../lib/api';
 import { formatSize } from '../lib/format';
 import ModalShell from './shared/ModalShell';
 import InlineError from './shared/InlineError';
+import { customAlert } from '../utils/alerts';
 
 const qualityColor = (q) => {
   if (!q) return 'text-slate-400';
@@ -33,12 +34,16 @@ export default function ManualSearchModal({ mediaId, mediaType, season, title, o
     ? `/library/episodes/${mediaId}/search`
     : mediaType === 'season'
     ? `/library/shows/${mediaId}/seasons/${season}/search`
+    : mediaType === 'show'
+    ? `/library/shows/${mediaId}/search`
     : `/library/movies/${mediaId}/search`;
 
   const grabEndpoint = mediaType === 'episode'
     ? `/library/episodes/${mediaId}/grab`
     : mediaType === 'season'
     ? `/library/shows/${mediaId}/seasons/${season}/download`
+    : mediaType === 'show'
+    ? `/library/shows/${mediaId}/download`
     : `/library/movies/${mediaId}/grab`;
 
   useEffect(() => {
@@ -46,7 +51,10 @@ export default function ManualSearchModal({ mediaId, mediaType, season, title, o
     setError(null);
     api.get(endpoint)
       .then(res => {
-        if (res.data.status === 'success') setResults(res.data.data);
+        if (res.data.status === 'success') {
+          // Dead torrents (0 seeders) can never start downloading — hide them
+          setResults((res.data.data || []).filter(r => (r.seeders ?? 0) > 0));
+        }
         else setError('Search returned no results.');
       })
       .catch((err) => setError(err.response?.data?.message || 'Search failed. Make sure your indexers are configured.'))
@@ -56,10 +64,14 @@ export default function ManualSearchModal({ mediaId, mediaType, season, title, o
   const handleGrab = async (result, idx) => {
     setGrabbing(idx);
     try {
-      await api.post(grabEndpoint, { link: result.link, title: result.title });
+      const payload = mediaType === 'show'
+        ? { torrentUrl: result.link }
+        : { link: result.link, title: result.title };
+      await api.post(grabEndpoint, payload);
       onGrabbed?.();
       onClose();
-    } catch {
+    } catch (err) {
+      customAlert(err.response?.data?.message || 'Grab failed', 'error');
       setGrabbing(null);
     }
   };

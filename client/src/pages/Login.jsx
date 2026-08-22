@@ -1,7 +1,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Shield, Lock, User, ArrowRight, X } from 'lucide-react';
+import { Shield, Lock, User, ArrowRight, X, Smartphone } from 'lucide-react';
 import api from '../lib/api';
 import { customAlert } from '../utils/alerts';
 import PasswordInput from '../components/shared/PasswordInput';
@@ -36,7 +36,7 @@ export default function Login() {
   const [qcModalOpen, setQcModalOpen] = useState(false);
   const [showAtlasLogin, setShowAtlasLogin] = useState(false);
   const [qcCode, setQcCode] = useState('');
-  const [qcSecret, setQcSecret] = useState('');
+  const [, setQcSecret] = useState('');
   
   const navigate = useNavigate();
   const pollIntervalRef = useRef(null);
@@ -114,10 +114,6 @@ export default function Login() {
   const handleAtlasLogin = (e) => {
     e.preventDefault();
     executeLogin('atlas');
-  };
-
-  const handleJellyfinLogin = () => {
-    executeLogin('jellyfin');
   };
 
   const handlePlexLogin = async () => {

@@ -10,9 +10,7 @@ const { GoogleGenerativeAI } = require('@google/generative-ai');
 const db = require('../config/database');
 const { getSetting, setSetting } = require('../utils/settings');
 const downloadClientService = require('../services/downloadClientService');
-const { isVideoFile } = require('../utils/fileUtils');
 const { invalidateAuthCache } = require('../middleware/authMiddleware');
-const { USER_AGENT } = require('../utils/constants');
 
 router.get('/', (req, res, next) => {
   try {
@@ -112,6 +110,7 @@ router.get('/', (req, res, next) => {
         libraryPaths,
         authEnabled: getSetting('authEnabled') || 'false',
         authUsername: getSetting('authUsername'),
+        timezone: getSetting('timezone') || '',
         plexUrl: getSetting('plexUrl'),
         plexToken: mask(getSetting('plexToken')),
         jellyfinUrl: getSetting('jellyfinUrl'),
@@ -193,6 +192,7 @@ const SETTING_SCHEMA = {
   autoDeleteWatchedEnabled: { type: 'boolean' },
   autoDeleteWatchedDays:    { type: 'string' },
   autoWatchUser:            { type: 'string' },
+  timezone:                 { type: 'string' },
 };
 
 const isMasked = (val) => typeof val === 'string' && /^\*+$/.test(val);
@@ -247,7 +247,7 @@ router.post('/', async (req, res, next) => {
 
     // Process all settings from the schema — collect valid writes first, then commit atomically
     const settingsToWrite = [];
-    for (const [key, schema] of Object.entries(SETTING_SCHEMA)) {
+    for (const [key] of Object.entries(SETTING_SCHEMA)) {
       if (body[key] === undefined) continue;
 
       if (key === 'authPassword') continue; // handled separately below
@@ -275,6 +275,10 @@ router.post('/', async (req, res, next) => {
     } else {
       // Still write individually if there were no errors but setSetting has side-effects
       for (const [key, val] of settingsToWrite) setSetting(key, val);
+    }
+
+    if (body.timezone !== undefined) {
+      require('../utils/airDate').invalidateTimezoneCache();
     }
 
 
@@ -486,7 +490,7 @@ router.get('/plex/pin/:pinId', async (req, res, next) => {
             plexUrl
           }
         });
-      } catch (discoverErr) {
+      } catch {
         // Still return token even if we can't discover the server URL
         return res.json({
           status: 'success',
@@ -1145,7 +1149,7 @@ router.post('/test-notification', async (req, res) => {
     const notificationService = require('../services/notificationService');
     await notificationService.testNotification(req.body || {});
     res.json({ status: 'success', message: 'Test notification sent' });
-  } catch (err) {
+  } catch {
     res.status(500).json({ status: 'error', message: 'Failed to send test notification' });
   }
 });

@@ -24,6 +24,8 @@ export default function FolderBrowserModal({ open, onClose, onSelect, itemId, it
       setError(null);
       fetchDirectory(null);
     }
+    // Only (re)fetch when the modal opens; fetchDirectory reads stable props
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   const fetchDirectory = async (dirPath) => {
@@ -48,7 +50,7 @@ export default function FolderBrowserModal({ open, onClose, onSelect, itemId, it
           setBreadcrumbs([]);
         }
       }
-    } catch (err) {
+    } catch {
       setError('Failed to browse directory');
     } finally {
       setLoading(false);

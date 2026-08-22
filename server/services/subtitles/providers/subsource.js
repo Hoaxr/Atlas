@@ -24,9 +24,18 @@ const downloadForMovie = async (apiKey, movie, langCode) => {
 };
 
 const downloadForEpisode = async (apiKey, show, episode, langCode) => {
-  const episodeMovie = { ...episode, title: show.title };
-  // The original implementation just called trySubsource with show.title
-  return await downloadForMovie(apiKey, episodeMovie, langCode);
+  // Search with season/episode so we get a subtitle for the right episode,
+  // then download it directly by its subtitleId.
+  const results = await searchForEpisode(apiKey, show, episode, langCode);
+  if (!results || results.length === 0) return null;
+  const subId = results[0].subId;
+  const dlRes = await axios.get(`https://api.subsource.net/api/v1/subtitles/${subId}/download`, {
+    params: { api_key: apiKey },
+    responseType: 'text',
+    validateStatus: () => true
+  });
+  if (dlRes.status !== 200) return null;
+  return dlRes.data;
 };
 
 const searchForMovie = async (apiKey, movie, langCode) => {

@@ -67,7 +67,7 @@ const PORT = process.env.PORT || 3000;
 // WebSocket server
 const wss = new WebSocketServer({ server, path: '/ws' });
 
-wss.on('connection', (ws, req) => {
+wss.on('connection', (ws, _req) => {
   console.log('[WS] Client connected');
   let authenticated = false;
   let onEvent = null;
@@ -253,7 +253,7 @@ app.use(helmet({
   },
 }));
 app.use(morgan('dev', {
-  skip: (req, res) => {
+  skip: (req, _res) => {
     const ignoredPaths = [
       '/api/settings/clients/test',
       '/api/library/stats',

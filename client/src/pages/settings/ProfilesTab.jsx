@@ -3,7 +3,7 @@ import { Save, Plus, Trash2, Settings2, CheckCircle2, Star, CheckSquare, Square 
 import { customAlert } from '../../utils/alerts';
 import CustomSelect from '../../components/shared/CustomSelect';
 
-export default function ProfilesTab({ profiles, newProfile, setNewProfile, editingProfile, setEditingProfile, handleAddEntity, handleDeleteEntity, fetchSettings, settings, setSettings, handleSave }) {
+export default function ProfilesTab({ profiles, newProfile, setNewProfile, editingProfile, setEditingProfile, handleAddEntity, handleDeleteEntity, fetchSettings, settings, setSettings, _handleSave }) {
   return (
     <div className="max-w-5xl mx-auto space-y-8 animate-fade-in">
       <h2 className="text-2xl font-bold text-amber-400 flex items-center gap-2">
@@ -167,7 +167,7 @@ export default function ProfilesTab({ profiles, newProfile, setNewProfile, editi
                     try {
                       await api.post('/settings', { ...settings, defaultQualityProfileId: newId });
                       customAlert('Default profile updated!', 'success');
-                    } catch (e) {
+                    } catch {
                       customAlert('Failed to update default profile.', 'error');
                     }
                   }

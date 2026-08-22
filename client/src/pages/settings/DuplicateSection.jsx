@@ -14,7 +14,7 @@ export default function DuplicateSection() {
       if (res.data.status === 'success') {
         setDuplicates(res.data.data);
       }
-    } catch (err) {
+    } catch {
       customAlert('Failed to check for duplicates', 'error');
     } finally {
       setChecking(false);
@@ -27,7 +27,7 @@ export default function DuplicateSection() {
       await api.post('/library/duplicates/delete', { id, type });
       customAlert('Duplicate removed');
       checkDuplicates();
-    } catch (err) {
+    } catch {
       customAlert('Failed to remove duplicate', 'error');
     }
   };

@@ -328,7 +328,7 @@ const autoTranslateExisting = async () => {
 
       const enSrtContent = fs.readFileSync(enSubPath, 'utf-8');
       for (const lang of targetLangs) await translateOrNativeMovie(parsedPath, movie, lang, enSrtContent);
-    } catch (e) { /* ignore */ }
+    } catch { /* ignore */ }
   });
 };
 
@@ -360,7 +360,7 @@ const upgradeTranslatedToNative = async () => {
           eventBus.success('Subtitle upgraded', { title: movie.title, language: tCode });
         }
       }
-    } catch (e) { /* ignore */ }
+    } catch { /* ignore */ }
   });
 };
 

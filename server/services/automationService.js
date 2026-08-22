@@ -3,6 +3,7 @@ const path = require('path');
 const fs = require('fs');
 const fsp = require('fs/promises');
 const db = require('../config/database');
+const { getAiredCutoffSql } = require('../utils/airDate');
 const indexerService = require('./indexerService');
 const downloadClientService = require('./downloadClientService');
 const taskRegistry = require('./taskRegistry');
@@ -481,7 +482,6 @@ const runMissingFilesCheck = async () => {
 
   // Check Episodes specifically — only for episodes whose show folder is on an accessible root
   const episodes = db.prepare("SELECT e.id, e.title, e.file_path, e.show_id, s.folder_path as show_folder FROM episodes e LEFT JOIN shows s ON s.id = e.show_id WHERE e.file_path IS NOT NULL").all();
-  let episodesReset = 0;
   const episodesToReset = [];
   for (const ep of episodes) {
     // Only verify episodes of shows that aren't being deleted entirely
@@ -501,7 +501,6 @@ const runMissingFilesCheck = async () => {
     if (!fs.existsSync(ep.file_path)) {
       console.log(`[Automation] Episode file missing, reverting to monitored: ${ep.title}`);
       episodesToReset.push(ep.id);
-      episodesReset++;
     }
   }
 
@@ -866,7 +865,7 @@ const runReleaseMonitoring = async () => {
     SET next_search_at = datetime('now'), search_state = 'PENDING'
     WHERE status = 'monitored' 
       AND air_date IS NOT NULL 
-      AND air_date <= date('now', 'localtime')
+      AND air_date <= ${getAiredCutoffSql()}
       AND (last_searched_at IS NULL OR last_searched_at < datetime(air_date))
   `).run();
 

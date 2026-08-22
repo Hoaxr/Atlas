@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   AlertCircle, CheckCircle2, Activity, Database, Zap,
   Film, Tv, Server, Cloud, DownloadCloud, Globe, Cpu,
-  Settings, BookOpen, MessageSquare, FolderTree, Clock, List, Trash2
+  Settings, BookOpen, MessageSquare, FolderTree, Clock, Trash2
 } from 'lucide-react';
 import useWebSocket from '../lib/useWebSocket';
 import EmptyState from '../components/shared/EmptyState';

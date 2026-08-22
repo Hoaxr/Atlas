@@ -31,7 +31,7 @@ export default function Watcher() {
     });
 
     return () => cleanup();
-  }, []);
+  }, [onEvent]);
 
   const fetchStats = async () => {
     try {
@@ -89,7 +89,7 @@ export default function Watcher() {
       customAlert('Watcher statistics have been reset');
       // Re-fetch stats via HTTP (WebSocket will pick up subsequent updates)
       fetchStats();
-    } catch (err) {
+    } catch {
       customAlert('Failed to reset statistics');
     } finally {
       setResetting(false);

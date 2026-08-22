@@ -6,9 +6,8 @@ const db = require('../../config/database');
 const libraryService = require('../../services/libraryService');
 const scannerService = require('../../services/scanner');
 const downloadClientService = require('../../services/downloadClientService');
-const tmdbService = require('../../services/tmdbService');
-const concurrency = require('../../utils/concurrency');
 const { deleteFolderRecursive } = require('../../utils/fileUtils');
+const { localizeAirDate, getAiredCutoffSql } = require('../../utils/airDate');
 const { parseResolution } = require('../../utils/mediaParsing');
 const cleanupWorker = require('../../services/cleanupWorker');
 
@@ -27,7 +26,7 @@ router.get('/health', (req, res, next) => {
       FROM movies m
       LEFT JOIN quality_profiles qp ON m.quality_profile_id = qp.id
       WHERE m.status IN ('monitored', 'downloaded') AND m.monitored = 1
-      AND m.release_date IS NOT NULL AND m.release_date <= date('now')
+      AND m.release_date IS NOT NULL AND m.release_date <= date('now', 'localtime')
     `).all();
 
     const missingMovies = [];
@@ -53,7 +52,7 @@ router.get('/health', (req, res, next) => {
       }
 
       let qualities = [];
-      try { qualities = JSON.parse(m.qualities); } catch (_) { /* ignore parse error */ }
+      try { qualities = JSON.parse(m.qualities); } catch { /* ignore parse error */ }
       const currentIdx = qualities.indexOf(currentQuality);
       const cutoffIdx = qualities.indexOf(m.cutoff);
 
@@ -70,7 +69,7 @@ router.get('/health', (req, res, next) => {
       JOIN shows s ON e.show_id = s.id
       LEFT JOIN quality_profiles qp ON s.quality_profile_id = qp.id
       WHERE e.status IN ('monitored', 'downloaded') AND e.monitored = 1 AND s.monitored = 1
-      AND e.air_date IS NOT NULL AND e.air_date <= date('now')
+      AND e.air_date IS NOT NULL AND e.air_date <= ${getAiredCutoffSql()}
     `).all();
 
     const missingEps = [];
@@ -96,7 +95,7 @@ router.get('/health', (req, res, next) => {
       }
 
       let qualities = [];
-      try { qualities = JSON.parse(e.qualities); } catch (_) { /* ignore parse error */ }
+      try { qualities = JSON.parse(e.qualities); } catch { /* ignore parse error */ }
       const currentIdx = qualities.indexOf(currentQuality);
       const cutoffIdx = qualities.indexOf(e.cutoff);
 
@@ -506,7 +505,7 @@ router.get('/calendar', async (req, res, next) => {
         e.title, 
         e.season_number, 
         e.episode_number, 
-        DATE(e.air_date, printf('%+d day', COALESCE(s.calendar_day_offset, 0))) AS date, 
+        e.air_date AS date,
         e.overview, 
         s.title as show_title, 
         s.id as show_id, 
@@ -539,6 +538,10 @@ router.get('/calendar', async (req, res, next) => {
       let dateStr = item.date;
       if (dateStr && dateStr.includes('T')) {
         dateStr = dateStr.split('T')[0];
+      }
+      // Convert US air dates to the configured local calendar day
+      if (item.type === 'episode') {
+        dateStr = localizeAirDate(dateStr);
       }
       return { ...item, date: dateStr };
     });
@@ -781,7 +784,6 @@ const getSystemHealth = async (req, res, next) => {
 };
 
 router.get('/system-health', getSystemHealth);
-router.get('/health', getSystemHealth);
 
 
 router.get('/export', (req, res, next) => {

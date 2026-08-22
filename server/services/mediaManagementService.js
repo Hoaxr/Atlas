@@ -339,7 +339,7 @@ const importMovie = async (torrent, movie) => {
     
     if (movie.file_path && movie.file_path !== destFile && fs.existsSync(movie.file_path)) {
       console.log(`[MediaManagement] Deleting old file at ${movie.file_path}.`);
-      await fs.promises.unlink(movie.file_path).catch(e => {});
+      await fs.promises.unlink(movie.file_path).catch(() => {});
     }
 
     if (fs.existsSync(destFile)) {
@@ -544,7 +544,7 @@ const importEpisode = async (torrent, episode) => {
     
     if (episode.file_path && episode.file_path !== destFile && fs.existsSync(episode.file_path)) {
       console.log(`[MediaManagement] Deleting old file at ${episode.file_path}.`);
-      await fs.promises.unlink(episode.file_path).catch(e => {});
+      await fs.promises.unlink(episode.file_path).catch(() => {});
     }
 
     if (fs.existsSync(destFile)) {

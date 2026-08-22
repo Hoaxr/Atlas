@@ -13,8 +13,7 @@ const eventBus = require('../../services/eventBus');
 const tmdbService = require('../../services/tmdbService');
 const subtitleService = require('../../services/subtitles');
 const { getMediaMetadata, parseAudioFromFileName } = require('../../utils/videoUtils');
-const { isWatchedSyncEnabled, getSubtitlesInDir, extractLang, translateSrt, LANG_CODE } = require('./helpers');
-const { USER_AGENT } = require('../../utils/constants');
+const { isWatchedSyncEnabled, extractLang, translateSrt, LANG_CODE } = require('./helpers');
 const { isRootLibraryPath, findLargestVideoFile } = require('../../utils/fileUtils');
 const { scanSubtitleLangs } = require('../../services/scanner/fileScanner');
 const requireAdmin = require('../../middleware/requireAdmin');
@@ -148,7 +147,7 @@ router.get('/:id/files', async (req, res, next) => {
     try {
       const files = await scanDirectory(dir);
       res.json({ status: 'success', data: files });
-    } catch (e) {
+    } catch {
       res.json({ status: 'success', data: [] });
     }
   } catch (err) {
@@ -470,15 +469,15 @@ router.post('/:id/translate-subs', async (req, res, next) => {
 
 router.post('/:id/download-subs', async (req, res, next) => {
   try {
-    const { langCode, url, fileId } = req.body;
+    const { langCode, url, fileId, subId, provider } = req.body;
 
     if (!langCode) return res.status(400).json({ status: 'error', message: 'langCode is required' });
 
     const movie = db.prepare('SELECT * FROM movies WHERE id = ?').get(req.params.id);
     if (!movie) return res.status(404).json({ status: 'error', message: 'Movie not found' });
 
-    // If a fileId is provided, download from OpenSubtitles
-    if (fileId) {
+    // If an OpenSubtitles fileId is provided, download by file ID
+    if ((provider === 'OpenSubtitles' || !provider) && fileId) {
       if (!movie.file_path || !fs.existsSync(movie.file_path)) {
         return res.status(400).json({ status: 'error', message: 'Movie file not found on disk' });
       }
@@ -493,6 +492,22 @@ router.post('/:id/download-subs', async (req, res, next) => {
       const srtRes = await axios.get(downloadRes.data.link, { responseType: 'text', headers: { 'User-Agent': 'Atlas/1.0' } });
       await fsp.writeFile(subPath, srtRes.data);
       return res.json({ status: 'success', message: `Downloaded "${langCode}" subtitle via OpenSubtitles` });
+    }
+
+    // If a SubSource subId is provided, download from the SubSource API
+    if (provider === 'SubSource' && subId) {
+      if (!movie.file_path || !fs.existsSync(movie.file_path)) {
+        return res.status(400).json({ status: 'error', message: 'Movie file not found on disk' });
+      }
+      const parsedPath = path.parse(movie.file_path);
+      const subPath = path.join(parsedPath.dir, `${parsedPath.name}.${langCode}.srt`);
+      const subsourceApiKeyRow = db.prepare("SELECT value FROM settings WHERE key = 'subsourceApiKey'").get();
+      if (!subsourceApiKeyRow?.value) throw new Error('SubSource API key not set');
+      const dlRes = await axios.get(`https://api.subsource.net/api/v1/subtitles/${subId}/download`,
+        { params: { api_key: subsourceApiKeyRow.value }, responseType: 'text', validateStatus: () => true });
+      if (dlRes.status !== 200) throw new Error(`SubSource download failed (HTTP ${dlRes.status})`);
+      await fsp.writeFile(subPath, dlRes.data);
+      return res.json({ status: 'success', message: `Downloaded "${langCode}" subtitle via SubSource` });
     }
 
     // If a direct URL is provided, download from there

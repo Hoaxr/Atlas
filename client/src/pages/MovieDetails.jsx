@@ -5,7 +5,7 @@ import api from '../lib/api';
 import { formatSize, parseResolution, parseCodec, parseAudio, getReleaseTitleFromPath, LANG_NAME } from '../lib/format';
 import { useSettings } from '../lib/useSettings';
 import { useTMDBDetails } from '../lib/useTMDBDetails';
-import { cachedMovies, setCachedMovies } from '../lib/libraryCache';
+import { cachedMovies } from '../lib/libraryCache';
 import {
   ArrowLeft, Search, Download, Film, PlayCircle, Bookmark, BookmarkMinus,
   Star, X, RefreshCw, Loader2, ChevronDown, ChevronRight, ChevronLeft,
@@ -18,12 +18,10 @@ import { posterUrl, tmdbImgUrl } from '../lib/posterUrl';
 import TrailerModal from '../components/TrailerModal';
 import ManualSearchModal from '../components/ManualSearchModal';
 import RemapModal from '../components/RemapModal';
-import SubSearchModal from '../components/SubSearchModal';
 import ModalShell from '../components/shared/ModalShell';
 import { ProviderLabel } from '../utils/providerColors';
 import FolderBrowserModal from '../components/FolderBrowserModal';
 import SubtitleLanguageBadge from '../components/shared/SubtitleLanguageBadge';
-import MediaDetailsModal from '../components/MediaDetailsModal';
 import CustomSelect from '../components/shared/CustomSelect';
 
 export default function MovieDetails() {
@@ -62,26 +60,22 @@ export default function MovieDetails() {
   const [mobileDeleteMenuOpen, setMobileDeleteMenuOpen] = useState(false);
   const mobileDeleteMenuRef = useOutsideClick(() => setMobileDeleteMenuOpen(false), mobileDeleteMenuOpen);
 
-  // Similar movies modal state
-  const [similarModal, setSimilarModal] = useState({ open: false, mediaId: null, isInLibrary: false, libraryId: null });
-  const [libraryMovieMap, setLibraryMovieMap] = useState(new Map()); // tmdb_id → library id
-  const [isOverviewExpanded, setIsOverviewExpanded] = useState(false);
-
   // Prev/next navigation
   const [siblingIds, setSiblingIds] = useState([]);
+  const fetchRequestIdRef = useRef(0);
+  const [autoSearching, setAutoSearching] = useState(false);
+  const [isOverviewExpanded, setIsOverviewExpanded] = useState(false);
 
   // Use cached library data for sibling navigation — avoids a full re-fetch on every detail page visit.
   // Falls back to a lightweight fetch (no badge/subtitle computation) only when cache is cold.
   useEffect(() => {
     if (cachedMovies && cachedMovies.length > 0) {
       setSiblingIds(cachedMovies.map(m => m.id));
-      setLibraryMovieMap(new Map(cachedMovies.map(m => [m.tmdb_id, m.id])));
       return;
     }
     api.get('/library/movies?badges=false').then(res => {
       if (res.data?.data) {
         setSiblingIds(res.data.data.map(m => m.id));
-        setLibraryMovieMap(new Map(res.data.data.map(m => [m.tmdb_id, m.id])));
       }
     }).catch(() => {});
   }, []);
@@ -101,14 +95,17 @@ export default function MovieDetails() {
   }, [openLangMenu]);
 
   const fetchMovieData = useCallback(async (silent = true) => {
+    const reqId = ++fetchRequestIdRef.current;
     try {
       const res = await api.get(`/library/movies/${id}`);
+      if (reqId !== fetchRequestIdRef.current) return;
       if (res.data.status === 'success') {
         const data = res.data.data;
         setMovie(data);
         if (data.files) setMovieFiles(data.files);
       }
     } catch (e) {
+      if (reqId !== fetchRequestIdRef.current) return;
       if (e.response?.status === 404) {
         navigate('/');
         return;
@@ -128,13 +125,15 @@ export default function MovieDetails() {
     setIsRefreshing(true);
     try {
       await api.post(`/library/movies/${id}/refresh`);
+      await fetchMovieData(true);
+      await refetchTMDB();
+      customAlert('Movie refreshed!');
     } catch (e) {
       console.error('Failed to rescan folder', e);
+      customAlert('Failed to refresh movie', 'error');
+    } finally {
+      setIsRefreshing(false);
     }
-    await fetchMovieData(true);
-    await refetchTMDB();
-    setIsRefreshing(false);
-    customAlert('Movie refreshed!');
   }, [fetchMovieData, refetchTMDB, id]);
 
   const handleQualityChange = async (profileId) => {
@@ -162,7 +161,7 @@ export default function MovieDetails() {
       if (res.data.status === 'success') {
         setSubSearchResults(res.data.data);
       }
-    } catch (err) {
+    } catch {
       customAlert('Search failed', 'error');
     } finally {
       setSubSearching(false);
@@ -182,7 +181,7 @@ export default function MovieDetails() {
       if (res.data.status === 'success') {
         setRemapResults(res.data.data);
       }
-    } catch (err) {
+    } catch {
       customAlert('Search failed', 'error');
     } finally {
       setRemapSearching(false);
@@ -317,6 +316,7 @@ export default function MovieDetails() {
                   <button
                     onClick={async () => {
                       setMobileDeleteMenuOpen(false);
+                      if (!await customConfirm(`Delete "${movie.title}" and permanently delete its files from disk?\n\nThis cannot be undone.`, { title: 'Delete Movie + Files', type: 'warning', confirmText: 'Delete Files' })) return;
                       try {
                         await api.delete(`/library/movies/${movie.id}?deleteFiles=true`);
                         customAlert('Movie and files removed.', 'success');
@@ -337,6 +337,7 @@ export default function MovieDetails() {
                   <button
                     onClick={async () => {
                       setMobileDeleteMenuOpen(false);
+                      if (!await customConfirm(`Remove "${movie.title}" from your library? Files on disk will be kept.`)) return;
                       try {
                         await api.delete(`/library/movies/${movie.id}?deleteFiles=false`);
                         customAlert('Movie removed from library.', 'success');
@@ -463,24 +464,33 @@ export default function MovieDetails() {
               <div className="grid grid-cols-2 gap-2">
                 <button
                   onClick={async () => {
+                    if (autoSearching) return;
                     if (await customConfirm(`Auto-search releases for "${movie.title}"?`)) {
+                      setAutoSearching(true);
                       try {
-                        const res = await api.post(`/library/movies/${movie.id}/search`);
+                        const res = await api.post(`/library/movies/${movie.id}/auto-search`);
                         if (res.data.status === 'success') {
-                          customAlert(`Found and grabbed: ${res.data.data.title}`);
+                          customAlert(`Found and grabbed: ${res.data.data?.title || res.data.message || 'Search started'}`);
                         } else {
                           customAlert(res.data.message || 'No suitable release found', 'error');
                         }
                         fetchMovieData();
-                      } catch (err) {
+                      } catch {
                         customAlert('Search failed.', 'error');
+                      } finally {
+                        setAutoSearching(false);
                       }
                     }
                   }}
-                  className="flex items-center justify-center gap-1.5 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-bold py-2.5 px-3 rounded-xl shadow-lg shadow-cyan-500/20 active:scale-[0.98] transition-all text-xs group"
+                  disabled={autoSearching}
+                  className="flex items-center justify-center gap-1.5 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-bold py-2.5 px-3 rounded-xl shadow-lg shadow-cyan-500/20 active:scale-[0.98] transition-all text-xs group disabled:opacity-60 disabled:cursor-not-allowed"
                 >
-                  <Zap className="w-3.5 h-3.5 fill-current group-hover:scale-110 transition-transform" />
-                  <span>Auto Search</span>
+                  {autoSearching ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Zap className="w-3.5 h-3.5 fill-current group-hover:scale-110 transition-transform" />
+                  )}
+                  <span>{autoSearching ? 'Searching...' : 'Auto Search'}</span>
                 </button>
                 <button
                   onClick={() => setSearchModalOpen(true)}
@@ -507,7 +517,7 @@ export default function MovieDetails() {
                             fetchMovieData();
                             customAlert(res.data.data.monitored ? 'Movie is now monitored' : 'Movie is now unmonitored', 'success');
                           }
-                        } catch (err) {
+                        } catch {
                           customAlert('Failed to toggle monitor status', 'error');
                         }
                       }}
@@ -577,6 +587,7 @@ export default function MovieDetails() {
                         <button
                           onClick={async () => {
                             setDeleteMenuOpen(false);
+                            if (!await customConfirm(`Delete "${movie.title}" and permanently delete its files from disk?\n\nThis cannot be undone.`, { title: 'Delete Movie + Files', type: 'warning', confirmText: 'Delete Files' })) return;
                             try {
                               await api.delete(`/library/movies/${movie.id}?deleteFiles=true`);
                               customAlert('Movie and files removed.', 'success');
@@ -597,6 +608,7 @@ export default function MovieDetails() {
                         <button
                           onClick={async () => {
                             setDeleteMenuOpen(false);
+                            if (!await customConfirm(`Remove "${movie.title}" from your library? Files on disk will be kept.`)) return;
                             try {
                               await api.delete(`/library/movies/${movie.id}?deleteFiles=false`);
                               customAlert('Movie removed from library.', 'success');
@@ -708,13 +720,17 @@ export default function MovieDetails() {
 
                   <div 
                     onClick={() => {
+                      const originalWatched = movie.watched;
                       const newWatched = movie.watched ? 0 : 1;
+                      setMovie(prev => ({ ...prev, watched: newWatched }));
                       api.post(`/library/movies/${movie.id}/watched`, { watched: newWatched })
                         .then(() => {
                           sessionStorage.setItem('tracker-stale', 'true');
-                          fetchMovieData(true);
                         })
-                        .catch(() => customAlert('Failed to toggle watched status', 'error'));
+                        .catch(() => {
+                          setMovie(prev => ({ ...prev, watched: originalWatched }));
+                          customAlert('Failed to toggle watched status', 'error');
+                        });
                     }}
                     className="flex items-center gap-2.5 sm:gap-3 bg-slate-800/30 dark:bg-slate-900/35 border border-slate-700/30 dark:border-white/5 rounded-xl p-2.5 sm:p-3 cursor-pointer hover:border-emerald-500/30 transition-colors group/watched"
                   >
@@ -939,20 +955,9 @@ export default function MovieDetails() {
                                 if (res.data.status === 'success') {
                                   customAlert('File deleted', 'success');
                                   setMovieFiles(movieFiles.filter(f => f.name !== file.name));
-                                  const ext = file.name.split('.').pop().toLowerCase();
-                                  if (['srt', 'vtt', 'sub', 'ass'].includes(ext)) {
-                                    const parts = file.name.split('.');
-                                    const lang = parts.length >= 3 ? parts[parts.length - 2] : null;
-                                    if (lang && movie.subtitles) {
-                                      let currentSubs = [];
-                                      try { currentSubs = JSON.parse(movie.subtitles); } catch { /* ignore malformed JSON */ }
-                                      const newSubs = currentSubs.filter(l => l !== lang);
-                                      setMovie({ ...movie, subtitles: JSON.stringify(newSubs) });
-                                    }
-                                  }
                                   fetchMovieData();
                                 }
-                              } catch (err) {
+                              } catch {
                                 customAlert('Failed to delete file', 'error');
                               }
                             }
@@ -1080,7 +1085,11 @@ export default function MovieDetails() {
                                   setDownloadingSubs(prev => ({ ...prev, [subSearchModal.code]: true }));
                                   try {
                                     const res = await api.post(`/library/movies/${movie.id}/download-subs`, {
-                                      langCode: subSearchModal.code, fileId: item.fileId || item.subId || item.subdlId
+                                      langCode: subSearchModal.code,
+                                      url: provider.provider === 'SubDL' ? (item.url || null) : null,
+                                      fileId: item.fileId || null,
+                                      subId: item.subId || null,
+                                      provider: provider.provider
                                     });
                                     customAlert(res.data.message);
                                     setSubSearchModal({ open: false, code: '', label: '' });
@@ -1144,7 +1153,11 @@ export default function MovieDetails() {
                                 setDownloadingSubs(prev => ({ ...prev, [subSearchModal.code]: true }));
                                 try {
                                   const res = await api.post(`/library/movies/${movie.id}/download-subs`, {
-                                    langCode: subSearchModal.code, fileId: item.fileId || item.subId || item.subdlId
+                                    langCode: subSearchModal.code,
+                                    url: provider.provider === 'SubDL' ? (item.url || null) : null,
+                                    fileId: item.fileId || null,
+                                    subId: item.subId || null,
+                                    provider: provider.provider
                                   });
                                   customAlert(res.data.message);
                                   setSubSearchModal({ open: false, code: '', label: '' });
@@ -1195,27 +1208,6 @@ export default function MovieDetails() {
         itemId={movie?.id}
         itemType="movies"
       />
-
-      {/* Similar Movies - MediaDetailsModal */}
-      {similarModal.open && (
-        <MediaDetailsModal
-          isOpen={similarModal.open}
-          onClose={() => setSimilarModal({ open: false, mediaId: null, isInLibrary: false, libraryId: null })}
-          mediaId={similarModal.mediaId}
-          mediaType="movie"
-          isInLibrary={similarModal.isInLibrary}
-          libraryId={similarModal.libraryId}
-          onAdded={() => {
-            setSimilarModal({ open: false, mediaId: null, isInLibrary: false, libraryId: null });
-            api.get('/library/movies?badges=true').then(res => {
-              if (res.data?.data) {
-                const map = new Map(res.data.data.map(m => [m.tmdb_id, m.id]));
-                setLibraryMovieMap(map);
-              }
-            }).catch(() => {});
-          }}
-        />
-      )}
     </div>
   );
 }

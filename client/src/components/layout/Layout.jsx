@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
-import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom';
+import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Search, Settings as SettingsIcon, Film, Activity, Tv as TvIcon, DownloadCloud, Heart, Calendar as CalendarIcon, BarChart3, Keyboard, Key, LogOut, Eye, X, HeartPulse, Clock, TrendingUp } from 'lucide-react';
+import { Search, Settings as SettingsIcon, Film, Activity, Tv as TvIcon, DownloadCloud, Heart, Calendar as CalendarIcon, BarChart3, LogOut, Eye, X, TrendingUp } from 'lucide-react';
 import Logo from './Logo';
 import clsx from 'clsx';
 import api from '../../lib/api';
@@ -42,11 +42,10 @@ const navSections = [
 export default function Layout() {
   const { onEvent } = useWebSocket(); // Connect to real-time event stream
   const navigate = useNavigate();
-  const location = useLocation();
   const [libStats, setLibStats] = useState({ movies: 0, shows: 0 });
   const [downloads, setDownloads] = useState([]);
-  const [clientStats, setClientStats] = useState({ dl_info_speed: 0, up_info_speed: 0 });
-  const [clientConnected, setClientConnected] = useState(null);
+  const [, setClientStats] = useState({ dl_info_speed: 0, up_info_speed: 0 });
+  const [, setClientConnected] = useState(null);
   const [systemIssues, setSystemIssues] = useState([]);
   const [pendingRequests, setPendingRequests] = useState(0);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -57,7 +56,7 @@ export default function Layout() {
   const handleLogout = async () => {
     try {
       await api.post('/auth/logout');
-    } catch (e) {
+    } catch {
       // Ignore network errors on logout
     }
     localStorage.removeItem('atlas_token');
@@ -174,6 +173,8 @@ export default function Layout() {
       document.removeEventListener('visibilitychange', onVisibility);
       if (cleanupWebSocket) cleanupWebSocket();
     };
+    // prefetchLibrary is stable-safe here: it reads localStorage and fetches once on mount
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [onEvent]);
 
   // Global keyboard shortcuts

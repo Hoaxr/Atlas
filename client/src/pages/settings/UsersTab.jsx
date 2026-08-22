@@ -83,7 +83,7 @@ export default function UsersTab() {
     try {
       const res = await api.get('/users');
       setUsers(res.data.data);
-    } catch (err) {
+    } catch {
       customAlert('Failed to load users');
     } finally {
       setLoading(false);

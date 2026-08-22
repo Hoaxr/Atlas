@@ -1,14 +1,12 @@
 const cron = require('node-cron');
 const { execFile } = require('child_process');
 const util = require('util');
-const path = require('path');
 const fsp = require('fs/promises');
 const fs = require('fs');
 const db = require('../config/database');
 const taskRegistry = require('./taskRegistry');
 const { registerJob } = require('../utils/cronRegistry');
 const eventBus = require('./eventBus');
-const { isVideoFile } = require('../utils/fileUtils');
 const { runWithConcurrency } = require('../utils/concurrency');
 
 const execFilePromise = util.promisify(execFile);

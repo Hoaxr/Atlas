@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import api from '../lib/api';
 import { Play, Clock, CheckCircle2, AlertCircle, Activity, Loader2, Timer } from 'lucide-react';
 import StickyBar from '../components/shared/StickyBar';
@@ -242,7 +242,7 @@ export default function SystemTasks() {
 
               const groupKeys = Object.keys(groups);
 
-              return groupKeys.map((groupKey, gi) => (
+              return groupKeys.map((groupKey, _gi) => (
                 <div key={groupKey}>
                   <div className="px-5 py-2 bg-slate-800/30 border-b border-white/5">
                     <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">{groupKey}</span>

@@ -3,7 +3,6 @@ const path = require('path');
 const db = require('../../config/database');
 const tmdbService = require('../tmdbService');
 const { getMediaMetadata, parseAudioFromFileName } = require('../../utils/videoUtils');
-const { isVideoFile } = require('../../utils/fileUtils');
 const { scanSubtitleLangs, SUBTITLE_EXTS } = require('./fileScanner');
 const { VALID_LANGUAGES } = require('../../utils/languages');
 

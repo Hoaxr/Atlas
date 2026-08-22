@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Shield, Save, CheckSquare, Square } from 'lucide-react';
+import { Shield, Save, CheckSquare, Square, Globe } from 'lucide-react';
 import api from '../../lib/api';
 import { customAlert } from '../../utils/alerts';
 import PasswordInput from '../../components/shared/PasswordInput';
@@ -8,7 +8,8 @@ export default function SecurityTab() {
   const [settings, setSettings] = useState({
     authEnabled: false,
     authUsername: '',
-    authPassword: '' // Write-only
+    authPassword: '', // Write-only
+    timezone: ''
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -25,7 +26,8 @@ export default function SecurityTab() {
         setSettings({
           authEnabled: data.authEnabled === 'true',
           authUsername: data.authUsername || '',
-          authPassword: '' // Do not fetch the password
+          authPassword: '', // Do not fetch the password
+          timezone: data.timezone || ''
         });
       }
     } catch (err) {
@@ -49,7 +51,8 @@ export default function SecurityTab() {
     try {
       const payload = {
         authEnabled: settings.authEnabled.toString(),
-        authUsername: settings.authUsername
+        authUsername: settings.authUsername,
+        timezone: settings.timezone
       };
       if (settings.authPassword) {
         payload.authPassword = settings.authPassword; // only send if filled out
@@ -123,6 +126,45 @@ export default function SecurityTab() {
               </div>
             </div>
           )}
+        </div>
+      </div>
+
+      {/* Location */}
+      <div className="glass-panel p-6 rounded-2xl">
+        <h2 className="text-xl font-bold text-slate-200 flex items-center gap-2 mb-6">
+          <Globe className="w-5 h-5 text-cyan-400" /> Location
+        </h2>
+
+        <p className="text-sm text-slate-400 mb-6">
+          Select your timezone so release dates from TMDB (which follow US timing) are converted to your local calendar day.
+          For example, an episode airing Thursday evening in the US shows up on Friday in the Netherlands.
+        </p>
+
+        <div className="max-w-md">
+          <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Your Timezone</label>
+          <select
+            name="timezone"
+            value={settings.timezone}
+            onChange={handleChange}
+            className="w-full bg-slate-800/50 border border-slate-700 rounded-xl px-4 py-2.5 text-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+          >
+            <option value="">No adjustment (show US air dates as-is)</option>
+            <optgroup label="Europe">
+              {['Europe/Amsterdam', 'Europe/London', 'Europe/Berlin', 'Europe/Brussels', 'Europe/Paris', 'Europe/Madrid', 'Europe/Rome', 'Europe/Stockholm', 'Europe/Oslo', 'Europe/Copenhagen', 'Europe/Helsinki', 'Europe/Warsaw', 'Europe/Vienna', 'Europe/Zurich', 'Europe/Lisbon', 'Europe/Dublin', 'Europe/Athens', 'Europe/Istanbul'].map(tz => (
+                <option key={tz} value={tz}>{tz.replace('Europe/', '').replace(/_/g, ' ')}</option>
+              ))}
+            </optgroup>
+            <optgroup label="Americas">
+              {['America/New_York', 'America/Chicago', 'America/Denver', 'America/Los_Angeles', 'America/Toronto', 'America/Vancouver', 'America/Mexico_City', 'America/Sao_Paulo', 'America/Argentina/Buenos_Aires'].map(tz => (
+                <option key={tz} value={tz}>{tz.replace('America/', '').replace(/_/g, ' ')}</option>
+              ))}
+            </optgroup>
+            <optgroup label="Asia & Oceania">
+              {['Asia/Tokyo', 'Asia/Seoul', 'Asia/Shanghai', 'Asia/Hong_Kong', 'Asia/Singapore', 'Asia/Kolkata', 'Asia/Dubai', 'Australia/Sydney', 'Australia/Melbourne', 'Pacific/Auckland'].map(tz => (
+                <option key={tz} value={tz}>{tz.split('/').slice(1).join('/').replace(/_/g, ' ')}</option>
+              ))}
+            </optgroup>
+          </select>
         </div>
       </div>
 

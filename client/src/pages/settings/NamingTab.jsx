@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { HelpCircle, CheckSquare, Square, FileText, X, Tag, Save } from 'lucide-react';
 import CustomSelect from '../../components/shared/CustomSelect';
@@ -28,7 +28,7 @@ const TagsModal = ({ title, tags, onClose }) => {
         </div>
 
         <ul className="space-y-2 max-h-[60vh] overflow-y-auto pr-2 custom-scrollbar">
-          {tags.map((tag, idx) => (
+          {tags.map((tag) => (
             <li key={tag.name} className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2 text-sm bg-slate-800/50 border border-white/5 rounded-lg p-3">
               <span className="text-cyan-400 font-mono">{tag.name}</span>
               {tag.desc && <span className="text-slate-400 sm:ml-auto">{tag.desc}</span>}

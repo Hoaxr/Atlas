@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { Search, Download, RefreshCw, Loader2, Check, X } from 'lucide-react';
-import { LANG_LABEL, LANG_NAME } from '../../lib/format';
+import { LANG_LABEL } from '../../lib/format';
 
 /**
  * Shared subtitle language badge with dropdown menu.
@@ -17,6 +17,7 @@ export default function SubtitleLanguageBadge({
   onAutoSearch,
   onManualSearch,
   onAutoTranslate,
+  onDelete,
 }) {
   const badgeRef = useRef(null);
   const [menuStyle, setMenuStyle] = useState(null);
@@ -73,6 +74,19 @@ export default function SubtitleLanguageBadge({
       >
         {exists && <Check className="w-2.5 h-2.5" />}
         {LANG_LABEL[code] || code}
+        {exists && onDelete && (
+          <button
+            data-lang-badge
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete(code);
+            }}
+            className="-mr-0.5 ml-0.5 rounded-sm text-current hover:text-red-400 transition-colors"
+            title="Delete subtitle"
+          >
+            <X className="w-2.5 h-2.5" />
+          </button>
+        )}
       </span>
       {isOpen && menuStyle && createPortal(
         <div

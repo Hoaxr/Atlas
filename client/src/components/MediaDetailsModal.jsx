@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import api from '../lib/api';
-import { X, Star, Calendar, Clock, Plus, ExternalLink, PlayCircle, CheckCircle2, ArrowRight, CheckSquare, Square, XCircle, Trash2, Loader2, ChevronDown } from 'lucide-react';
+import { X, Star, Calendar, Clock, Plus, PlayCircle, CheckCircle2, CheckSquare, Square, XCircle, Trash2, Loader2, ChevronDown } from 'lucide-react';
 import { customAlert } from '../utils/alerts';
 import TrailerModal from './TrailerModal';
 import Spinner from './shared/Spinner';
@@ -424,12 +424,9 @@ export default function MediaDetailsModal({ isOpen, onClose, mediaId, mediaType,
                       if (onAdded) onAdded(details.id, details);
                       onClose();
                       customAlert(`${mediaType === 'movie' ? 'Movie' : 'TV Show'} added to library successfully!`);
-                      // Trigger auto-search from client side so it runs in its own request context
-                      if (autoSearch && res.data?.data?.id) {
-                        const searchEndpoint = mediaType === 'movie'
-                          ? `/library/movies/${res.data.data.id}/auto-search`
-                          : `/library/shows/${res.data.data.id}/auto-search`;
-                        api.post(searchEndpoint).catch(() => {});
+                      // Server already launches a background auto-search for shows on POST /library/shows
+                      if (autoSearch && mediaType === 'movie' && res.data?.data?.id) {
+                        api.post(`/library/movies/${res.data.data.id}/auto-search`).catch(() => {});
                       }
                     } catch (err) {
                       console.error('Add to library error:', err.response?.data || err);

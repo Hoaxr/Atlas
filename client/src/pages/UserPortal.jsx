@@ -17,7 +17,7 @@ export default function UserPortal() {
   const [requests, setRequests] = useState([]);
   const [libraryMovies, setLibraryMovies] = useState([]);
   const [libraryShows, setLibraryShows] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [, setLoading] = useState(true);
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
   const [selectedMediaId, setSelectedMediaId] = useState(null);
   const [selectedMediaType, setSelectedMediaType] = useState('movie');
@@ -83,7 +83,7 @@ export default function UserPortal() {
       try {
         const res = await api.get(`/tmdb/search/multi?query=${encodeURIComponent(query)}`);
         setResults(res.data?.data?.filter(item => item.media_type === 'movie' || item.media_type === 'tv') || []);
-      } catch (err) {
+      } catch {
         customAlert('Search failed');
       } finally {
         setSearching(false);
@@ -170,7 +170,7 @@ export default function UserPortal() {
   const handleLogout = async () => {
     try {
       await api.post('/auth/logout');
-    } catch (e) {
+    } catch {
       // Ignore network errors on logout
     }
     localStorage.removeItem('atlas_token');
@@ -192,7 +192,7 @@ export default function UserPortal() {
     }
   };
 
-  const renderMediaCard = (item, isTrending = false, isGrid = true) => {
+  const renderMediaCard = (item, _isTrending = false, isGrid = true) => {
     const tmdbId = item.tmdb_id || item.id || (item.ids && item.ids.tmdb);
     const tmdbStr = String(tmdbId);
     const isRequested = requests.some(r => String(r.tmdb_id) === tmdbStr);

@@ -112,7 +112,6 @@ db.exec(`
     status TEXT DEFAULT 'monitored',
     folder_path TEXT,
     quality_profile_id INTEGER,
-    calendar_day_offset INTEGER DEFAULT 0,
     added_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     runtime INTEGER
   );
@@ -925,6 +924,15 @@ const MIGRATIONS = [
           SELECT 1 FROM watch_history w WHERE w.tmdb_id = movies.tmdb_id AND w.type = 'movie'
         )
       `).run();
+    }
+  },
+  {
+    id: 32,
+    name: 'remove_calendar_day_offset_from_shows',
+    run: (db) => {
+      if (hasColumn('shows', 'calendar_day_offset')) {
+        db.exec('ALTER TABLE shows DROP COLUMN calendar_day_offset;');
+      }
     }
   }
 ];

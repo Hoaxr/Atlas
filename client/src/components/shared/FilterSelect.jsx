@@ -9,7 +9,7 @@ export const SortIcon = memo(function SortIcon({ field, sort }) {
     : <ChevronDown className="w-3.5 h-3.5 inline ml-1" />;
 });
 
-export const FilterSelect = memo(function FilterSelect({ value, onChange, label, children, accentColor, hideAll, className = '' }) {
+export const FilterSelect = memo(function FilterSelect({ value, onChange, label, children, _accentColor, hideAll, className = '' }) {
   const [isOpen, setIsOpen] = useState(false);
   const ref = useRef(null);
 

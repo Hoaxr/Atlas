@@ -44,6 +44,9 @@ class TelegramBotService {
     this.bot.on('callback_query', (callbackQuery) => this.handleCallbackQuery(callbackQuery));
     
     this.bot.on('polling_error', (error) => {
+      // 409 Conflict means another Atlas instance is polling with the same
+      // token — expected when multiple instances run; don't spam the log.
+      if (error?.code === 'ETELEGRAM' && String(error.message || '').includes('409')) return;
       console.error(`[TelegramBot] Polling error: ${error.code} - ${error.message}`);
     });
   }

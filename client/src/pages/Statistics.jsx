@@ -3,29 +3,15 @@ import { useNavigate } from 'react-router-dom';
 import api from '../lib/api';
 import { formatSize } from '../lib/format';
 import {
-  BarChart3, Film, Tv, HardDrive, Star, TrendingUp, Eye, Clock,
-  CheckCircle2, Hash, Zap, PlayCircle, Activity, Languages, X, Loader2, Trash2, FolderOpen
+  BarChart3, Film, Tv, HardDrive, Star,
+  CheckCircle2, Hash, Zap, PlayCircle, Activity, Languages, Trash2, FolderOpen
 } from 'lucide-react';
 import { StatsSkeleton } from '../components/shared/Skeleton';
 import EmptyState from '../components/shared/EmptyState';
 import StickyBar from '../components/shared/StickyBar';
-import MediaDetailsModal from '../components/MediaDetailsModal';
 import ModalShell from '../components/shared/ModalShell';
 import Spinner from '../components/shared/Spinner';
 import { useStickyBar } from '../lib/useStickyBar';
-
-const formatDuration = (totalMinutes) => {
-  if (!totalMinutes || totalMinutes === 0) return '0h';
-  const days = Math.floor(totalMinutes / (60 * 24));
-  const hours = Math.floor((totalMinutes % (60 * 24)) / 60);
-  const years = Math.floor(days / 365);
-  const remainingDays = days % 365;
-  const parts = [];
-  if (years > 0) parts.push(`${years}y`);
-  if (remainingDays > 0) parts.push(`${remainingDays}d`);
-  if (hours > 0) parts.push(`${hours}h`);
-  return parts.join(' ') || '0h';
-};
 
 const STATUS_CONFIG = {
   downloaded: { color: '#06b6d4', label: 'Downloaded', bg: 'bg-cyan-500' },
@@ -63,14 +49,13 @@ export default function Statistics() {
   const navigate = useNavigate();
   const { headerRef, stickyVisible } = useStickyBar();
   const [stats, setStats] = useState(null);
-  const [traktStats, setTraktStats] = useState(null);
+  const [, setTraktStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [missingSubsModal, setMissingSubsModal] = useState(false);
   const [missingSubsData, setMissingSubsData] = useState(null);
   const [missingSubsLoading, setMissingSubsLoading] = useState(false);
-  const [deletableData, setDeletableData] = useState(null);
-  const [deletableLoading, setDeletableLoading] = useState(false);
-  const [detailsModal, setDetailsModal] = useState({ open: false, mediaId: null, mediaType: 'movie', libraryId: null });
+  const [, setDeletableData] = useState(null);
+  const [, setDeletableLoading] = useState(false);
 
   const openMissingSubs = async () => {
     setMissingSubsModal(true);
@@ -98,19 +83,6 @@ export default function Statistics() {
     } finally {
       setDeletableLoading(false);
     }
-  };
-
-  const handleItemDeleted = (id) => {
-    setDeletableData(prev => {
-      if (!prev) return prev;
-      return {
-        ...prev,
-        highPriority: prev.highPriority?.filter(m => m.id !== id),
-        mediumPriority: prev.mediumPriority?.filter(m => m.id !== id),
-        lowPriority: prev.lowPriority?.filter(m => m.id !== id),
-        all: prev.all?.filter(m => m.id !== id)
-      };
-    });
   };
 
   useEffect(() => {
@@ -154,7 +126,6 @@ export default function Statistics() {
   );
 
   const maxGenre  = Math.max(...stats.topGenres.map(([, c]) => c), 1);
-  const maxYear   = Math.max(...stats.yearData.map(([, c]) => c), 1);
   const maxRating = Math.max(...Object.values(stats.ratingBuckets), 1);
 
   const movieDonut = Object.entries(stats.movieStatuses).map(([status, value]) => ({
@@ -580,16 +551,6 @@ function HeroCard({ icon: Icon, label, value, gradient, iconColor, iconBg }) {
   );
 }
 
-function TraktCard({ icon: Icon, label, value }) {
-  return (
-    <div className="bg-cyan-500/10 rounded-xl p-4 border border-cyan-500/20">
-      <Icon className="w-4 h-4 text-cyan-400 mb-2" />
-      <p className="text-xl font-black text-slate-100">{value}</p>
-      <p className="text-xs text-cyan-300/70 mt-0.5">{label}</p>
-    </div>
-  );
-}
-
 function RecentCard({ item, onClick }) {
   const isMovie = item.mediaType === 'movie';
   const borderColor = isMovie ? '#06b6d4' : '#0ea5e9';
@@ -625,107 +586,6 @@ function RecentCard({ item, onClick }) {
         <p className="text-[10px] text-slate-600 mt-1">
           Added {new Date(item.added_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
         </p>
-      </div>
-    </div>
-  );
-}
-
-function DeletableCard({ movie, onDetails, onDeleted }) {
-  const [deleteOpen, setDeleteOpen] = useState(false);
-  const [deleting, setDeleting] = useState(false);
-  const scoreColor = movie.score >= 35 ? 'text-rose-400 bg-rose-500/10 border-rose-500/20'
-    : movie.score >= 15 ? 'text-amber-400 bg-amber-500/10 border-amber-500/20'
-    : 'text-slate-400 bg-slate-500/10 border-slate-500/20';
-
-  const handleDelete = async (deleteFiles) => {
-    setDeleting(true);
-    try {
-      await api.delete(`/library/movies/${movie.id}${deleteFiles ? '?deleteFiles=true' : ''}`);
-      onDeleted?.();
-    } catch (e) {
-      console.error('Failed to delete movie', e);
-    } finally {
-      setDeleting(false);
-      setDeleteOpen(false);
-    }
-  };
-
-  if (deleting) {
-    return (
-      <div className="flex items-center gap-3 p-3 rounded-lg bg-slate-800/30 border border-white/5 opacity-50">
-        <Loader2 className="w-4 h-4 animate-spin text-slate-400" />
-        <span className="text-xs text-slate-400">Deleting...</span>
-      </div>
-    );
-  }
-
-  return (
-    <div
-      onClick={onDetails}
-      className="flex items-start gap-3 p-3 rounded-lg bg-slate-800/30 border border-white/5 hover:bg-slate-800/50 hover:border-slate-600/30 transition-all cursor-pointer group"
-    >
-      {/* Score badge */}
-      <div className={`shrink-0 flex flex-col items-center justify-center w-10 h-10 rounded-lg border ${scoreColor}`}>
-        <span className="text-sm font-black leading-none">{movie.score}</span>
-        <span className="text-[8px] uppercase tracking-wider opacity-70">pts</span>
-      </div>
-
-      {/* Info */}
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-semibold text-slate-200 truncate group-hover:text-white transition-colors">
-          {movie.title} {movie.year && <span className="text-slate-500 font-normal">({movie.year})</span>}
-        </p>
-        <div className="flex flex-wrap items-center gap-1.5 mt-1">
-          {movie.tmdb_rating !== null && (
-            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
-              movie.tmdb_rating < 5 ? 'bg-rose-500/15 text-rose-400' :
-              movie.tmdb_rating < 7 ? 'bg-amber-500/15 text-amber-400' :
-              'bg-emerald-500/15 text-emerald-400'
-            }`}>
-              ★ {movie.tmdb_rating}
-            </span>
-          )}
-          {!movie.watched && (
-            <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-700/50 text-slate-400">Unwatched</span>
-          )}
-          <span className="text-[10px] text-slate-500">{formatSize(movie.file_size)}</span>
-        </div>
-        {movie.reasons?.length > 0 && (
-          <div className="flex flex-wrap gap-1 mt-1.5">
-            {movie.reasons.map((r, i) => (
-              <span key={i} className="text-[9px] text-slate-600 bg-slate-800/50 px-1.5 py-0.5 rounded">{r}</span>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Actions */}
-      <div className="shrink-0 flex items-center gap-1.5" onClick={e => e.stopPropagation()}>
-        <div className="relative">
-          <button
-            onClick={() => setDeleteOpen(!deleteOpen)}
-            className="p-2 rounded-lg bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 transition-colors"
-            title="Delete"
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-          </button>
-          {deleteOpen && (
-            <div className="absolute right-0 top-full mt-1 w-44 bg-slate-800 border border-slate-700 rounded-lg shadow-xl z-10 py-1">
-              <button
-                onClick={() => handleDelete(false)}
-                className="w-full text-left px-3 py-2 text-xs text-slate-300 hover:bg-slate-700 hover:text-white transition-colors"
-              >
-                Delete from library
-              </button>
-              <button
-                onClick={() => handleDelete(true)}
-                className="w-full text-left px-3 py-2 text-xs text-rose-400 hover:bg-slate-700 hover:text-rose-300 transition-colors"
-              >
-                Delete with files
-              </button>
-            </div>
-          )}
-        </div>
       </div>
     </div>
   );

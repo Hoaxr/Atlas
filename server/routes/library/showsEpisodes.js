@@ -2,11 +2,11 @@ const express = require('express');
 const router = express.Router();
 const fs = require('fs');
 const { deleteFolderRecursive } = require('../../utils/fileUtils');
-const { USER_AGENT } = require('../../utils/constants');
 const fsp = require('fs/promises');
 const path = require('path');
 const axios = require('axios');
 const db = require('../../config/database');
+const { getAiredCutoffSql } = require('../../utils/airDate');
 const libraryService = require('../../services/libraryService');
 const indexerService = require('../../services/indexerService');
 const downloadClientService = require('../../services/downloadClientService');
@@ -74,9 +74,10 @@ router.get('/shows/:id', async (req, res, next) => {
       SELECT s.*,
         CASE
           WHEN s.status = 'downloading' OR (SELECT COUNT(*) FROM episodes WHERE show_id = s.id AND status = 'downloading') > 0 THEN 'downloading'
+          WHEN (SELECT COUNT(*) FROM episodes WHERE show_id = s.id AND status = 'downloaded') > 0 THEN
+            CASE WHEN s.monitored = 1 AND (SELECT COUNT(*) FROM episodes WHERE show_id = s.id AND monitored = 1 AND (file_path IS NULL OR file_path = '') AND status != 'downloaded' AND air_date IS NOT NULL AND air_date <= ${getAiredCutoffSql()}) > 0 THEN 'monitored' ELSE 'downloaded' END
           WHEN s.monitored = 0 THEN 'unmonitored'
-          WHEN (SELECT COUNT(*) FROM episodes WHERE show_id = s.id AND monitored = 1 AND (file_path IS NULL OR file_path = '') AND status != 'downloaded' AND air_date IS NOT NULL AND air_date <= date('now', 'localtime')) > 0 THEN 'monitored'
-          WHEN (SELECT COUNT(*) FROM episodes WHERE show_id = s.id AND status = 'downloaded') > 0 THEN 'downloaded'
+          WHEN (SELECT COUNT(*) FROM episodes WHERE show_id = s.id AND monitored = 1 AND (file_path IS NULL OR file_path = '') AND status != 'downloaded' AND air_date IS NOT NULL AND air_date <= ${getAiredCutoffSql()}) > 0 THEN 'monitored'
           ELSE s.status
         END as status,
         qp.name as quality_profile_name 
@@ -172,7 +173,7 @@ const refreshShowData = async (id) => {
             }
           }
         }
-      } catch (e) {
+      } catch {
         // Ignore read errors
       }
     };
@@ -336,7 +337,7 @@ router.get('/shows/:id/episodes', async (req, res, next) => {
       let subFiles = [];
       try {
         subFiles = await getSubtitlesInDir(dir, fsp, path);
-      } catch (e) {
+      } catch {
         // Directory might not exist, ignore
       }
       
@@ -450,6 +451,19 @@ router.post('/episodes/:id/download-subs', async (req, res, next) => {
       }
     }
 
+    // If a SubSource subId is provided, download from the SubSource API
+    if (provider === 'SubSource' && req.body.subId) {
+      const parsedPath = path.parse(episode.file_path);
+      const epSubPath = path.join(parsedPath.dir, `${parsedPath.name}.${langCode}.srt`);
+      const subsourceApiKeyRow = db.prepare("SELECT value FROM settings WHERE key = 'subsourceApiKey'").get();
+      if (!subsourceApiKeyRow?.value) throw new Error('SubSource API key not set');
+      const dlRes = await axios.get(`https://api.subsource.net/api/v1/subtitles/${req.body.subId}/download`,
+        { params: { api_key: subsourceApiKeyRow.value }, responseType: 'text', validateStatus: () => true });
+      if (dlRes.status !== 200) throw new Error(`SubSource download failed (HTTP ${dlRes.status})`);
+      await fsp.writeFile(epSubPath, dlRes.data);
+      return res.json({ status: 'success', message: `Downloaded "${langCode}" subtitle` });
+    }
+
     const show = db.prepare('SELECT * FROM shows WHERE id = ?').get(episode.show_id);
     if (!show) return res.status(404).json({ status: 'error', message: 'Show not found' });
 
@@ -458,6 +472,47 @@ router.post('/episodes/:id/download-subs', async (req, res, next) => {
       return res.json({ status: 'success', message: `Subtitle already exists for "${langCode}"` });
     }
     res.json({ status: 'success', message: `Downloaded "${langCode}" subtitle` });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.delete('/episodes/:id/subs/:code', async (req, res, next) => {
+  try {
+    const episode = db.prepare('SELECT * FROM episodes WHERE id = ?').get(req.params.id);
+    if (!episode) return res.status(404).json({ status: 'error', message: 'Episode not found' });
+    if (!episode.file_path || !fs.existsSync(episode.file_path)) {
+      return res.status(400).json({ status: 'error', message: 'Episode file not found on disk' });
+    }
+
+    const langCode = String(req.params.code || '').toLowerCase();
+    if (!/^[a-z]{2,3}(-[a-z0-9]+)?$/i.test(langCode)) {
+      return res.status(400).json({ status: 'error', message: 'Invalid language code' });
+    }
+
+    // Subtitle files live next to the video as <name>.<lang>.srt
+    const parsedPath = path.parse(episode.file_path);
+    const candidates = [
+      path.join(parsedPath.dir, `${parsedPath.name}.${langCode}.srt`),
+      path.join(parsedPath.dir, `${parsedPath.name}.${langCode}.ass`),
+      path.join(parsedPath.dir, `${parsedPath.name}.${langCode}.ssa`),
+      path.join(parsedPath.dir, `${parsedPath.name}.${langCode}.vtt`),
+    ];
+
+    let deleted = 0;
+    for (const candidate of candidates) {
+      try {
+        await fsp.unlink(candidate);
+        deleted++;
+      } catch (e) {
+        if (e.code !== 'ENOENT') throw e;
+      }
+    }
+    if (deleted === 0) {
+      return res.status(404).json({ status: 'error', message: `No "${req.params.code}" subtitle found for this episode` });
+    }
+
+    res.json({ status: 'success', message: `Deleted "${req.params.code}" subtitle` });
   } catch (err) {
     next(err);
   }
@@ -504,7 +559,7 @@ router.post('/shows/:id/auto-search', async (req, res, next) => {
     const episodes = db.prepare(`
       SELECT * FROM episodes 
       WHERE show_id = ? AND status = 'monitored' 
-        AND (air_date IS NULL OR date(air_date) <= date('now', 'localtime'))
+        AND (air_date IS NULL OR date(air_date) <= ${getAiredCutoffSql()})
     `).all(req.params.id);
     
     // Run the search asynchronously in the background so the UI doesn't freeze
@@ -612,7 +667,7 @@ router.post('/shows', async (req, res, next) => {
             const episodes = db.prepare(`
               SELECT * FROM episodes 
               WHERE show_id = ? AND status = 'monitored' 
-                AND (air_date IS NULL OR date(air_date) <= date('now', 'localtime'))
+                AND (air_date IS NULL OR date(air_date) <= ${getAiredCutoffSql()})
             `).all(result.id);
             eventBus.info('Auto-search started', { title: show.title, type: 'show', episodes: episodes.length });
             let sentCount = 0;
@@ -684,17 +739,6 @@ router.put('/shows/:id/quality', (req, res, next) => {
     const { profileId } = req.body;
     db.prepare('UPDATE shows SET quality_profile_id = ? WHERE id = ?').run(profileId || null, req.params.id);
     res.json({ status: 'success', message: 'Quality profile updated' });
-  } catch (err) {
-    next(err);
-  }
-});
-
-router.put('/shows/:id/offset', (req, res, next) => {
-  try {
-    const { offset } = req.body;
-    const numOffset = parseInt(offset, 10) || 0;
-    db.prepare('UPDATE shows SET calendar_day_offset = ? WHERE id = ?').run(numOffset, req.params.id);
-    res.json({ status: 'success', message: 'Calendar air date offset updated', offset: numOffset });
   } catch (err) {
     next(err);
   }

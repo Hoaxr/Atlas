@@ -621,12 +621,6 @@ const processScannedFiles = async (allFiles, scanProgress, mode, nextStage) => {
 
   // Run file processing with controlled concurrency (6 concurrent files)
   await runWithConcurrency(allFiles, 6, processFile, scanProgress);
-
-  // Automatically recalculate and sync release/download day offsets for all TV shows based on historical file data
-  try {
-    const { syncAllShowOffsets } = require('../calendarOffsetService');
-    syncAllShowOffsets();
-  } catch { /* ignore */ }
 };
 
 module.exports = { processScannedFiles };

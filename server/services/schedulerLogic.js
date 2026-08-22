@@ -59,7 +59,7 @@ const calculatePriority = (item, type, currentDate = new Date()) => {
  */
 const calculateNextSearchAt = (item, type, options = {}, currentDate = new Date()) => {
   const config = getSchedulerConfig();
-  const { providerResponse = null, isCutoffMet = false, isDownloaded = false } = options;
+  const { isCutoffMet = false, isDownloaded = false } = options;
   
   if (isDownloaded && isCutoffMet) {
     return { state: 'EXPIRED', nextSearch: null };

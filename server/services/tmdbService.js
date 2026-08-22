@@ -76,7 +76,7 @@ const searchMovies = async (query) => {
           responseMovie.data.media_type = 'movie';
           idResult = responseMovie.data;
         }
-      } catch (e) {
+      } catch {
         // Ignore
       }
       // If explicit tmdb: prefix was used, return just the ID result (or empty if not found)
@@ -150,7 +150,7 @@ const searchShows = async (query, firstAirDateYear = null) => {
           responseShow.data.media_type = 'tv';
           idResult = responseShow.data;
         }
-      } catch (e) {
+      } catch {
         // Ignore
       }
       // If explicit tmdb: prefix was used, return just the ID result (or empty if not found)

@@ -5,9 +5,9 @@ import { customAlert, customConfirm } from '../../utils/alerts';
 import PasswordInput from '../../components/shared/PasswordInput';
 
 export default function ConnectionsTab({
-  settings: parentSettings, setSettings: setParentSettings, handleSave: parentHandleSave,
+  settings: parentSettings, setSettings: setParentSettings, handleSave: _parentHandleSave,
   simklDeviceCode, simklUserCode, simklVerificationUrl, simklPolling,
-  connectSimkl, fetchSettings, keyStatuses
+  connectSimkl, fetchSettings, _keyStatuses
 }) {
   const [localSettings, setLocalSettings] = useState({
     plexUrl: '',
@@ -47,6 +47,8 @@ export default function ConnectionsTab({
   useEffect(() => {
     fetchConnectionsSettings();
     return () => { mountedRef.current = false; };
+    // fetch once on mount; fetchConnectionsSettings reads only static config
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const fetchConnectionsSettings = async () => {
@@ -131,7 +133,7 @@ export default function ConnectionsTab({
         // Start polling for auth result
         pollPlexPin(pinId);
       }
-    } catch (err) {
+    } catch {
       setPlexOAuth({ loading: false, pinId: null, code: null, authUrl: null, polling: false });
       customAlert('Failed to initiate Plex authentication');
     }
@@ -307,10 +309,8 @@ export default function ConnectionsTab({
     const hasDiscord = !!localSettings.discordWebhookUrl;
     const hasTelegramToken = !!localSettings.telegramBotToken;
     const hasTelegramChat = !!localSettings.telegramChatId;
-    const hasTelegram = hasTelegramToken && hasTelegramChat;
     const hasPushoverApp = !!localSettings.pushoverAppToken;
     const hasPushoverUser = !!localSettings.pushoverUserKey;
-    const hasPushover = hasPushoverApp && hasPushoverUser;
 
     if (!hasDiscord && !hasTelegramToken && !hasTelegramChat && !hasPushoverApp && !hasPushoverUser) {
       customAlert('Please configure at least one notification service to test');
@@ -336,7 +336,7 @@ export default function ConnectionsTab({
         pushoverUserKey: localSettings.pushoverUserKey
       });
       customAlert('Test notification triggered');
-    } catch (err) {
+    } catch {
       customAlert('Test failed to send');
     }
   };
