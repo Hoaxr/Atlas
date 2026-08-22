@@ -37,7 +37,7 @@ export default function ProtectedRoute() {
 
   if (authState.checking && !token) {
     return (
-      <div className="flex items-center justify-center h-screen bg-slate-950">
+      <div className="flex items-center justify-center h-screen bg-slate-950" style={{ height: '100dvh' }}>
         <Spinner size="lg" />
       </div>
     );

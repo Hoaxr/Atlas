@@ -90,7 +90,11 @@ export default function ClientsTab({ clients, newClient, setNewClient, clientSta
                   const res = await api.get('/settings/clients/detect-mapping');
                   if (res.data.status === 'success' && res.data.data) {
                     setSettings({...settings, downloadPathMapping: res.data.data});
-                    customAlert('Mapping detected: ' + res.data.data.join(' → '), 'success');
+                    if (res.data.guessed) {
+                      customAlert('Could not probe the client directly — applied a best-guess mapping, please verify: ' + res.data.data.join(' → '));
+                    } else {
+                      customAlert('Mapping detected: ' + res.data.data.join(' → '), 'success');
+                    }
                   } else {
                     customAlert('Could not detect mapping — set it manually', 'error');
                   }
@@ -150,7 +154,17 @@ export default function ClientsTab({ clients, newClient, setNewClient, clientSta
             <PasswordInput placeholder="Password" className="glass-input w-full" value={newClient.password} onChange={e => setNewClient({...newClient, password: e.target.value})} />
           </div>
           <div className="flex items-end">
-            <button onClick={() => handleAddEntity('clients', newClient)} className="w-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold py-3 px-4 rounded-xl flex justify-center items-center gap-2 shadow-lg shadow-emerald-500/20 transition-all">
+            <button onClick={() => {
+              if (!newClient.name?.trim()) {
+                customAlert('Please enter a name for the download client.', 'error');
+                return;
+              }
+              if (!newClient.host?.trim()) {
+                customAlert('Please enter a host URL (e.g. http://localhost).', 'error');
+                return;
+              }
+              handleAddEntity('clients', newClient);
+            }} className="w-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold py-3 px-4 rounded-xl flex justify-center items-center gap-2 shadow-lg shadow-emerald-500/20 transition-all">
               <Plus className="w-5 h-5" /> Add Client
             </button>
           </div>

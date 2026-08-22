@@ -23,6 +23,15 @@ const loginLimiter = rateLimit({
   message: { status: 'error', message: 'Too many login attempts. Please try again in 15 minutes.' },
 });
 
+// Lighter limiter for unauthenticated endpoints that proxy third-party services (30 per 15 min per IP)
+const generalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { status: 'error', message: 'Too many requests. Please try again in 15 minutes.' },
+});
+
 // Login endpoint
 router.post('/login', loginLimiter, async (req, res) => {
   const { username, password } = req.body;
@@ -33,8 +42,12 @@ router.post('/login', loginLimiter, async (req, res) => {
   }
 
   const user = db.prepare('SELECT id, username, password, role, origin, jwt_version FROM users WHERE username = ?').get(username);
-  
-  if (user && await bcrypt.compare(password, user.password)) {
+
+  // Always run a bcrypt comparison so response timing doesn't reveal whether the username exists
+  const DUMMY_HASH = '$2a$12$C6UzMDM.H6dfI/f/IKcEeO7ZBpQ0D3NtRSm7oHFCjP.QfHm3XW1Bu';
+  const passwordMatches = await bcrypt.compare(password, user?.password || DUMMY_HASH);
+
+  if (user && passwordMatches) {
     const token = jwt.sign({ id: user.id, username: user.username, role: user.role, jwt_version: user.jwt_version }, JWT_SECRET, { expiresIn: '7d' });
     db.prepare('UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = ?').run(user.id);
     res.json({ status: 'success', data: { token, user: { id: user.id, username: user.username, role: user.role, origin: user.origin } } });
@@ -73,7 +86,8 @@ router.put('/password', authMiddleware, async (req, res) => {
     db.prepare('UPDATE users SET password = ?, jwt_version = jwt_version + 1 WHERE id = ?').run(hashed, req.user.id);
     res.json({ status: 'success', message: 'Password updated successfully. Other sessions have been logged out.' });
   } catch (err) {
-    res.status(500).json({ status: 'error', message: err.message });
+    console.error('[Auth] Password change failed:', err.message);
+    res.status(500).json({ status: 'error', message: 'Internal server error' });
   }
 });
 
@@ -86,23 +100,24 @@ router.post('/logout', authMiddleware, (req, res) => {
     db.prepare('UPDATE users SET jwt_version = jwt_version + 1 WHERE id = ?').run(req.user.id);
     res.json({ status: 'success', message: 'Logged out successfully' });
   } catch (err) {
-    res.status(500).json({ status: 'error', message: err.message });
+    console.error('[Auth] Logout failed:', err.message);
+    res.status(500).json({ status: 'error', message: 'Internal server error' });
   }
 });
 
 // Simkl PIN Auth
-router.post('/simkl/device-code', async (req, res) => {
+router.post('/simkl/device-code', generalLimiter, async (req, res) => {
   const simklService = require('../services/simklService');
   try {
     const data = await simklService.getDeviceCode();
     res.json({ status: 'success', data });
   } catch (err) {
     console.error('[Simkl Auth] Failed to get PIN:', err.message);
-    res.status(500).json({ status: 'error', message: err.message || 'Failed to get PIN from Simkl' });
+    res.status(500).json({ status: 'error', message: 'Failed to get PIN from Simkl' });
   }
 });
 
-router.post('/simkl/device-token', async (req, res) => {
+router.post('/simkl/device-token', authMiddleware, async (req, res) => {
   const { userCode } = req.body;
   if (!userCode) {
     return res.status(400).json({ status: 'error', message: 'User code is required' });
@@ -124,7 +139,7 @@ router.post('/simkl/device-token', async (req, res) => {
   }
 });
 
-router.post('/simkl/disconnect', (req, res) => {
+router.post('/simkl/disconnect', authMiddleware, (req, res) => {
   setSetting('simklAccessToken', '');
   setSetting('simklWatchedSync', 'false');
   res.json({ status: 'success', message: 'Simkl account disconnected.' });
@@ -140,57 +155,10 @@ router.get('/status', (req, res) => {
   res.json({ status: 'success', data: { authEnabled, plexConfigured, jellyfinConfigured } });
 });
 
-// Check if Trakt is connected and token is still valid
-router.get('/trakt/status', (req, res) => {
-  const accessToken = getSetting('traktAccessToken');
-  const expiresAt = parseInt(getSetting('traktTokenExpiresAt') || '0', 10);
-  const now = Math.floor(Date.now() / 1000);
-  const connected = !!accessToken;
-  const expired = connected && expiresAt > 0 && now >= expiresAt;
-  res.json({ status: 'success', data: { connected, expired, expiresAt } });
-});
-
-// Refresh the Trakt access token using the refresh token
-router.post('/trakt/refresh', async (req, res) => {
-  const clientId = getSetting('traktClientId');
-  const clientSecret = getSetting('traktClientSecret');
-  const refreshToken = getSetting('traktRefreshToken');
-
-  if (!clientId || !clientSecret || !refreshToken) {
-    return res.status(400).json({ status: 'error', message: 'Cannot refresh — missing credentials or refresh token' });
-  }
-
-  try {
-    const response = await axios.post('https://api.trakt.tv/oauth/token', {
-      refresh_token: refreshToken,
-      client_id: clientId,
-      client_secret: clientSecret,
-      grant_type: 'refresh_token'
-    });
-    const { access_token, refresh_token, created_at, expires_in } = response.data;
-    setSetting('traktAccessToken', access_token);
-    if (refresh_token) setSetting('traktRefreshToken', refresh_token);
-    setSetting('traktTokenExpiresAt', String(Number(created_at) + Number(expires_in)));
-    res.json({ status: 'success', message: 'Token refreshed successfully' });
-  } catch (err) {
-    console.error('[Trakt] Token refresh failed:', err.response?.data || err.message);
-    res.status(500).json({ status: 'error', message: 'Failed to refresh token' });
-  }
-});
-
-// Disconnect Trakt (remove tokens)
-router.post('/trakt/disconnect', (req, res) => {
-  setSetting('traktAccessToken', '');
-  setSetting('traktRefreshToken', '');
-  setSetting('traktTokenExpiresAt', '0');
-  res.json({ status: 'success', message: 'Disconnected from Trakt' });
-});
-
-
 // Plex Auth endpoint
 
 // Generate Plex Pin (proxy to avoid client-side adblockers/CORS)
-router.post('/plex/pin', async (req, res) => {
+router.post('/plex/pin', generalLimiter, async (req, res) => {
   try {
     const clientId = 'Atlas-' + Math.random().toString(36).substring(2, 15);
     const pinRes = await axios.post('https://plex.tv/api/v2/pins?strong=true', null, {
@@ -208,7 +176,7 @@ router.post('/plex/pin', async (req, res) => {
 });
 
 // Poll Plex Pin (proxy)
-router.get('/plex/pin/:id', async (req, res) => {
+router.get('/plex/pin/:id', generalLimiter, async (req, res) => {
   const { id } = req.params;
   const { clientId } = req.query;
   if (!clientId) return res.status(400).json({ status: 'error', message: 'clientId required' });
@@ -338,7 +306,7 @@ router.post('/jellyfin/login', loginLimiter, async (req, res) => {
 
 
 // Jellyfin Quick Connect Initiate
-router.get('/jellyfin/quickconnect/initiate', async (req, res) => {
+router.get('/jellyfin/quickconnect/initiate', generalLimiter, async (req, res) => {
   const { getSetting } = require('../utils/settings');
   const jellyfinUrl = getSetting('jellyfinUrl');
   if (!jellyfinUrl) return res.status(400).json({ status: 'error', message: 'Jellyfin not configured' });
@@ -357,7 +325,7 @@ router.get('/jellyfin/quickconnect/initiate', async (req, res) => {
 });
 
 // Jellyfin Quick Connect Status Poll
-router.get('/jellyfin/quickconnect/status', async (req, res) => {
+router.get('/jellyfin/quickconnect/status', generalLimiter, async (req, res) => {
   const { secret } = req.query;
   const { getSetting } = require('../utils/settings');
   const jellyfinUrl = getSetting('jellyfinUrl');

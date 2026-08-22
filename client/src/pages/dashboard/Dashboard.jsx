@@ -954,7 +954,7 @@ export default function Dashboard() {
                   }}
                   className={`cursor-pointer glass-panel interactive-glow-card rounded-xl overflow-hidden group hover:scale-[1.02] transition-all duration-300 relative flex flex-col focus:outline-none focus:ring-2 focus:ring-cyan-500/50 hover:shadow-[0_0_30px_-5px_rgba(6,182,212,0.25)] hover:border-cyan-500/40`}
                 >
-                  <div className="absolute top-2 left-2 z-20 group-hover:opacity-0 transition-opacity duration-200">
+                  <div className="absolute top-2 left-2 z-20 lg:group-hover:opacity-0 transition-opacity duration-200">
                     <button 
                       onClick={async (e) => {
                         e.stopPropagation(); e.preventDefault();
@@ -980,7 +980,7 @@ export default function Dashboard() {
                     </button>
                   </div>
 
-                  <div className="absolute top-2 right-2 z-20 flex gap-2 group-hover:opacity-0 transition-opacity duration-200">
+                  <div className="absolute top-2 right-2 z-20 flex gap-2 lg:group-hover:opacity-0 transition-opacity duration-200">
                     {(item.status === 'downloading' || (viewMode === 'shows' && item.downloading_episodes > 0)) && (
                       <div className="bg-slate-900/80 rounded-full shadow-lg p-1.5" title="Downloading">
                         <Activity className="w-5 h-5 text-blue-400 animate-pulse" />
@@ -1019,13 +1019,13 @@ export default function Dashboard() {
 
                   <div className="aspect-[2/3] relative bg-slate-800 min-h-[200px] flex-shrink-0">
                     {item.watched ? (
-                      <div className="absolute bottom-2 left-2 z-20 flex items-center gap-1 bg-slate-950/80 backdrop-blur px-2 py-1 rounded-md border border-emerald-500/30 shadow-lg group-hover:opacity-0 transition-opacity duration-200">
+                      <div className="absolute bottom-2 left-2 z-20 flex items-center gap-1 bg-slate-950/80 backdrop-blur px-2 py-1 rounded-md border border-emerald-500/30 shadow-lg lg:group-hover:opacity-0 transition-opacity duration-200">
                         <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#34d399" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
                         <span className="text-[10px] font-bold text-emerald-400">Watched</span>
                       </div>
                     ) : null}
                     {viewMode === 'shows' && item.season_count > 0 && (
-                      <div className="absolute bottom-2 right-2 z-20 flex items-center gap-1 bg-slate-950/80 backdrop-blur px-2 py-1 rounded-md border border-purple-500/30 shadow-lg group-hover:opacity-0 transition-opacity duration-200">
+                      <div className="absolute bottom-2 right-2 z-20 flex items-center gap-1 bg-slate-950/80 backdrop-blur px-2 py-1 rounded-md border border-purple-500/30 shadow-lg lg:group-hover:opacity-0 transition-opacity duration-200">
                         <Tv className="w-3 h-3 text-purple-400" />
                         <span className="text-[10px] font-bold text-purple-400">{item.season_count}</span>
                       </div>
@@ -1038,7 +1038,7 @@ export default function Dashboard() {
                       height="750"
                       className="w-full h-full object-cover relative"
                     />
-                    <div className="absolute inset-0 bg-slate-950/80 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-between p-3 z-10 pointer-events-none">
+                    <div className="absolute inset-0 bg-slate-950/80 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-between p-3 z-10 pointer-events-none">
                       {/* Top Header: Progress pill for shows only */}
                       {viewMode === 'shows' && item.episode_count > 0 ? (
                         <div className="w-full bg-slate-900/90 backdrop-blur-md px-3 py-1.5 rounded-lg border border-white/10 shadow-lg flex flex-col gap-1">
@@ -1083,7 +1083,7 @@ export default function Dashboard() {
                               customAlert('Auto-search failed to find any results', 'error');
                             }
                           }}
-                          className="bg-amber-400 hover:bg-amber-300 text-slate-950 w-9 h-9 rounded-full font-bold flex items-center justify-center transition-transform hover:scale-110 shadow-lg"
+                          className="bg-amber-400 hover:bg-amber-300 text-slate-950 w-10 h-10 rounded-full font-bold flex items-center justify-center transition-transform hover:scale-110 shadow-lg"
                           title="Auto Search"
                         >
                           <Zap className="w-4 h-4 fill-current" />
@@ -1096,7 +1096,7 @@ export default function Dashboard() {
                             setSearchMediaTitle(item.title);
                             setSearchModalOpen(true);
                           }}
-                          className="bg-cyan-500 hover:bg-cyan-400 text-slate-950 w-9 h-9 rounded-full font-bold flex items-center justify-center transition-transform hover:scale-110 shadow-lg"
+                          className="bg-cyan-500 hover:bg-cyan-400 text-slate-950 w-10 h-10 rounded-full font-bold flex items-center justify-center transition-transform hover:scale-110 shadow-lg"
                           title="Manual Search"
                         >
                           <Search className="w-4 h-4" />
@@ -1119,7 +1119,7 @@ export default function Dashboard() {
                               customAlert('Failed to update watch status', 'error');
                             }
                           }}
-                          className={`w-9 h-9 rounded-full font-bold flex items-center justify-center transition-transform hover:scale-110 shadow-lg ${
+                          className={`w-10 h-10 rounded-full font-bold flex items-center justify-center transition-transform hover:scale-110 shadow-lg ${
                             item.watched 
                               ? 'bg-emerald-500 hover:bg-emerald-400 text-slate-950' 
                               : 'bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-white/10'
@@ -1167,7 +1167,7 @@ export default function Dashboard() {
                   <th className="py-3 px-2 font-medium w-8">
                     <button
                       onClick={toggleSelectAll}
-                      className="p-0.5 rounded hover:bg-slate-700 transition-colors"
+                      className="p-2 -m-2 rounded hover:bg-slate-700 transition-colors"
                       title="Select All"
                       aria-label={selectedIds.size === displayItems.length && displayItems.length > 0 ? 'Deselect all' : 'Select all'}
                     >

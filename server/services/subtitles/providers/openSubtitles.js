@@ -22,6 +22,7 @@ const mapOpenSubtitlesItem = (item) => ({
 const downloadForMovie = async (apiKey, movie, langCode) => {
   const searchRes = await axios.get('https://api.opensubtitles.com/api/v1/subtitles', {
     headers: { 'Api-Key': apiKey, 'Content-Type': 'application/json', 'User-Agent': 'Atlas/1.0' },
+    timeout: 30000,
     params: { tmdb_id: movie.tmdb_id, languages: langCode }
   });
   const data = searchRes.data.data;
@@ -29,15 +30,16 @@ const downloadForMovie = async (apiKey, movie, langCode) => {
   const fileId = data[0].attributes.files[0].file_id;
   const downloadRes = await axios.post('https://api.opensubtitles.com/api/v1/download',
     { file_id: fileId },
-    { headers: { 'Api-Key': apiKey, 'Content-Type': 'application/json', 'Accept': 'application/json', 'User-Agent': 'Atlas/1.0' } }
+    { headers: { 'Api-Key': apiKey, 'Content-Type': 'application/json', 'Accept': 'application/json', 'User-Agent': 'Atlas/1.0' }, timeout: 30000 }
   );
-  const srtRes = await axios.get(downloadRes.data.link, { responseType: 'text' });
+  const srtRes = await axios.get(downloadRes.data.link, { responseType: 'text', timeout: 30000 });
   return srtRes.data;
 };
 
 const downloadForEpisode = async (apiKey, show, episode, langCode) => {
   const searchRes = await axios.get('https://api.opensubtitles.com/api/v1/subtitles', {
     headers: { 'Api-Key': apiKey, 'Content-Type': 'application/json', 'User-Agent': 'Atlas/1.0' },
+    timeout: 30000,
     params: { tmdb_id: show.tmdb_id, season_number: episode.season_number, episode_number: episode.episode_number, languages: langCode }
   });
   const data = searchRes.data.data;
@@ -45,15 +47,16 @@ const downloadForEpisode = async (apiKey, show, episode, langCode) => {
   const fileId = data[0].attributes.files[0].file_id;
   const downloadRes = await axios.post('https://api.opensubtitles.com/api/v1/download',
     { file_id: fileId },
-    { headers: { 'Api-Key': apiKey, 'Content-Type': 'application/json', 'Accept': 'application/json', 'User-Agent': 'Atlas/1.0' } }
+    { headers: { 'Api-Key': apiKey, 'Content-Type': 'application/json', 'Accept': 'application/json', 'User-Agent': 'Atlas/1.0' }, timeout: 30000 }
   );
-  const srtRes = await axios.get(downloadRes.data.link, { responseType: 'text' });
+  const srtRes = await axios.get(downloadRes.data.link, { responseType: 'text', timeout: 30000 });
   return srtRes.data;
 };
 
 const searchForMovie = async (apiKey, movie, langCode) => {
   const searchRes = await axios.get('https://api.opensubtitles.com/api/v1/subtitles', {
     headers: { 'Api-Key': apiKey, 'Content-Type': 'application/json', 'User-Agent': 'Atlas/1.0' },
+    timeout: 30000,
     params: { tmdb_id: movie.tmdb_id, languages: langCode }
   });
   const data = searchRes.data.data;
@@ -64,6 +67,7 @@ const searchForMovie = async (apiKey, movie, langCode) => {
 const searchForEpisode = async (apiKey, show, episode, langCode) => {
   const searchRes = await axios.get('https://api.opensubtitles.com/api/v1/subtitles', {
     headers: { 'Api-Key': apiKey, 'Content-Type': 'application/json', 'User-Agent': 'Atlas/1.0' },
+    timeout: 30000,
     params: { tmdb_id: show.tmdb_id, season_number: episode.season_number, episode_number: episode.episode_number, languages: langCode }
   });
   const data = searchRes.data.data;

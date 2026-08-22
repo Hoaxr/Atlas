@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Shield, Save, CheckSquare, Square, Globe } from 'lucide-react';
+import { Shield, Save, CheckSquare, Square, Globe, Webhook } from 'lucide-react';
 import api from '../../lib/api';
 import { customAlert } from '../../utils/alerts';
 import PasswordInput from '../../components/shared/PasswordInput';
@@ -11,11 +11,15 @@ export default function SecurityTab() {
     authPassword: '', // Write-only
     timezone: ''
   });
+  const [webhookToken, setWebhookToken] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     fetchSettings();
+    api.get('/webhooks/token')
+      .then(res => { if (res.data.status === 'success') setWebhookToken(res.data.data.token); })
+      .catch(() => {});
   }, []);
 
   const fetchSettings = async () => {
@@ -167,6 +171,22 @@ export default function SecurityTab() {
           </select>
         </div>
       </div>
+
+      {/* Download Client Webhook */}
+      {webhookToken && (
+        <div className="glass-panel p-6 rounded-2xl">
+          <h2 className="text-xl font-bold text-slate-200 flex items-center gap-2 mb-6">
+            <Webhook className="w-5 h-5 text-purple-400" /> Download Client Webhook
+          </h2>
+          <p className="text-sm text-slate-400 mb-4">
+            Trigger instant post-processing when a download completes. Point your download client's
+            "run on completion" command at:
+          </p>
+          <code className="block bg-slate-900/60 border border-white/5 rounded-xl px-4 py-3 text-xs text-cyan-300 break-all">
+            POST http://&lt;your-atlas-host&gt;:3000/api/webhooks/download-client?token={webhookToken}
+          </code>
+        </div>
+      )}
 
       {/* Save Button */}
       <div className="flex justify-end">

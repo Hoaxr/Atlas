@@ -49,7 +49,6 @@ export default function Statistics() {
   const navigate = useNavigate();
   const { headerRef, stickyVisible } = useStickyBar();
   const [stats, setStats] = useState(null);
-  const [, setTraktStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [missingSubsModal, setMissingSubsModal] = useState(false);
   const [missingSubsData, setMissingSubsData] = useState(null);
@@ -93,7 +92,7 @@ export default function Statistics() {
 
   const fetchStats = async () => {
     try {
-      const [libRes, simklRes] = await Promise.all([
+      const [libRes] = await Promise.all([
         api.get('/library/stats'),
         api.get('/simkl/stats').catch(() => ({ data: {} }))
       ]);
@@ -102,8 +101,6 @@ export default function Statistics() {
         setStats(libRes.data.data);
       }
 
-      if (simklRes.data?.status === 'success') setTraktStats(simklRes.data.data);
-      else if (simklRes.data?.error) setTraktStats({ error: simklRes.data.error });
     } catch (err) {
       console.error('Failed to fetch stats', err);
     } finally {

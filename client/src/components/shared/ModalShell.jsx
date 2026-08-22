@@ -86,7 +86,7 @@ export default function ModalShell({
             </div>
             <button
               onClick={onClose}
-              className="text-slate-400 hover:text-white p-1.5 rounded-lg hover:bg-slate-800 transition-all shrink-0 ml-3"
+              className="text-slate-400 hover:text-white p-2.5 rounded-lg hover:bg-slate-800 transition-all shrink-0 ml-3"
               aria-label="Close"
             >
               <X className="w-5 h-5" />
@@ -96,10 +96,10 @@ export default function ModalShell({
 
         {/* Close button standalone (when no header and no custom close) */}
         {noHeader && !noFloatingClose && onClose && (
-          <div className="absolute top-4 right-4 z-10">
+          <div className="absolute top-3 right-3 z-10">
             <button
               onClick={onClose}
-              className="text-slate-400 hover:text-white p-1.5 rounded-lg hover:bg-slate-800/80 transition-all"
+              className="text-slate-400 hover:text-white p-2.5 rounded-lg hover:bg-slate-800/80 transition-all"
               aria-label="Close"
             >
               <X className="w-5 h-5" />

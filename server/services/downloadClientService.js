@@ -1,4 +1,5 @@
 const db = require('../config/database');
+const { getSetting } = require('../utils/settings');
 const adapters = {
   qbittorrent: require('./clients/qbittorrent'),
   deluge: require('./clients/deluge'),
@@ -23,7 +24,38 @@ const getAdapter = (client) => {
   return adapter;
 };
 
+// Torrent URLs must use http(s)/magnet schemes. Private/link-local hosts are
+// only rejected when 'blockPrivateTorrentHosts' is enabled, so self-hosted
+// indexers (e.g. Prowlarr on the LAN) keep working by default.
+const validateTorrentUrl = (url) => {
+  let parsed;
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw new Error('Invalid torrent URL');
+  }
+  if (!['http:', 'https:', 'magnet:'].includes(parsed.protocol)) {
+    throw new Error(`Unsupported torrent URL scheme: ${parsed.protocol}`);
+  }
+  if (parsed.protocol === 'magnet:') return;
+  if (getSetting('blockPrivateTorrentHosts') !== 'true') return;
+  const hostname = parsed.hostname.replace(/^\[|\]$/g, '').toLowerCase();
+  const isPrivate =
+    hostname === 'localhost' ||
+    hostname === '::1' ||
+    hostname.startsWith('fe80:') ||
+    /^127\./.test(hostname) ||
+    /^10\./.test(hostname) ||
+    /^192\.168\./.test(hostname) ||
+    /^169\.254\./.test(hostname) ||
+    /^172\.(1[6-9]|2\d|3[01])\./.test(hostname);
+  if (isPrivate) {
+    throw new Error('Refusing to fetch torrent from a private or link-local address');
+  }
+};
+
 const addTorrent = async (torrentUrl, type = 'movie') => {
+  validateTorrentUrl(torrentUrl);
   const client = getClient();
   if (!client) throw new Error('No download client configured');
   console.log(`[DownloadClient] Adding ${type} torrent via ${client.type}: ${String(torrentUrl).substring(0, 80)}...`);

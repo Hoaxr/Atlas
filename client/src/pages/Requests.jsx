@@ -15,6 +15,7 @@ export default function Requests() {
   
   const [selectedMedia, setSelectedMedia] = useState(null);
   const [currentRequestId, setCurrentRequestId] = useState(null);
+  const [actionBusy, setActionBusy] = useState(null); // e.g. "12:deny"
 
   const fetchRequests = async () => {
     try {
@@ -50,7 +51,8 @@ export default function Requests() {
 
   const handleDeny = async (id) => {
     const confirm = await customConfirm('Are you sure you want to deny this request?');
-    if (!confirm) return;
+    if (!confirm || actionBusy) return;
+    setActionBusy(`${id}:deny`);
 
     try {
       await api.put(`/requests/${id}/deny`);
@@ -58,12 +60,15 @@ export default function Requests() {
       fetchRequests();
     } catch {
       customAlert('Failed to deny request');
+    } finally {
+      setActionBusy(null);
     }
   };
 
   const handleDelete = async (id) => {
     const confirm = await customConfirm('Are you sure you want to delete this request permanently?');
-    if (!confirm) return;
+    if (!confirm || actionBusy) return;
+    setActionBusy(`${id}:delete`);
 
     try {
       await api.delete(`/requests/${id}`);
@@ -71,6 +76,8 @@ export default function Requests() {
       fetchRequests();
     } catch {
       customAlert('Failed to delete request');
+    } finally {
+      setActionBusy(null);
     }
   };
 
@@ -169,7 +176,8 @@ export default function Requests() {
                           </button>
                           <button
                             onClick={() => handleDeny(req.id)}
-                            className="px-3 py-1.5 rounded-lg bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 font-medium transition-colors text-xs"
+                            disabled={actionBusy === `${req.id}:deny`}
+                            className="px-3 py-1.5 rounded-lg bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 font-medium transition-colors text-xs disabled:opacity-50 disabled:pointer-events-none"
                           >
                             Deny
                           </button>
@@ -177,7 +185,8 @@ export default function Requests() {
                       )}
                       <button
                         onClick={() => handleDelete(req.id)}
-                        className="p-1.5 rounded-lg text-slate-500 hover:bg-slate-800 hover:text-rose-400 transition-colors ml-2"
+                        disabled={!!actionBusy}
+                        className="p-1.5 rounded-lg text-slate-500 hover:bg-slate-800 hover:text-rose-400 transition-colors ml-2 disabled:opacity-50 disabled:pointer-events-none"
                         title="Delete Request"
                       >
                         <Trash2 className="w-4 h-4" />
@@ -249,7 +258,8 @@ export default function Requests() {
                         </button>
                         <button
                           onClick={() => handleDeny(req.id)}
-                          className="px-3 py-1.5 rounded-lg bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 font-medium transition-colors text-xs"
+                          disabled={actionBusy === `${req.id}:deny`}
+                          className="px-3 py-1.5 rounded-lg bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 font-medium transition-colors text-xs disabled:opacity-50 disabled:pointer-events-none"
                         >
                           Deny
                         </button>
@@ -257,7 +267,8 @@ export default function Requests() {
                     )}
                     <button
                       onClick={() => handleDelete(req.id)}
-                      className="p-1.5 rounded-lg text-slate-500 hover:bg-slate-800 hover:text-rose-400 transition-colors"
+                      disabled={!!actionBusy}
+                      className="p-1.5 rounded-lg text-slate-500 hover:bg-slate-800 hover:text-rose-400 transition-colors disabled:opacity-50 disabled:pointer-events-none"
                       title="Delete Request"
                     >
                       <Trash2 className="w-4 h-4" />

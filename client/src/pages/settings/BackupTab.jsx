@@ -42,21 +42,25 @@ export default function BackupTab() {
     if (!confirmed) return;
 
     setRestoring(true);
-    try {
-      const reader = new FileReader();
-      reader.onload = async (e) => {
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      try {
         const base64 = e.target.result.split(',')[1];
-        await api.post('/settings/restore', { data: base64, filename: restoreFile.name });
-        customAlert('Database restored successfully. Please refresh the page.');
+        const res = await api.post('/settings/restore', { data: base64, filename: restoreFile.name });
+        customAlert(res.data.message || 'Database restored successfully.', 'success');
         setRestoreFile(null);
-      };
-      reader.readAsDataURL(restoreFile);
-    } catch (err) {
-      console.error('Restore failed', err);
-      customAlert('Failed to restore database', 'error');
-    } finally {
+      } catch (err) {
+        console.error('Restore failed', err);
+        customAlert(err.response?.data?.message || 'Failed to restore database', 'error');
+      } finally {
+        setRestoring(false);
+      }
+    };
+    reader.onerror = () => {
+      customAlert('Failed to read the selected file', 'error');
       setRestoring(false);
-    }
+    };
+    reader.readAsDataURL(restoreFile);
   };
 
   return (

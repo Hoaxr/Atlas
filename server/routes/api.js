@@ -4,10 +4,8 @@ const db = require('../config/database');
 
 const requireAdmin = require('../middleware/requireAdmin');
 
-const traktRoutes = require('./trakt');
 const trackerRoutes = require('./tracker');
 
-router.use('/trakt', traktRoutes);
 router.use('/tracker', trackerRoutes);
 
 router.get('/status', (req, res, next) => {

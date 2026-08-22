@@ -13,6 +13,7 @@ import ManualSearchModal from '../components/ManualSearchModal';
 import EpisodeDetailsModal from '../components/EpisodeDetailsModal';
 import RemapModal from '../components/RemapModal';
 import { posterUrl, tmdbImgUrl } from '../lib/posterUrl';
+import InlineError from '../components/shared/InlineError';
 
 import SubtitleLanguageBadge from '../components/shared/SubtitleLanguageBadge';
 import { ProviderLabel } from '../utils/providerColors';
@@ -23,6 +24,7 @@ export default function ShowDetails() {
   const navigate = useNavigate();
 
   const [show, setShow] = useState(null);
+  const [loadError, setLoadError] = useState(false);
   const [detailsModalEpisode, setDetailsModalEpisode] = useState(null);
   const [episodes, setEpisodes] = useState([]);
   const { providerLangs, profiles } = useSettings();
@@ -126,6 +128,7 @@ export default function ShowDetails() {
       ]);
       if (reqId !== fetchRequestIdRef.current) return;
       if (res.data.status === 'success') {
+        setLoadError(false);
         setShow(res.data.data);
       }
       if (epRes.data.status === 'success') {
@@ -138,7 +141,7 @@ export default function ShowDetails() {
         return;
       }
       console.error(e);
-      if (!silent) customAlert('Failed to load show details', 'error');
+      if (!silent) setLoadError(true);
     }
   }, [id, navigate]);
 
@@ -241,6 +244,17 @@ export default function ShowDetails() {
       return { ...prev, [season]: !isCurrentlyCollapsed };
     });
   };
+
+  if (loadError && !show) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-6 relative z-10">
+        <InlineError
+          message="Failed to load show details. Please check your connection and try again."
+          onRetry={() => { setLoadError(false); fetchShowData(false); }}
+        />
+      </div>
+    );
+  }
 
   if (!show) return null;
 

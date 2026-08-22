@@ -102,7 +102,7 @@ const addMovie = async (tmdbId, rootFolderPath = null) => {
   // Auto-approve any pending request for this movie
   db.prepare("UPDATE requests SET status = 'approved' WHERE tmdb_id = ? AND type = 'movie' AND status = 'pending'").run(movieDetails.id);
 
-  // If this movie was already marked as watched on Trakt, apply it
+  // If this movie was already marked as watched (Simkl sync), apply it
   if (isWatchedSyncEnabled()) {
     const watchedEntry = db.prepare('SELECT 1 FROM watched_tmdb WHERE tmdb_id = ? AND type = ?').get(tmdbId, 'movie');
     if (watchedEntry) {
@@ -331,7 +331,7 @@ const addShow = async (tmdbId, rootFolderPath = null, monitorLevel = 'all') => {
   // Auto-approve any pending request for this show
   db.prepare("UPDATE requests SET status = 'approved' WHERE tmdb_id = ? AND type = 'tv' AND status = 'pending'").run(showDetails.id);
 
-  // If this show was already marked as watched on Trakt, apply it
+  // If this show was already marked as watched (Simkl sync), apply it
   if (isWatchedSyncEnabled()) {
     const watchedEntry = db.prepare('SELECT 1 FROM watched_tmdb WHERE tmdb_id = ? AND type = ?').get(tmdbId, 'show');
     if (watchedEntry) {

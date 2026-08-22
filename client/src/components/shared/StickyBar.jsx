@@ -7,7 +7,7 @@ import { Menu, Search, X, Loader2 } from 'lucide-react';
  */
 export default function StickyBar({ visible, searchQuery, onSearchChange, searchPlaceholder, showSearch = false, isTyping = false, children }) {
   return (
-    <div className={`sticky top-0 z-30 -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8 ${showSearch ? 'py-3' : 'py-2'} bg-slate-950/80 backdrop-blur-md border-b border-white/5 ${visible ? '' : 'sm:hidden'}`}>
+    <div className={`sticky top-0 z-30 -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8 ${showSearch ? 'py-3' : 'py-2'} bg-slate-950/80 backdrop-blur-md border-b border-white/5 ${visible ? '' : 'sm:hidden'}`} style={{ paddingTop: `calc(${showSearch ? '0.75rem' : '0.5rem'} + env(safe-area-inset-top))` }}>
       <div className={`flex items-center gap-2 ${showSearch ? 'relative max-w-2xl mx-auto' : ''}`}>
         <button
           onClick={() => window.dispatchEvent(new CustomEvent('atlas-toggle-sidebar'))}
@@ -34,7 +34,7 @@ export default function StickyBar({ visible, searchQuery, onSearchChange, search
               {searchQuery && !isTyping && (
                 <button
                   onClick={() => onSearchChange('')}
-                  className="p-0.5 text-slate-500 hover:text-slate-300 transition-colors"
+                  className="p-2 -m-1.5 text-slate-500 hover:text-slate-300 transition-colors"
                   aria-label="Clear search"
                 >
                   <X className="w-4 h-4" />

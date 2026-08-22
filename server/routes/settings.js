@@ -8,14 +8,13 @@ const path = require('path');
 const axios = require('axios');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const db = require('../config/database');
-const { getSetting, setSetting } = require('../utils/settings');
+const { getSetting, setSetting, invalidateSettingsCache } = require('../utils/settings');
 const downloadClientService = require('../services/downloadClientService');
 const { invalidateAuthCache } = require('../middleware/authMiddleware');
 
 router.get('/', (req, res, next) => {
   try {
     const tmdbApiKey = getSetting('tmdbApiKey');
-    const traktClientId = getSetting('traktClientId');
     const osApiKey = getSetting('osApiKey');
     const subdlApiKey = getSetting('subdlApiKey');
     const subsourceApiKey = getSetting('subsourceApiKey');
@@ -32,9 +31,6 @@ router.get('/', (req, res, next) => {
     try { providerLangs = JSON.parse(getSetting('providerLangs') || '["en"]'); } catch { /* ignore */ }
     const autoTranslate = getSetting('autoTranslate') === 'true';
     const preferNativeBeforeTranslate = getSetting('preferNativeBeforeTranslate') === 'true';
-    const traktWatchedSync = getSetting('traktWatchedSync') === 'true';
-    const traktAccessToken = getSetting('traktAccessToken');
-    const traktClientSecret = getSetting('traktClientSecret');
     const simklClientId = getSetting('simklClientId');
     const simklWatchedSync = getSetting('simklWatchedSync') === 'true';
     const simklAccessToken = getSetting('simklAccessToken');
@@ -72,7 +68,6 @@ router.get('/', (req, res, next) => {
       status: 'success',
       data: {
         tmdbApiKey: mask(tmdbApiKey),
-        traktClientId: mask(traktClientId),
         osApiKey: mask(osApiKey),
         subdlApiKey: mask(subdlApiKey),
         subsourceApiKey: mask(subsourceApiKey),
@@ -87,9 +82,6 @@ router.get('/', (req, res, next) => {
         providerLangs,
         autoTranslate,
         preferNativeBeforeTranslate,
-        traktWatchedSync,
-        traktAccessToken: mask(traktAccessToken),
-        traktClientSecret: mask(traktClientSecret),
         simklClientId: mask(simklClientId),
         simklWatchedSync,
         simklAccessToken: mask(simklAccessToken),
@@ -117,7 +109,7 @@ router.get('/', (req, res, next) => {
         jellyfinApiKey: mask(getSetting('jellyfinApiKey')),
         embyUrl: getSetting('embyUrl'),
         embyApiKey: mask(getSetting('embyApiKey')),
-        discordWebhookUrl: getSetting('discordWebhookUrl'),
+        discordWebhookUrl: mask(getSetting('discordWebhookUrl')),
         telegramBotToken: mask(getSetting('telegramBotToken')),
         telegramChatId: getSetting('telegramChatId'),
         notifyOnGrab: getSetting('notifyOnGrab') || 'false',
@@ -140,7 +132,6 @@ router.get('/', (req, res, next) => {
 // type: 'string' | 'boolean' | 'json' | 'apiKey' (masked, only saved if not ***) | 'url'
 const SETTING_SCHEMA = {
   tmdbApiKey:               { type: 'apiKey' },
-  traktClientId:            { type: 'apiKey' },
   osApiKey:                 { type: 'apiKey' },
   subdlApiKey:              { type: 'apiKey' },
   subsourceApiKey:          { type: 'apiKey' },
@@ -155,9 +146,6 @@ const SETTING_SCHEMA = {
   providerLangs:            { type: 'json' },
   autoTranslate:            { type: 'boolean' },
   preferNativeBeforeTranslate: { type: 'boolean' },
-  traktWatchedSync:         { type: 'boolean' },
-  traktAccessToken:         { type: 'apiKey' },
-  traktClientSecret:        { type: 'apiKey' },
   simklClientId:            { type: 'apiKey' },
   simklWatchedSync:         { type: 'boolean' },
   simklAccessToken:         { type: 'apiKey' },
@@ -180,7 +168,7 @@ const SETTING_SCHEMA = {
   jellyfinApiKey:           { type: 'apiKey' },
   embyUrl:                  { type: 'url' },
   embyApiKey:               { type: 'apiKey' },
-  discordWebhookUrl:        { type: 'string' },
+  discordWebhookUrl:        { type: 'webhookUrl' },
   telegramBotToken:         { type: 'apiKey' },
   telegramChatId:           { type: 'string' },
   notifyOnGrab:             { type: 'string' },
@@ -193,6 +181,7 @@ const SETTING_SCHEMA = {
   autoDeleteWatchedDays:    { type: 'string' },
   autoWatchUser:            { type: 'string' },
   timezone:                 { type: 'string' },
+  blockPrivateTorrentHosts: { type: 'boolean' },
 };
 
 const isMasked = (val) => typeof val === 'string' && /^\*+$/.test(val);
@@ -213,6 +202,13 @@ const validateAndTransform = (key, value) => {
   }
 
   if (schema.type === 'url') {
+    if (value !== '' && !isValidUrl(value)) return { valid: false, reason: `${key}: must be a valid URL` };
+    return { valid: true, transformed: value };
+  }
+
+  if (schema.type === 'webhookUrl') {
+    // Secret-bearing value: never let a masked placeholder overwrite the real URL
+    if (isMasked(value)) return { valid: false, skip: true };
     if (value !== '' && !isValidUrl(value)) return { valid: false, reason: `${key}: must be a valid URL` };
     return { valid: true, transformed: value };
   }
@@ -261,8 +257,8 @@ router.post('/', async (req, res, next) => {
       settingsToWrite.push([key, result.transformed]);
     }
 
-    // Commit all validated settings in one transaction (#15)
-    if (settingsToWrite.length > 0 && errors.length === 0) {
+    // Commit all validated settings in one transaction (#15) — nothing is persisted if validation failed
+    if (errors.length === 0 && settingsToWrite.length > 0) {
       const upsertSetting = db.prepare(
         "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value"
       );
@@ -272,18 +268,15 @@ router.post('/', async (req, res, next) => {
       // Sync to the in-memory settings cache
       const { setSetting: setSettingFn } = require('../utils/settings');
       for (const [key, val] of settingsToWrite) setSettingFn(key, val);
-    } else {
-      // Still write individually if there were no errors but setSetting has side-effects
-      for (const [key, val] of settingsToWrite) setSetting(key, val);
     }
 
-    if (body.timezone !== undefined) {
+    if (errors.length === 0 && body.timezone !== undefined) {
       require('../utils/airDate').invalidateTimezoneCache();
     }
 
 
     // Special: default quality profile
-    if (body.defaultQualityProfileId !== undefined) {
+    if (errors.length === 0 && body.defaultQualityProfileId !== undefined) {
       setSetting('defaultQualityProfileId', body.defaultQualityProfileId);
       if (body.defaultQualityProfileId !== null) {
         db.prepare('UPDATE movies SET quality_profile_id = ? WHERE quality_profile_id IS NULL').run(body.defaultQualityProfileId);
@@ -533,7 +526,15 @@ router.get('/plex/pin/:pinId', async (req, res, next) => {
 // Download Clients
 router.post('/clients', (req, res) => {
   const { name, host, port, username, password, type } = req.body;
-  const result = db.prepare('INSERT INTO download_clients (name, host, port, username, password, type) VALUES (?, ?, ?, ?, ?, ?)').run(name, host, port, username, password, type);
+  if (!name || typeof name !== 'string' || !name.trim()) {
+    return res.status(400).json({ status: 'error', message: 'Client name is required' });
+  }
+  const hostStr = typeof host === 'string' ? host.trim() : '';
+  if (!hostStr || !(/^(https?:\/\/[\w.-]+(:\d+)?)(\/.*)?$/.test(hostStr) || /^[\w.-]+(:\d+)?$/.test(hostStr))) {
+    return res.status(400).json({ status: 'error', message: 'Host must be a valid URL (http(s)://host) or a host[:port] address' });
+  }
+  const portNum = Number.isFinite(parseInt(port, 10)) ? parseInt(port, 10) : null;
+  const result = db.prepare('INSERT INTO download_clients (name, host, port, username, password, type) VALUES (?, ?, ?, ?, ?, ?)').run(name.trim(), hostStr, portNum, username, password, type);
   res.json({ status: 'success', data: { id: result.lastInsertRowid } });
 });
 
@@ -643,11 +644,12 @@ router.get('/clients/detect-mapping', async (req, res) => {
         if (!mapping) {
           const adapter = require('../services/downloadClientService');
           const torrents = await adapter.getTorrents();
-          const completed = (torrents || []).find(t => t.progress === 1);
+          const completed = (torrents || []).find(t => t.progress >= 100);
           if (completed) mapping = tryMapping(completed.save_path || completed.content_path || '');
         }
         
         // DB fallback always takes priority if it exists and is more specific
+        let guessed = false;
         const downloadsLibPath = db.prepare("SELECT path FROM library_paths WHERE type = 'downloads' LIMIT 1").get();
         if (downloadsLibPath) {
           let remote = (remotePath || '/data').replace(/\/+$/, '');
@@ -657,9 +659,13 @@ router.get('/clients/detect-mapping', async (req, res) => {
             remote += '/downloads';
           }
           mapping = [remote, downloadsLibPath.path];
+          guessed = true;
         }
 
         if (mapping) {
+          if (guessed) {
+            return res.json({ status: 'success', data: mapping, detected: false, guessed: true, message: 'Could not probe the client directly — applied a best-guess mapping. Please verify it.' });
+          }
           return res.json({ status: 'success', data: mapping });
         }
       } catch { /* ignore */ }
@@ -690,7 +696,14 @@ router.put('/profiles/:id', (req, res) => {
 });
 
 router.delete('/profiles/:id', (req, res) => {
-  db.prepare('DELETE FROM quality_profiles WHERE id = ?').run(req.params.id);
+  db.transaction(() => {
+    db.prepare('DELETE FROM quality_profiles WHERE id = ?').run(req.params.id);
+    db.prepare('UPDATE movies SET quality_profile_id = NULL WHERE quality_profile_id = ?').run(req.params.id);
+    db.prepare('UPDATE shows SET quality_profile_id = NULL WHERE quality_profile_id = ?').run(req.params.id);
+    if (getSetting('defaultQualityProfileId') && String(getSetting('defaultQualityProfileId')) === String(req.params.id)) {
+      setSetting('defaultQualityProfileId', '');
+    }
+  })();
   res.json({ status: 'success' });
 });
 // Issues Endpoint
@@ -1059,7 +1072,10 @@ router.get('/backup', (req, res, next) => {
     if (!fs.existsSync(dbPath)) {
       return res.status(404).json({ status: 'error', message: 'Database file not found' });
     }
-    
+
+    // Flush WAL into the main file so pending transactions are included in the backup
+    db.exec('PRAGMA wal_checkpoint(TRUNCATE);');
+
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     res.setHeader('Content-Type', 'application/octet-stream');
     res.setHeader('Content-Disposition', `attachment; filename="atlas-backup-${timestamp}.sqlite"`);
@@ -1071,35 +1087,70 @@ router.get('/backup', (req, res, next) => {
   }
 });
 
-// Database Restore - upload a SQLite file
-router.post('/restore', (req, res, next) => {
+// Database Restore - upload a SQLite file (base64 in JSON — needs a bigger body limit than the global 500kb)
+// The parser is applied by index.js so this handler can be reused there above the global limit.
+const restoreHandler = async (req, res, next) => {
+  let tempPath = null;
   try {
     // Simple approach: accept base64 encoded file in JSON body
     const { data } = req.body;
     if (!data) {
       return res.status(400).json({ status: 'error', message: 'No database data provided' });
     }
-    
-    const dbPath = path.join(__dirname, '../data/database.sqlite');
-    const backupPath = path.join(__dirname, `../data/database-backup-${Date.now()}.sqlite`);
-    
-    // Backup current database first
-    if (fs.existsSync(dbPath)) {
-      fs.copyFileSync(dbPath, backupPath);
-    }
-    
-    // Write uploaded data
+
     const buffer = Buffer.from(data, 'base64');
     if (buffer.length < 16 || buffer.toString('utf8', 0, 15) !== 'SQLite format 3') {
       return res.status(400).json({ status: 'error', message: 'Invalid SQLite database file header' });
     }
-    fs.writeFileSync(dbPath, buffer);
-    
-    res.json({ status: 'success', message: 'Database restored successfully. Previous database backed up.' });
+
+    const dbPath = path.join(__dirname, '../data/database.sqlite');
+
+    // Write to a temp file and integrity-check it before touching the live DB
+    tempPath = path.join(path.dirname(dbPath), `restore-${Date.now()}.sqlite`);
+    fs.writeFileSync(tempPath, buffer);
+
+    const { DatabaseSync } = require('node:sqlite');
+    let probe;
+    try {
+      probe = new DatabaseSync(tempPath, { readOnly: true });
+      const check = probe.prepare('PRAGMA integrity_check').get();
+      if (!check || Object.values(check)[0] !== 'ok') {
+        fs.unlinkSync(tempPath);
+        tempPath = null;
+        return res.status(400).json({ status: 'error', message: `Uploaded file failed integrity check: ${check ? Object.values(check)[0] : 'unknown'}` });
+      }
+    } finally {
+      if (probe) probe.close();
+    }
+
+    // Backup current database first
+    const backupPath = path.join(__dirname, `../data/database-backup-${Date.now()}.sqlite`);
+    if (fs.existsSync(dbPath)) {
+      fs.copyFileSync(dbPath, backupPath);
+    }
+
+    // Flush WAL into the live file, remove stale sidecars, then atomically swap in the restore
+    db.exec('PRAGMA wal_checkpoint(TRUNCATE);');
+    for (const suffix of ['-wal', '-shm']) {
+      const sidecar = dbPath + suffix;
+      if (fs.existsSync(sidecar)) fs.unlinkSync(sidecar);
+    }
+    fs.renameSync(tempPath, dbPath);
+    tempPath = null;
+
+    invalidateSettingsCache();
+
+    console.log(`[restore] Database restored from upload (previous copy saved as ${path.basename(backupPath)}). Restarting server...`);
+    res.json({ status: 'success', message: 'Restore complete — server is restarting', restartRequired: true });
+    setTimeout(() => process.exit(0), 1500); // docker restart policy brings the server back with restored data
   } catch (e) {
     next(e);
+  } finally {
+    if (tempPath && fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
   }
-});
+};
+
+router.post('/restore', restoreHandler);
 
 // ─── Feature 5: Task Schedule Editor ─────────────────────────────────────────
 
@@ -1155,3 +1206,4 @@ router.post('/test-notification', async (req, res) => {
 });
 
 module.exports = router;
+module.exports.restoreHandler = restoreHandler;

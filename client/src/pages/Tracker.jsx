@@ -177,31 +177,34 @@ const Tracker = () => {
   
   const scrollRef = useRef(null);
   const weekScrollRef = useRef(null);
+  const settingsRef = useRef(null);
+
+  useEffect(() => {
+    api.get('/settings')
+      .then(res => { settingsRef.current = res.data?.data || {}; })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     const cleanup = onEvent((data) => {
       if (data.type === 'WATCHERS_UPDATE' && Array.isArray(data.sessions)) {
-        api.get('/settings').then(res => {
-          const autoWatchUser = res.data?.data?.autoWatchUser || '';
-          const authUsername = res.data?.data?.authUsername || '';
-          
-          let active = null;
-          if (autoWatchUser && autoWatchUser.trim() !== '') {
-            if (autoWatchUser.trim() === '*') {
-              active = data.sessions[0] || null;
-            } else {
-              const allowed = autoWatchUser.split(',').map(u => u.trim().toLowerCase());
-              active = data.sessions.find(s => s.user && allowed.includes(s.user.trim().toLowerCase())) || null;
-            }
-          } else if (authUsername && authUsername.trim() !== '') {
-            active = data.sessions.find(s => s.user && s.user.trim().toLowerCase() === authUsername.trim().toLowerCase()) || null;
-          } else {
+        const autoWatchUser = settingsRef.current?.autoWatchUser || '';
+        const authUsername = settingsRef.current?.authUsername || '';
+
+        let active = null;
+        if (autoWatchUser && autoWatchUser.trim() !== '') {
+          if (autoWatchUser.trim() === '*') {
             active = data.sessions[0] || null;
+          } else {
+            const allowed = autoWatchUser.split(',').map(u => u.trim().toLowerCase());
+            active = data.sessions.find(s => s.user && allowed.includes(s.user.trim().toLowerCase())) || null;
           }
-          setLiveSession(active);
-        }).catch(() => {
-          setLiveSession(null);
-        });
+        } else if (authUsername && authUsername.trim() !== '') {
+          active = data.sessions.find(s => s.user && s.user.trim().toLowerCase() === authUsername.trim().toLowerCase()) || null;
+        } else {
+          active = data.sessions[0] || null;
+        }
+        setLiveSession(active);
       }
     });
     return () => cleanup();
@@ -240,8 +243,14 @@ const Tracker = () => {
         setLiveSession(statsRes.data.stats.now_watching);
       }
       setHistory(historyRes.data.history);
-      setUpNextEpisodes(upNextRes.data.episodes);
-      setThisWeekEpisodes(thisWeekRes.data.episodes);
+      setUpNextEpisodes([
+        ...(upNextRes.data.movies || []).map(m => ({ ...m, _type: 'movie' })),
+        ...(upNextRes.data.episodes || []).map(ep => ({ ...ep, _type: 'episode' }))
+      ]);
+      setThisWeekEpisodes([
+        ...(thisWeekRes.data.movies || []).map(m => ({ ...m, _type: 'movie' })),
+        ...(thisWeekRes.data.episodes || []).map(ep => ({ ...ep, _type: 'episode' }))
+      ]);
       setError(null);
     } catch (err) {
       console.error('Failed to fetch tracker data', err);
@@ -303,15 +312,15 @@ const Tracker = () => {
 
   // Group history chronologically by day with summaries
   const groupedHistory = useMemo(() => {
-    const todayStr = new Date().toISOString().split('T')[0];
-    const yesterdayStr = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+    const todayStr = new Date().toLocaleDateString('en-CA');
+    const yesterdayStr = new Date(Date.now() - 86400000).toLocaleDateString('en-CA');
 
     const groups = {};
 
     history.forEach(item => {
       if (!item.watched_at) return;
       const dateObj = new Date(item.watched_at);
-      const dStr = dateObj.toISOString().split('T')[0];
+      const dStr = dateObj.toLocaleDateString('en-CA');
 
       let label = dateObj.toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' });
       if (dStr === todayStr) label = 'Today';
@@ -351,7 +360,7 @@ const Tracker = () => {
 
   const currently = stats?.currently_watching;
   const activeWatching = liveSession || stats?.now_watching;
-  const thisWeekCombined = (thisWeekEpisodes || []).map(ep => ({ ...ep, _type: 'episode' }));
+  const thisWeekCombined = thisWeekEpisodes || [];
 
   return (
     <div className="w-full space-y-6 sm:space-y-8 md:space-y-10 pb-12 sm:pb-16 animate-in fade-in duration-500">
@@ -494,7 +503,7 @@ const Tracker = () => {
                 )}
                 <div className="mt-2 sm:mt-2.5 flex items-center gap-2">
                   <div className="flex-1 h-1.5 bg-slate-700/80 rounded-full overflow-hidden">
-                    <div className="h-full bg-gradient-to-r from-cyan-500 to-emerald-400 rounded-full" style={{ width: `${currently.progress || 100}%` }}></div>
+                    <div className="h-full bg-gradient-to-r from-cyan-500 to-emerald-400 rounded-full" style={{ width: `${currently.progress ?? 100}%` }}></div>
                   </div>
                   <span className="text-[10px] text-slate-400 font-mono font-semibold">{formatRuntime(currently.runtime) || `${currently.runtime}m`}</span>
                 </div>
@@ -527,9 +536,9 @@ const Tracker = () => {
           <div ref={scrollRef} className="flex gap-3 sm:gap-5 overflow-x-auto scrollbar-none pb-4 pt-1 snap-x">
             {upNextEpisodes.map(ep => (
               <AnimatedUpNextCard 
-                key={`ep-${ep.episode_id}`}
+                key={ep._type === 'episode' ? `up-ep-${ep.episode_id}` : `up-movie-${ep.id}`}
                 item={ep}
-                type="episode"
+                type={ep._type}
                 onMarkWatched={handleMarkWatched}
               />
             ))}

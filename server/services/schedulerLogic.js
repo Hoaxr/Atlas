@@ -93,8 +93,9 @@ const calculateNextSearchAt = (item, type, options = {}, currentDate = new Date(
 
 const fallbackSchedule = (retryCount, config, currentDate) => {
   const baseMinutes = 60; // 1 hour
-  const nextMs = currentDate.getTime() + (baseMinutes * Math.pow(config.backoffMultiplier, retryCount) * 60000);
-  return { state: 'SEARCHING', nextSearch: new Date(nextMs) };
+  // Cap at 7 days — uncapped exponential growth reaches ~years by retry 20.
+  const delayMinutes = Math.min(baseMinutes * Math.pow(config.backoffMultiplier, retryCount), 7 * 24 * 60);
+  return { state: 'SEARCHING', nextSearch: new Date(currentDate.getTime() + delayMinutes * 60000) };
 };
 
 const scheduleMovie = (retryCount, diffHours, config, currentDate, isDownloaded = false) => {

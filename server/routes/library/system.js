@@ -472,7 +472,12 @@ router.post('/scan/stop', (req, res) => {
 
 
 router.get('/scan/progress', (req, res) => {
-  res.json(scannerService.getScanProgress());
+  const progress = scannerService.getScanProgress();
+  let lastScanTime = null;
+  try {
+    lastScanTime = require('../../utils/settings').getSetting('lastScanTime');
+  } catch { /* ignore */ }
+  res.json({ ...progress, lastScanTime });
 });
 
 
@@ -554,6 +559,7 @@ router.get('/calendar', async (req, res, next) => {
 
 
 const VALID_BULK_TYPES = ['movies', 'shows'];
+const VALID_BULK_STATUSES = ['monitored', 'unmonitored', 'downloaded', 'downloading', 'wanted', 'missing'];
 
 router.post('/bulk/status', (req, res, next) => {
   try {
@@ -563,6 +569,9 @@ router.post('/bulk/status', (req, res, next) => {
     }
     if (!VALID_BULK_TYPES.includes(type)) {
       return res.status(400).json({ status: 'error', message: 'Invalid type. Must be movies or shows.' });
+    }
+    if (!VALID_BULK_STATUSES.includes(status)) {
+      return res.status(400).json({ status: 'error', message: `Invalid status. Must be one of: ${VALID_BULK_STATUSES.join(', ')}.` });
     }
     
     const table = type === 'shows' ? 'shows' : 'movies';
@@ -692,6 +701,9 @@ router.post('/duplicates/delete', (req, res, next) => {
     }
     
     const table = type === 'show' ? 'shows' : 'movies';
+    if (type === 'show') {
+      db.prepare('DELETE FROM episodes WHERE show_id = ?').run(id);
+    }
     db.prepare(`DELETE FROM ${table} WHERE id = ?`).run(id);
     
     res.json({ status: 'success', message: 'Duplicate removed' });

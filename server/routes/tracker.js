@@ -9,8 +9,20 @@ const watcherService = require('../services/watcherService');
 const MOVIE_AVG = 100;
 const EPISODE_AVG = 45;
 
+// ── Stats cache — avoids ~10 DB queries (+ possible TMDB fetch) per request ──
+let _statsCache = null; // { full, stats }
+let _statsCacheTimestamp = 0;
+const STATS_CACHE_TTL = 60_000; // 60 seconds
+
+const invalidateStatsCache = () => { _statsCache = null; _statsCacheTimestamp = 0; };
+
 router.get('/stats', async (req, res) => {
+  const full = req.query.full === '1';
   try {
+    if (_statsCache && _statsCache.full === full && Date.now() - _statsCacheTimestamp < STATS_CACHE_TTL) {
+      return res.json({ success: true, stats: _statsCache.stats });
+    }
+
     // 1. Movies stats — deduplicate per tmdb_id so re-watches don't inflate the runtime sum
     const movieStats = db.prepare(`
       SELECT
@@ -76,9 +88,10 @@ router.get('/stats', async (req, res) => {
     `).get() || { count: 0 };
 
     const finishedSeasons = db.prepare(`
-      SELECT COUNT(DISTINCT show_id || '-' || season_number) as count
-      FROM episodes
-      WHERE watched = 1
+      SELECT COUNT(*) as count FROM (
+        SELECT show_id, season_number FROM episodes GROUP BY show_id, season_number
+        HAVING SUM(CASE WHEN watched = 1 THEN 1 ELSE 0 END) = COUNT(*)
+      )
     `).get() || { count: 0 };
 
     // Live Active Watching Session for Tracked User
@@ -176,8 +189,8 @@ router.get('/stats', async (req, res) => {
     let longestStreak = 0;
 
     if (activeDates.length > 0) {
-      const today = new Date().toISOString().split('T')[0];
-      const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+      const today = new Date().toLocaleDateString('en-CA');
+      const yesterday = new Date(Date.now() - 86400000).toLocaleDateString('en-CA');
 
       let checkDate = new Date();
       if (!activeDates.includes(today) && activeDates.includes(yesterday)) {
@@ -188,7 +201,7 @@ router.get('/stats', async (req, res) => {
       const dateSet = new Set(activeDates);
       const curr = new Date(checkDate);
 
-      while (dateSet.has(curr.toISOString().split('T')[0])) {
+      while (dateSet.has(curr.toLocaleDateString('en-CA'))) {
         tempStreak++;
         curr.setDate(curr.getDate() - 1);
       }
@@ -218,142 +231,157 @@ router.get('/stats', async (req, res) => {
       longestStreak = maxS;
     }
 
-    // 6. Weekly Activity Graph Data (Last 7 Days)
-    const weeklyActivity = db.prepare(`
-      SELECT 
-        strftime('%w', w.watched_at) as day_index,
-        strftime('%Y-%m-%d', w.watched_at) as date_str,
-        COUNT(*) as items_count,
-        ROUND(SUM(
-          COALESCE(
-            w.runtime,
-            CASE w.type
-              WHEN 'movie' THEN m.runtime
-              WHEN 'episode' THEN e.runtime
-            END,
-            CASE w.type WHEN 'movie' THEN ? ELSE ? END
-          )
-        ) / 60.0, 1) as hours
-      FROM watch_history w
-      LEFT JOIN movies m ON w.type = 'movie' AND w.tmdb_id = m.tmdb_id
-      LEFT JOIN shows s ON w.type = 'episode' AND w.tmdb_id = s.tmdb_id
-      LEFT JOIN episodes e ON w.type = 'episode' AND s.id = e.show_id
-        AND w.season_number = e.season_number AND w.episode_number = e.episode_number
-      WHERE w.watched_at >= date('now', '-6 days')
-      GROUP BY date_str
-      ORDER BY date_str ASC
-    `).all(MOVIE_AVG, EPISODE_AVG);
+    // 6-11. Heavy analytics — only computed for full fetches (?full=1)
+    let weeklyActivity = [];
+    let genreBreakdown = [];
+    let habits = { night_owl_pct: 0, weekend_pct: 0, longest_binge: null, top_genre: null };
+    let records = { longest_movie: null, longest_series: null };
+    let achievements = [];
 
-    // 8. Genre Breakdown
-    const movieGenres = db.prepare(`SELECT genres FROM movies WHERE watched = 1 AND genres IS NOT NULL AND genres != ''`).all();
-    const showGenres = db.prepare(`SELECT genres FROM shows WHERE watched = 1 AND genres IS NOT NULL AND genres != ''`).all();
+    if (req.query.full === '1') {
+      // Weekly Activity Graph Data (Last 7 Days)
+      weeklyActivity = db.prepare(`
+        SELECT
+          strftime('%w', w.watched_at) as day_index,
+          strftime('%Y-%m-%d', w.watched_at) as date_str,
+          COUNT(*) as items_count,
+          ROUND(SUM(
+            COALESCE(
+              w.runtime,
+              CASE w.type
+                WHEN 'movie' THEN m.runtime
+                WHEN 'episode' THEN e.runtime
+              END,
+              CASE w.type WHEN 'movie' THEN ? ELSE ? END
+            )
+          ) / 60.0, 1) as hours
+        FROM watch_history w
+        LEFT JOIN movies m ON w.type = 'movie' AND w.tmdb_id = m.tmdb_id
+        LEFT JOIN shows s ON w.type = 'episode' AND w.tmdb_id = s.tmdb_id
+        LEFT JOIN episodes e ON w.type = 'episode' AND s.id = e.show_id
+          AND w.season_number = e.season_number AND w.episode_number = e.episode_number
+        WHERE w.watched_at >= date('now', '-6 days')
+        GROUP BY date_str
+        ORDER BY date_str ASC
+      `).all(MOVIE_AVG, EPISODE_AVG);
 
-    const genreCounts = {};
-    let totalGenreHits = 0;
-    [...movieGenres, ...showGenres].forEach(row => {
-      let list;
-      try {
-        if (row.genres.startsWith('[')) list = JSON.parse(row.genres);
-        else list = row.genres.split(',').map(g => g.trim());
-      } catch {
-        list = row.genres.split(',').map(g => g.trim());
-      }
-      list.filter(Boolean).forEach(g => {
-        genreCounts[g] = (genreCounts[g] || 0) + 1;
-        totalGenreHits++;
+      // Genre Breakdown
+      const movieGenres = db.prepare(`SELECT genres FROM movies WHERE watched = 1 AND genres IS NOT NULL AND genres != ''`).all();
+      const showGenres = db.prepare(`SELECT genres FROM shows WHERE watched = 1 AND genres IS NOT NULL AND genres != ''`).all();
+
+      const genreCounts = {};
+      let totalGenreHits = 0;
+      [...movieGenres, ...showGenres].forEach(row => {
+        let list;
+        try {
+          if (row.genres.startsWith('[')) list = JSON.parse(row.genres);
+          else list = row.genres.split(',').map(g => g.trim());
+        } catch {
+          list = row.genres.split(',').map(g => g.trim());
+        }
+        list.filter(Boolean).forEach(g => {
+          genreCounts[g] = (genreCounts[g] || 0) + 1;
+          totalGenreHits++;
+        });
       });
-    });
 
-    const genreBreakdown = Object.entries(genreCounts)
-      .map(([name, count]) => ({
-        name,
-        count,
-        percentage: totalGenreHits > 0 ? Math.round((count / totalGenreHits) * 100) : 0
-      }))
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 6);
+      genreBreakdown = Object.entries(genreCounts)
+        .map(([name, count]) => ({
+          name,
+          count,
+          percentage: totalGenreHits > 0 ? Math.round((count / totalGenreHits) * 100) : 0
+        }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 6);
 
-    // 9. Viewing Habits (Spotify Wrapped style)
-    const nightOwlRow = db.prepare(`
-      SELECT 
-        COUNT(*) as total,
-        SUM(CASE WHEN CAST(strftime('%H', watched_at) AS INTEGER) >= 20 OR CAST(strftime('%H', watched_at) AS INTEGER) < 4 THEN 1 ELSE 0 END) as night_count
-      FROM watch_history
-    `).get();
-    const nightOwlPct = nightOwlRow && nightOwlRow.total > 0 ? Math.round((nightOwlRow.night_count / nightOwlRow.total) * 100) : 75;
+      // Viewing Habits (Spotify Wrapped style)
+      const nightOwlRow = db.prepare(`
+        SELECT
+          COUNT(*) as total,
+          SUM(CASE WHEN CAST(strftime('%H', watched_at) AS INTEGER) >= 20 OR CAST(strftime('%H', watched_at) AS INTEGER) < 4 THEN 1 ELSE 0 END) as night_count
+        FROM watch_history
+      `).get();
+      const nightOwlPct = nightOwlRow && nightOwlRow.total > 0 ? Math.round((nightOwlRow.night_count / nightOwlRow.total) * 100) : 0;
 
-    const weekendRow = db.prepare(`
-      SELECT 
-        COUNT(*) as total,
-        SUM(CASE WHEN strftime('%w', watched_at) IN ('0', '6') THEN 1 ELSE 0 END) as weekend_count
-      FROM watch_history
-    `).get();
-    const weekendPct = weekendRow && weekendRow.total > 0 ? Math.round((weekendRow.weekend_count / weekendRow.total) * 100) : 60;
+      const weekendRow = db.prepare(`
+        SELECT
+          COUNT(*) as total,
+          SUM(CASE WHEN strftime('%w', watched_at) IN ('0', '6') THEN 1 ELSE 0 END) as weekend_count
+        FROM watch_history
+      `).get();
+      const weekendPct = weekendRow && weekendRow.total > 0 ? Math.round((weekendRow.weekend_count / weekendRow.total) * 100) : 0;
 
-    const longestBingeRow = db.prepare(`
-      SELECT date(w.watched_at) as d, COUNT(*) as ep_count, SUM(
-        COALESCE(w.runtime, e.runtime, ?)
-      ) as total_min
-      FROM watch_history w
-      LEFT JOIN shows s ON w.tmdb_id = s.tmdb_id
-      LEFT JOIN episodes e ON s.id = e.show_id
-        AND w.season_number = e.season_number AND w.episode_number = e.episode_number
-      WHERE w.type = 'episode'
-      GROUP BY d
-      ORDER BY ep_count DESC
-      LIMIT 1
-    `).get(EPISODE_AVG);
+      const longestBingeRow = db.prepare(`
+        SELECT date(w.watched_at) as d, COUNT(*) as ep_count, SUM(
+          COALESCE(w.runtime, e.runtime, ?)
+        ) as total_min
+        FROM watch_history w
+        LEFT JOIN shows s ON w.tmdb_id = s.tmdb_id
+        LEFT JOIN episodes e ON s.id = e.show_id
+          AND w.season_number = e.season_number AND w.episode_number = e.episode_number
+        WHERE w.type = 'episode'
+        GROUP BY d
+        ORDER BY ep_count DESC
+        LIMIT 1
+      `).get(EPISODE_AVG);
 
-    // 10. Personal Records
-    const longestMovie = db.prepare(`SELECT title, runtime FROM movies WHERE runtime IS NOT NULL ORDER BY runtime DESC LIMIT 1`).get();
-    const longestShow = db.prepare(`
-      SELECT s.title, COUNT(e.id) as ep_count, SUM(e.runtime) as total_runtime
-      FROM shows s JOIN episodes e ON s.id = e.show_id
-      GROUP BY s.id ORDER BY ep_count DESC LIMIT 1
-    `).get();
+      // Personal Records
+      const longestMovie = db.prepare(`SELECT title, runtime FROM movies WHERE runtime IS NOT NULL ORDER BY runtime DESC LIMIT 1`).get();
+      const longestShow = db.prepare(`
+        SELECT s.title, COUNT(e.id) as ep_count, SUM(e.runtime) as total_runtime
+        FROM shows s JOIN episodes e ON s.id = e.show_id
+        GROUP BY s.id ORDER BY ep_count DESC LIMIT 1
+      `).get();
+
+      habits = {
+        night_owl_pct: nightOwlPct,
+        weekend_pct: weekendPct,
+        longest_binge: longestBingeRow ? { episodes: longestBingeRow.ep_count, hours: (longestBingeRow.total_min / 60).toFixed(1) } : null,
+        top_genre: genreBreakdown[0]?.name || null
+      };
+
+      records = {
+        longest_movie: longestMovie || null,
+        longest_series: longestShow || null
+      };
+
+      // Achievements
+      achievements = [
+        { id: 'movie_lover', title: 'Movie Lover', desc: 'Watch 100+ movies', icon: '🍿', unlocked: movieStats.count >= 100, progress: Math.min(100, Math.round((movieStats.count / 100) * 100)) },
+        { id: 'series_addict', title: 'Series Addict', desc: 'Watch 1,000+ episodes', icon: '📺', unlocked: episodeStats.count >= 1000, progress: Math.min(100, Math.round((episodeStats.count / 1000) * 100)) },
+        { id: 'weekend_warrior', title: 'Weekend Warrior', desc: 'High weekend viewing ratio', icon: '⚔️', unlocked: weekendPct >= 50, progress: weekendPct },
+        { id: 'night_owl', title: 'Night Owl', desc: 'Watch >70% of content after 8 PM', icon: '🦉', unlocked: nightOwlPct >= 70, progress: nightOwlPct },
+        { id: 'marathoner', title: 'Marathoner', desc: 'Binge 8+ episodes in a single day', icon: '🏃', unlocked: (longestBingeRow?.ep_count || 0) >= 8, progress: Math.min(100, Math.round(((longestBingeRow?.ep_count || 0) / 8) * 100)) }
+      ];
+    }
 
     const totalMinutes = (movieStats.total_minutes || 0) + (episodeStats.total_minutes || 0);
     const totalHours = Math.round(totalMinutes / 60);
 
-    // 11. Achievements
-    const achievements = [
-      { id: 'movie_lover', title: 'Movie Lover', desc: 'Watch 100+ movies', icon: '🍿', unlocked: movieStats.count >= 100, progress: Math.min(100, Math.round((movieStats.count / 100) * 100)) },
-      { id: 'series_addict', title: 'Series Addict', desc: 'Watch 1,000+ episodes', icon: '📺', unlocked: episodeStats.count >= 1000, progress: Math.min(100, Math.round((episodeStats.count / 1000) * 100)) },
-      { id: 'weekend_warrior', title: 'Weekend Warrior', desc: 'High weekend viewing ratio', icon: '⚔️', unlocked: weekendPct >= 50, progress: weekendPct },
-      { id: 'night_owl', title: 'Night Owl', desc: 'Watch >70% of content after 8 PM', icon: '🦉', unlocked: nightOwlPct >= 70, progress: nightOwlPct },
-      { id: 'marathoner', title: 'Marathoner', desc: 'Binge 8+ episodes in a single day', icon: '🏃', unlocked: (longestBingeRow?.ep_count || 0) >= 8, progress: Math.min(100, Math.round(((longestBingeRow?.ep_count || 0) / 8) * 100)) }
-    ];
+    const stats = {
+      movies: { count: movieStats.count, minutes: movieStats.total_minutes || 0, this_month: thisMonthMovies.count || 0 },
+      episodes: { count: episodeStats.count, minutes: episodeStats.total_minutes || 0, this_month: thisMonthEpisodes.count || 0 },
+      shows: { count: episodeStats.shows_count || 0 },
+      completed_shows: completedShows.count,
+      finished_seasons: finishedSeasons.count,
+      total_minutes: totalMinutes,
+      total_hours: totalHours,
+      total_days: (totalMinutes / 60 / 24).toFixed(1),
+      this_month_hours: Math.round(((thisMonthEpisodes.minutes || 0) + (thisMonthMovies.count * 100)) / 60),
+      streaks: { current: currentStreak, longest: longestStreak },
+      habits,
+      records,
+      weekly_activity: weeklyActivity,
+      genre_breakdown: genreBreakdown,
+      achievements,
+      currently_watching: currentlyWatching,
+      now_watching: nowWatching
+    };
 
-    res.json({
-      success: true,
-      stats: {
-        movies: { count: movieStats.count, minutes: movieStats.total_minutes || 0, this_month: thisMonthMovies.count || 0 },
-        episodes: { count: episodeStats.count, minutes: episodeStats.total_minutes || 0, this_month: thisMonthEpisodes.count || 0 },
-        shows: { count: episodeStats.shows_count || 0 },
-        completed_shows: completedShows.count,
-        finished_seasons: finishedSeasons.count,
-        total_minutes: totalMinutes,
-        total_hours: totalHours,
-        total_days: (totalMinutes / 60 / 24).toFixed(1),
-        this_month_hours: Math.round(((thisMonthEpisodes.minutes || 0) + (thisMonthMovies.count * 100)) / 60),
-        streaks: { current: currentStreak, longest: longestStreak },
-        habits: {
-          night_owl_pct: nightOwlPct,
-          weekend_pct: weekendPct,
-          longest_binge: longestBingeRow ? { episodes: longestBingeRow.ep_count, hours: (longestBingeRow.total_min / 60).toFixed(1) } : { episodes: 8, hours: '6.7' },
-          top_genre: genreBreakdown[0]?.name || 'Drama'
-        },
-        records: {
-          longest_movie: longestMovie || { title: 'The Lord of the Rings', runtime: 201 },
-          longest_series: longestShow || { title: 'South Park', ep_count: 331 }
-        },
-        weekly_activity: weeklyActivity,
-        genre_breakdown: genreBreakdown,
-        achievements,
-        currently_watching: currentlyWatching,
-        now_watching: nowWatching
-      }
-    });
+    _statsCache = { full, stats };
+    _statsCacheTimestamp = Date.now();
+
+    res.json({ success: true, stats });
   } catch (error) {
     console.error('[Tracker] /stats error:', error);
     res.status(500).json({ error: 'Failed to fetch stats' });
@@ -445,7 +473,8 @@ router.get('/up-next', (req, res) => {
           ) as rn
         FROM episodes e
         JOIN shows s ON e.show_id = s.id
-        WHERE e.watched = 0 
+        WHERE e.season_number > 0
+          AND e.watched = 0
           AND (
             e.status = 'downloaded' OR (
               e.air_date IS NOT NULL AND 
@@ -497,6 +526,7 @@ router.get('/up-next', (req, res) => {
       TotalCount AS (
         SELECT show_id, COUNT(*) as total_episodes
         FROM episodes
+        WHERE season_number > 0
         GROUP BY show_id
       )
       SELECT 
@@ -545,6 +575,7 @@ router.delete('/history/:id', (req, res) => {
     if (result.changes === 0) {
       return res.status(404).json({ error: 'History entry not found' });
     }
+    invalidateStatsCache();
     res.json({ success: true });
   } catch (error) {
     console.error('[Tracker] DELETE /history/:id error:', error);
@@ -560,44 +591,39 @@ router.post('/mark-watched', async (req, res) => {
   try {
     const watchedAt = new Date().toISOString();
 
-    if (type === 'movie') {
-      const movie = db.prepare('SELECT id, runtime FROM movies WHERE tmdb_id = ?').get(tmdbId);
-      const existingMovie = db.prepare('SELECT id FROM watch_history WHERE tmdb_id = ? AND type = ?').get(tmdbId, 'movie');
-      if (existingMovie) {
-        db.prepare('UPDATE watch_history SET watched_at = ?, runtime = ? WHERE id = ?').run(watchedAt, movie ? movie.runtime : null, existingMovie.id);
-      } else {
-        db.prepare('INSERT INTO watch_history (tmdb_id, type, watched_at, runtime) VALUES (?, ?, ?, ?)').run(tmdbId, 'movie', watchedAt, movie ? movie.runtime : null);
-      }
-      if (movie) {
-        db.prepare('UPDATE movies SET watched = 1, watched_at = ? WHERE id = ?').run(watchedAt, movie.id);
-      }
-    } else if (type === 'episode') {
-      const show = db.prepare('SELECT id FROM shows WHERE tmdb_id = ? OR id = ?').get(tmdbId, tmdbId);
-      let epRuntime = null;
-      let epId = null;
-      const sNum = parseInt(season, 10);
-      const eNum = parseInt(episode, 10);
-      
-      if (show) {
-        const ep = db.prepare('SELECT id, runtime FROM episodes WHERE show_id = ? AND season_number = ? AND episode_number = ?').get(show.id, sNum, eNum);
-        if (ep) {
-          epRuntime = ep.runtime;
-          epId = ep.id;
-          db.prepare('UPDATE episodes SET watched = 1, watched_at = ? WHERE id = ?').run(watchedAt, epId);
+    db.transaction(() => {
+      if (type === 'movie') {
+        const movie = db.prepare('SELECT id, runtime FROM movies WHERE tmdb_id = ?').get(tmdbId);
+        const existingMovie = db.prepare('SELECT id FROM watch_history WHERE tmdb_id = ? AND type = ?').get(tmdbId, 'movie');
+        if (existingMovie) {
+          db.prepare('UPDATE watch_history SET watched_at = ?, runtime = ? WHERE id = ?').run(watchedAt, movie ? movie.runtime : null, existingMovie.id);
+        } else {
+          db.prepare('INSERT INTO watch_history (tmdb_id, type, watched_at, runtime) VALUES (?, ?, ?, ?)').run(tmdbId, 'movie', watchedAt, movie ? movie.runtime : null);
+        }
+        if (movie) {
+          db.prepare('UPDATE movies SET watched = 1, watched_at = ? WHERE id = ?').run(watchedAt, movie.id);
+        }
+      } else if (type === 'episode') {
+        const show = db.prepare('SELECT id FROM shows WHERE tmdb_id = ?').get(tmdbId);
+        let epRuntime = null;
+        const sNum = parseInt(season, 10);
+        const eNum = parseInt(episode, 10);
+
+        if (show) {
+          const ep = db.prepare('SELECT id, runtime FROM episodes WHERE show_id = ? AND season_number = ? AND episode_number = ?').get(show.id, sNum, eNum);
+          if (ep) {
+            epRuntime = ep.runtime;
+            db.prepare('UPDATE episodes SET watched = 1, watched_at = ?, watch_progress = 0 WHERE id = ?').run(watchedAt, ep.id);
+          }
+        }
+        const existingEp = db.prepare('SELECT id FROM watch_history WHERE tmdb_id = ? AND type = ? AND season_number = ? AND episode_number = ?').get(tmdbId, 'episode', sNum, eNum);
+        if (existingEp) {
+          db.prepare('UPDATE watch_history SET watched_at = ?, runtime = ? WHERE id = ?').run(watchedAt, epRuntime, existingEp.id);
+        } else {
+          db.prepare('INSERT INTO watch_history (tmdb_id, type, season_number, episode_number, watched_at, runtime) VALUES (?, ?, ?, ?, ?, ?)').run(tmdbId, 'episode', sNum, eNum, watchedAt, epRuntime);
         }
       }
-      const existingEp = db.prepare('SELECT id FROM watch_history WHERE tmdb_id = ? AND type = ? AND season_number = ? AND episode_number = ?').get(tmdbId, 'episode', sNum, eNum);
-      if (existingEp) {
-        db.prepare('UPDATE watch_history SET watched_at = ?, runtime = ? WHERE id = ?').run(watchedAt, epRuntime, existingEp.id);
-      } else {
-        db.prepare('INSERT INTO watch_history (tmdb_id, type, season_number, episode_number, watched_at, runtime) VALUES (?, ?, ?, ?, ?, ?)').run(tmdbId, 'episode', sNum, eNum, watchedAt, epRuntime);
-      }
-    }
-
-    // Force WAL checkpoint so the subsequent up-next query sees this write.
-    // node:sqlite DatabaseSync with mmap may otherwise return stale data on
-    // immediate re-reads of the same connection.
-    db.exec('PRAGMA wal_checkpoint(TRUNCATE);');
+    })();
 
     // Trigger sync to Simkl in background if enabled
     try {
@@ -607,6 +633,7 @@ router.post('/mark-watched', async (req, res) => {
       // ignore
     }
 
+    invalidateStatsCache();
     res.json({ success: true });
   } catch (error) {
     console.error('[Tracker] /mark-watched error:', error);
@@ -631,6 +658,15 @@ router.post('/mark-unwatched', async (req, res) => {
       }
     }
 
+    // Trigger sync to Simkl in background if enabled
+    try {
+      const simklService = require('../services/simklService');
+      simklService.pushToSimklOnWatched(tmdbId, type, false, season, episode).catch(e => console.error('[SimklSync] background push error:', e.message));
+    } catch {
+      // ignore
+    }
+
+    invalidateStatsCache();
     res.json({ success: true });
   } catch (error) {
     console.error('[Tracker] /mark-unwatched error:', error);
@@ -657,6 +693,12 @@ router.get('/this-week', (req, res) => {
     const fromStr = formatLocalDate(fromDate);
     const toStr = formatLocalDate(toDate);
 
+    // Raw SQL window is widened so localized air dates (shifted forward by the
+    // configured timezone) can be re-filtered in JS to the true week range.
+    const wideFromDate = new Date(fromDate);
+    wideFromDate.setDate(wideFromDate.getDate() - 3);
+    const wideFromStr = formatLocalDate(wideFromDate);
+
     // Movies releasing this week (not yet watched)
     const movies = db.prepare(`
       SELECT id, tmdb_id, title, poster_path, overview, release_date, runtime
@@ -680,11 +722,11 @@ router.get('/this-week', (req, res) => {
         s.poster_path
       FROM episodes e
       JOIN shows s ON e.show_id = s.id
-      WHERE e.air_date >= date(?, '-1 day') 
+      WHERE e.air_date >= date(?, '-3 day') 
         AND e.air_date <= ? 
         AND e.watched = 0
       ORDER BY air_date ASC, s.title, e.season_number, e.episode_number
-    `).all(fromStr, toStr);
+    `).all(wideFromStr, toStr);
 
     const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
@@ -713,10 +755,10 @@ router.get('/this-week', (req, res) => {
       success: true,
       weekRange: { from: fromStr, to: toStr },
       movies: movies.map(m => ({ ...m, ...getDayLabel(m.release_date, 'movie') })),
-      episodes: episodes.map(ep => {
-        const localized = localizeAirDate(ep.air_date);
-        return { ...ep, air_date: localized, ...getDayLabel(localized, 'episode') };
-      })
+      episodes: episodes
+        .map(ep => ({ ...ep, air_date: localizeAirDate(ep.air_date) }))
+        .filter(ep => ep.air_date >= fromStr && ep.air_date <= toStr)
+        .map(ep => ({ ...ep, ...getDayLabel(ep.air_date, 'episode') }))
     });
   } catch (error) {
     console.error('[Tracker] /this-week error:', error);

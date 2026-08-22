@@ -88,10 +88,21 @@ export default function SystemTasks() {
     fetchLogs();
     setLoading(false);
     const interval = setInterval(() => {
+      if (document.visibilityState === 'hidden') return;
       fetchTasks();
       fetchLogs();
     }, 3000);
-    return () => clearInterval(interval);
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        fetchTasks();
+        fetchLogs();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
   }, [fetchTasks, fetchLogs]);
 
   const isRunning = (task) => task.status === 'running' || recentlyRan[task.id];

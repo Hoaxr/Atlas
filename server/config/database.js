@@ -934,6 +934,33 @@ const MIGRATIONS = [
         db.exec('ALTER TABLE shows DROP COLUMN calendar_day_offset;');
       }
     }
+  },
+  {
+    id: 33,
+    name: 'unique_requests_per_media',
+    run: (db) => {
+      // Remove duplicate requests first (keep the oldest), then enforce uniqueness
+      db.exec(`
+        DELETE FROM requests WHERE id NOT IN (
+          SELECT MIN(id) FROM requests GROUP BY tmdb_id, type
+        );
+      `);
+      db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_requests_tmdb_type ON requests(tmdb_id, type);');
+    }
+  },
+  {
+    id: 34,
+    name: 'perf_indexes',
+    run: (db) => {
+      db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_logs_created_at ON logs(created_at);
+        CREATE INDEX IF NOT EXISTS idx_watch_history_watched_at ON watch_history(watched_at);
+        CREATE INDEX IF NOT EXISTS idx_movies_title_nocase ON movies(title COLLATE NOCASE);
+        CREATE INDEX IF NOT EXISTS idx_shows_title_nocase ON shows(title COLLATE NOCASE);
+        CREATE INDEX IF NOT EXISTS idx_play_history_created_at ON play_history(created_at);
+        CREATE INDEX IF NOT EXISTS idx_indexer_stats_created_at ON indexer_stats(created_at);
+      `);
+    }
   }
 ];
 

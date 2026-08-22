@@ -105,7 +105,8 @@ class NotificationService {
               
               const body = Buffer.concat(parts);
               await axios.post(discordUrl, body, {
-                headers: { 'Content-Type': `multipart/form-data; boundary=${boundary}` }
+                headers: { 'Content-Type': `multipart/form-data; boundary=${boundary}` },
+                timeout: 10000
               });
               return; // Sent with attachment, skip the plain JSON post below
             }
@@ -115,7 +116,7 @@ class NotificationService {
         }
 
         // Fallback: send without poster attachment
-        await axios.post(discordUrl, { embeds: [embed] });
+        await axios.post(discordUrl, { embeds: [embed] }, { timeout: 10000 });
       } catch (err) {
         console.error('[NotificationService] Discord error:', err.message);
       }
@@ -124,17 +125,20 @@ class NotificationService {
     if (telegramToken && telegramChatId) {
       try {
         let caption = '';
+        // Escape user-controlled text so Markdown parse errors can't break delivery
+        const escMd = (t) => String(t ?? '').replace(/([_*`\\[])/g, '\\$1');
+
         if (title === 'Playback Started' && itemTitle) {
           caption = `🎬 *Playback Started*\n\n`;
-          caption += `*${itemTitle}*\n`;
-          caption += `${message}\n`;
+          caption += `*${escMd(itemTitle)}*\n`;
+          caption += `${escMd(message)}\n`;
           if (metadata.type) caption += `📺 ${metadata.type}`;
           if (metadata.duration) caption += ` · ⏱ ${metadata.duration}`;
           if (metadata.server) caption += `\n🖥 ${metadata.server}`;
         } else if (itemTitle) {
-          caption = `*${title}*\n${itemTitle}\n${description}`;
+          caption = `*${escMd(title)}*\n${escMd(itemTitle)}\n${escMd(description)}`;
         } else {
-          caption = `*${title}*\n${description}`;
+          caption = `*${escMd(title)}*\n${escMd(description)}`;
         }
 
         let telegramPhotoSent = false;
@@ -162,7 +166,8 @@ class NotificationService {
 
               const body = Buffer.concat(parts);
               await axios.post(`https://api.telegram.org/bot${telegramToken}/sendPhoto`, body, {
-                headers: { 'Content-Type': `multipart/form-data; boundary=${boundary}` }
+                headers: { 'Content-Type': `multipart/form-data; boundary=${boundary}` },
+                timeout: 10000
               });
               telegramPhotoSent = true;
             }
@@ -177,7 +182,7 @@ class NotificationService {
             chat_id: telegramChatId,
             text: caption,
             parse_mode: 'Markdown'
-          });
+          }, { timeout: 10000 });
         }
       } catch (err) {
         console.error('[NotificationService] Telegram notification failed:', err.response?.data || err.message);
@@ -188,6 +193,7 @@ class NotificationService {
       try {
         const titleText = itemTitle || title;
         await axios.post('https://api.pushover.net/1/messages.json', null, {
+          timeout: 10000,
           params: {
             token: pushoverAppToken,
             user: pushoverUserKey,

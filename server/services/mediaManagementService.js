@@ -188,10 +188,16 @@ const runMediaManagement = async () => {
   let importedAnything = false;
 
   try {
-    const torrentList = await downloadClientService.getTorrents() || [];
+    let torrentList;
+    try {
+      torrentList = await downloadClientService.getTorrents() || [];
+    } catch (clientErr) {
+      console.warn('[MediaManagement] Download client unreachable — skipping this run:', clientErr.message);
+      return 'skipped';
+    }
     
     // Filter finished torrents
-    const finishedTorrents = torrentList.filter(t => t.progress === 1);
+    const finishedTorrents = torrentList.filter(t => t.progress >= 100);
 
     const pendingMovies = db.prepare("SELECT * FROM movies WHERE status IN ('downloading', 'monitored')").all();
     const pendingEpisodes = db.prepare(`

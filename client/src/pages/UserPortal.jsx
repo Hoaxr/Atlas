@@ -27,8 +27,13 @@ export default function UserPortal() {
   const navigate = useNavigate();
   const searchTimerRef = useRef(null);
 
-  const userStr = localStorage.getItem('atlas_user');
-  const user = userStr ? JSON.parse(userStr) : null;
+  let user = null;
+  try {
+    const userStr = localStorage.getItem('atlas_user');
+    user = userStr ? JSON.parse(userStr) : null;
+  } catch {
+    user = null;
+  }
 
   const fetchData = async () => {
     try {

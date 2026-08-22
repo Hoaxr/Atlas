@@ -230,12 +230,20 @@ class CleanupWorker {
         lowPriority,
         total: scored.length,
         franchiseCount: franchiseIds.size,
-        lastUpdated: Date.now()
+        lastUpdated: Date.now(),
+        lastError: null,
+        lastErrorAt: null
       };
-      
+
       console.log(`[CleanupWorker] Calculation complete. Found ${scored.length} candidates.`);
     } catch (err) {
       console.error('[CleanupWorker] Error calculating deletable:', err);
+      // Keep stale candidates but surface the failure so the UI can show the cache is outdated.
+      this.cache = {
+        ...(this.cache || { all: [], highPriority: [], mediumPriority: [], lowPriority: [], total: 0, franchiseCount: 0 }),
+        lastError: err.message,
+        lastErrorAt: Date.now()
+      };
     }
   }
 

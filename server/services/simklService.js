@@ -13,7 +13,8 @@ const getSimklAccessToken = () => {
 };
 
 const simklApi = axios.create({
-  baseURL: 'https://api.simkl.com'
+  baseURL: 'https://api.simkl.com',
+  timeout: 30000
 });
 
 const simklRequest = async (config) => {
@@ -45,7 +46,7 @@ const getDeviceCode = async () => {
   if (!clientId) {
     throw new Error('Simkl Client ID is not configured.');
   }
-  const response = await axios.get(`https://api.simkl.com/oauth/pin?client_id=${clientId}`);
+  const response = await axios.get(`https://api.simkl.com/oauth/pin?client_id=${encodeURIComponent(clientId)}`, { timeout: 30000 });
   // response.data: { user_code, verification_url, expires_in, interval }
   return response.data;
 };
@@ -59,7 +60,7 @@ const pollDeviceToken = async (userCode) => {
   if (!clientId) {
     throw new Error('Simkl Client ID is not configured.');
   }
-  const response = await axios.get(`https://api.simkl.com/oauth/pin/${userCode}?client_id=${clientId}`);
+  const response = await axios.get(`https://api.simkl.com/oauth/pin/${encodeURIComponent(userCode)}?client_id=${encodeURIComponent(clientId)}`, { timeout: 30000 });
   // If authorized, returns: { result: "OK", access_token: "..." }
   return response.data;
 };
@@ -117,6 +118,7 @@ const syncWatchedShows = async () => {
   try {
     const response = await simklApi.get('/sync/all-items/shows?extended=full');
     const showsList = response.data.shows || [];
+    const showsNeedingDetail = [];
 
     const count = db.transaction((list) => {
       let localCount = 0;
@@ -177,6 +179,14 @@ const syncWatchedShows = async () => {
             }
           }
         }
+
+        // Queue library shows without episode-level detail for the deep pass —
+        // Simkl is the leading source of watched state, so we fetch per-show
+        // progress (watched_episodes_count / last_watched) for those separately.
+        if (show && !(item.seasons || []).some(se => (se.episodes || []).length)) {
+          const simklId = item.show?.ids?.simkl || item.ids?.simkl;
+          if (simklId) showsNeedingDetail.push({ simklId, tmdbId, showId: show.id });
+        }
         
         if (show) localCount++;
       }
@@ -184,6 +194,52 @@ const syncWatchedShows = async () => {
     })(showsList);
 
     console.log(`[SimklSync] Synced ${count} watched shows and episode watched states (${showsList.length} shows returned from Simkl)`);
+
+    // ── Deep pass: sequential backfill from per-show progress ──
+    // Simkl's all-items response often lacks episode lists. For library shows
+    // without one, fetch /sync/all-items/shows/{simklId} and mark episodes
+    // watched sequentially up to `last_watched` (SxxEyy) using the local
+    // episode ordering — Simkl is treated as the leading source of truth.
+    let deepSynced = 0;
+    for (const entry of showsNeedingDetail) {
+      try {
+        const r = await simklRequest({ method: 'GET', url: `/sync/all-items/shows/${entry.simklId}` });
+        const info = r.data?.shows?.[0];
+        if (!info) continue;
+        const watchedCount = Number(info.watched_episodes_count) || 0;
+        const lastWatched = String(info.last_watched || '').toUpperCase();
+        if (watchedCount <= 0 || !/S(\d{1,2})E(\d{1,4})/.test(lastWatched)) continue;
+
+        const m = lastWatched.match(/S(\d{1,2})E(\d{1,4})/);
+        const lastSeason = parseInt(m[1], 10);
+        const lastEpisode = parseInt(m[2], 10);
+        const watchedAt = info.last_watched_at || new Date().toISOString();
+
+        const eps = db.prepare('SELECT id, season_number, episode_number, runtime, watched FROM episodes WHERE show_id = ? ORDER BY season_number ASC, episode_number ASC').all(entry.showId);
+        const cutoff = eps.findIndex(e => e.season_number === lastSeason && e.episode_number === lastEpisode);
+        if (cutoff === -1) continue;
+
+        const toMark = eps.slice(0, cutoff + 1).filter(e => !e.watched);
+        if (toMark.length === 0) continue;
+
+        const insertDeepHistory = db.prepare('INSERT OR IGNORE INTO watch_history (tmdb_id, type, season_number, episode_number, watched_at, runtime) VALUES (?, \'episode\', ?, ?, ?, ?)');
+        db.transaction(() => {
+          for (const ep of toMark) {
+            db.prepare("UPDATE episodes SET watched = 1, watched_at = COALESCE(watched_at, ?), watch_progress = 0 WHERE id = ?").run(watchedAt, ep.id);
+            insertDeepHistory.run(entry.tmdbId, ep.season_number, ep.episode_number, watchedAt, ep.runtime);
+          }
+        })();
+
+        deepSynced++;
+        console.log(`[SimklSync] Deep-synced "${info.show?.title || entry.tmdbId}": marked ${toMark.length} episodes up to ${lastWatched}`);
+        await new Promise(res => setTimeout(res, 300)); // throttle API usage
+      } catch (err) {
+        console.error(`[SimklSync] Deep sync failed for simklId ${entry.simklId}:`, err.message);
+      }
+    }
+    if (showsNeedingDetail.length > 0) {
+      console.log(`[SimklSync] Deep pass: ${deepSynced}/${showsNeedingDetail.length} library shows backfilled from Simkl progress`);
+    }
     return count;
   } catch (error) {
     if (error.response?.status === 401) {
@@ -353,7 +409,31 @@ const getUserStats = async () => {
   }
 };
 
+const init = () => {
+  // Simkl is the leading source of watched state — sync every 6 hours so
+  // playback progress made elsewhere flows into the library automatically.
+  try {
+    const taskRegistry = require('./taskRegistry');
+    const { registerJob } = require('../utils/cronRegistry');
+    const cron = require('node-cron');
+
+    taskRegistry.registerTask(
+      'simkl_sync',
+      'Simkl Watched Sync',
+      'Imports watched movies and episode states from Simkl into the library.',
+      '0 */6 * * *',
+      syncWatched
+    );
+    const job = cron.schedule('0 */6 * * *', () => taskRegistry.executeTask('simkl_sync').catch(err => console.error('[SimklSync] Scheduled sync failed:', err.message)));
+    registerJob(job);
+    console.log('[SimklSync] Scheduler initialized (every 6 hours).');
+  } catch (err) {
+    console.error('[SimklSync] Failed to initialize scheduler:', err.message);
+  }
+};
+
 module.exports = {
+  init,
   getDeviceCode,
   pollDeviceToken,
   syncWatched,

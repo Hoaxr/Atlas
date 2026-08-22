@@ -104,11 +104,18 @@ const processScannedFiles = async (allFiles, scanProgress, mode, nextStage) => {
     
     const fileDir = file.parentPath || file.path;
     let fullPath = path.join(fileDir, file.name);
-    const { title, year, isShow, seasonNumber, episodeNumber, episodeEnd, tmdbId: explicitTmdbId, imdbId: explicitImdbId } = parseMediaTitle(file.name, fileDir);
-    
+    const { title, year, isShow, seasonNumber, episodeNumber, episodeEnd, tmdbId: explicitTmdbId, imdbId: explicitImdbId } = parseMediaTitle(file.name, fileDir, file.showContext);
+
     if (!title && !explicitTmdbId && !explicitImdbId) {
       scanProgress.skippedCount++;
       scanProgress.skippedFiles.push({ name: file.name, reason: 'Could not parse title from filename', path: file.path });
+      scanProgress.processedFiles++;
+      return;
+    }
+
+    if (isShow && !episodeNumber) {
+      scanProgress.skippedCount++;
+      scanProgress.skippedFiles.push({ name: file.name, reason: 'no episode number detected', path: file.path });
       scanProgress.processedFiles++;
       return;
     }
@@ -126,12 +133,24 @@ const processScannedFiles = async (allFiles, scanProgress, mode, nextStage) => {
       let showId = null;
       let tmdbId = null;
 
-      const existingShow = db.prepare('SELECT id, tmdb_id FROM shows WHERE folder_path = ? OR (tmdb_id IS NOT NULL AND tmdb_id = ?) OR title = ? COLLATE NOCASE').get(showFolderPath, explicitTmdbId || -1, title);
-      
+      let existingShow = null;
+      if (year) {
+        existingShow = db.prepare('SELECT id, tmdb_id FROM shows WHERE folder_path = ? OR (tmdb_id IS NOT NULL AND tmdb_id = ?) OR (title = ? COLLATE NOCASE AND year = ?)').get(showFolderPath, explicitTmdbId || -1, title, year);
+      }
+      if (!existingShow) {
+        existingShow = db.prepare('SELECT id, tmdb_id FROM shows WHERE folder_path = ? OR (tmdb_id IS NOT NULL AND tmdb_id = ?) OR title = ? COLLATE NOCASE').get(showFolderPath, explicitTmdbId || -1, title);
+      }
+
       if (existingShow) {
         showId = existingShow.id;
         tmdbId = existingShow.tmdb_id;
-        
+
+        // Keep folder_path in sync if the show moved
+        const currentFolder = db.prepare('SELECT folder_path FROM shows WHERE id = ?').get(showId)?.folder_path;
+        if (currentFolder && currentFolder !== showFolderPath) {
+          db.prepare('UPDATE shows SET folder_path = ? WHERE id = ?').run(showFolderPath, showId);
+        }
+
         // Update tmdb_status if missing
         if (tmdbId) {
           try {
@@ -211,9 +230,10 @@ const processScannedFiles = async (allFiles, scanProgress, mode, nextStage) => {
           } else {
             tmdbId = matchedShow.id;
             
-            const existingMonitored = db.prepare('SELECT id, tmdb_id, folder_size FROM shows WHERE tmdb_id = ?').get(tmdbId);
-            const showRating = matchedShow.vote_average || 0;
-            showId = existingMonitored ? existingMonitored.id : null;
+          const existingMonitored = db.prepare('SELECT id, tmdb_id, folder_size FROM shows WHERE tmdb_id = ?').get(tmdbId);
+          const showRating = matchedShow.vote_average || 0;
+          showId = existingMonitored ? existingMonitored.id : null;
+          let racedDuplicate = false;
 
             // Fetch full TMDB details for status and accurate data
             let fullShow = null;
@@ -256,23 +276,32 @@ const processScannedFiles = async (allFiles, scanProgress, mode, nextStage) => {
                 ? Math.round(fullShow.episode_run_time.reduce((a, b) => a + b, 0) / fullShow.episode_run_time.length)
                 : null;
 
-              const insertRes = db.prepare(`
-                INSERT INTO shows (tmdb_id, title, year, poster_path, overview, status, folder_path, rating, folder_size, quality_profile_id, tmdb_status, runtime)
-                VALUES (?, ?, ?, ?, ?, 'downloaded', ?, ?, ?, ?, ?, ?)
-              `).run(
-                matchedShow.id,
-                matchedShow.name || matchedShow.title,
-                showYear,
-                matchedShow.poster_path,
-                matchedShow.overview,
-                showFolderPath,
-                showRating,
-                folderSize,
-                defaultProfileId,
-                tmdbStatus,
-                showRuntime
-              );
-              showId = insertRes.lastInsertRowid;
+              try {
+                const insertRes = db.prepare(`
+                  INSERT INTO shows (tmdb_id, title, year, poster_path, overview, status, folder_path, rating, folder_size, quality_profile_id, tmdb_status, runtime)
+                  VALUES (?, ?, ?, ?, ?, 'downloaded', ?, ?, ?, ?, ?, ?)
+                `).run(
+                  matchedShow.id,
+                  matchedShow.name || matchedShow.title,
+                  showYear,
+                  matchedShow.poster_path,
+                  matchedShow.overview,
+                  showFolderPath,
+                  showRating,
+                  folderSize,
+                  defaultProfileId,
+                  tmdbStatus,
+                  showRuntime
+                );
+                showId = insertRes.lastInsertRowid;
+              } catch (insertErr) {
+                if (!String(insertErr.code || '').startsWith('SQLITE_CONSTRAINT')) throw insertErr;
+                const dupRow = db.prepare('SELECT id FROM shows WHERE tmdb_id = ?').get(matchedShow.id);
+                if (!dupRow) throw insertErr;
+                showId = dupRow.id;
+                racedDuplicate = true;
+              }
+              if (!racedDuplicate) {
               if (matchedShow.poster_path) await imageService.ensurePoster('shows', matchedShow.id, matchedShow.poster_path).catch(err => console.error(`[Scanner] Poster fetch failed for show ${matchedShow.id}:`, err.message));
 
               // Synchronously fetch and insert episodes for the newly discovered show
@@ -296,12 +325,15 @@ const processScannedFiles = async (allFiles, scanProgress, mode, nextStage) => {
                 console.error(`Failed to fetch episodes for show ${title}:`, epErr.message);
               }
               scanProgress.addedEpisodesCount += episodeCount;
+              }
             }
+            if (!racedDuplicate) {
             scanProgress.addedShowsCount++;
             scanProgress.addedShows.push({ title: matchedShow.name || matchedShow.title });
+            }
           }
 
-          // Apply Trakt/Simkl watched status
+          // Apply Simkl watched status
           if (tmdbId) {
             try {
               if (isWatchedSyncEnabled()) {
@@ -379,7 +411,7 @@ const processScannedFiles = async (allFiles, scanProgress, mode, nextStage) => {
           resolution = existingEp.resolution;
           codec = existingEp.codec;
           audio = existingEp.audio || audio;
-          resName = 'Unknown ' + resolution;
+          resName = null;
         } else {
           // Probe file
           try {
@@ -387,7 +419,7 @@ const processScannedFiles = async (allFiles, scanProgress, mode, nextStage) => {
               const meta = await getMediaMetadata(fullPath);
               if (resolution === 'Unknown' && meta.resolution) {
                 resolution = meta.resolution;
-                resName = 'Unknown ' + resolution;
+                resName = null;
               }
               if (codec === 'Unknown' && meta.codec) {
                 codec = meta.codec;
@@ -540,28 +572,36 @@ const processScannedFiles = async (allFiles, scanProgress, mode, nextStage) => {
             scanProgress.addedMoviesCount++;
             scanProgress.addedMovies.push({ title: matchedMovie.title, year: movieYear });
           } else {
-            db.prepare(`
-              INSERT INTO movies (tmdb_id, title, year, poster_path, overview, status, file_path, rating, file_size, quality_profile_id, release_date, runtime)
-              VALUES (?, ?, ?, ?, ?, 'downloaded', ?, ?, ?, ?, ?, ?)
-            `).run(
-              matchedMovie.id,
-              matchedMovie.title,
-              movieYear,
-              matchedMovie.poster_path,
-              matchedMovie.overview,
-              fullPath,
-              movieRating,
-              fileSize,
-              defaultProfileId,
-              matchedMovie.release_date || null,
-              matchedMovie.runtime || null
-            );
+            try {
+              db.prepare(`
+                INSERT INTO movies (tmdb_id, title, year, poster_path, overview, status, file_path, rating, file_size, quality_profile_id, release_date, runtime)
+                VALUES (?, ?, ?, ?, ?, 'downloaded', ?, ?, ?, ?, ?, ?)
+              `).run(
+                matchedMovie.id,
+                matchedMovie.title,
+                movieYear,
+                matchedMovie.poster_path,
+                matchedMovie.overview,
+                fullPath,
+                movieRating,
+                fileSize,
+                defaultProfileId,
+                matchedMovie.release_date || null,
+                matchedMovie.runtime || null
+              );
+            } catch (insertErr) {
+              if (!String(insertErr.code || '').startsWith('SQLITE_CONSTRAINT')) throw insertErr;
+              const dupRow = db.prepare('SELECT id FROM movies WHERE tmdb_id = ?').get(matchedMovie.id);
+              if (!dupRow) throw insertErr;
+              db.prepare('UPDATE movies SET file_path = ?, status = ?, rating = ?, file_size = ?, quality_profile_id = COALESCE(quality_profile_id, ?) WHERE tmdb_id = ?')
+                .run(fullPath, 'downloaded', movieRating, fileSize, defaultProfileId, matchedMovie.id);
+            }
             scanProgress.addedMoviesCount++;
             if (matchedMovie.poster_path) await imageService.ensurePoster('movies', matchedMovie.id, matchedMovie.poster_path).catch(err => console.error(`[Scanner] Poster fetch failed for movie ${matchedMovie.id}:`, err.message));
             scanProgress.addedMovies.push({ title: matchedMovie.title, year: movieYear });
           }
 
-          // Apply Trakt/Simkl watched status
+          // Apply Simkl watched status
           try {
             if (isWatchedSyncEnabled()) {
               db.prepare("UPDATE movies SET watched = 1 WHERE tmdb_id = ? AND EXISTS (SELECT 1 FROM watched_tmdb WHERE tmdb_id = ? AND type = 'movie')").run(matchedMovie.id, matchedMovie.id);
@@ -602,7 +642,7 @@ const processScannedFiles = async (allFiles, scanProgress, mode, nextStage) => {
           allSubtitles = [...new Set(allSubtitles)];
 
           db.prepare("UPDATE movies SET resolution = ?, codec = ?, audio = ?, scene_name = COALESCE(NULLIF(scene_name, ''), ?) WHERE tmdb_id = ?")
-            .run(resolution || null, codec || null, audio || null, 'Unknown ' + (resolution || '1080p'), matchedMovie.id);
+            .run(resolution || null, codec || null, audio || null, null, matchedMovie.id);
 
           if (allSubtitles.length > 0) {
             const movieId = existingMonitored?.id || db.prepare('SELECT id FROM movies WHERE tmdb_id = ?').get(matchedMovie.id)?.id;

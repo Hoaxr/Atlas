@@ -4,6 +4,7 @@ import { DownloadCloud, ArrowDown, ArrowUp, Activity, Film, Tv, Play, Pause, Tra
 import { customAlert, customConfirm } from '../utils/alerts';
 import useWebSocket from '../lib/useWebSocket';
 import StickyBar from '../components/shared/StickyBar';
+import InlineError from '../components/shared/InlineError';
 import { useStickyBar } from '../lib/useStickyBar';
 import { parseResolution, parseCodec, parseAudio } from '../lib/format';
 
@@ -85,6 +86,8 @@ export default function Downloads() {
   const { onEvent } = useWebSocket();
   const [downloads, setDownloads] = useState([]);
   const [stats, setStats] = useState({ dl_info_speed: 0, up_info_speed: 0 });
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [clientError, setClientError] = useState(false);
 
   useEffect(() => {
     // Initial fetch
@@ -95,6 +98,8 @@ export default function Downloads() {
       if (data.type === 'TORRENTS_UPDATE' && data.data) {
         setDownloads(data.data.torrents || []);
         setStats(data.data.clientStats || { dl_info_speed: 0, up_info_speed: 0 });
+        setInitialLoading(false);
+        setClientError(data.clientConnected === false);
       }
     });
 
@@ -116,11 +121,16 @@ export default function Downloads() {
 
       if (torrentsResult.status === 'fulfilled' && torrentsResult.value.data.status === 'success' && torrentsResult.value.data.data) {
         setDownloads(torrentsResult.value.data.data);
+        setClientError(false);
       } else {
         setDownloads([]);
+        setClientError(true);
       }
     } catch (err) {
       console.error('Failed to fetch client data', err);
+      setClientError(true);
+    } finally {
+      setInitialLoading(false);
     }
   };
 
@@ -137,8 +147,8 @@ export default function Downloads() {
   };
 
   const formatEta = (totalSize, progress, speed) => {
-    if (!speed || speed <= 0 || !totalSize || progress >= 1) return null;
-    const remainingBytes = totalSize * (1 - progress);
+    if (!speed || speed <= 0 || !totalSize || progress >= 99.5) return null;
+    const remainingBytes = totalSize * (1 - progress / 100);
     const seconds = Math.floor(remainingBytes / speed);
     if (seconds <= 0) return 'Few seconds remaining';
     if (seconds < 60) return `${seconds}s remaining`;
@@ -152,20 +162,27 @@ export default function Downloads() {
 
   const getStateBadge = (state) => {
     const s = (state || '').toLowerCase();
-    if (s.includes('download') || s.includes('dl')) {
-      return { class: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30', dot: 'bg-emerald-400' };
-    }
-    if (s.includes('upload') || s.includes('seed') || s.includes('up')) {
-      return { class: 'bg-cyan-500/15 text-cyan-400 border-cyan-500/30', dot: 'bg-cyan-400' };
-    }
-    if (s.includes('pause') || s.includes('stop')) {
+    if (s.startsWith('paused') || s.startsWith('stopped')) {
       return { class: 'bg-amber-500/15 text-amber-400 border-amber-500/30', dot: 'bg-amber-400' };
     }
-    if (s.includes('error') || s.includes('stall')) {
+    if (s.includes('error')) {
+      return { class: 'bg-rose-500/15 text-rose-400 border-rose-500/30', dot: 'bg-rose-400' };
+    }
+    if (s.includes('download') || s.endsWith('dl')) {
+      return { class: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30', dot: 'bg-emerald-400' };
+    }
+    if (s.includes('upload') || s.includes('seed')) {
+      return { class: 'bg-cyan-500/15 text-cyan-400 border-cyan-500/30', dot: 'bg-cyan-400' };
+    }
+    if (s.startsWith('stall')) {
       return { class: 'bg-rose-500/15 text-rose-400 border-rose-500/30', dot: 'bg-rose-400' };
     }
     return { class: 'bg-slate-700/30 text-slate-400 border-slate-700/50', dot: 'bg-slate-400' };
   };
+
+  const transferRatio = stats.up_info_data !== null && stats.up_info_data !== undefined && Number(stats.dl_info_data) > 0
+    ? (stats.up_info_data / stats.dl_info_data).toFixed(2)
+    : null;
 
   return (
     <div className="space-y-4 max-w-6xl mx-auto">
@@ -212,14 +229,25 @@ export default function Downloads() {
             <div className="flex items-center justify-between mt-1">
               <p className="text-sm font-semibold text-slate-400">Total Traffic</p>
               <div className="flex flex-col text-xs font-mono text-cyan-400 text-right space-y-0.5">
-                <span className="flex items-center justify-end gap-1.5 text-slate-400">Ratio: <strong>{((stats.dl_info_speed && stats.up_info_speed) ? (stats.up_info_speed / stats.dl_info_speed).toFixed(2) : '1.00')}</strong></span>
+                {transferRatio !== null && (
+                  <span className="flex items-center justify-end gap-1.5 text-slate-400">Ratio: <strong>{transferRatio}</strong></span>
+                )}
               </div>
             </div>
           </div>
         </div>
       </div>
 
-      {downloads.length > 0 ? (
+      {clientError && (
+        <InlineError message="Download client not reachable" onRetry={fetchClientData} />
+      )}
+
+      {initialLoading ? (
+        <div className="glass-panel flex flex-col items-center justify-center h-[320px] rounded-2xl border border-white/5 shadow-xl">
+          <div className="w-8 h-8 border-2 border-emerald-500/50 border-t-emerald-400 rounded-full animate-spin" />
+          <p className="text-sm text-slate-400 mt-4">Loading downloads...</p>
+        </div>
+      ) : downloads.length > 0 ? (
         <div className="glass-panel p-4 sm:p-6 rounded-2xl border border-white/5 shadow-xl">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-base sm:text-lg font-bold text-slate-100 flex items-center gap-2">
@@ -233,7 +261,7 @@ export default function Downloads() {
           <div className="space-y-3">
             {downloads.map(t => {
               const totalSize = t.total_size || t.size || 0;
-              const progressPct = Math.min(100, Math.max(0, Math.round((t.progress || 0) * 100)));
+              const progressPct = Math.min(100, Math.max(0, Math.round(t.progress || 0)));
               const eta = formatEta(totalSize, t.progress || 0, t.dlspeed || 0);
               const info = parseReleaseInfo(t.name);
               const stateBadge = getStateBadge(t.state);

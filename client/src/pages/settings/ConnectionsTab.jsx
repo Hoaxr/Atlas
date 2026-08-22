@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Server, BellRing, Save, CheckSquare, Square, Link, Loader2, Key } from 'lucide-react';
+import { BellRing, Save, CheckSquare, Square, Link, Loader2, Key } from 'lucide-react';
 import api from '../../lib/api';
 import { customAlert, customConfirm } from '../../utils/alerts';
 import PasswordInput from '../../components/shared/PasswordInput';
@@ -31,7 +31,6 @@ export default function ConnectionsTab({
   const [simklPulling, setSimklPulling] = useState(false);
   const [testStatuses, setTestStatuses] = useState({ plex: null, jellyfin: null, emby: null });
   const [testingMedia, setTestingMedia] = useState({ plex: false, jellyfin: false, emby: false });
-  const [traktImporting, setTraktImporting] = useState(false);
     
   // Plex OAuth state
   const [plexOAuth, setPlexOAuth] = useState({
@@ -234,38 +233,6 @@ export default function ConnectionsTab({
     }
   };
 
-  const handleTraktImport = async (e) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
-
-    for (let i = 0; i < files.length; i++) {
-      if (!files[i].name.endsWith('.json')) {
-        customAlert('Please upload only valid JSON files');
-        return;
-      }
-    }
-
-    setTraktImporting(true);
-    try {
-      const formData = new FormData();
-      for (let i = 0; i < files.length; i++) {
-        formData.append('files', files[i]);
-      }
-      
-      const res = await api.post('/trakt/import', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      });
-      
-      if (res.data.success) {
-        customAlert(res.data.message);
-      }
-    } catch (error) {
-      customAlert(error.response?.data?.error || 'Failed to import Trakt data');
-    } finally {
-      setTraktImporting(false);
-      e.target.value = null; // reset input
-    }
-  };
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
@@ -461,50 +428,7 @@ export default function ConnectionsTab({
             )}
           </div>
           
-          {/* Trakt Import */}
-          <div className="p-3 sm:p-4 bg-slate-800/30 rounded-xl border border-slate-700/50 space-y-4">
-            <div className="flex items-center gap-3">
-              <h3 className="text-sm font-bold text-red-500">Trakt Import</h3>
-            </div>
-            <p className="text-xs text-slate-500">Import your watched history from a Trakt JSON export to keep your watched status even after deleting media.</p>
-            <div className="grid grid-cols-1 gap-4">
-              <div>
-                <label className="flex items-center gap-2 text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">
-                  <span>Upload JSON Export</span>
-                </label>
-                <div className="relative">
-                  <input 
-                    type="file" 
-                    multiple
-                    accept=".json" 
-                    onChange={handleTraktImport} 
-                    disabled={traktImporting}
-                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed" 
-                  />
-                  <div className={`w-full bg-slate-800/50 border border-slate-700 border-dashed rounded-xl px-4 py-4 text-center transition-all ${traktImporting ? 'opacity-50' : 'hover:border-red-500/50 hover:bg-slate-800/80'}`}>
-                    {traktImporting ? (
-                      <span className="flex items-center justify-center gap-2 text-slate-300 text-sm font-bold">
-                        <Loader2 className="w-4 h-4 animate-spin" /> Importing...
-                      </span>
-                    ) : (
-                      <span className="text-slate-300 text-sm font-bold">Click to select Trakt JSON file</span>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Media Servers */}
-      <div className="glass-panel p-4 sm:p-6 rounded-2xl">
-        <h2 className="text-xl font-bold text-slate-200 flex items-center gap-2 mb-6">
-          <Server className="w-5 h-5 text-cyan-400" /> Media Servers
-        </h2>
-
-        <div className="space-y-6">
-          {/* Plex */}
+{/* Plex */}
           <div className="p-3 sm:p-4 bg-slate-800/30 rounded-xl border border-slate-700/50 space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex items-center gap-3">

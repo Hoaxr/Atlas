@@ -1,19 +1,35 @@
 const axios = require('axios');
-const db = require('../config/database');
+const { getSetting } = require('../utils/settings');
 
-const getTmdbApiKey = () => {
-  const row = db.prepare('SELECT value FROM settings WHERE key = ?').get('tmdbApiKey');
-  return row ? row.value : null;
-};
+// Cached via utils/settings (30s TTL) instead of hitting the settings table per call
+const getTmdbApiKey = () => getSetting('tmdbApiKey');
 
 const memoryCache = new Map();
 const CACHE_TTL = 1000 * 60 * 60; // 1 hour
+const MAX_MEMORY_CACHE = 500;
+
+const pruneMemoryCache = () => {
+  if (memoryCache.size <= MAX_MEMORY_CACHE) return;
+  const now = Date.now();
+  // Drop expired entries first
+  for (const [key, entry] of memoryCache) {
+    if (now - entry.timestamp >= CACHE_TTL) memoryCache.delete(key);
+  }
+  // Then evict oldest until under limit
+  const entries = [...memoryCache.entries()].sort((a, b) => a[1].timestamp - b[1].timestamp);
+  for (let i = 0; i < entries.length && memoryCache.size > MAX_MEMORY_CACHE; i++) {
+    memoryCache.delete(entries[i][0]);
+  }
+};
 
 const withCache = async (key, fetcher) => {
   const cached = memoryCache.get(key);
   if (cached && Date.now() - cached.timestamp < CACHE_TTL) return cached.data;
   const data = await fetcher();
-  if (data) memoryCache.set(key, { data, timestamp: Date.now() });
+  if (data) {
+    memoryCache.set(key, { data, timestamp: Date.now() });
+    pruneMemoryCache();
+  }
   return data;
 };
 

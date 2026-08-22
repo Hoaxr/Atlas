@@ -23,7 +23,6 @@ export default function Settings() {
   const [activeTab, setActiveTab] = useState('connections');
   const [settings, setSettings] = useState({
     tmdbApiKey: '',
-    traktClientId: '',
     osApiKey: '',
     geminiApiKey: '',
     targetLang: 'Dutch',
@@ -36,9 +35,6 @@ export default function Settings() {
     preferNativeBeforeTranslate: true,
     deepseekApiKey: '',
     claudeApiKey: '',
-    traktWatchedSync: false,
-    traktAccessToken: '',
-    traktClientSecret: '',
     renameMovies: true,
     replaceIllegalCharacters: true,
     colonReplacement: 'dash',
@@ -226,7 +222,6 @@ export default function Settings() {
       if (res.data.status === 'success') {
         setSettings({
           tmdbApiKey: res.data.data.tmdbApiKey || '',
-          traktClientId: res.data.data.traktClientId || '',
           osApiKey: res.data.data.osApiKey || '',
           geminiApiKey: res.data.data.geminiApiKey || '',
           targetLang: res.data.data.targetLang || 'Dutch',
@@ -240,11 +235,11 @@ export default function Settings() {
           prowlarrUrl: res.data.data.prowlarrUrl || '',
           prowlarrApiKey: res.data.data.prowlarrApiKey || '',
           autoTranslate: res.data.data.autoTranslate || false,
+          preferNativeBeforeTranslate: res.data.data.preferNativeBeforeTranslate ?? false,
+          autoDeleteWatchedEnabled: res.data.data.autoDeleteWatchedEnabled ?? false,
+          autoDeleteWatchedDays: res.data.data.autoDeleteWatchedDays || '',
           deepseekApiKey: res.data.data.deepseekApiKey || '',
           claudeApiKey: res.data.data.claudeApiKey || '',
-          traktWatchedSync: res.data.data.traktWatchedSync || false,
-          traktAccessToken: res.data.data.traktAccessToken || '',
-          traktClientSecret: res.data.data.traktClientSecret || '',
           simklClientId: res.data.data.simklClientId || '',
           simklWatchedSync: res.data.data.simklWatchedSync || false,
           simklAccessToken: res.data.data.simklAccessToken || '',
@@ -332,8 +327,7 @@ export default function Settings() {
         standardMovieFormat: settings.standardMovieFormat,
         renameEpisodes: settings.renameEpisodes,
         standardEpisodeFormat: settings.standardEpisodeFormat,
-        seasonFolderFormat: settings.seasonFolderFormat,
-        separatorStyle: settings.separatorStyle
+        seasonFolderFormat: settings.seasonFolderFormat
       });
       invalidateSettingsCache();
       customAlert('Naming settings saved!', 'success');

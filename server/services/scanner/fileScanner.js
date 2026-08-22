@@ -16,6 +16,14 @@ const RECYCLE_DIRS = new Set([
 const shouldSkipDir = (dirName) => {
   if (RECYCLE_DIRS.has(dirName)) return true;
   if (/^\.Trash-\d+$/.test(dirName)) return true;
+  if (/^(samples|extras|featurettes|trailers)$/i.test(dirName)) return true;
+  return false;
+};
+
+const shouldSkipFile = (fileName) => {
+  if (/^\./.test(fileName)) return true;
+  if (/^(sample|trailer|proof|screen)/i.test(fileName)) return true;
+  if (/-sample\./i.test(fileName)) return true;
   return false;
 };
 
@@ -74,7 +82,7 @@ const extractIds = (text) => {
   return { tmdbId, imdbId };
 };
 
-const parseMediaTitle = (filename, folderPath) => {
+const parseMediaTitle = (filename, folderPath, showContext = false) => {
   const cleanName = filename.replace(/\.(mp4|mkv|avi|mov|wmv|webm|ts|m2ts|mpg|mpeg)$/i, '');
   const combinedContext = `${folderPath || ''} ${cleanName}`;
   const { tmdbId, imdbId } = extractIds(combinedContext);
@@ -92,15 +100,40 @@ const parseMediaTitle = (filename, folderPath) => {
   // Check for Season folder or Specials / Season 0
   const seasonWordMatch = !sxxExxMatch && !sceneMatch ? strippedName.match(/(Season\s*\d+|Specials|Season\s*0+)/i) : null;
 
-  const isTvShow = Boolean(sxxExxMatch || sceneMatch || seasonWordMatch || (folderPath && /(?:Season\s*\d+|Specials)/i.test(folderPath)));
+  const isSeasonFolder = Boolean(folderPath && /(?:Season\s*\d+|Specials)/i.test(folderPath));
+  let isTvShow = Boolean(sxxExxMatch || sceneMatch || seasonWordMatch || isSeasonFolder);
+
+  // Anime/absolute numbering: only when folder context suggests a show
+  let absoluteEpisode = null;
+  let absoluteMatch = null;
+  let cleaned = null;
+  if (!isTvShow && showContext) {
+    cleaned = strippedName.replace(/\[[^\]]*\]|\{[^}]*\}/g, ' ')
+      .replace(/\b(1080p|720p|480p|2160p|4k|x264|x265|h\.?264|h\.?265|hevc|avc|bluray|bdrip|webdl|web-?dl|webrip|hdtv|dvdrip|flac)\b/gi, ' ');
+    let m = cleaned.match(/\bEP(\d{1,4})\b/i) || cleaned.match(/\bE(\d{2,4})\b/i);
+    if (!m) {
+      const trailing = [...cleaned.matchAll(/(?:^|[\s._-])(\d{2,4})(?=[\s._-]*$)/g)]
+        .filter(x => !/^(19|20)\d{2}$/.test(x[1]));
+      if (trailing.length > 0) m = trailing[trailing.length - 1];
+    }
+    if (m) {
+      absoluteMatch = m;
+      absoluteEpisode = parseInt(m[1], 10);
+      isTvShow = true;
+    }
+  }
 
   if (isTvShow) {
     let title = '';
-    let seasonNumber = 1;
-    let episodeNumber = 1;
+    let seasonNumber = null;
+    let episodeNumber = null;
     let episodeEnd = null;
 
-    if (sxxExxMatch) {
+    if (absoluteEpisode !== null) {
+      title = cleaned.substring(0, absoluteMatch.index).replace(/[._()[\]-]/g, ' ').trim();
+      seasonNumber = 1;
+      episodeNumber = absoluteEpisode;
+    } else if (sxxExxMatch) {
       title = strippedName.substring(0, sxxExxMatch.index).replace(/[._()[\]-]/g, ' ').trim();
       seasonNumber = parseInt(sxxExxMatch[1], 10);
       episodeNumber = parseInt(sxxExxMatch[2], 10);
@@ -161,9 +194,13 @@ const parseMediaTitle = (filename, folderPath) => {
   }
 
   // Movie parsing
-  const yearMatch = strippedName.match(/(19\d{2}|20\d{2})/);
-  const year = yearMatch ? parseInt(yearMatch[0], 10) : null;
-  
+  const yearMatches = [...strippedName.matchAll(/\b(19\d{2}|20\d{2})\b/g)];
+  const qualityMatch = strippedName.match(/\b(1080p|720p|480p|2160p|4k|x264|x265|h\.?264|h\.?265|hevc|bluray|webdl|web-?dl|webrip|hdtv|dvdrip)\b/i);
+  const qualityPos = qualityMatch ? qualityMatch.index : strippedName.length;
+  let yearMatch = [...yearMatches].reverse().find(y => y.index < qualityPos) || null;
+  if (!yearMatch && yearMatches.length > 0) yearMatch = yearMatches[0];
+  const year = yearMatch ? parseInt(yearMatch[1], 10) : null;
+
   let titlePart = strippedName;
   if (yearMatch) {
     titlePart = strippedName.substring(0, yearMatch.index);
@@ -182,22 +219,24 @@ const parseMediaTitle = (filename, folderPath) => {
 const gatherFilesFromPaths = async (paths, scanProgress) => {
   const allFiles = [];
 
-  async function getFiles(dir) {
+  async function getFiles(dir, libType) {
     try {
       const dirents = await fs.readdir(dir, { withFileTypes: true });
       for (const dirent of dirents) {
         const res = path.join(dir, dirent.name);
         if (dirent.isDirectory()) {
           if (shouldSkipDir(dirent.name)) {
-            console.log(`[Scanner] Skipping recycle/trash directory: ${res}`);
+            console.log(`[Scanner] Skipping recycle/trash/extras directory: ${res}`);
             continue;
           }
-          await getFiles(res);
+          await getFiles(res, libType);
         } else if (dirent.isFile() && isVideoFile(dirent.name)) {
+          if (shouldSkipFile(dirent.name)) continue;
           allFiles.push({
             name: dirent.name,
             path: res,
             parentPath: dir,
+            tvLibType: libType,
             isFile: () => true
           });
           if (allFiles.length % 50 === 0) {
@@ -218,10 +257,10 @@ const gatherFilesFromPaths = async (paths, scanProgress) => {
         scanProgress.emptyPaths.push({ path: libPath.path, error: 'Not a directory' });
         continue;
       }
-      
+
       const initialCount = allFiles.length;
-      await getFiles(libPath.path);
-      
+      await getFiles(libPath.path, libPath.type);
+
       if (allFiles.length === initialCount) {
         scanProgress.emptyPaths.push({ path: libPath.path, error: 'No video files found — mount may be empty or disconnected' });
       }
@@ -229,6 +268,22 @@ const gatherFilesFromPaths = async (paths, scanProgress) => {
       console.error(`Error gathering files from ${libPath.path}:`, err.message);
       scanProgress.unreachablePaths.push({ path: libPath.path, error: err.message });
     }
+  }
+
+  // Tag files whose folder context suggests a show (for anime/absolute numbering)
+  const dirs = [...new Set(allFiles.map(f => f.parentPath))];
+  for (const dir of dirs) {
+    const hasSxxExxSibling = allFiles.some(f =>
+      f.parentPath === dir &&
+      (/\bS\d{1,2}[._\s-]*E\d{1,3}\b/i.test(f.name) || /\b\d{1,2}x\d{1,3}\b/i.test(f.name))
+    );
+    if (!hasSxxExxSibling) continue;
+    for (const f of allFiles) {
+      if (f.parentPath === dir) f.showContext = true;
+    }
+  }
+  for (const f of allFiles) {
+    if (!f.showContext && f.tvLibType === 'tv') f.showContext = true;
   }
   return allFiles;
 };

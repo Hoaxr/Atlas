@@ -12,7 +12,7 @@ const imageService = require('./imageService');
 const eventBus = require('./eventBus');
 const { runWithConcurrency } = require('../utils/concurrency');
 const { registerJob } = require('../utils/cronRegistry');
-const { isVideoFile } = require('../utils/fileUtils');
+const { isVideoFile, deleteFolderRecursive } = require('../utils/fileUtils');
 const { isRootLibraryPath } = require('../utils/fileUtils');
 const { calculateNextSearchAt, calculatePriority } = require('./schedulerLogic');
 
@@ -41,6 +41,13 @@ const getSchedule = (taskId) => {
 const getProfile = (id) => {
   if (!id) return null;
   return db.prepare('SELECT * FROM quality_profiles WHERE id = ?').get(id);
+};
+
+// Proper path-relative containment check — unlike startsWith(), it won't match sibling
+// directories like /data/movies-backup under root /data/movies.
+const isInsideRoot = (root, p) => {
+  const rel = path.relative(path.resolve(root), path.resolve(p));
+  return !rel.startsWith('..') && !path.isAbsolute(rel);
 };
 
 let isSearchCycleRunning = false;
@@ -137,12 +144,13 @@ const runSearchCycle = async () => {
             .run(next.state, next.nextSearch ? next.nextSearch.toISOString() : null, movie.retry_count, movie.id);
         }
       } catch (err) {
+        // Transient error (indexer outage, network failure): don't burn a retry — only
+        // empty result sets increment retry_count. Leave scheduling untouched so the
+        // next search cycle retries naturally.
         movieFailures++;
         console.error(`[Automation] Failed to process ${movie.title}:`, err.message);
-        movie.retry_count = (movie.retry_count || 0) + 1;
-        const next = calculateNextSearchAt(movie, 'movie', { isDownloaded: (movie.status === 'downloaded'), isCutoffMet: false });
-        db.prepare("UPDATE movies SET last_searched_at = datetime('now'), search_state = ?, next_search_at = ?, retry_count = ?, last_provider_response = ?, last_failure_at = datetime('now') WHERE id = ?")
-          .run(next.state, next.nextSearch ? next.nextSearch.toISOString() : null, movie.retry_count, err.message, movie.id);
+        db.prepare("UPDATE movies SET last_provider_response = ?, last_failure_at = datetime('now') WHERE id = ?")
+          .run(err.message, movie.id);
       }
     };
     
@@ -266,12 +274,11 @@ const runSearchCycle = async () => {
             .run(next.state, next.nextSearch ? next.nextSearch.toISOString() : null, ep.retry_count, ep.id);
         }
       } catch (err) {
+        // Same as movies: transient errors leave retry_count untouched for next-cycle retry.
         episodeFailures++;
         console.error(`[Automation] Failed to process ${epLabel}:`, err.message);
-        ep.retry_count = (ep.retry_count || 0) + 1;
-        const next = calculateNextSearchAt(ep, 'episode', { isDownloaded: (ep.status === 'downloaded'), isCutoffMet: false });
-        db.prepare("UPDATE episodes SET last_searched_at = datetime('now'), search_state = ?, next_search_at = ?, retry_count = ?, last_provider_response = ?, last_failure_at = datetime('now') WHERE id = ?")
-          .run(next.state, next.nextSearch ? next.nextSearch.toISOString() : null, ep.retry_count, err.message, ep.id);
+        db.prepare("UPDATE episodes SET last_provider_response = ?, last_failure_at = datetime('now') WHERE id = ?")
+          .run(err.message, ep.id);
       }
     };
     
@@ -335,9 +342,17 @@ const runRefreshMetadata = async () => {
         `);
         
         const tmdbEpisodeKeys = new Set();
+        // Empty season list or any season returning zero episodes means the fetch is
+        // unreliable (TMDB outage/API failure) — pruning against it would wipe real episodes.
+        let reliableFetch = seasons.length > 0;
         for (const s of seasons) {
+          if (!reliableFetch) break;
           if (s.season_number === 0) continue;
           const episodes = await tmdbService.getSeasonEpisodes(show.tmdb_id, s.season_number);
+          if (episodes.length === 0) {
+            reliableFetch = false;
+            break;
+          }
           for (const ep of episodes) {
             const key = `${ep.season_number}|${ep.episode_number}`;
             tmdbEpisodeKeys.add(key);
@@ -345,24 +360,28 @@ const runRefreshMetadata = async () => {
           }
         }
 
-        const allDbEpisodes = db.prepare(
-          'SELECT id, season_number, episode_number, status FROM episodes WHERE show_id = ?'
-        ).all(show.id);
-        
-        const runStaleDeletion = db.transaction(() => {
-          const deleteStale = db.prepare('DELETE FROM episodes WHERE id = ?');
-          let removedCount = 0;
-          for (const ep of allDbEpisodes) {
-            const key = `${ep.season_number}|${ep.episode_number}`;
-            if (!tmdbEpisodeKeys.has(key) && ep.status !== 'downloaded') {
-              deleteStale.run(ep.id);
-              removedCount++;
+        if (!reliableFetch) {
+          console.warn(`[Automation] Skipping stale-episode cleanup for "${show.title}" — TMDB episode data incomplete or unavailable.`);
+        } else {
+          const allDbEpisodes = db.prepare(
+            'SELECT id, season_number, episode_number, status FROM episodes WHERE show_id = ?'
+          ).all(show.id);
+
+          const runStaleDeletion = db.transaction(() => {
+            const deleteStale = db.prepare('DELETE FROM episodes WHERE id = ?');
+            let removedCount = 0;
+            for (const ep of allDbEpisodes) {
+              const key = `${ep.season_number}|${ep.episode_number}`;
+              if (!tmdbEpisodeKeys.has(key) && ep.status !== 'downloaded') {
+                deleteStale.run(ep.id);
+                removedCount++;
+              }
             }
-          }
-          return removedCount;
-        });
-        
-        runStaleDeletion();
+            return removedCount;
+          });
+
+          runStaleDeletion();
+        }
         showsUpdated++;
       } else {
         db.prepare("UPDATE shows SET last_refreshed_at = datetime('now') WHERE id = ?").run(show.id);
@@ -411,7 +430,7 @@ const runMissingFilesCheck = async () => {
     if (!movie.folder_path) continue;
     
     // Ensure movie belongs to an accessible root
-    const isOnAccessibleRoot = validRootPaths.some(root => movie.folder_path.startsWith(root));
+    const isOnAccessibleRoot = validRootPaths.some(root => isInsideRoot(root, movie.folder_path));
     if (!isOnAccessibleRoot) continue;
 
     if (!fs.existsSync(movie.folder_path)) {
@@ -455,7 +474,7 @@ const runMissingFilesCheck = async () => {
     if (!show.folder_path) continue;
     
     // Ensure show belongs to an accessible root
-    const isOnAccessibleRoot = validRootPaths.some(root => show.folder_path.startsWith(root));
+    const isOnAccessibleRoot = validRootPaths.some(root => isInsideRoot(root, show.folder_path));
     if (!isOnAccessibleRoot) continue;
 
     if (!fs.existsSync(show.folder_path)) {
@@ -490,11 +509,11 @@ const runMissingFilesCheck = async () => {
     // Only check episodes whose show folder is on an accessible root (same guard as movies/shows)
     const showFolder = ep.show_folder;
     if (showFolder) {
-      const isOnAccessibleRoot = validRootPaths.some(root => showFolder.startsWith(root));
+      const isOnAccessibleRoot = validRootPaths.some(root => isInsideRoot(root, showFolder));
       if (!isOnAccessibleRoot) continue;
     } else {
       // No show folder — fall back to checking the episode file's path against roots
-      const isOnAccessibleRoot = validRootPaths.some(root => ep.file_path.startsWith(root));
+      const isOnAccessibleRoot = validRootPaths.some(root => isInsideRoot(root, ep.file_path));
       if (!isOnAccessibleRoot) continue;
     }
 
@@ -598,7 +617,7 @@ const runAutoDeleteWatched = async () => {
           if (isRootLibraryPath(dirPath)) {
             await fsp.unlink(movie.file_path);
           } else {
-            await fsp.rm(dirPath, { recursive: true, force: true });
+            await deleteFolderRecursive(dirPath);
           }
           console.log(`[Automation] Auto-deleted watched movie: ${movie.title}`);
         }
@@ -619,7 +638,9 @@ const runAutoDeleteWatched = async () => {
           await fsp.unlink(ep.file_path);
           console.log(`[Automation] Auto-deleted watched episode: ${ep.title}`);
         }
-        db.prepare("UPDATE episodes SET file_path = NULL WHERE id = ?").run(ep.id);
+        // Mirror movie behavior (status='unmonitored'): search cycle requires monitored=1,
+        // so this keeps deleted episodes out of searches/stats without redownload churn.
+        db.prepare("UPDATE episodes SET file_path = NULL, status = 'unmonitored', monitored = 0 WHERE id = ?").run(ep.id);
       } catch (err) {
         console.error(`[Automation] Failed to auto-delete episode ${ep.title}: ${err.message}`);
       }
@@ -812,9 +833,16 @@ const runDeepMetadataRefresh = async () => {
         `);
 
         const tmdbEpisodeKeys = new Set();
+        // Same reliability guard as runRefreshMetadata: never prune against a failed TMDB fetch.
+        let reliableFetch = seasons.length > 0;
         for (const s of seasons) {
+          if (!reliableFetch) break;
           if (s.season_number === 0) continue;
           const episodes = await tmdbService.getSeasonEpisodes(show.tmdb_id, s.season_number);
+          if (episodes.length === 0) {
+            reliableFetch = false;
+            break;
+          }
           for (const ep of episodes) {
             const key = `${ep.season_number}|${ep.episode_number}`;
             tmdbEpisodeKeys.add(key);
@@ -822,19 +850,23 @@ const runDeepMetadataRefresh = async () => {
           }
         }
 
-        const allDbEpisodes = db.prepare(
-          'SELECT id, season_number, episode_number, status FROM episodes WHERE show_id = ?'
-        ).all(show.id);
+        if (!reliableFetch) {
+          console.warn(`[Automation] Skipping stale-episode cleanup for "${show.title}" — TMDB episode data incomplete or unavailable.`);
+        } else {
+          const allDbEpisodes = db.prepare(
+            'SELECT id, season_number, episode_number, status FROM episodes WHERE show_id = ?'
+          ).all(show.id);
 
-        db.transaction(() => {
-          const deleteStale = db.prepare('DELETE FROM episodes WHERE id = ?');
-          for (const ep of allDbEpisodes) {
-            const key = `${ep.season_number}|${ep.episode_number}`;
-            if (!tmdbEpisodeKeys.has(key) && ep.status !== 'downloaded') {
-              deleteStale.run(ep.id);
+          db.transaction(() => {
+            const deleteStale = db.prepare('DELETE FROM episodes WHERE id = ?');
+            for (const ep of allDbEpisodes) {
+              const key = `${ep.season_number}|${ep.episode_number}`;
+              if (!tmdbEpisodeKeys.has(key) && ep.status !== 'downloaded') {
+                deleteStale.run(ep.id);
+              }
             }
-          }
-        })();
+          })();
+        }
 
         showsUpdated++;
       } else {

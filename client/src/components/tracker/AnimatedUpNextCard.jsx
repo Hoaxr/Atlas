@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
+import toast from 'react-hot-toast';
 import { CheckCircle2, Check, Tv, Film } from 'lucide-react';
 import { tmdbImgUrl } from '../../lib/posterUrl';
 
@@ -44,34 +45,38 @@ export function AnimatedUpNextCard({ item, type, onMarkWatched }) {
     e.stopPropagation();
     if (animState !== 'idle') return;
 
+    // Fire the watch request BEFORE the exit animation so the animation
+    // reflects a request that is actually in flight. On failure skip the
+    // celebration entirely and surface an error toast.
+    let requestPromise;
+    try {
+      requestPromise = Promise.resolve(onMarkWatched(
+        itemKey,
+        tmdbId,
+        type,
+        isEpisode ? item.season_number : undefined,
+        isEpisode ? item.episode_number : undefined
+      ));
+    } catch (err) {
+      console.error('Failed to mark as watched', err);
+      toast.error('Failed to mark as watched');
+      return;
+    }
+
     setAnimState('animating');
+
+    requestPromise.catch(err => {
+      console.error('Failed to mark as watched', err);
+      toast.error('Failed to mark as watched');
+      setAnimState('idle');
+    });
 
     // Sequence timing:
     // 0-600ms: Celebration burst, progress fill to 100%, status text to Watched ✓
-    // 600ms: Start smooth exit slide/fade
-    // 950ms: Trigger API mark watched to fetch next episode
-    // On success the parent re-renders with fresh data and this card unmounts,
-    // so we intentionally do NOT reset animState — the next episode gets a fresh card.
-    setTimeout(() => {
-      setAnimState('exiting');
-      setTimeout(async () => {
-        try {
-          await onMarkWatched(
-            itemKey,
-            tmdbId,
-            type,
-            isEpisode ? item.season_number : undefined,
-            isEpisode ? item.episode_number : undefined
-          );
-        } catch (err) {
-          console.error('Failed to mark as watched', err);
-        }
-        // Always reset — if the parent re-rendered with new data
-        // this component is already unmounted so this is a no-op.
-        // If something went wrong, the card recovers to visible.
-        setAnimState('idle');
-      }, 350);
-    }, 600);
+    // 600ms: Start smooth exit slide/fade; the parent refetches on success and
+    // this card unmounts, so we intentionally do NOT reset animState — the next
+    // episode gets a fresh card. The reset above only runs if the request failed.
+    setTimeout(() => setAnimState('exiting'), 600);
   };
 
   const isCompleted = animState === 'animating' || animState === 'exiting';

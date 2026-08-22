@@ -9,6 +9,25 @@ const eventBus = require('./eventBus');
 const { runWithConcurrency } = require('../utils/concurrency');
 const { registerJob } = require('../utils/cronRegistry');
 const { LANG_CODE } = require('../routes/library/helpers');
+
+// LLM output is token-limited — long SRTs must be translated in small numbered-block
+// chunks and concatenated, otherwise the response gets truncated mid-file.
+const LLM_BLOCK_CHUNK_SIZE = 40;
+
+const splitSrtBlocks = (text) =>
+  text.split(/\r?\n\r?\n/).map(b => b.trim()).filter(Boolean);
+
+// Runs an LLM translate function once per chunk of subtitle blocks, preserving block order.
+const translateChunked = async (translateFn, srtContent, targetLang, apiKey) => {
+  const blocks = splitSrtBlocks(srtContent);
+  const results = [];
+  for (let i = 0; i < blocks.length; i += LLM_BLOCK_CHUNK_SIZE) {
+    const chunk = blocks.slice(i, i + LLM_BLOCK_CHUNK_SIZE).join('\n\n');
+    results.push((await translateFn(chunk, targetLang, apiKey)).trim());
+  }
+  return results.join('\n\n');
+};
+
 const translateWithGemini = async (text, targetLang, apiKey) => {
   const modelName = db.prepare("SELECT value FROM settings WHERE key = 'geminiModel'").get()?.value || 'gemini-1.5-flash';
   const genAI = new GoogleGenerativeAI(apiKey);
@@ -70,10 +89,10 @@ const translateWithGoogleTranslate = async (text, targetLang) => {
           translatedLines[textIndices[b + j]] = segments[j]?.[0] || batch[j];
         }
       }
-    } catch {
-      for (let j = 0; j < batch.length; j++) {
-        translatedLines[textIndices[b + j]] = batch[j];
-      }
+    } catch (err) {
+      // Never write untranslated English into the target-language file — that would
+      // poison the output and block future retries (translateFile skips existing files).
+      throw new Error(`Google Translate batch failed: ${err?.message || err}`, { cause: err });
     }
   }
   
@@ -133,17 +152,17 @@ const translateWithProvider = async (srtContent, targetLang, overrides = {}) => 
   if (provider === 'gemini') {
     const apiKey = getApiKey('geminiApiKey');
     if (!apiKey) throw new Error('Gemini API Key missing');
-    return translateWithGemini(srtContent, targetLang, apiKey);
+    return translateChunked(translateWithGemini, srtContent, targetLang, apiKey);
   }
   if (provider === 'deepseek') {
     const apiKey = getApiKey('deepseekApiKey');
     if (!apiKey) throw new Error('DeepSeek API Key missing');
-    return translateWithDeepSeek(srtContent, targetLang, apiKey);
+    return translateChunked(translateWithDeepSeek, srtContent, targetLang, apiKey);
   }
   if (provider === 'claude') {
     const apiKey = getApiKey('claudeApiKey');
     if (!apiKey) throw new Error('Claude API Key missing');
-    return translateWithClaude(srtContent, targetLang, apiKey);
+    return translateChunked(translateWithClaude, srtContent, targetLang, apiKey);
   }
   // Default: Google Translate (no API key needed)
   return translateWithGoogleTranslate(srtContent, targetLang);
@@ -213,7 +232,11 @@ const translateSubtitles = async () => {
       claudeApiKey: claudeApiKeyRow?.value
     });
 
-    fs.writeFileSync(targetSub, translatedText);
+    // Atomic write: temp file + rename so a crash never leaves a torn/partial subtitle
+    // that would block future retries (existing files are skipped).
+    const tmpPath = `${targetSub}.tmp`;
+    fs.writeFileSync(tmpPath, translatedText);
+    fs.renameSync(tmpPath, targetSub);
     console.log(`[AITranslator] Successfully translated and saved ${targetSub}`);
     return displayName;
   };

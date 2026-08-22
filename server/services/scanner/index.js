@@ -87,7 +87,7 @@ const doScan = async (mode = 'full') => {
     const gatherFiles = ['full', 'movies', 'shows', 'new', 'rematch'].includes(mode);
     const processFiles = ['full', 'movies', 'shows', 'new', 'rematch'].includes(mode);
     const updateMetadata = ['full', 'movies', 'shows', 'new', 'rematch', 'refresh'].includes(mode);
-    const syncTrakt = ['full', 'movies', 'shows'].includes(mode);
+    const syncWatched = ['full', 'movies', 'shows'].includes(mode);
     const scanSubtitles = ['full', 'movies', 'shows', 'subtitles'].includes(mode);
 
     let allFiles = []; // Scoped outside the if-blocks so processFiles can access it
@@ -167,10 +167,29 @@ const doScan = async (mode = 'full') => {
           }
         })();
       }
+
+      // Reset individually deleted episode files
+      const existingEpisodes = db.prepare("SELECT id, file_path FROM episodes WHERE file_path IS NOT NULL AND file_path != ''").all();
+      const orphanEpisodes = [];
+      for (const ep of existingEpisodes) {
+        if (scanProgress.cancelled) throw new Error('Scan cancelled by user');
+        if (filesOnDisk.has(ep.file_path)) continue;
+        try { await fs.access(ep.file_path); continue; } catch { /* file gone */ }
+        orphanEpisodes.push(ep.id);
+      }
+      if (orphanEpisodes.length > 0) {
+        db.transaction(() => {
+          const resetStmt = db.prepare("UPDATE episodes SET status = 'monitored', file_path = NULL, file_size = NULL WHERE id = ?");
+          for (const epId of orphanEpisodes) {
+            resetStmt.run(epId);
+          }
+        })();
+        console.log(`[Scanner] Reset ${orphanEpisodes.length} episode(s) with missing files to monitored`);
+      }
     }
 
     if (removedCount > 0) {
-      scanProgress.addedCount = (scanProgress.addedCount || 0) - removedCount;
+      scanProgress.addedCount = Math.max(0, (scanProgress.addedCount || 0) - removedCount);
     }
     } // end gatherFiles
 
@@ -193,7 +212,7 @@ const doScan = async (mode = 'full') => {
     // ════════════════════════════════════════════
     // Stage: Sync Simkl
     // ════════════════════════════════════════════
-    if (syncTrakt) {
+    if (syncWatched) {
       nextStage('Syncing Simkl watched status...');
       scanProgress.totalFiles = 1;
       scanProgress.currentFile = 'Simkl';
@@ -233,6 +252,7 @@ async function completeScan() {
   scanProgress.cancelled = false;
   scanProgress.currentFile = 'Finished';
   scanProgress.currentStage = scanProgress.totalStages;
+  try { require('../../utils/settings').setSetting('lastScanTime', new Date().toISOString()); } catch { /* ignore */ }
   const eventBus = require('../eventBus');
   if (scanProgress.currentPhase === 'Scan cancelled by user') {
     scanProgress.currentPhase = 'Cancelled';

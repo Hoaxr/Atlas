@@ -78,7 +78,6 @@ Atlas combines the functionality of multiple *arr apps into a single, cohesive e
 
 ### External Integrations
 - **TMDB (The Movie Database)** — Core data provider for metadata, posters, cast, crew, and more.
-- **Trakt.tv** — Sync watched status and authenticate with Trakt to keep your media progress aligned across devices.
 - **Plex / Jellyfin / Emby** — Media server integration for library updates and notifications.
 
 ### Watcher & Discovery
@@ -93,7 +92,7 @@ Atlas combines the functionality of multiple *arr apps into a single, cohesive e
 | **Backend** | Node.js 22+, Express 4, WebSocket (ws) |
 | **Database** | SQLite via built-in `node:sqlite` (Node 22) |
 | **Authentication** | JWT (jsonwebtoken), bcrypt |
-| **External APIs** | TMDB, Trakt.tv |
+| **External APIs** | TMDB, Simkl |
 | **Styling** | Tailwind CSS, PostCSS, Autoprefixer |
 | **Notifications** | react-hot-toast |
 | **Linting** | ESLint 10 |
@@ -225,7 +224,6 @@ Upon first launch, the **System Status** page will show issues:
 | `/api/settings` | Application settings (TMDB, clients, indexers, etc.) |
 | `/api/library` | Library management (movies, shows, paths, scanning, deletable analysis) |
 | `/api/tmdb` | TMDB data proxy (search, details, trending) |
-| `/api/trakt` | Trakt.tv sync and authentication |
 | `/api/tasks` | Background task management |
 | `/api/clients` | Download client proxy (torrents, stats) |
 | `/api/release-profiles` | Release profile management |
@@ -258,8 +256,6 @@ Upon first launch, the **System Status** page will show issues:
 | `CORS_ORIGIN` | No | Allowed CORS origin (default: `http://localhost:3001`) |
 | `JWT_SECRET` | **Yes** | Secret key for JWT token signing |
 | `TMDB_API_KEY` | **Yes** | TMDB API key for metadata |
-| `TRAKT_CLIENT_ID` | No | Trakt.tv OAuth client ID |
-| `TRAKT_CLIENT_SECRET` | No | Trakt.tv OAuth client secret |
 | `GOOGLE_API_KEY` | No | Google Translate API key |
 | `DEEPSEEK_API_KEY` | No | DeepSeek API key |
 | `ANTHROPIC_API_KEY` | No | Claude/Anthropic API key |

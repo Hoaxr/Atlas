@@ -4,6 +4,7 @@ const notificationService = require('./notificationService');
 const eventBus = require('./eventBus');
 const { getSetting } = require('../utils/settings');
 const tmdbService = require('./tmdbService');
+const presenceTracker = require('./presenceTracker');
 
 // ── Poster cache — avoids DB lookup per session per poll ──
 const posterCache = new Map();
@@ -145,7 +146,8 @@ class WatcherService {
     }
 
     // Default when autoWatchUser setting is empty:
-    // Match authUsername or the primary admin user in the Atlas users table
+    // Match authUsername, any admin, or ANY registered user (incl. ones imported
+    // from Plex/Jellyfin/Emby) so household playback is tracked automatically.
     const authUsername = getSetting('authUsername');
     if (authUsername && authUsername.trim() !== '') {
       if (authUsername.trim().toLowerCase() === sessionUser.trim().toLowerCase()) {
@@ -154,11 +156,8 @@ class WatcherService {
     }
 
     try {
-      const adminUser = db.prepare("SELECT username FROM users WHERE role = 'admin' ORDER BY id ASC LIMIT 1").get()
-                     || db.prepare("SELECT username FROM users ORDER BY id ASC LIMIT 1").get();
-      if (adminUser?.username && adminUser.username.trim().toLowerCase() === sessionUser.trim().toLowerCase()) {
-        return true;
-      }
+      const knownUser = db.prepare('SELECT id FROM users WHERE username = ? COLLATE NOCASE').get(sessionUser.trim());
+      if (knownUser) return true;
     } catch { /* ignore */ }
 
     // If no users exist in DB yet, default to true
@@ -612,6 +611,12 @@ class WatcherService {
 
     // Update active sessions
     this.activeSessions = currentSessionIds;
+
+    // Skip the 9 aggregate play_history queries when nobody is watching
+    // and no WS clients are connected to receive the stats
+    if (currentSessionIds.size === 0 && presenceTracker.getOnlineUserIds().length === 0) {
+      return;
+    }
 
     // Emit event with full sessions + stats (replaces per-client HTTP polling)
     const topMovies = db.prepare(`SELECT title, COUNT(*) as plays FROM play_history WHERE type = 'movie' GROUP BY title ORDER BY plays DESC LIMIT 10`).all();

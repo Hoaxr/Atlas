@@ -14,6 +14,7 @@ if (!process.env.JWT_SECRET) {
 const express = require('express');
 const path = require('path');
 const http = require('http');
+const jwt = require('jsonwebtoken');
 const { WebSocketServer } = require('ws');
 const compression = require('compression');
 const cors = require('cors');
@@ -24,6 +25,7 @@ const apiRoutes = require('./routes/api');
 const settingsRoutes = require('./routes/settings');
 const tmdbRoutes = require('./routes/tmdb');
 const simklRoutes = require('./routes/simkl');
+const simklService = require('./services/simklService');
 const libraryRoutes = require('./routes/library/index');
 const tasksRoutes = require('./routes/tasks');
 const clientsRoutes = require('./routes/clients');
@@ -56,11 +58,17 @@ const notificationService = require('./services/notificationService');
 const telegramBotService = require('./services/telegramBotService');
 const imageService = require('./services/imageService');
 const healthService = require('./services/healthService');
+const retentionService = require('./services/retentionService');
 const cleanupWorker = require('./services/cleanupWorker');
 
 
 
 const app = express();
+
+// Trust one proxy hop so express-rate-limit sees real client IPs behind reverse proxies/docker.
+// Must match the number of proxy hops in front of this server.
+app.set('trust proxy', 1);
+
 const server = http.createServer(app);
 const PORT = process.env.PORT || 3000;
 
@@ -133,9 +141,11 @@ wss.on('connection', (ws, _req) => {
 automationService.init();
 mediaManagementService.init();
 healthService.init();
+retentionService.init();
 subtitleService.init();
 aiTranslationWorker.init();
 telegramBotService.init();
+simklService.init();
 // Notification and Media Server services auto-init in constructor
 
 // ── Layout push broadcast — replaces client-side 3s polling ──
@@ -194,7 +204,15 @@ const broadcastTorrentsUpdate = async () => {
       type: 'TORRENTS_UPDATE',
       data: {
         torrents: _cachedTorrents,
-        clientStats: _cachedClientStats,
+        clientStats: {
+          dl_info_speed: _cachedClientStats.dl_info_speed,
+          up_info_speed: _cachedClientStats.up_info_speed,
+          free_space: _cachedClientStats.free_space,
+          // Session totals (qBittorrent transfer/info) for the ratio card —
+          // absent fields are simply omitted and the client hides the ratio.
+          ...(Number.isFinite(_cachedClientStats.dl_info_data) ? { dl_info_data: _cachedClientStats.dl_info_data } : {}),
+          ...(Number.isFinite(_cachedClientStats.up_info_data) ? { up_info_data: _cachedClientStats.up_info_data } : {}),
+        },
         clientConnected: _clientConnected,
       }
     };
@@ -207,6 +225,11 @@ const broadcastTorrentsUpdate = async () => {
     });
   } catch { /* ignore */ }
 };
+
+// Immediate cache refresh + rebroadcast when a client mutation (pause/resume/delete) happens
+eventBus.on('TORRENTS_MUTATED', () => {
+  broadcastTorrentsUpdate();
+});
 
 const startPolling = (fn, interval) => {
   const poll = async () => {
@@ -269,13 +292,16 @@ app.use(cors({
   origin: process.env.CORS_ORIGIN || 'http://localhost:3001',
   credentials: true
 }));
+// Restore uploads are large — register above the global 500kb JSON parser with
+// its own limit. Auth must be applied explicitly since this bypasses later routers.
+app.post('/api/settings/restore', authMiddleware, requireAdmin, express.json({ limit: '100mb' }), settingsRoutes.restoreHandler);
 app.use(express.json({ limit: '500kb' }));
 
 
 // Routes
 // Apply auth middleware to all /api routes except /api/auth
 app.use('/api', (req, res, next) => {
-  if (req.path.startsWith('/auth') || req.path.startsWith('/watcher/image') || req.path.startsWith('/images')) {
+  if (req.path.startsWith('/auth') || req.path.startsWith('/watcher/image') || req.path.startsWith('/images') || req.path === '/webhooks/download-client') {
     return next();
   }
   return authMiddleware(req, res, next);
@@ -331,7 +357,22 @@ app.get('/api/images/:type/:tmdbId/poster', async (req, res) => {
     return res.sendFile(dest, { headers: { 'Cache-Control': 'public, max-age=604800, immutable' } });
   }
 
-  // Cache miss — look up poster_path from DB and download
+  // This route bypasses authMiddleware, so verify a Bearer JWT manually when present.
+  // Anonymous (unauthenticated) requests get cache-only service — no outbound TMDB fetches,
+  // preventing quota burn / disk fill by unauthenticated traffic.
+  let isAuthenticated = false;
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    try {
+      const decoded = jwt.verify(authHeader.split(' ')[1], process.env.JWT_SECRET);
+      isAuthenticated = !!decoded?.id;
+    } catch { /* invalid token — treat as anonymous */ }
+  }
+  if (!isAuthenticated) {
+    return res.status(404).json({ error: 'No poster available' });
+  }
+
+  // Cache miss (authenticated) — look up poster_path from DB and download
   try {
     const table      = type === 'movies' ? 'movies' : 'shows';
     const row        = db.prepare(`SELECT poster_path FROM ${table} WHERE tmdb_id = ?`).get(tmdbId);
@@ -348,6 +389,9 @@ app.get('/api/images/:type/:tmdbId/poster', async (req, res) => {
     return res.status(500).json({ error: 'Failed to fetch poster' });
   }
 });
+
+// Unknown API paths must not fall through to the SPA catch-all below
+app.use('/api', (_req, res) => res.status(404).json({ status: 'error', message: 'Not found' }));
 
 // ---- Production: serve the built client ----
 if (process.env.NODE_ENV === 'production') {

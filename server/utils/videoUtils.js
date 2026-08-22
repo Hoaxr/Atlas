@@ -13,7 +13,7 @@ const getMediaMetadata = async (filePath) => {
       '-show_entries', 'stream=codec_type,codec_name,width,height,channels,channel_layout:stream_tags=language:format=duration',
       '-of', 'json',
       filePath
-    ]);
+    ], { timeout: 30000 });
     const info = JSON.parse(stdout) || {};
     const streams = info.streams || [];
     const format = info.format || {};

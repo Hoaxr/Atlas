@@ -57,10 +57,6 @@ export default function NamingTab({ settings, setSettings, handleSave }) {
     let result = format;
     result = result.replace(/{Movie Title}/gi, 'The Movie Title');
     result = result.replace(/{Release Year}/gi, '2010');
-    result = result.replace(/{Quality Title}/gi, '1080p WEBRip');
-    result = result.replace(/{MediaInfo VideoCodec}/gi, 'x264');
-    result = result.replace(/{MediaInfo AudioCodec}/gi, 'AAC');
-    result = result.replace(/{MediaInfo Resolution}/gi, '1080p');
     return `Example: ${result}`;
   };
 
@@ -71,10 +67,6 @@ export default function NamingTab({ settings, setSettings, handleSave }) {
     result = result.replace(/{Season}/gi, '01');
     result = result.replace(/{Episode}/gi, '01');
     result = result.replace(/{Episode Title}/gi, 'Episode Title');
-    result = result.replace(/{Quality Title}/gi, '1080p WEBRip');
-    result = result.replace(/{MediaInfo VideoCodec}/gi, 'x264');
-    result = result.replace(/{MediaInfo AudioCodec}/gi, 'AAC');
-    result = result.replace(/{MediaInfo Resolution}/gi, '1080p');
     return `Example: ${result}`;
   };
 
@@ -269,29 +261,21 @@ export default function NamingTab({ settings, setSettings, handleSave }) {
           title="Movie Naming Tags" 
           tags={[
             { name: '{Movie Title}', desc: 'Title of the movie' },
-            { name: '{Release Year}', desc: 'Release year' },
-            { name: '{Quality Title}', desc: 'e.g. 1080p WEBRip' },
-            { name: '{MediaInfo VideoCodec}', desc: 'e.g. x264' },
-            { name: '{MediaInfo AudioCodec}', desc: 'e.g. AAC' },
-            { name: '{MediaInfo Resolution}', desc: 'e.g. 1080p' }
+            { name: '{Release Year}', desc: 'Release year' }
           ]}
           onClose={() => setModalType(null)}
         />
       )}
 
       {modalType === 'episode' && (
-        <TagsModal 
-          title="Episode Naming Tags" 
+        <TagsModal
+          title="Episode Naming Tags"
           tags={[
             { name: '{Show Title}', desc: 'Title of the show' },
             { name: '{Season}', desc: 'Padded (e.g. 02)' },
             { name: '{Season Number}', desc: 'Unpadded (e.g. 2)' },
             { name: '{Episode}', desc: 'Episode number' },
-            { name: '{Episode Title}', desc: 'Title of the episode' },
-            { name: '{Quality Title}', desc: 'e.g. 1080p WEBRip' },
-            { name: '{MediaInfo VideoCodec}', desc: 'e.g. x264' },
-            { name: '{MediaInfo AudioCodec}', desc: 'e.g. AAC' },
-            { name: '{MediaInfo Resolution}', desc: 'e.g. 1080p' }
+            { name: '{Episode Title}', desc: 'Title of the episode' }
           ]}
           onClose={() => setModalType(null)}
         />

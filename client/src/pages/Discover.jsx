@@ -507,8 +507,6 @@ export default function Discover() {
         libraryId={selectedMediaId ? libraryItems.get(selectedMediaId) : null}
         mode={modalAction}
         onAdded={(tmdbId, details) => {
-          setLibraryItems(prev => new Map(prev).set(tmdbId, null));
-          // Immediately prepend to Recently Added using the TMDB data we already have
           if (details) {
             const newItem = {
               id: details.id,

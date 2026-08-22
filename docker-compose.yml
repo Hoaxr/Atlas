@@ -15,6 +15,7 @@ services:
       - TZ=Europe/Amsterdam
       - NODE_ENV=production
       - PORT=9898
+      # Set to the origin you actually browse from (e.g. https://atlas.example.com) when behind a reverse proxy
       - CORS_ORIGIN=http://localhost:9898
       - JWT_SECRET=${JWT_SECRET:?JWT_SECRET must be set}
     volumes:

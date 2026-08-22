@@ -47,6 +47,10 @@ router.post('/', requireAdmin, async (req, res, next) => {
       return res.status(400).json({ status: 'error', message: 'Password must be at least 8 characters' });
     }
 
+    if (role && !['admin', 'user'].includes(role)) {
+      return res.status(400).json({ status: 'error', message: 'Role must be "admin" or "user"' });
+    }
+
     const existing = db.prepare('SELECT id FROM users WHERE username = ?').get(username);
     if (existing) {
       return res.status(400).json({ status: 'error', message: 'Username already exists' });
@@ -114,6 +118,10 @@ router.put('/:id', requireAdmin, async (req, res, next) => {
       return res.status(400).json({ status: 'error', message: 'Username is required' });
     }
 
+    if (role !== undefined && !['admin', 'user'].includes(role)) {
+      return res.status(400).json({ status: 'error', message: 'Role must be "admin" or "user"' });
+    }
+
     // Check for username collision
     const existing = db.prepare('SELECT id FROM users WHERE username = ? AND id != ?').get(username, id);
     if (existing) {
@@ -129,9 +137,12 @@ router.put('/:id', requireAdmin, async (req, res, next) => {
         hashed = await bcrypt.hash(password, 12);
       }
 
+      // Preserve the existing role when the request omits it (e.g. profile-only edits)
+      const effectiveRole = role !== undefined ? role : user.role;
+
       db.transaction(() => {
         // Prevent changing role if it's the last admin
-        if (user.role === 'admin' && role !== 'admin') {
+        if (user.role === 'admin' && effectiveRole !== 'admin') {
           const adminCount = db.prepare("SELECT COUNT(*) as count FROM users WHERE role = 'admin'").get().count;
           if (adminCount <= 1) {
             throw new Error('Cannot demote the only remaining admin');
@@ -141,11 +152,11 @@ router.put('/:id', requireAdmin, async (req, res, next) => {
         if (password && hashed) {
           // If password is changed, invalidate tokens by incrementing jwt_version
           db.prepare('UPDATE users SET username = ?, password = ?, email = ?, role = ?, jwt_version = jwt_version + 1 WHERE id = ?').run(
-            username, hashed, email || null, role || 'user', id
+            username, hashed, email || null, effectiveRole, id
           );
         } else {
           db.prepare('UPDATE users SET username = ?, email = ?, role = ? WHERE id = ?').run(
-            username, email || null, role || 'user', id
+            username, email || null, effectiveRole, id
           );
         }
       })();

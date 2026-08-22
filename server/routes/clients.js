@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const downloadClientService = require('../services/downloadClientService');
 const { resetDownloadsNotInClient } = require('../services/mediaManagementService');
+const eventBus = require('../services/eventBus');
 
 router.get('/stats', async (req, res) => {
   try {
@@ -20,7 +21,7 @@ router.get('/torrents', async (req, res) => {
     const hideCompleted = db.prepare('SELECT value FROM settings WHERE key = ?').get('hideCompletedDownloads');
     if (!hideCompleted || hideCompleted.value !== 'false') {
       // Default is true, so filter out if it's not explicitly false
-      torrents = torrents.filter(t => t.progress < 1 && t.state !== 'stalledUP' && t.state !== 'uploading');
+      torrents = torrents.filter(t => t.progress < 100 && t.state !== 'stalledUP' && t.state !== 'uploading');
     }
     
     res.json({ status: 'success', data: torrents });
@@ -32,6 +33,7 @@ router.get('/torrents', async (req, res) => {
 router.post('/torrents/:hash/pause', async (req, res) => {
   try {
     await downloadClientService.pauseTorrent(req.params.hash);
+    eventBus.emit('TORRENTS_MUTATED');
     res.json({ status: 'success', message: 'Torrent paused' });
   } catch (err) {
     res.status(500).json({ status: 'error', message: err.message });
@@ -41,6 +43,7 @@ router.post('/torrents/:hash/pause', async (req, res) => {
 router.post('/torrents/:hash/resume', async (req, res) => {
   try {
     await downloadClientService.resumeTorrent(req.params.hash);
+    eventBus.emit('TORRENTS_MUTATED');
     res.json({ status: 'success', message: 'Torrent resumed' });
   } catch (err) {
     res.status(500).json({ status: 'error', message: err.message });
@@ -60,6 +63,7 @@ router.delete('/torrents/:hash', async (req, res) => {
       console.error('[Clients] Failed to reset removed downloads:', resetErr.message);
     }
 
+    eventBus.emit('TORRENTS_MUTATED');
     res.json({ status: 'success', message: 'Torrent deleted' });
   } catch (err) {
     res.status(500).json({ status: 'error', message: err.message });

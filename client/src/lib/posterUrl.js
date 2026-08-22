@@ -15,7 +15,10 @@
  */
 export const posterUrl = (type, tmdbId, tmdbPath = null, size = 'w500') => {
   if (tmdbId) {
-    return `/api/images/${type}/${tmdbId}/poster`;
+    const token = localStorage.getItem('atlas_token');
+    return token
+      ? `/api/images/${type}/${tmdbId}/poster?token=${encodeURIComponent(token)}`
+      : `/api/images/${type}/${tmdbId}/poster`;
   }
   // Fallback for items not yet in the library (search results, discover)
   if (tmdbPath) {

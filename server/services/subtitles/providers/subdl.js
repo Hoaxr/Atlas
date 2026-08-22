@@ -10,7 +10,7 @@ const downloadForMovie = async (apiKey, movie, langCode) => {
     languages: LANG_MAP[langCode] || 'EN',
     unpack: '1'
   };
-  const searchRes = await axios.get('https://api.subdl.com/api/v1/subtitles', { params });
+  const searchRes = await axios.get('https://api.subdl.com/api/v1/subtitles', { params, timeout: 30000 });
   if (!searchRes.data.status || !searchRes.data.subtitles || searchRes.data.subtitles.length === 0) return null;
   const match = searchRes.data.subtitles.find(s => (s.language || '').toLowerCase() === langCode);
   if (!match) return null;
@@ -18,7 +18,7 @@ const downloadForMovie = async (apiKey, movie, langCode) => {
   const url = match.unpack_files?.[0]?.url || match.url;
   if (!url) return null;
   const downloadUrl = `https://dl.subdl.com${url.startsWith('/') ? url : '/' + url}`;
-  const srtRes = await axios.get(downloadUrl, { responseType: 'text' });
+  const srtRes = await axios.get(downloadUrl, { responseType: 'text', timeout: 30000 });
   return srtRes.data;
 };
 
@@ -32,7 +32,7 @@ const downloadForEpisode = async (apiKey, show, episode, langCode) => {
     season_number: episode.season_number,
     episode_number: episode.episode_number
   };
-  const searchRes = await axios.get('https://api.subdl.com/api/v1/subtitles', { params });
+  const searchRes = await axios.get('https://api.subdl.com/api/v1/subtitles', { params, timeout: 30000 });
   if (!searchRes.data.status || !searchRes.data.subtitles || searchRes.data.subtitles.length === 0) return null;
   const match = searchRes.data.subtitles.find(s => (s.language || '').toLowerCase() === langCode);
   if (!match) return null;
@@ -40,13 +40,13 @@ const downloadForEpisode = async (apiKey, show, episode, langCode) => {
   const url = match.unpack_files?.[0]?.url || match.url;
   if (!url) return null;
   const downloadUrl = `https://dl.subdl.com${url.startsWith('/') ? url : '/' + url}`;
-  const srtRes = await axios.get(downloadUrl, { responseType: 'text' });
+  const srtRes = await axios.get(downloadUrl, { responseType: 'text', timeout: 30000 });
   return srtRes.data;
 };
 
 const searchForMovie = async (apiKey, movie, langCode) => {
   const res = await axios.get('https://api.subdl.com/api/v1/subtitles', {
-    params: { api_key: apiKey, tmdb_id: movie.tmdb_id, type: 'movie', languages: LANG_MAP[langCode] || 'EN', unpack: '1' }
+    params: { api_key: apiKey, tmdb_id: movie.tmdb_id, type: 'movie', languages: LANG_MAP[langCode] || 'EN', unpack: '1' }, timeout: 30000
   });
   if (res.data.status && res.data.subtitles?.length > 0) {
     const matching = res.data.subtitles.filter(s => (s.language || '').toLowerCase() === langCode);
@@ -71,7 +71,7 @@ const searchForMovie = async (apiKey, movie, langCode) => {
 
 const searchForEpisode = async (apiKey, show, episode, langCode) => {
   const res = await axios.get('https://api.subdl.com/api/v1/subtitles', {
-    params: { api_key: apiKey, tmdb_id: show.tmdb_id, type: 'tv', season_number: episode.season_number, episode_number: episode.episode_number, languages: LANG_MAP[langCode] || 'EN', unpack: '1' }
+    params: { api_key: apiKey, tmdb_id: show.tmdb_id, type: 'tv', season_number: episode.season_number, episode_number: episode.episode_number, languages: LANG_MAP[langCode] || 'EN', unpack: '1' }, timeout: 30000
   });
   if (res.data.status && res.data.subtitles?.length > 0) {
     const matching = res.data.subtitles.filter(s => (s.language || '').toLowerCase() === langCode);

@@ -5,7 +5,7 @@ import { Search, Settings as SettingsIcon, Film, Activity, Tv as TvIcon, Downloa
 import Logo from './Logo';
 import clsx from 'clsx';
 import api from '../../lib/api';
-import useWebSocket from '../../lib/useWebSocket';
+import useWebSocket, { closeWebSocket } from '../../lib/useWebSocket';
 import { setCachedMovies, setCachedShows } from '../../lib/libraryCache';
 import useKeyboardShortcuts from '../../lib/useKeyboardShortcuts';
 import ShortcutsModal from '../shared/ShortcutsModal';
@@ -61,6 +61,7 @@ export default function Layout() {
     }
     localStorage.removeItem('atlas_token');
     localStorage.removeItem('atlas_user');
+    closeWebSocket();
     navigate('/login');
   };
 
@@ -235,7 +236,7 @@ export default function Layout() {
   }, [sidebarOpen]);
 
   return (
-    <div className="flex h-screen overflow-hidden bg-slate-50 dark:bg-slate-950">
+      <div className="flex h-screen overflow-hidden bg-slate-50 dark:bg-slate-950" style={{ height: '100dvh', paddingBottom: 'env(safe-area-inset-bottom)' }}>
       {shortcutsOpen && <ShortcutsModal onClose={() => setShortcutsOpen(false)} />}
       {/* Mobile overlay */}
       {sidebarOpen && (
@@ -477,7 +478,7 @@ export default function Layout() {
         </div>
 
         {/* Bottom action row: Logout + Donate side by side */}
-        <div className="px-3 pb-4 pt-1 flex gap-2">
+        <div className="px-3 pb-4 pt-1 flex gap-2" style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom))' }}>
           {hasToken && (
             <button
               onClick={handleLogout}

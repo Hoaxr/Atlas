@@ -3,31 +3,32 @@ const axios = require('axios');
 // SABnzbd uses a simple HTTP API with an API key
 // Endpoint format: http://host:port/sabnzbd/api?mode=...&apikey=...
 
+const http = axios.create({ timeout: 10000 });
+
 const apiCall = async (client, params) => {
   const baseParams = { output: 'json' };
   if (client.password) baseParams.apikey = client.password; // SABnzbd uses password field as API key
 
-  const response = await axios.get(`${client.host}:${client.port}/sabnzbd/api`, {
-    params: { ...baseParams, ...params },
-    timeout: 10000,
-    validateStatus: () => true
+  const response = await http.get(`${client.host}:${client.port}/sabnzbd/api`, {
+    params: { ...baseParams, ...params }
   });
+  if ([401, 403].includes(response.status)) throw new Error(`SABnzbd authentication failed (${response.status})`);
+  if (response.data?.error) throw new Error(response.data.error);
   return response.data;
 };
 
 const addTorrent = async (client, torrentUrl) => {
-  // SABnzbd accepts URLs directly
-  if (torrentUrl.startsWith('http')) {
-    const params = { mode: 'addurl', name: torrentUrl, nzbname: '' };
-    if (client.username) params.cat = client.username; // reuse username as category
-    await apiCall(client, params);
+  if (torrentUrl.startsWith('magnet:')) {
+    throw new Error('Magnet links are not supported by this download client');
   }
+  const params = { mode: 'addurl', name: torrentUrl, nzbname: '' };
+  if (client.username) params.cat = client.username; // reuse username as category
+  await apiCall(client, params);
   return true;
 };
 
 const getTorrents = async (client) => {
-  try {
-    const data = await apiCall(client, { mode: 'queue', start: 0, limit: 100 });
+  const data = await apiCall(client, { mode: 'queue', start: 0, limit: 100 });
     const queue = data?.queue?.slots || [];
     return queue.map((item, i) => ({
       hash: item.nzo_id || String(i),
@@ -43,7 +44,6 @@ const getTorrents = async (client) => {
       completed: item.mb ? parseFloat(item.mb) * 1024 * 1024 : 0,
       eta: item.eta || null,
     }));
-  } catch { return []; }
 };
 
 const getTransferInfo = async (client) => {
@@ -55,7 +55,10 @@ const getTransferInfo = async (client) => {
       up_info_speed: 0,
       free_space: queue.diskspace2 ? parseFloat(queue.diskspace2) * 1024 * 1024 * 1024 : null,
     };
-  } catch { return null; }
+  } catch (err) {
+    console.error('[SABnzbd] getTransferInfo failed:', err.message);
+    return null;
+  }
 };
 
 const pauseTorrent = async (client, hash) => {

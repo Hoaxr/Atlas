@@ -60,6 +60,22 @@ const getProviderLangs = () => {
   return ['en'];
 };
 
+// Defensive: providerLangs/langCode values originate from settings — strip anything
+// path-like (slashes, dots, traversal sequences) before interpolating into filesystem paths.
+const sanitizeLangCode = (code) => String(code || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+
+// Legacy subtitle files often use hyphenated locale codes (zh-CN, pt-BR) that
+// sanitizeLangCode strips — accept both variants when checking existence.
+const langFileExists = (dir, base, langCode) => {
+  const sanitized = sanitizeLangCode(langCode);
+  if (fs.existsSync(path.join(dir, `${base}.${sanitized}.srt`))) return true;
+  const raw = String(langCode || '').toLowerCase();
+  if (raw !== sanitized && /^[a-z]{2}-[a-z]{2}$/.test(raw)) {
+    return fs.existsSync(path.join(dir, `${base}.${raw}.srt`));
+  }
+  return false;
+};
+
 const tryDownloadNativeMovie = async (movie, langCode) => {
   const keys = getProviderKeys();
   let srtContent = null;
@@ -93,9 +109,9 @@ const tryDownloadNativeEpisode = async (show, episode, langCode) => {
 const downloadSubtitlesForMovie = async (movie, langCode) => {
   if (!movie.file_path || !fs.existsSync(movie.file_path)) throw new Error('Movie file not found on disk');
   const parsedPath = path.parse(movie.file_path);
-  const subPath = path.join(parsedPath.dir, `${parsedPath.name}.${langCode}.srt`);
+  const subPath = path.join(parsedPath.dir, `${parsedPath.name}.${sanitizeLangCode(langCode)}.srt`);
 
-  if (fs.existsSync(subPath)) return { alreadyExists: true, langCode };
+  if (langFileExists(parsedPath.dir, parsedPath.name, langCode)) return { alreadyExists: true, langCode };
 
   const srtContent = await tryDownloadNativeMovie(movie, langCode);
   if (srtContent) {
@@ -108,9 +124,9 @@ const downloadSubtitlesForMovie = async (movie, langCode) => {
 const downloadSubtitlesForEpisode = async (episode, show, langCode) => {
   if (!episode.file_path || !fs.existsSync(episode.file_path)) throw new Error('Episode file not found on disk');
   const parsedPath = path.parse(episode.file_path);
-  const subPath = path.join(parsedPath.dir, `${parsedPath.name}.${langCode}.srt`);
+  const subPath = path.join(parsedPath.dir, `${parsedPath.name}.${sanitizeLangCode(langCode)}.srt`);
 
-  if (fs.existsSync(subPath)) return { alreadyExists: true, langCode };
+  if (langFileExists(parsedPath.dir, parsedPath.name, langCode)) return { alreadyExists: true, langCode };
 
   const srtContent = await tryDownloadNativeEpisode(show, episode, langCode);
   if (srtContent) {
@@ -138,13 +154,13 @@ const downloadSubtitlesForMovies = async () => {
     try {
       if (!fs.existsSync(movie.file_path)) return;
       const parsedPath = path.parse(movie.file_path);
-      const missingLangs = providerLangs.filter(langCode => !fs.existsSync(path.join(parsedPath.dir, `${parsedPath.name}.${langCode}.srt`)));
+      const missingLangs = providerLangs.filter(langCode => !langFileExists(parsedPath.dir, parsedPath.name, langCode));
       if (missingLangs.length === 0) return;
 
       console.log(`[SubtitleService] Checking subtitles for: ${movie.title}`);
       for (const langCode of providerLangs) {
-        const subPath = path.join(parsedPath.dir, `${parsedPath.name}.${langCode}.srt`);
-        if (fs.existsSync(subPath)) continue;
+        const subPath = path.join(parsedPath.dir, `${parsedPath.name}.${sanitizeLangCode(langCode)}.srt`);
+        if (langFileExists(parsedPath.dir, parsedPath.name, langCode)) continue;
 
         console.log(`[SubtitleService] Searching ${langCode} subtitle for: ${movie.title}`);
         const srtContent = await tryDownloadNativeMovie(movie, langCode);
@@ -158,8 +174,8 @@ const downloadSubtitlesForMovies = async () => {
             for (const lang of targetLangs) {
               const tCode = LANG_TO_CODE[lang];
               if (!tCode || providerLangs.includes(tCode)) continue;
-              const targetSubPath = path.join(parsedPath.dir, `${parsedPath.name}.${tCode}.srt`);
-              if (fs.existsSync(targetSubPath)) continue;
+              const targetSubPath = path.join(parsedPath.dir, `${parsedPath.name}.${sanitizeLangCode(tCode)}.srt`);
+              if (langFileExists(parsedPath.dir, parsedPath.name, tCode)) continue;
 
               if (isPreferNative) {
                 const nativeContent = await tryDownloadNativeMovie(movie, tCode);
@@ -201,13 +217,13 @@ const downloadSubtitlesForEpisodes = async () => {
       if (!fs.existsSync(ep.file_path)) return;
       const parsedPath = path.parse(ep.file_path);
       const label = `${ep.show_title} S${String(ep.season_number).padStart(2, '0')}E${String(ep.episode_number).padStart(2, '0')}`;
-      const missingLangs = providerLangs.filter(langCode => !fs.existsSync(path.join(parsedPath.dir, `${parsedPath.name}.${langCode}.srt`)));
+      const missingLangs = providerLangs.filter(langCode => !langFileExists(parsedPath.dir, parsedPath.name, langCode));
       if (missingLangs.length === 0) return;
 
       console.log(`[SubtitleService] Checking subtitles for: ${label}`);
       for (const langCode of providerLangs) {
-        const subPath = path.join(parsedPath.dir, `${parsedPath.name}.${langCode}.srt`);
-        if (fs.existsSync(subPath)) continue;
+        const subPath = path.join(parsedPath.dir, `${parsedPath.name}.${sanitizeLangCode(langCode)}.srt`);
+        if (langFileExists(parsedPath.dir, parsedPath.name, langCode)) continue;
 
         console.log(`[SubtitleService] Searching ${langCode} subtitle for: ${label}`);
         const show = { tmdb_id: ep.tmdb_id, title: ep.show_title, year: ep.year };
@@ -300,8 +316,8 @@ const autoTranslateExisting = async () => {
   const translateOrNativeMovie = async (fileBase, movie, lang, enSrtContent) => {
     const tCode = LANG_TO_CODE[lang];
     if (!tCode || providerLangs.includes(tCode)) return;
-    const targetSubPath = path.join(fileBase.dir, `${fileBase.name}.${tCode}.srt`);
-    if (fs.existsSync(targetSubPath)) return;
+    const targetSubPath = path.join(fileBase.dir, `${fileBase.name}.${sanitizeLangCode(tCode)}.srt`);
+    if (langFileExists(fileBase.dir, fileBase.name, tCode)) return;
 
     if (isPreferNative) {
       const nativeContent = await tryDownloadNativeMovie(movie, tCode);
@@ -352,8 +368,8 @@ const upgradeTranslatedToNative = async () => {
       if (!fs.existsSync(movie.file_path)) return;
       const parsedPath = path.parse(movie.file_path);
       for (const tCode of targetCodes) {
-        const subPath = path.join(parsedPath.dir, `${parsedPath.name}.${tCode}.srt`);
-        if (!fs.existsSync(subPath)) continue;
+        const subPath = path.join(parsedPath.dir, `${parsedPath.name}.${sanitizeLangCode(tCode)}.srt`);
+        if (!langFileExists(parsedPath.dir, parsedPath.name, tCode)) continue;
         const nativeContent = await tryDownloadNativeMovie(movie, tCode);
         if (nativeContent) {
           fs.writeFileSync(subPath, nativeContent);

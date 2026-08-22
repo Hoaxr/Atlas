@@ -6,11 +6,11 @@ const JWT_SECRET = process.env.JWT_SECRET;
 // userId -> Set of WebSocket connections
 const users = new Map();
 
-function addConnection(userId, ws) {
+function addConnection(userId, ws, username = null) {
   if (!users.has(userId)) {
     users.set(userId, new Set());
     // User just came online
-    eventBus.emit('event', { type: 'userOnline', userId });
+    eventBus.emit('event', { type: 'userOnline', userId, username });
   }
   users.get(userId).add(ws);
 }
@@ -48,7 +48,7 @@ function handleAuthMessage(ws, data) {
 
     ws._userId = dbUser.id;
     ws._username = dbUser.username;
-    addConnection(dbUser.id, ws);
+    addConnection(dbUser.id, ws, dbUser.username);
     return true;
   } catch {
     return false;

@@ -118,7 +118,9 @@ export default function ProfilesTab({ profiles, newProfile, setNewProfile, editi
                     setEditingProfile(null);
                     fetchSettings();
                     customAlert('Profile updated!', 'success');
-                  } catch { /* profile update failed silently */ }
+                  } catch (err) {
+                    customAlert(err.response?.data?.message || 'Failed to update profile', 'error');
+                  }
                 } else {
                   handleAddEntity('profiles', newProfile);
                   setNewProfile({ name: '', qualities: ['720p', '1080p', '2160p'], cutoff: '1080p', upgrade_allowed: true });

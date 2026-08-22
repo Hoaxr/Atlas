@@ -34,13 +34,13 @@ export default function IndexersTab({ settings, setSettings, handleSave }) {
   };
 
   useEffect(() => {
-    // Only auto-test on mount if the settings were already loaded from the database
+    // Auto-test once settings have actually loaded (prowlarrUrl/API key populated from the server)
     if (settings.prowlarrUrl && settings.prowlarrApiKey && !initialTestDone) {
       setInitialTestDone(true);
       testConnection(true);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [settings.prowlarrUrl, settings.prowlarrApiKey]);
 
   const handleLocalSave = async () => {
     await handleSave();

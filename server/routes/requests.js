@@ -83,9 +83,27 @@ router.post('/', (req, res, next) => {
       return res.status(400).json({ status: 'error', message: 'This item has already been requested by another user' });
     }
 
-    const result = db.prepare("INSERT INTO requests (user_id, tmdb_id, type, title, status, release_date, poster_path) VALUES (?, ?, ?, ?, 'pending', ?, ?)").run(
-      user_id, tmdb_id, type, title, release_date || null, poster_path || null
-    );
+    // Check if it's already in the library
+    const inLibrary = type === 'movie'
+      ? db.prepare('SELECT id FROM movies WHERE tmdb_id = ?').get(tmdb_id)
+      : db.prepare('SELECT id FROM shows WHERE tmdb_id = ?').get(tmdb_id);
+    if (inLibrary) {
+      return res.status(409).json({ status: 'error', message: 'This item is already in your library' });
+    }
+
+    let requestId;
+    try {
+      const result = db.prepare("INSERT INTO requests (user_id, tmdb_id, type, title, status, release_date, poster_path) VALUES (?, ?, ?, ?, 'pending', ?, ?)").run(
+        user_id, tmdb_id, type, title, release_date || null, poster_path || null
+      );
+      requestId = result.lastInsertRowid;
+    } catch (insertErr) {
+      // Unique index race: another request for the same item slipped in first
+      if (String(insertErr.code || '').startsWith('SQLITE_CONSTRAINT')) {
+        return res.status(400).json({ status: 'error', message: 'This item has already been requested' });
+      }
+      throw insertErr;
+    }
 
     // Send notification if enabled
     const notifyOnRequest = getSetting('notifyOnRequest') === 'true';
@@ -99,7 +117,7 @@ router.post('/', (req, res, next) => {
       ).catch(err => console.error('[NotificationService] Request notification failed:', err.message));
     }
 
-    res.json({ status: 'success', message: 'Request submitted successfully', data: { id: result.lastInsertRowid } });
+    res.json({ status: 'success', message: 'Request submitted successfully', data: { id: requestId } });
   } catch (err) {
     next(err);
   }
@@ -110,6 +128,9 @@ router.put('/:id/approve', requireAdmin, async (req, res, next) => {
   try {
     const request = db.prepare('SELECT * FROM requests WHERE id = ?').get(req.params.id);
     if (!request) return res.status(404).json({ status: 'error', message: 'Request not found' });
+    if (request.status !== 'pending') {
+      return res.status(400).json({ status: 'error', message: `Only pending requests can be approved (current status: ${request.status})` });
+    }
 
     // If it's not in the library, we need to add it. But adding it requires quality profiles and path!
     // Often admins want to choose the path/profile when approving. 
@@ -126,6 +147,11 @@ router.put('/:id/approve', requireAdmin, async (req, res, next) => {
 // PUT /api/requests/:id/deny (Admin only)
 router.put('/:id/deny', requireAdmin, (req, res, next) => {
   try {
+    const request = db.prepare('SELECT status FROM requests WHERE id = ?').get(req.params.id);
+    if (!request) return res.status(404).json({ status: 'error', message: 'Request not found' });
+    if (request.status !== 'pending') {
+      return res.status(400).json({ status: 'error', message: `Only pending requests can be denied (current status: ${request.status})` });
+    }
     db.prepare("UPDATE requests SET status = 'denied' WHERE id = ?").run(req.params.id);
     res.json({ status: 'success', message: 'Request denied' });
   } catch (err) {

@@ -19,6 +19,7 @@ import TrailerModal from '../components/TrailerModal';
 import ManualSearchModal from '../components/ManualSearchModal';
 import RemapModal from '../components/RemapModal';
 import ModalShell from '../components/shared/ModalShell';
+import InlineError from '../components/shared/InlineError';
 import { ProviderLabel } from '../utils/providerColors';
 import FolderBrowserModal from '../components/FolderBrowserModal';
 import SubtitleLanguageBadge from '../components/shared/SubtitleLanguageBadge';
@@ -29,6 +30,7 @@ export default function MovieDetails() {
   const navigate = useNavigate();
 
   const [movie, setMovie] = useState(null);
+  const [loadError, setLoadError] = useState(false);
   const [isTrailerOpen, setIsTrailerOpen] = useState(false);
   const { providerLangs, profiles } = useSettings();
 
@@ -100,6 +102,7 @@ export default function MovieDetails() {
       const res = await api.get(`/library/movies/${id}`);
       if (reqId !== fetchRequestIdRef.current) return;
       if (res.data.status === 'success') {
+        setLoadError(false);
         const data = res.data.data;
         setMovie(data);
         if (data.files) setMovieFiles(data.files);
@@ -111,7 +114,7 @@ export default function MovieDetails() {
         return;
       }
       console.error(e);
-      if (!silent) customAlert('Failed to load movie details', 'error');
+      if (!silent) setLoadError(true);
     }
   }, [id, navigate]);
 
@@ -214,6 +217,17 @@ export default function MovieDetails() {
       setRemapping(false);
     }
   };
+
+  if (loadError && !movie) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-6 relative z-10">
+        <InlineError
+          message="Failed to load movie details. Please check your connection and try again."
+          onRetry={() => { setLoadError(false); fetchMovieData(false); }}
+        />
+      </div>
+    );
+  }
 
   if (!movie) return null;
 

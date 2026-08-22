@@ -21,6 +21,9 @@ const IMAGE_DIR = path.join(DATA_DIR, 'images');
 const TMDB_POSTER_BASE   = 'https://image.tmdb.org/t/p/w500';
 const TMDB_ORIGINAL_BASE = 'https://image.tmdb.org/t/p/original';
 
+// Refuse to cache anything larger than this (posters are ~100-300KB)
+const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
+
 /**
  * Absolute path for a cached poster.
  * @param {'movies'|'shows'} type
@@ -44,12 +47,29 @@ const downloadImage = async (tmdbImagePath, destPath, size = 'w500') => {
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 
   const response = await axios({ method: 'GET', url, responseType: 'stream', timeout: 15000 });
-  const writer   = fs.createWriteStream(destPath);
-  response.data.pipe(writer);
-  return new Promise((resolve, reject) => {
-    writer.on('finish', resolve);
-    writer.on('error', reject);
-  });
+
+  // Enforce a size cap before touching disk
+  const contentLength = parseInt(response.headers['content-length'], 10);
+  if (!Number.isNaN(contentLength) && contentLength > MAX_IMAGE_BYTES) {
+    response.data.destroy();
+    throw new Error(`Image exceeds size limit (${contentLength} bytes)`);
+  }
+
+  // Write to a temp file first so a torn/partial download is never served from the final path
+  const tmpPath = `${destPath}.tmp`;
+  try {
+    const writer = fs.createWriteStream(tmpPath);
+    response.data.pipe(writer);
+    await new Promise((resolve, reject) => {
+      writer.on('finish', resolve);
+      writer.on('error', reject);
+      response.data.on('error', reject);
+    });
+    fs.renameSync(tmpPath, destPath);
+  } catch (err) {
+    try { fs.unlinkSync(tmpPath); } catch { /* ignore */ }
+    throw err;
+  }
 };
 
 /**

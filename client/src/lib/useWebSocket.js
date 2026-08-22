@@ -6,8 +6,14 @@ let sharedWs = null;
 const handlers = new Set();
 let reconnectTimer = null;
 let isConnecting = false;
+let reconnectAttempts = 0;
+let reconnectDisabled = false;
+
+// Codes sent by the server on auth failure — don't retry until an explicit connect()
+const FATAL_CLOSE_CODES = new Set([4001, 4003]);
 
 const connect = () => {
+  if (reconnectDisabled) return;
   if (isConnecting && sharedWs?.readyState === WebSocket.CONNECTING) return;
   isConnecting = true;
 
@@ -20,6 +26,7 @@ const connect = () => {
 
     ws.onopen = () => {
       isConnecting = false;
+      reconnectAttempts = 0;
       // Send auth if logged in
       try {
         const token = localStorage.getItem('atlas_token');
@@ -58,10 +65,16 @@ const connect = () => {
       } catch { /* malformed */ }
     };
 
-    ws.onclose = () => {
+    ws.onclose = (event) => {
       isConnecting = false;
       clearTimeout(reconnectTimer);
-      reconnectTimer = setTimeout(connect, 5000);
+      if (FATAL_CLOSE_CODES.has(event.code)) {
+        reconnectDisabled = true;
+        return;
+      }
+      reconnectAttempts += 1;
+      const delay = Math.min(30000, 5000 * reconnectAttempts);
+      reconnectTimer = setTimeout(connect, delay);
     };
 
     ws.onerror = () => {
@@ -72,7 +85,23 @@ const connect = () => {
   } catch {
     isConnecting = false;
     clearTimeout(reconnectTimer);
-    reconnectTimer = setTimeout(connect, 5000);
+    reconnectTimer = setTimeout(connect, Math.min(30000, 5000 * (reconnectAttempts + 1)));
+  }
+};
+
+/**
+ * Close the shared socket and stop reconnection attempts (e.g. on logout).
+ * A subsequent useWebSocket() consumer will trigger a fresh connect().
+ */
+export const closeWebSocket = () => {
+  reconnectDisabled = true;
+  clearTimeout(reconnectTimer);
+  isConnecting = false;
+  if (sharedWs) {
+    sharedWs.onclose = null;
+    sharedWs.onerror = null;
+    try { sharedWs.close(); } catch { /* ignore */ }
+    sharedWs = null;
   }
 };
 
@@ -84,6 +113,7 @@ export default function useWebSocket() {
     handlers.add(handler);
     if (!sharedWs || sharedWs.readyState > 1) {
       clearTimeout(reconnectTimer);
+      reconnectDisabled = false;
       connect();
     }
     return () => {
