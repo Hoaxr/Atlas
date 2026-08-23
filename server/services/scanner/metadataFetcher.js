@@ -367,6 +367,12 @@ const processScannedFiles = async (allFiles, scanProgress, mode, nextStage) => {
             } catch { /* non-critical */ }
           }
         } catch (tmdbErr) {
+          // A duplicate-show race means another worker already created the row
+          // and linked its file — not a failure worth reporting.
+          if (/UNIQUE constraint failed: shows\.tmdb_id/.test(tmdbErr.message)) {
+            console.log(`[Scanner] Show "${title}" already exists (created concurrently) — linking skipped`);
+            return;
+          }
           console.error(`TMDB error for show ${title}:`, tmdbErr.message);
           scanProgress.failedShows.push({ title, reason: `TMDB error: ${tmdbErr.message}`, file: file.name, path: file.path });
         }
@@ -652,6 +658,11 @@ const processScannedFiles = async (allFiles, scanProgress, mode, nextStage) => {
           }
         }
       } catch (tmdbErr) {
+        // Same duplicate-race tolerance as shows: the movie row already exists.
+        if (/UNIQUE constraint failed: movies\.tmdb_id/.test(tmdbErr.message)) {
+          console.log(`[Scanner] Movie "${title}" already exists (created concurrently) — linking skipped`);
+          return;
+        }
         console.error(`TMDB error for movie ${title}:`, tmdbErr.message);
         scanProgress.failedMovies.push({ title, year, reason: `TMDB error: ${tmdbErr.message}`, file: file.name, path: file.path });
       }

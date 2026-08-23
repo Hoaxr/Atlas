@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Search, Loader2, Plus, Clock, CheckCircle2, XCircle, LogOut, Key, Star, X, Film, Tv, CalendarClock, Sparkles, Check, TrendingUp, DownloadCloud } from 'lucide-react';
+import { Search, Loader2, Plus, Clock, CheckCircle2, XCircle, LogOut, Key, Star, X, Film, Tv, CalendarClock, Sparkles, Check, TrendingUp, DownloadCloud, Heart } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import api from '../lib/api';
@@ -355,7 +355,7 @@ export default function UserPortal() {
                 </span>
                 <div className="w-px h-5 bg-white/10 hidden sm:block"></div>
                 {(!user || user.origin === 'atlas') && (
-                  <button 
+                  <button
                     onClick={() => setIsPasswordModalOpen(true)}
                     className="p-2 rounded-xl hover:bg-white/10 transition-colors text-slate-400 hover:text-white group relative"
                     title="Change Password"
@@ -363,7 +363,16 @@ export default function UserPortal() {
                     <Key className="w-5 h-5 group-hover:scale-110 transition-transform" />
                   </button>
                 )}
-                <button 
+                <a
+                  href="https://www.paypal.com/donate/?business=C5EDZZUFSMX4J&no_recurring=0&item_name=Thanks+for+the+coffee&currency_code=EUR"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="p-2 rounded-xl hover:bg-rose-500/10 transition-colors text-slate-400 hover:text-rose-400 group relative"
+                  title="Support Atlas"
+                >
+                  <Heart className="w-5 h-5 group-hover:scale-110 transition-transform fill-rose-400/30 group-hover:fill-rose-400/60" />
+                </a>
+                <button
                   onClick={handleLogout}
                   className="p-2 rounded-xl hover:bg-rose-500/10 hover:text-rose-400 transition-colors text-slate-400 group relative"
                   title="Logout"
