@@ -204,7 +204,7 @@ export default function PersonDetails() {
 
                 {/* In library badge */}
                 {credit.inLibrary && (
-                  <div className="absolute top-2 left-2 z-20 bg-slate-900/80 rounded-full shadow-lg" title="In Library">
+                  <div className="absolute top-2 left-2 z-20 bg-slate-900/80 rounded-full shadow-lg flex items-center justify-center" title="In Library">
                     <CheckCircle2 className="w-6 h-6 text-emerald-400 fill-emerald-400/20" />
                   </div>
                 )}

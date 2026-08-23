@@ -264,7 +264,7 @@ export default function Discover() {
       <div key={keyId} className={cardClass}>
         
         {isInLibrary && (
-          <div className="absolute top-2 left-2 z-20 bg-slate-900/80 rounded-full shadow-lg group-hover:opacity-0 transition-opacity duration-200" title="In Library">
+          <div className="absolute top-2 left-2 z-20 bg-slate-900/80 rounded-full shadow-lg flex items-center justify-center group-hover:opacity-0 transition-opacity duration-200" title="In Library">
             <CheckCircle2 className="w-6 h-6 text-emerald-400 fill-emerald-400/20" />
           </div>
         )}

@@ -954,7 +954,7 @@ export default function Dashboard() {
                   }}
                   className={`cursor-pointer glass-panel interactive-glow-card rounded-xl overflow-hidden group hover:scale-[1.02] transition-all duration-300 relative flex flex-col focus:outline-none focus:ring-2 focus:ring-cyan-500/50 hover:shadow-[0_0_30px_-5px_rgba(6,182,212,0.25)] hover:border-cyan-500/40`}
                 >
-                  <div className="absolute top-2 left-2 z-20 md:group-hover:opacity-0 transition-opacity duration-200">
+                  <div className="absolute top-2 left-2 z-20">
                     <button 
                       onClick={async (e) => {
                         e.stopPropagation(); e.preventDefault();
@@ -969,7 +969,7 @@ export default function Dashboard() {
                           customAlert('Failed to toggle monitor status', 'error');
                         }
                       }}
-                      className="p-1.5 rounded-full bg-slate-900/80 hover:bg-slate-800 transition-colors shadow-lg group/btn"
+                      className="w-8 h-8 rounded-full bg-slate-900/80 hover:bg-slate-800 transition-colors shadow-lg flex items-center justify-center group/btn"
                       title={item.monitored ? 'Unmonitor' : 'Monitor'}
                     >
                       {item.monitored ? (
@@ -980,19 +980,19 @@ export default function Dashboard() {
                     </button>
                   </div>
 
-                  <div className="absolute top-2 right-2 z-20 flex gap-2 md:group-hover:opacity-0 transition-opacity duration-200">
+                  <div className="absolute top-2 right-2 z-20 flex gap-2">
                     {(item.status === 'downloading' || (viewMode === 'shows' && item.downloading_episodes > 0)) && (
-                      <div className="bg-slate-900/80 rounded-full shadow-lg p-1.5" title="Downloading">
+                      <div className="w-8 h-8 rounded-full bg-slate-900/80 flex items-center justify-center shadow-lg" title="Downloading">
                         <Activity className="w-5 h-5 text-blue-400 animate-pulse" />
                       </div>
                     )}
                     {viewMode === 'shows' && item.status !== 'downloading' && !item.downloading_episodes && (
                       item.missing_episodes > 0 ? (
-                        <div className="bg-slate-900/80 rounded-full shadow-lg p-1.5" title={`${item.missing_episodes} Missing Episode${item.missing_episodes > 1 ? 's' : ''}`}>
+                        <div className="w-8 h-8 rounded-full bg-slate-900/80 flex items-center justify-center shadow-lg" title={`${item.missing_episodes} Missing Episode${item.missing_episodes > 1 ? 's' : ''}`}>
                           <AlertCircle className="w-5 h-5 text-amber-500" />
                         </div>
                       ) : (item.downloaded_episodes > 0 || item.status === 'downloaded') ? (
-                        <div className="bg-slate-900/80 rounded-full shadow-lg p-1.5" title="Available">
+                        <div className="w-8 h-8 rounded-full bg-slate-900/80 flex items-center justify-center shadow-lg" title="Available">
                           <CheckCircle2 className="w-5 h-5 text-emerald-400 fill-emerald-400/20" />
                         </div>
                       ) : null
@@ -1000,12 +1000,12 @@ export default function Dashboard() {
                     {viewMode === 'movies' && item.status !== 'downloading' && (
                       <>
                         {item.status === 'downloaded' && (
-                          <div className="bg-slate-900/80 rounded-full shadow-lg p-1.5" title="Available">
+                          <div className="w-8 h-8 rounded-full bg-slate-900/80 flex items-center justify-center shadow-lg" title="Available">
                             <CheckCircle2 className="w-5 h-5 text-emerald-400 fill-emerald-400/20" />
                           </div>
                         )}
                         {item.status === 'monitored' && (
-                          <div className="bg-slate-900/80 rounded-full shadow-lg p-1.5" title={
+                          <div className="w-8 h-8 rounded-full bg-slate-900/80 flex items-center justify-center shadow-lg" title={
                             item.release_date && new Date(item.release_date) > new Date()
                               ? 'Missing / Not Released Yet'
                               : 'Missing'

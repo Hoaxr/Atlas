@@ -241,22 +241,22 @@ export default function UserPortal() {
       >
         <div className="absolute top-2 left-2 z-20 flex items-center gap-1">
           {isDownloaded && (
-            <div className="bg-slate-900/80 rounded-full shadow-lg" title="Downloaded">
+            <div className="bg-slate-900/80 rounded-full shadow-lg flex items-center justify-center" title="Downloaded">
               <CheckCircle2 className="w-6 h-6 text-emerald-400 fill-emerald-400/20" />
             </div>
           )}
           {inLibrary && !isDownloaded && (
-            <div className="bg-slate-900/80 rounded-full shadow-lg" title="In Library (Not Available Yet)">
+            <div className="bg-slate-900/80 rounded-full shadow-lg flex items-center justify-center" title="In Library (Not Available Yet)">
               <Clock className="w-6 h-6 text-sky-400 fill-sky-400/20" />
             </div>
           )}
           {isNotYetReleased(item.release_date || item.first_air_date) && (
-            <div className="bg-slate-900/80 rounded-full shadow-lg" title="Coming Soon">
+            <div className="bg-slate-900/80 rounded-full shadow-lg flex items-center justify-center" title="Coming Soon">
               <CalendarClock className="w-6 h-6 text-violet-400 fill-violet-400/20" />
             </div>
           )}
           {!inLibrary && !isNotYetReleased(item.release_date || item.first_air_date) && isRequested && (
-            <div className="bg-slate-900/80 rounded-full shadow-lg" title="Requested">
+            <div className="bg-slate-900/80 rounded-full shadow-lg flex items-center justify-center" title="Requested">
               <Clock className="w-6 h-6 text-amber-400 fill-amber-400/20" />
             </div>
           )}
