@@ -9,6 +9,7 @@ const axios = require('axios');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const db = require('../config/database');
 const { getSetting, setSetting, invalidateSettingsCache } = require('../utils/settings');
+const { getVersionInfo } = require('../utils/version');
 const downloadClientService = require('../services/downloadClientService');
 const { invalidateAuthCache } = require('../middleware/authMiddleware');
 
@@ -1061,7 +1062,14 @@ router.get('/status', async (req, res) => {
   }
   services.mounts = { paths: libraryPaths.length, entries: mountEntries, issues: mountIssues };
 
-  res.json({ status: 'success', data: { services, errors } });
+  const version = getVersionInfo();
+
+  res.json({ status: 'success', data: { services, errors, version } });
+});
+
+// System version endpoint
+router.get('/version', (req, res) => {
+  res.json({ status: 'success', data: getVersionInfo() });
 });
 
 // Database Backup - download the SQLite database file

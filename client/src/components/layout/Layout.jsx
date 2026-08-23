@@ -17,7 +17,7 @@ const navSections = [
       { name: 'Tracker', path: '/tracker', icon: TrendingUp },
       { name: 'Discover', path: '/discover', icon: Search },
       { name: 'Movies', path: '/movies', icon: Film },
-      { name: 'TV Shows', path: '/shows', icon: TvIcon },
+      { name: 'Shows', path: '/shows', icon: TvIcon },
       { name: 'Calendar', path: '/calendar', icon: CalendarIcon },
       { name: 'Statistics', path: '/stats', icon: BarChart3 },
     ]
@@ -371,6 +371,26 @@ export default function Layout() {
                             <span className="text-sm font-medium">{item.name}</span>
                           </div>
                           <div className="relative z-10 flex items-center space-x-2">
+                            {item.path === '/movies' && libStats?.movies > 0 && (
+                              <span className={clsx(
+                                "text-[11px] font-semibold px-2 py-0.5 rounded-lg border transition-colors",
+                                isActive
+                                  ? "bg-cyan-500/15 text-cyan-300 border-cyan-500/30"
+                                  : "bg-slate-200/80 dark:bg-slate-800/80 text-slate-600 dark:text-slate-300 border-slate-300/40 dark:border-slate-700/50"
+                              )}>
+                                {libStats.movies.toLocaleString()}
+                              </span>
+                            )}
+                            {item.path === '/shows' && libStats?.shows > 0 && (
+                              <span className={clsx(
+                                "text-[11px] font-semibold px-2 py-0.5 rounded-lg border transition-colors",
+                                isActive
+                                  ? "bg-cyan-500/15 text-cyan-300 border-cyan-500/30"
+                                  : "bg-slate-200/80 dark:bg-slate-800/80 text-slate-600 dark:text-slate-300 border-slate-300/40 dark:border-slate-700/50"
+                              )}>
+                                {libStats.shows.toLocaleString()}
+                              </span>
+                            )}
                             {item.name === 'Requests' && pendingRequests > 0 && (
                               <span className="bg-amber-500/20 text-amber-400 text-[10px] font-bold px-2 py-0.5 rounded-full border border-amber-500/30">
                                 {pendingRequests}
@@ -424,79 +444,50 @@ export default function Layout() {
           )}
         </div>
 
-        <div className="px-3 mt-auto pb-4">
-          <div className="space-y-1">
-            <div className="flex items-center px-4 mb-2">
-              <h3 className="text-[10px] font-black text-slate-800 dark:text-white uppercase tracking-widest opacity-90">
-                Overview
-              </h3>
-              <div className="flex-1 h-px bg-gradient-to-r from-slate-400/50 dark:from-white/30 to-transparent mt-0.5"></div>
-            </div>
-            <div className="space-y-0.5">
-              <div className="flex items-center justify-between px-4 py-2 rounded-xl text-slate-600 dark:text-slate-400 hover:bg-slate-200/50 dark:hover:bg-white/5 transition-colors cursor-default">
-                <div className="flex items-center gap-3">
-                  <Film className="w-4 h-4 text-cyan-500/70" />
-                  <span className="text-sm font-medium">Movies</span>
-                </div>
-                <span className="text-xs font-bold text-slate-500 dark:text-slate-300 bg-slate-200/50 dark:bg-slate-800/80 px-2 py-0.5 rounded-md">
-                  {libStats.movies.toLocaleString()}
-                </span>
-              </div>
-              
-              <div className="flex items-center justify-between px-4 py-2 rounded-xl text-slate-600 dark:text-slate-400 hover:bg-slate-200/50 dark:hover:bg-white/5 transition-colors cursor-default">
-                <div className="flex items-center gap-3">
-                  <TvIcon className="w-4 h-4 text-purple-500/70" />
-                  <span className="text-sm font-medium">Shows</span>
-                </div>
-                <span className="text-xs font-bold text-slate-500 dark:text-slate-300 bg-slate-200/50 dark:bg-slate-800/80 px-2 py-0.5 rounded-md">
-                  {libStats.shows.toLocaleString()}
-                </span>
-              </div>
-
-              <NavLink 
-                to="/status" 
-                onClick={() => setSidebarOpen(false)}
-                className="flex items-center justify-between px-4 py-2 rounded-xl text-slate-600 dark:text-slate-400 hover:bg-slate-200/50 dark:hover:bg-white/5 transition-colors group"
-              >
-                <div className="flex items-center gap-3">
-                  <Activity className={`w-4 h-4 ${systemIssues.length > 0 ? 'text-amber-500/70 group-hover:text-amber-500' : 'text-emerald-500/70 group-hover:text-emerald-500'} transition-colors`} />
-                  <span className="text-sm font-medium">Status</span>
-                </div>
-                {systemIssues.length > 0 ? (
-                  <span className="text-[10px] font-bold text-amber-500 bg-amber-500/10 px-2 py-0.5 rounded-md flex items-center gap-1">
-                    <div className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
-                    {systemIssues.length} Issues
-                  </span>
-                ) : (
-                  <span className="text-[10px] font-bold text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded-md">
-                    Healthy
-                  </span>
-                )}
-              </NavLink>
-            </div>
-          </div>
-        </div>
-
-        {/* Bottom action row: Logout + Donate side by side */}
-        <div className="px-3 pb-4 pt-1 flex gap-2" style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom))' }}>
+        {/* Bottom action row: Logout + Status + Donate side by side */}
+        <div className="px-3 pb-4 pt-3 flex gap-1.5 mt-auto border-t border-slate-200/80 dark:border-slate-800/80" style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom))' }}>
           {hasToken && (
             <button
               onClick={handleLogout}
-              className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-slate-200/60 dark:bg-slate-800/50 border border-slate-300/40 dark:border-white/5 text-slate-500 dark:text-slate-400 hover:bg-rose-500/10 hover:text-rose-400 hover:border-rose-500/20 dark:hover:bg-rose-500/10 dark:hover:text-rose-400 dark:hover:border-rose-500/20 transition-all duration-200 text-sm font-medium"
+              className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-slate-200/60 dark:bg-slate-800/50 border border-slate-300/40 dark:border-white/5 text-slate-500 dark:text-slate-400 hover:bg-rose-500/10 hover:text-rose-400 hover:border-rose-500/20 dark:hover:bg-rose-500/10 dark:hover:text-rose-400 dark:hover:border-rose-500/20 transition-all duration-200 text-xs font-medium"
               title="Logout"
             >
-              <LogOut className="w-4 h-4" />
+              <LogOut className="w-3.5 h-3.5" />
               <span>Logout</span>
             </button>
           )}
+
+          <NavLink
+            to="/status"
+            onClick={() => setSidebarOpen(false)}
+            className={({ isActive }) => clsx(
+              "flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl border transition-all duration-200 text-xs font-medium relative group",
+              isActive
+                ? "bg-cyan-500/15 text-cyan-300 border-cyan-500/30"
+                : systemIssues.length > 0
+                  ? "bg-amber-500/10 text-amber-400 border-amber-500/20 hover:bg-amber-500/20"
+                  : "bg-slate-200/60 dark:bg-slate-800/50 border-slate-300/40 dark:border-white/5 text-slate-500 dark:text-slate-400 hover:bg-slate-300/60 dark:hover:bg-slate-700/50 hover:text-slate-700 dark:hover:text-slate-200"
+            )}
+            title={systemIssues.length > 0 ? `${systemIssues.length} System Issues` : "System Healthy"}
+          >
+            <div className="relative flex items-center">
+              <Activity className={clsx("w-3.5 h-3.5", systemIssues.length > 0 ? "text-amber-400" : "text-emerald-400")} />
+              <span className={clsx(
+                "absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full",
+                systemIssues.length > 0 ? "bg-amber-400 animate-pulse" : "bg-emerald-400"
+              )} />
+            </div>
+            <span>Status</span>
+          </NavLink>
+
           <a
             href="https://www.paypal.com/donate/?business=C5EDZZUFSMX4J&no_recurring=0&item_name=Thanks+for+the+coffee&currency_code=EUR"
             target="_blank"
             rel="noopener noreferrer"
-            className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 hover:bg-rose-500/20 hover:text-rose-300 hover:border-rose-500/35 transition-all duration-200 text-sm font-medium group"
+            className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 hover:bg-rose-500/20 hover:text-rose-300 hover:border-rose-500/35 transition-all duration-200 text-xs font-medium group"
             title="Support Atlas"
           >
-            <Heart className="w-4 h-4 group-hover:scale-110 transition-transform duration-200 fill-rose-400/30 group-hover:fill-rose-400/60" />
+            <Heart className="w-3.5 h-3.5 group-hover:scale-110 transition-transform duration-200 fill-rose-400/30 group-hover:fill-rose-400/60" />
             <span>Donate</span>
           </a>
         </div>

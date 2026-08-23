@@ -7,8 +7,15 @@ const { getMediaMetadata, parseAudioFromFileName } = require('../../utils/videoU
 const { parseResolution, parseCodec } = require('../../utils/mediaParsing');
 const { isWatchedSyncEnabled } = require('../../utils/settings');
 const { parseMediaTitle, scanSubtitleLangs } = require('./fileScanner');
-const { isVideoFile, SUBTITLE_EXTENSIONS } = require('../../utils/fileUtils');
-const { getNamingConfig, sanitizeTitle } = require('../mediaManagementService');
+const { isVideoFile } = require('../../utils/fileUtils');
+
+// Helper to detect SQLite constraint errors across driver implementations (node:sqlite errcode 19, ERR_SQLITE_ERROR, etc.)
+const isConstraintError = (err) => {
+  if (!err) return false;
+  return err.errcode === 19 ||
+    String(err.code || '').startsWith('SQLITE_CONSTRAINT') ||
+    /constraint failed/i.test(err.message || '');
+};
 
 // Concurrency limiter helper
 const runWithConcurrency = async (items, concurrency, workerFn, scanProgress) => {
@@ -23,77 +30,6 @@ const runWithConcurrency = async (items, concurrency, workerFn, scanProgress) =>
   await Promise.all(workers);
 };
 
-// Rename subtitle files that share the video's old base name so they keep
-// matching the renamed video file (e.g. "Movie.en.srt" -> "Movie (2020).en.srt").
-const renameMatchingSubtitles = async (dir, oldBase, newBase) => {
-  if (oldBase === newBase) return;
-  try {
-    const items = await fs.readdir(dir);
-    for (const item of items) {
-      if (!SUBTITLE_EXTENSIONS.includes(path.extname(item).toLowerCase())) continue;
-      if (!item.toLowerCase().startsWith(oldBase.toLowerCase())) continue;
-      const suffix = item.slice(oldBase.length);
-      const newName = `${newBase}${suffix}`;
-      if (newName === item) continue;
-      try {
-        await fs.rename(path.join(dir, item), path.join(dir, newName));
-        console.log(`[Scanner] Renamed subtitle "${item}" -> "${newName}"`);
-      } catch (err) {
-        console.warn(`[Scanner] Failed to rename subtitle "${item}": ${err.message}`);
-      }
-    }
-  } catch { /* ignore */ }
-};
-
-// Rename a scanned video file in place to the configured naming format.
-// Returns the (possibly new) full path.
-const renameToNamingFormat = async (fullPath, { type, title, year, season, episode, episodeEnd, episodeTitle }) => {
-  const config = getNamingConfig();
-  const dir = path.dirname(fullPath);
-  const ext = path.extname(fullPath);
-  const currentBase = path.basename(fullPath, ext);
-
-  let targetBase;
-  if (type === 'movie') {
-    if (!config.renameMovies) return fullPath;
-    let format = config.standardMovieFormat || '{Movie Title} ({Release Year})';
-    format = format.replace('{Movie Title}', sanitizeTitle(title || '', config));
-    format = format.replace('{Release Year}', year ? String(year) : '');
-    targetBase = format;
-  } else {
-    if (!config.renameEpisodes) return fullPath;
-    const s = String(season).padStart(2, '0');
-    const e = String(episode).padStart(2, '0');
-    let format = config.standardEpisodeFormat || '{Show Title} - S{Season}E{Episode} - {Episode Title}';
-    format = format.replace('{Show Title}', sanitizeTitle(title || '', config));
-    format = format.replace('{Season}', s);
-    format = format.replace('{Episode}', (episodeEnd && episodeEnd > episode) ? `${e}-E${String(episodeEnd).padStart(2, '0')}` : e);
-    format = format.replace('{Episode Title}', sanitizeTitle(episodeTitle || '', config));
-    targetBase = format;
-  }
-
-  // Strip any illegal characters introduced by the format itself
-  targetBase = targetBase.replace(/[<>"/\\|?*]/g, '').trim().replace(/\s+/g, ' ');
-  if (!targetBase || targetBase === currentBase) return fullPath;
-
-  const newPath = path.join(dir, `${targetBase}${ext}`);
-  try {
-    await fs.access(newPath);
-    console.warn(`[Scanner] Skipping rename — target already exists: ${newPath}`);
-    return fullPath;
-  } catch { /* target does not exist, safe to rename */ }
-
-  try {
-    await fs.rename(fullPath, newPath);
-    console.log(`[Scanner] Renamed "${currentBase}${ext}" -> "${targetBase}${ext}"`);
-    await renameMatchingSubtitles(dir, currentBase, targetBase);
-    return newPath;
-  } catch (err) {
-    console.warn(`[Scanner] Failed to rename "${fullPath}": ${err.message}`);
-    return fullPath;
-  }
-};
-
 const processScannedFiles = async (allFiles, scanProgress, mode, nextStage) => {
   nextStage('Processing files...');
   scanProgress.totalFiles = allFiles.length;
@@ -103,7 +39,7 @@ const processScannedFiles = async (allFiles, scanProgress, mode, nextStage) => {
     scanProgress.currentFile = file.name;
     
     const fileDir = file.parentPath || file.path;
-    let fullPath = path.join(fileDir, file.name);
+    const fullPath = path.join(fileDir, file.name);
     const { title, year, isShow, seasonNumber, episodeNumber, episodeEnd, tmdbId: explicitTmdbId, imdbId: explicitImdbId } = parseMediaTitle(file.name, fileDir, file.showContext);
 
     if (!title && !explicitTmdbId && !explicitImdbId) {
@@ -295,7 +231,7 @@ const processScannedFiles = async (allFiles, scanProgress, mode, nextStage) => {
                 );
                 showId = insertRes.lastInsertRowid;
               } catch (insertErr) {
-                if (!String(insertErr.code || '').startsWith('SQLITE_CONSTRAINT')) throw insertErr;
+                if (!isConstraintError(insertErr)) throw insertErr;
                 const dupRow = db.prepare('SELECT id FROM shows WHERE tmdb_id = ?').get(matchedShow.id);
                 if (!dupRow) throw insertErr;
                 showId = dupRow.id;
@@ -367,14 +303,16 @@ const processScannedFiles = async (allFiles, scanProgress, mode, nextStage) => {
             } catch { /* non-critical */ }
           }
         } catch (tmdbErr) {
-          // A duplicate-show race means another worker already created the row
-          // and linked its file — not a failure worth reporting.
-          if (/UNIQUE constraint failed: shows\.tmdb_id/.test(tmdbErr.message)) {
-            console.log(`[Scanner] Show "${title}" already exists (created concurrently) — linking skipped`);
-            return;
+          if (isConstraintError(tmdbErr) || /UNIQUE constraint failed: shows\.tmdb_id/.test(tmdbErr.message)) {
+            const dup = db.prepare('SELECT id FROM shows WHERE tmdb_id = ? OR folder_path = ?').get(tmdbId || -1, showFolderPath);
+            if (dup) {
+              showId = dup.id;
+            }
           }
-          console.error(`TMDB error for show ${title}:`, tmdbErr.message);
-          scanProgress.failedShows.push({ title, reason: `TMDB error: ${tmdbErr.message}`, file: file.name, path: file.path });
+          if (!showId) {
+            console.error(`TMDB error for show ${title}:`, tmdbErr.message);
+            scanProgress.failedShows.push({ title, reason: `TMDB error: ${tmdbErr.message}`, file: file.name, path: file.path });
+          }
         }
       }
       
@@ -385,19 +323,6 @@ const processScannedFiles = async (allFiles, scanProgress, mode, nextStage) => {
           const stat = await fs.stat(fullPath);
           fileSize = stat.size;
         } catch { /* ignore */ }
-
-        // Rename to the configured naming format (in place)
-        const showRow = db.prepare('SELECT title FROM shows WHERE id = ?').get(showId);
-        const epTitleRow = db.prepare('SELECT title FROM episodes WHERE show_id = ? AND season_number = ? AND episode_number = ?').get(showId, seasonNumber, episodeNumber);
-        const renamedPath = await renameToNamingFormat(fullPath, {
-          type: 'episode',
-          title: showRow?.title || title,
-          season: seasonNumber,
-          episode: episodeNumber,
-          episodeEnd,
-          episodeTitle: epTitleRow?.title,
-        });
-        if (renamedPath !== fullPath) fullPath = renamedPath;
 
         // Fast-path: Check if already probed in DB
         const existingEp = db.prepare(`
@@ -553,14 +478,6 @@ const processScannedFiles = async (allFiles, scanProgress, mode, nextStage) => {
             fileSize = stat.size;
           } catch { /* ignore */ }
 
-          // Rename to the configured naming format (in place)
-          const renamedPath = await renameToNamingFormat(fullPath, {
-            type: 'movie',
-            title: matchedMovie.title,
-            year: movieYear,
-          });
-          if (renamedPath !== fullPath) fullPath = renamedPath;
-
           const defaultProfile = db.prepare("SELECT id FROM quality_profiles WHERE media_type IN ('movies', 'both') OR media_type IS NULL ORDER BY id ASC LIMIT 1").get();
           const defaultProfileId = defaultProfile?.id || null;
 
@@ -596,7 +513,7 @@ const processScannedFiles = async (allFiles, scanProgress, mode, nextStage) => {
                 matchedMovie.runtime || null
               );
             } catch (insertErr) {
-              if (!String(insertErr.code || '').startsWith('SQLITE_CONSTRAINT')) throw insertErr;
+              if (!isConstraintError(insertErr)) throw insertErr;
               const dupRow = db.prepare('SELECT id FROM movies WHERE tmdb_id = ?').get(matchedMovie.id);
               if (!dupRow) throw insertErr;
               db.prepare('UPDATE movies SET file_path = ?, status = ?, rating = ?, file_size = ?, quality_profile_id = COALESCE(quality_profile_id, ?) WHERE tmdb_id = ?')
@@ -658,13 +575,15 @@ const processScannedFiles = async (allFiles, scanProgress, mode, nextStage) => {
           }
         }
       } catch (tmdbErr) {
-        // Same duplicate-race tolerance as shows: the movie row already exists.
-        if (/UNIQUE constraint failed: movies\.tmdb_id/.test(tmdbErr.message)) {
-          console.log(`[Scanner] Movie "${title}" already exists (created concurrently) — linking skipped`);
-          return;
+        if (isConstraintError(tmdbErr) || /UNIQUE constraint failed: movies\.tmdb_id/.test(tmdbErr.message)) {
+          try {
+            db.prepare("UPDATE movies SET file_path = ?, status = 'downloaded' WHERE file_path = ? OR (tmdb_id IS NOT NULL AND tmdb_id = ?)")
+              .run(fullPath, fullPath, explicitTmdbId || -1);
+          } catch { /* ignore */ }
+        } else {
+          console.error(`TMDB error for movie ${title}:`, tmdbErr.message);
+          scanProgress.failedMovies.push({ title, year, reason: `TMDB error: ${tmdbErr.message}`, file: file.name, path: file.path });
         }
-        console.error(`TMDB error for movie ${title}:`, tmdbErr.message);
-        scanProgress.failedMovies.push({ title, year, reason: `TMDB error: ${tmdbErr.message}`, file: file.name, path: file.path });
       }
     }
     scanProgress.processedFiles++;

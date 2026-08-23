@@ -11,6 +11,7 @@ import EmptyState from '../components/shared/EmptyState';
 import HealthWidget from '../components/shared/HealthWidget';
 import Spinner from '../components/shared/Spinner';
 import StickyBar from '../components/shared/StickyBar';
+import VersionBadge from '../components/shared/VersionBadge';
 import { useStickyBar } from '../lib/useStickyBar';
 
 const statusIcons = {
@@ -179,6 +180,11 @@ export default function Status() {
               ? `${issues.length} issue${issues.length !== 1 ? 's' : ''} need${issues.length === 1 ? 's' : ''} attention`
               : 'All systems are running smoothly'}
           </p>
+        </div>
+
+        {/* Live version & commit badge */}
+        <div className="flex items-center gap-2 sm:self-center">
+          <VersionBadge version={statusData?.version} />
         </div>
       </div>
 

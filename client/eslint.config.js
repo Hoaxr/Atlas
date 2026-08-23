@@ -34,6 +34,7 @@ const browserGlobals = {
   structuredClone: 'readonly',
   queueMicrotask: 'readonly',
   process: 'readonly',
+  __APP_VERSION_INFO__: 'readonly',
 };
 
 export default [

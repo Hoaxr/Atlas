@@ -99,7 +99,7 @@ router.post('/', (req, res, next) => {
       requestId = result.lastInsertRowid;
     } catch (insertErr) {
       // Unique index race: another request for the same item slipped in first
-      if (String(insertErr.code || '').startsWith('SQLITE_CONSTRAINT')) {
+      if (insertErr.errcode === 19 || String(insertErr.code || '').startsWith('SQLITE_CONSTRAINT') || /constraint failed/i.test(insertErr.message)) {
         return res.status(400).json({ status: 'error', message: 'This item has already been requested' });
       }
       throw insertErr;
