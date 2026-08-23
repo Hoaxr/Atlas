@@ -28,9 +28,8 @@ RUN npm ci --omit=dev
 # ============================================================
 FROM node:22-alpine AS server
 
-# Only install runtime dependencies (ffmpeg for video resolution detection,
-# su-exec to drop privileges to the node user)
-RUN apk add --no-cache ffmpeg su-exec
+# Only install runtime dependencies (ffmpeg for video resolution detection)
+RUN apk add --no-cache ffmpeg
 
 WORKDIR /app
 
@@ -41,12 +40,8 @@ COPY --from=server-builder /app/server/node_modules ./server/node_modules
 # ---- Built client assets ----
 COPY --from=client-builder /app/client/dist ./client/dist
 
-# ---- Runtime data directory (owned by node; entrypoint fixes volume ownership) ----
-RUN mkdir -p /app/server/data && chown node:node /app/server/data
-
-# ---- Entrypoint (chowns data volume as root, then drops to node) ----
-COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
-RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+# ---- Runtime data directory ----
+RUN mkdir -p /app/server/data
 
 EXPOSE 9898
 
@@ -54,5 +49,4 @@ ENV NODE_ENV=production
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s CMD wget -qO- http://127.0.0.1:${PORT:-3000}/api/auth/status || exit 1
 
-ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 CMD ["node", "server/index.js"]
