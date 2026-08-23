@@ -954,7 +954,7 @@ export default function Dashboard() {
                   }}
                   className={`cursor-pointer glass-panel interactive-glow-card rounded-xl overflow-hidden group hover:scale-[1.02] transition-all duration-300 relative flex flex-col focus:outline-none focus:ring-2 focus:ring-cyan-500/50 hover:shadow-[0_0_30px_-5px_rgba(6,182,212,0.25)] hover:border-cyan-500/40`}
                 >
-                  <div className="absolute top-2 left-2 z-20 lg:group-hover:opacity-0 transition-opacity duration-200">
+                  <div className="absolute top-2 left-2 z-20 md:group-hover:opacity-0 transition-opacity duration-200">
                     <button 
                       onClick={async (e) => {
                         e.stopPropagation(); e.preventDefault();
@@ -980,7 +980,7 @@ export default function Dashboard() {
                     </button>
                   </div>
 
-                  <div className="absolute top-2 right-2 z-20 flex gap-2 lg:group-hover:opacity-0 transition-opacity duration-200">
+                  <div className="absolute top-2 right-2 z-20 flex gap-2 md:group-hover:opacity-0 transition-opacity duration-200">
                     {(item.status === 'downloading' || (viewMode === 'shows' && item.downloading_episodes > 0)) && (
                       <div className="bg-slate-900/80 rounded-full shadow-lg p-1.5" title="Downloading">
                         <Activity className="w-5 h-5 text-blue-400 animate-pulse" />
@@ -1019,13 +1019,13 @@ export default function Dashboard() {
 
                   <div className="aspect-[2/3] relative bg-slate-800 min-h-[200px] flex-shrink-0">
                     {item.watched ? (
-                      <div className="absolute bottom-2 left-2 z-20 flex items-center gap-1 bg-slate-950/80 backdrop-blur px-2 py-1 rounded-md border border-emerald-500/30 shadow-lg lg:group-hover:opacity-0 transition-opacity duration-200">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#34d399" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                      <div className="absolute bottom-2 left-2 z-20 flex items-center gap-1 bg-slate-950/80 backdrop-blur px-2 py-1 rounded-md border border-emerald-500/30 shadow-lg md:group-hover:opacity-0 transition-opacity duration-200">
+                        <Eye className="w-3 h-3 text-emerald-400" />
                         <span className="text-[10px] font-bold text-emerald-400">Watched</span>
                       </div>
                     ) : null}
                     {viewMode === 'shows' && item.season_count > 0 && (
-                      <div className="absolute bottom-2 right-2 z-20 flex items-center gap-1 bg-slate-950/80 backdrop-blur px-2 py-1 rounded-md border border-purple-500/30 shadow-lg lg:group-hover:opacity-0 transition-opacity duration-200">
+                      <div className="absolute bottom-2 right-2 z-20 flex items-center gap-1 bg-slate-950/80 backdrop-blur px-2 py-1 rounded-md border border-purple-500/30 shadow-lg md:group-hover:opacity-0 transition-opacity duration-200">
                         <Tv className="w-3 h-3 text-purple-400" />
                         <span className="text-[10px] font-bold text-purple-400">{item.season_count}</span>
                       </div>
@@ -1038,35 +1038,9 @@ export default function Dashboard() {
                       height="750"
                       className="w-full h-full object-cover relative"
                     />
-                    <div className="absolute inset-0 bg-slate-950/80 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-between p-3 z-10 pointer-events-none">
-                      {/* Top Header: Progress pill for shows only */}
-                      {viewMode === 'shows' && item.episode_count > 0 ? (
-                        <div className="w-full bg-slate-900/90 backdrop-blur-md px-3 py-1.5 rounded-lg border border-white/10 shadow-lg flex flex-col gap-1">
-                          <div className="flex justify-between items-center w-full text-[11px] font-semibold">
-                            <span className="text-slate-400">Episodes</span>
-                            <span className="text-slate-200">
-                              <span className={item.downloaded_episodes === item.episode_count ? 'text-emerald-400 font-bold' : 'text-cyan-400 font-bold'}>
-                                {item.downloaded_episodes || 0}
-                              </span>
-                              <span className="text-slate-500"> / </span>
-                              {item.episode_count}
-                            </span>
-                          </div>
-                          <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
-                            <div
-                              className={`h-full rounded-full transition-all duration-300 ${
-                                item.downloaded_episodes === item.episode_count ? 'bg-emerald-400' : 'bg-gradient-to-r from-cyan-500 to-purple-500'
-                              }`}
-                              style={{ width: `${Math.min(100, Math.round(((item.downloaded_episodes || 0) / (item.episode_count || 1)) * 100))}%` }}
-                            />
-                          </div>
-                        </div>
-                      ) : (
-                        <div />
-                      )}
-
+                    <div className="absolute inset-0 bg-slate-950/80 opacity-0 md:group-hover:opacity-100 transition-opacity duration-300 hidden md:flex items-center justify-center p-3 z-10 pointer-events-none">
                       {/* Center Floating Action Dock */}
-                      <div className="self-center flex items-center gap-2 p-1.5 rounded-full bg-slate-900/90 backdrop-blur-md border border-white/10 shadow-2xl pointer-events-auto">
+                      <div className="flex items-center gap-2 p-1.5 rounded-full bg-slate-900/90 backdrop-blur-md border border-white/10 shadow-2xl pointer-events-auto">
                         <button 
                           onClick={async (e) => { 
                             e.stopPropagation(); e.preventDefault(); 

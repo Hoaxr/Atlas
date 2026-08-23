@@ -12,6 +12,24 @@ const formatRuntime = (minutes) => {
   return `${m}m`;
 };
 
+const formatDate = (dateStr) => {
+  if (!dateStr) return '';
+  const cleanDate = typeof dateStr === 'string' ? dateStr.split('T')[0] : '';
+  const parts = cleanDate.split('-').map(Number);
+  if (parts.length === 3 && !parts.some(isNaN)) {
+    const [y, m, d] = parts;
+    return new Date(y, m - 1, d).toLocaleDateString(undefined, {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric'
+    });
+  }
+  const d = new Date(dateStr);
+  return isNaN(d.getTime())
+    ? dateStr
+    : d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+};
+
 export function ThisWeekCard({ item, type }) {
   const navigate = useNavigate();
   const isEpisode = type === 'episode';
@@ -29,7 +47,7 @@ export function ThisWeekCard({ item, type }) {
   const title = isEpisode ? item.show_title : item.title;
   const subtitle = isEpisode
     ? `S${String(item.season_number).padStart(2, '0')} E${String(item.episode_number).padStart(2, '0')}${item.episode_title ? ` — ${item.episode_title}` : ''}`
-    : item.release_date;
+    : formatDate(item.release_date);
 
   return (
     <div

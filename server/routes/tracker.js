@@ -450,11 +450,14 @@ router.get('/up-next', (req, res) => {
       LIMIT 10
     `).all();
 
-    // 2. Next unwatched episodes for all shows in library with downloaded episodes.
-    //    Works for both started shows (picks up next after last watched) and
-    //    unstarted shows (shows S1E1).
+    // 2. Next unwatched episodes for started shows in library (watched > 0 or watch_progress > 0).
     const episodes = db.prepare(`
-      WITH ShowFirstUnwatched AS (
+      WITH ShowHasStarted AS (
+        SELECT DISTINCT show_id
+        FROM episodes 
+        WHERE season_number > 0 AND (watched = 1 OR watch_progress > 0)
+      ),
+      ShowFirstUnwatched AS (
         SELECT 
           e.id as episode_id, 
           e.show_id,
@@ -473,6 +476,7 @@ router.get('/up-next', (req, res) => {
           ) as rn
         FROM episodes e
         JOIN shows s ON e.show_id = s.id
+        JOIN ShowHasStarted shs ON e.show_id = shs.show_id
         WHERE e.season_number > 0
           AND e.watched = 0
           AND (
@@ -508,6 +512,12 @@ router.get('/up-next', (req, res) => {
         WHERE sf.rn = 1
         GROUP BY sf.episode_id, sf.show_id, sf.season_number
       ),
+      WatchedCount AS (
+        SELECT show_id, COUNT(*) as watched_episodes
+        FROM episodes
+        WHERE season_number > 0 AND watched = 1
+        GROUP BY show_id
+      ),
       SeasonMax AS (
         SELECT show_id, season_number, MAX(episode_number) as max_ep
         FROM episodes 
@@ -517,11 +527,6 @@ router.get('/up-next', (req, res) => {
         SELECT show_id, MAX(season_number) as max_season
         FROM episodes 
         GROUP BY show_id
-      ),
-      -- Determine if show has any watched episodes
-      ShowHasStarted AS (
-        SELECT DISTINCT show_id, 1 as started
-        FROM episodes WHERE watched = 1
       ),
       TotalCount AS (
         -- Count only episodes that are actually watchable (aired or downloaded)
@@ -545,18 +550,19 @@ router.get('/up-next', (req, res) => {
         sf.poster_path,
         COALESCE(rc.episodes_left, 0) as episodes_left,
         COALESCE(rc.total_time_left, 0) as total_time_left,
+        COALESCE(wc.watched_episodes, 0) as watched_episodes,
         tc.total_episodes,
         CASE WHEN sm.max_ep = sf.episode_number THEN 1 ELSE 0 END as is_finale,
         CASE WHEN sf.season_number = 1 AND sf.episode_number = 1 
-              AND shs.started IS NULL THEN 1 ELSE 0 END as is_premiere,
+              AND COALESCE(wc.watched_episodes, 0) = 0 THEN 1 ELSE 0 END as is_premiere,
         CASE WHEN sm.max_ep = sf.episode_number 
               AND shm.max_season = sf.season_number 
               AND sf.tmdb_status IN ('Ended', 'Canceled') THEN 1 ELSE 0 END as is_series_finale
       FROM ShowFirstUnwatched sf
       LEFT JOIN RemainingCount rc ON sf.episode_id = rc.episode_id
+      LEFT JOIN WatchedCount wc ON sf.show_id = wc.show_id
       LEFT JOIN SeasonMax sm ON sf.show_id = sm.show_id AND sf.season_number = sm.season_number
       LEFT JOIN ShowMax shm ON sf.show_id = shm.show_id
-      LEFT JOIN ShowHasStarted shs ON sf.show_id = shs.show_id
       LEFT JOIN TotalCount tc ON sf.show_id = tc.show_id
       WHERE sf.rn = 1
       ORDER BY sf.show_title
@@ -654,10 +660,13 @@ router.post('/mark-unwatched', async (req, res) => {
       db.prepare('DELETE FROM watch_history WHERE tmdb_id = ? AND type = ?').run(tmdbId, 'movie');
       db.prepare('UPDATE movies SET watched = 0, watched_at = NULL WHERE tmdb_id = ?').run(tmdbId);
     } else if (type === 'episode') {
-      db.prepare('DELETE FROM watch_history WHERE tmdb_id = ? AND type = ? AND season_number = ? AND episode_number = ?').run(tmdbId, 'episode', season, episode);
+      const sNum = parseInt(season, 10);
+      const eNum = parseInt(episode, 10);
+      db.prepare('DELETE FROM watch_history WHERE tmdb_id = ? AND type = ? AND season_number = ? AND episode_number = ?').run(tmdbId, 'episode', sNum, eNum);
       const show = db.prepare('SELECT id FROM shows WHERE tmdb_id = ?').get(tmdbId);
       if (show) {
-        db.prepare('UPDATE episodes SET watched = 0, watched_at = NULL WHERE show_id = ? AND season_number = ? AND episode_number = ?').run(show.id, season, episode);
+        db.prepare('UPDATE episodes SET watched = 0, watched_at = NULL WHERE show_id = ? AND season_number = ? AND episode_number = ?').run(show.id, sNum, eNum);
+        db.prepare('UPDATE shows SET watched = 0 WHERE id = ?').run(show.id);
       }
     }
 

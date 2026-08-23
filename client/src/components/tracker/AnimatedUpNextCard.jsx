@@ -266,7 +266,7 @@ export function AnimatedUpNextCard({ item, type, onMarkWatched }) {
                 width: isCompleted
                   ? '100%'
                   : isEpisode && item.total_episodes > 0
-                  ? `${Math.round(((item.total_episodes - (item.episodes_left || 0)) / item.total_episodes) * 100)}%`
+                  ? `${Math.round(((item.watched_episodes ?? Math.max(0, item.total_episodes - (item.episodes_left || 0))) / item.total_episodes) * 100)}%`
                   : `${item.watch_progress || 0}%`
               }}
               transition={{ duration: 0.5, ease: 'easeOut' }}
@@ -293,7 +293,7 @@ export function AnimatedUpNextCard({ item, type, onMarkWatched }) {
                     transition={{ duration: 0.25 }}
                     className="text-[9px] sm:text-[11px] font-bold text-white drop-shadow-md tracking-wider"
                   >
-                    {item.total_episodes - (item.episodes_left || 0)} / {item.total_episodes}
+                    {item.watched_episodes ?? Math.max(0, item.total_episodes - (item.episodes_left || 0))} / {item.total_episodes}
                   </motion.span>
                 ) : null}
               </AnimatePresence>

@@ -205,7 +205,7 @@ const syncWatchedShows = async () => {
     let deepSynced = 0;
     for (const entry of showsNeedingDetail) {
       try {
-        const r = await simklRequest({ method: 'GET', url: `/sync/all-items/shows/${entry.simklId}` });
+        const r = await simklApi.get(`/sync/all-items/shows/${entry.simklId}`);
         const info = r.data?.shows?.[0];
         if (!info) continue;
         const watchedCount = Number(info.watched_episodes_count) || 0;
