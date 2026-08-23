@@ -225,9 +225,10 @@ export default function ShowDetails() {
     }
   };
 
-  // Group by season
+  // Group by season (season 0 = specials — hidden per user preference)
   const seasons = useMemo(() => {
     return episodes.reduce((acc, ep) => {
+      if (ep.season_number === 0) return acc;
       if (!acc[ep.season_number]) acc[ep.season_number] = [];
       acc[ep.season_number].push(ep);
       return acc;
@@ -727,7 +728,7 @@ export default function ShowDetails() {
                         episodes.length > 0 && episodes.every(e => e.watched) ? 'text-emerald-400' : 'text-slate-400'
                       }`}>
                         {episodes.length > 0
-                          ? `${episodes.filter(e => e.watched).length}/${episodes.length}`
+                          ? `${episodes.filter(e => e.watched && e.season_number > 0).length}/${episodes.filter(e => e.season_number > 0).length}`
                           : '—'}
                       </span>
                     </div>
