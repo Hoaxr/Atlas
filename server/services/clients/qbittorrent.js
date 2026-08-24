@@ -56,11 +56,27 @@ const addTorrent = async (client, torrentUrl) => {
         const torrentRes = await http.get(torrentUrl, {
           responseType: 'arraybuffer',
           timeout: 15000,
-          maxRedirects: 5,
+          maxRedirects: 0,
           validateStatus: (status) => status >= 200 && status < 400
         });
         if (torrentRes.status >= 300 && torrentRes.status < 400 && torrentRes.headers.location) {
           finalUrl = torrentRes.headers.location;
+          if (/^https?:/i.test(finalUrl)) {
+            try {
+              const fileRes = await http.get(finalUrl, {
+                responseType: 'arraybuffer',
+                timeout: 15000,
+                maxRedirects: 5,
+                validateStatus: (s) => s === 200
+              });
+              if (fileRes.data && fileRes.data.length > 0) {
+                formData.append('torrents', Buffer.from(fileRes.data), 'download.torrent');
+                finalUrl = null;
+              }
+            } catch {
+              // fallback to passing finalUrl directly to client
+            }
+          }
         } else if (torrentRes.data && torrentRes.data.length > 0) {
           formData.append('torrents', Buffer.from(torrentRes.data), 'download.torrent');
           finalUrl = null;
