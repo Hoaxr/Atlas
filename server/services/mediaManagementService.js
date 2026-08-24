@@ -90,6 +90,164 @@ const parseEpisodeFromFilename = (filePath) => {
 
 const normalizeForMatching = (s) => (s || '').toLowerCase().replace(/'/g, '').replace(/[^a-z0-9]/g, ' ').replace(/\s+/g, ' ').trim();
 
+// Strip quality, audio, resolution, and release group tags to extract clean candidate title
+const stripReleaseTags = (rawName) => {
+  return (rawName || '')
+    .replace(/\.(mp4|mkv|avi|mov|wmv|webm|ts|m2ts|mpg|mpeg)$/i, '')
+    .replace(/(?:\[|\{)?\btmdb(?:id)?[-=:\s]+\d+(?:\]|\})?/gi, '')
+    .replace(/(?:\[|\{)?\b(?:imdb[-=:\s]+)?tt\d{7,10}\b(?:\]|\})?/gi, '')
+    .replace(/\b(2160p|1080p|1080i|720p|576p|480p|4k|uhd|bluray|bdrip|brrip|web-?dl|webrip|web|hdtv|hdrip|dvdrip|dvd|remux|proper|repack|rerip)\b.*/i, '')
+    .replace(/\b(x264|x265|h\.?264|h\.?265|hevc|avc|xvid|divx|10bit|hdr(?:10(?:\+)?)?|dv|dolby\s*vision|atmos|truehd|dts(?:-hd)?|ddp?\+?(?:5\.1|7\.1)?|ac3|aac|flac|mp3)\b.*/i, '')
+    .replace(/[._()[\]-]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+};
+
+const isTvTorrentName = (rawName) => {
+  if (!rawName) return false;
+  if (/\bS\d{1,2}(?:[._\s-]*E\d{1,3})?\b/i.test(rawName)) return true;
+  if (/\b\d{1,2}x\d{1,3}\b/i.test(rawName)) return true;
+  if (/\b(?:Complete\s*)?Season\s*\d{1,2}\b/i.test(rawName)) return true;
+  if (/\b(?:Complete\s*)?Series\b/i.test(rawName)) return true;
+  if (/\bEpisode\s*\d+\b/i.test(rawName)) return true;
+  if (/\bEP\d{1,4}\b/i.test(rawName)) return true;
+  return false;
+};
+
+const matchMovieToTorrent = (torrent, movie) => {
+  const rawName = torrent.name || '';
+  if (!rawName) return false;
+
+  // Never match TV releases as movies
+  if (isTvTorrentName(rawName)) return false;
+
+  const normRaw = normalizeForMatching(rawName);
+
+  // 1. Direct scene_name match (stored when download was triggered)
+  if (movie.scene_name && normalizeForMatching(movie.scene_name) === normRaw) {
+    return true;
+  }
+
+  const normMovieTitle = normalizeForMatching(movie.title);
+  if (!normMovieTitle) return false;
+
+  // Extract year from raw torrent name
+  const yearMatches = [...rawName.matchAll(/\b(19\d{2}|20\d{2})\b/g)];
+  const torrentYear = yearMatches.length > 0 ? parseInt(yearMatches[0][1], 10) : null;
+
+  // Strip release tags to find clean title stem
+  const strippedTitlePart = stripReleaseTags(rawName);
+  const normTitlePart = normalizeForMatching(strippedTitlePart.replace(/\b(19\d{2}|20\d{2})\b/g, ''));
+
+  // Exact title stem match (e.g. "x" vs "x", "inception" vs "inception")
+  if (normTitlePart === normMovieTitle) {
+    if (movie.year && torrentYear && Math.abs(movie.year - torrentYear) > 1) {
+      return false;
+    }
+    return true;
+  }
+
+  // Token boundary prefix match (torrent starts with full movie title)
+  const movieWords = normMovieTitle.split(/\s+/).filter(Boolean);
+  const torrentWords = normTitlePart.split(/\s+/).filter(Boolean);
+
+  if (torrentWords.length >= movieWords.length) {
+    const startWords = torrentWords.slice(0, movieWords.length).join(' ');
+    if (startWords === normMovieTitle) {
+      // Must verify year if movie has a year
+      if (movie.year && torrentYear) {
+        return Math.abs(movie.year - torrentYear) <= 1;
+      }
+      // For short titles (<= 3 chars, e.g. "X", "IT", "UP", "HER", "US", "X2", "9", "RRR"),
+      // require exact title match or matching year to avoid false matches on codec words
+      if (normMovieTitle.length <= 3) {
+        return false;
+      }
+      return true;
+    }
+  }
+
+  return false;
+};
+
+const matchEpisodeToTorrent = (torrent, ep) => {
+  const rawName = torrent.name || '';
+  if (!rawName) return false;
+
+  const normRaw = normalizeForMatching(rawName);
+
+  // 1. Direct scene_name match
+  if (ep.scene_name && normalizeForMatching(ep.scene_name) === normRaw) {
+    return true;
+  }
+
+  const normShowTitle = normalizeForMatching(ep.show_title);
+  if (!normShowTitle) return false;
+
+  // Must match show title on word boundary
+  const showWords = normShowTitle.split(/\s+/).filter(Boolean);
+  const rawWords = normRaw.split(/\s+/).filter(Boolean);
+  
+  let hasShowTitle = false;
+  for (let i = 0; i <= rawWords.length - showWords.length; i++) {
+    if (rawWords.slice(i, i + showWords.length).join(' ') === normShowTitle) {
+      hasShowTitle = true;
+      break;
+    }
+  }
+  if (!hasShowTitle) return false;
+
+  // S01E02 or 01x02 or S1E2 or multi-episode ranges S01E01-E04
+  const sxxExxRegex = new RegExp(`\\bS0?${ep.season_number}[._\\s-]*E0?${ep.episode_number}\\b`, 'i');
+  const sceneRegex = new RegExp(`\\b0?${ep.season_number}x0?${ep.episode_number}\\b`, 'i');
+  
+  if (sxxExxRegex.test(rawName) || sceneRegex.test(rawName)) {
+    return true;
+  }
+
+  // Multi-episode regex: e.g. S01E01-E05
+  const multiMatch = rawName.match(/\bS(\d{1,2})[._\s-]*E(\d{1,3})(?:[-_E\s]+(?:S\d{1,2})?E?(\d{1,3}))+\b/i);
+  if (multiMatch) {
+    const sNum = parseInt(multiMatch[1], 10);
+    const eStart = parseInt(multiMatch[2], 10);
+    const extra = [...multiMatch[0].matchAll(/(\d{1,3})/g)].map(m => parseInt(m[1], 10));
+    const eEnd = extra[extra.length - 1];
+    if (sNum === ep.season_number && ep.episode_number >= eStart && ep.episode_number <= eEnd) {
+      return true;
+    }
+  }
+
+  return false;
+};
+
+const matchSeasonPackToTorrent = (torrent, showTitle, seasonNumber) => {
+  const rawName = torrent.name || '';
+  if (!rawName) return false;
+
+  // Must NOT have individual episode IDs
+  const hasEpisodeIds = /\bS\d{1,2}[._\s-]*E\d{1,3}\b/i.test(rawName) || /\b\d{1,2}x\d{1,3}\b/i.test(rawName);
+  if (hasEpisodeIds) return false;
+
+  // Must match season pattern: S04, Season 4, Season 04, Complete Season 4
+  const s = String(seasonNumber).padStart(2, '0');
+  const seasonRegex = new RegExp(`\\b(S${s}|S${seasonNumber}|Season[._\\s]*0?${seasonNumber}|Complete[._\\s]*Season[._\\s]*0?${seasonNumber})\\b`, 'i');
+  if (!seasonRegex.test(rawName)) return false;
+
+  // Check show title on word boundary
+  const normShowTitle = normalizeForMatching(showTitle);
+  const normRaw = normalizeForMatching(rawName);
+  const showWords = normShowTitle.split(/\s+/).filter(Boolean);
+  const rawWords = normRaw.split(/\s+/).filter(Boolean);
+
+  for (let i = 0; i <= rawWords.length - showWords.length; i++) {
+    if (rawWords.slice(i, i + showWords.length).join(' ') === normShowTitle) {
+      return true;
+    }
+  }
+
+  return false;
+};
+
 // Reset any 'downloading' movies/episodes that are no longer present in the
 // download client. If the item already had a file on disk (e.g. a cancelled
 // upgrade) it is restored to 'downloaded'; otherwise it goes back to
@@ -115,8 +273,7 @@ const resetDownloadsNotInClient = async (torrentList) => {
   `).all();
 
   for (const movie of downloadingMovies) {
-    const movieTitle = normalizeForMatching(movie.title);
-    const isStillInQueue = list.some(t => normalizeForMatching(t.name).includes(movieTitle));
+    const isStillInQueue = list.some(t => matchMovieToTorrent(t, movie));
     if (!isStillInQueue) {
       if (movie.file_path && fs.existsSync(movie.file_path)) {
         console.log(`[MediaManagement] Movie ${movie.title} removed from client but its file exists. Restoring to downloaded.`);
@@ -129,28 +286,16 @@ const resetDownloadsNotInClient = async (torrentList) => {
   }
 
   for (const ep of downloadingEpisodes) {
-    const showTitle = normalizeForMatching(ep.show_title);
-    const s = ep.season_number.toString().padStart(2, '0');
-    const e = ep.episode_number.toString().padStart(2, '0');
-    const epString1 = `s${s}e${e}`;
-    const epString2 = `${s}x${e}`;
-    const seasonStr = `s${s}`;
-
     const isStillInQueue = list.some(t => {
-      const tName = normalizeForMatching(t.name);
-      // Match individual episode (S01E01) or season pack (S01 without episode IDs)
-      const hasShow = tName.includes(showTitle);
-      const hasEpisode = tName.includes(epString1) || tName.includes(epString2);
-      const hasSeasonPack = tName.includes(seasonStr) && !/\bs\d{2}e\d{2}\b/i.test(tName) && !/\b\d{1,2}x\d{1,2}\b/i.test(tName);
-      return hasShow && (hasEpisode || hasSeasonPack);
+      return matchEpisodeToTorrent(t, ep) || matchSeasonPackToTorrent(t, ep.show_title, ep.season_number);
     });
 
     if (!isStillInQueue) {
       if (ep.file_path && fs.existsSync(ep.file_path)) {
-        console.log(`[MediaManagement] Episode ${ep.show_title} S${s}E${e} removed from client but its file exists. Restoring to downloaded.`);
+        console.log(`[MediaManagement] Episode ${ep.show_title} S${String(ep.season_number).padStart(2,'0')}E${String(ep.episode_number).padStart(2,'0')} removed from client but its file exists. Restoring to downloaded.`);
         db.prepare("UPDATE episodes SET status = 'downloaded' WHERE id = ?").run(ep.id);
       } else {
-        console.log(`[MediaManagement] Episode ${ep.show_title} S${s}E${e} no longer in download client. Resetting to monitored.`);
+        console.log(`[MediaManagement] Episode ${ep.show_title} S${String(ep.season_number).padStart(2,'0')}E${String(ep.episode_number).padStart(2,'0')} no longer in download client. Resetting to monitored.`);
         db.prepare("UPDATE episodes SET status = 'monitored', file_path = NULL, file_size = NULL, scene_name = NULL WHERE id = ?").run(ep.id);
       }
     }
@@ -208,43 +353,43 @@ const runMediaManagement = async () => {
     `).all();
 
     for (const torrent of finishedTorrents) {
-      const torrentName = torrent.name.toLowerCase().replace(/'/g, '').replace(/[^a-z0-9]/g, ' ').replace(/\s+/g, ' ').trim();
-      
-      // Match movies
-      for (const movie of pendingMovies) {
-        const movieTitle = movie.title.toLowerCase().replace(/'/g, '').replace(/[^a-z0-9]/g, ' ').replace(/\s+/g, ' ').trim();
-        if (torrentName.includes(movieTitle)) {
-          const success = await importMovie(torrent, movie);
-          if (success) importedAnything = true;
+      let torrentHandled = false;
+
+      // 1. If torrent is a TV release, match episodes and season packs
+      if (isTvTorrentName(torrent.name)) {
+        // Individual episode match
+        for (const ep of pendingEpisodes) {
+          if (matchEpisodeToTorrent(torrent, ep)) {
+            const success = await importEpisode(torrent, ep);
+            if (success) {
+              importedAnything = true;
+              torrentHandled = true;
+              break;
+            }
+          }
         }
-      }
 
-      // Match episodes (individual)
-      for (const ep of pendingEpisodes) {
-        const showTitle = ep.show_title.toLowerCase().replace(/'/g, '').replace(/[^a-z0-9]/g, ' ').replace(/\s+/g, ' ').trim();
-        const s = ep.season_number.toString().padStart(2, '0');
-        const e = ep.episode_number.toString().padStart(2, '0');
-        const epString1 = `s${s}e${e}`;
-        const epString2 = `${s}x${e}`; 
-
-        if (torrentName.includes(showTitle) && (torrentName.includes(epString1) || torrentName.includes(epString2))) {
-          const success = await importEpisode(torrent, ep);
-          if (success) importedAnything = true;
-        }
-      }
-
-      // Match season packs — torrent contains show title + Sxx pattern but NO episode IDs (SxxExx or xxXxx)
-      const hasEpisodeIds = /\bs\d{2}e\d{2}\b/i.test(torrentName) || /\b\d{1,2}x\d{1,2}\b/i.test(torrentName);
-      if (!hasEpisodeIds) {
-        const seasonPackMatch = torrentName.match(/\bs(\d{2})\b/i);
-        if (seasonPackMatch) {
-          const seasonNum = parseInt(seasonPackMatch[1], 10);
-          // Find shows whose title is in the torrent name
+        // Season pack match (if not matched to an individual episode)
+        if (!torrentHandled) {
           for (const ep of pendingEpisodes) {
-            const showTitle = ep.show_title.toLowerCase().replace(/'/g, '').replace(/[^a-z0-9]/g, ' ').replace(/\s+/g, ' ').trim();
-            if (torrentName.includes(showTitle) && ep.season_number === seasonNum) {
-              const success = await importSeasonPack(torrent, { showId: ep.show_id, showTitle: ep.show_title, seasonNumber: seasonNum });
-              if (success) importedAnything = true;
+            if (matchSeasonPackToTorrent(torrent, ep.show_title, ep.season_number)) {
+              const success = await importSeasonPack(torrent, { showId: ep.show_id, showTitle: ep.show_title, seasonNumber: ep.season_number });
+              if (success) {
+                importedAnything = true;
+                torrentHandled = true;
+                break;
+              }
+            }
+          }
+        }
+      } else {
+        // 2. Movie match (only for non-TV releases)
+        for (const movie of pendingMovies) {
+          if (matchMovieToTorrent(torrent, movie)) {
+            const success = await importMovie(torrent, movie);
+            if (success) {
+              importedAnything = true;
+              torrentHandled = true;
               break; // One import per torrent
             }
           }
