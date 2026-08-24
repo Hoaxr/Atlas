@@ -66,7 +66,8 @@ const runSearchCycle = async () => {
     let monitoredMovies = db.prepare(`
       SELECT m.* FROM movies m
       LEFT JOIN quality_profiles qp ON m.quality_profile_id = qp.id
-      WHERE (m.status = 'monitored' OR (m.status = 'downloaded' AND qp.upgrade_allowed = 1))
+      WHERE (m.status IN ('monitored', 'missing') OR (m.status = 'downloaded' AND qp.upgrade_allowed = 1))
+        AND m.monitored = 1
         AND (m.next_search_at IS NULL OR m.next_search_at <= datetime('now'))
     `).all();
     
@@ -161,8 +162,9 @@ const runSearchCycle = async () => {
       FROM episodes e 
       JOIN shows s ON e.show_id = s.id
       LEFT JOIN quality_profiles qp ON s.quality_profile_id = qp.id
-      WHERE (e.status = 'monitored' OR (e.status = 'downloaded' AND qp.upgrade_allowed = 1))
+      WHERE (e.status IN ('monitored', 'missing') OR (e.status = 'downloaded' AND qp.upgrade_allowed = 1))
         AND e.monitored = 1
+        AND s.monitored = 1
         AND (e.next_search_at IS NULL OR e.next_search_at <= datetime('now'))
     `).all();
 
@@ -886,7 +888,8 @@ const runReleaseMonitoring = async () => {
   const moviesRes = db.prepare(`
     UPDATE movies 
     SET next_search_at = datetime('now'), search_state = 'PENDING'
-    WHERE status = 'monitored' 
+    WHERE (status IN ('monitored', 'missing'))
+      AND monitored = 1
       AND release_date IS NOT NULL 
       AND release_date <= date('now', 'localtime')
       AND (last_searched_at IS NULL OR last_searched_at < datetime(release_date))
@@ -895,7 +898,8 @@ const runReleaseMonitoring = async () => {
   const episodesRes = db.prepare(`
     UPDATE episodes 
     SET next_search_at = datetime('now'), search_state = 'PENDING'
-    WHERE status = 'monitored' 
+    WHERE (status IN ('monitored', 'missing'))
+      AND monitored = 1
       AND air_date IS NOT NULL 
       AND air_date <= ${getAiredCutoffSql()}
       AND (last_searched_at IS NULL OR last_searched_at < datetime(air_date))

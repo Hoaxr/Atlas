@@ -315,11 +315,11 @@ const resetDownloadsNotInClient = async (torrentList) => {
 };
 
 const runMediaManagement = async () => {
-  const pendingMoviesCount = db.prepare("SELECT COUNT(*) as count FROM movies WHERE status IN ('downloading', 'monitored')").get().count;
+  const pendingMoviesCount = db.prepare("SELECT COUNT(*) as count FROM movies WHERE status IN ('downloading', 'monitored', 'missing')").get().count;
   const pendingEpisodesCount = db.prepare(`
     SELECT COUNT(*) as count FROM episodes 
     WHERE (status = 'downloading') 
-       OR (status = 'monitored' AND (file_path IS NULL OR file_path = ''))
+       OR (status IN ('monitored', 'missing') AND (file_path IS NULL OR file_path = ''))
   `).get().count;
 
   console.log(`[MediaManagement] Checking: ${pendingMoviesCount} pending movies, ${pendingEpisodesCount} pending episodes`);

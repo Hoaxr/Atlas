@@ -483,7 +483,7 @@ router.get('/up-next', (req, res) => {
             e.status = 'downloaded' OR (
               e.air_date IS NOT NULL AND 
               date(e.air_date) <= ${getAiredCutoffSql()} AND 
-              (e.status = 'monitored' OR e.show_id IN (SELECT show_id FROM episodes WHERE watched = 1))
+              ((e.status IN ('monitored', 'missing') AND e.monitored = 1) OR e.show_id IN (SELECT show_id FROM episodes WHERE watched = 1))
             )
           )
       ),
@@ -506,7 +506,7 @@ router.get('/up-next', (req, res) => {
             OR (
               e2.air_date IS NOT NULL AND 
               date(e2.air_date) <= ${getAiredCutoffSql()} AND 
-              (e2.status = 'monitored' OR e2.show_id IN (SELECT show_id FROM episodes WHERE watched = 1))
+              ((e2.status IN ('monitored', 'missing') AND e2.monitored = 1) OR e2.show_id IN (SELECT show_id FROM episodes WHERE watched = 1))
             )
           )
         WHERE sf.rn = 1

@@ -558,7 +558,7 @@ router.post('/shows/:id/auto-search', async (req, res, next) => {
     // Find all monitored episodes that are missing and have aired
     const episodes = db.prepare(`
       SELECT * FROM episodes 
-      WHERE show_id = ? AND status = 'monitored' 
+      WHERE show_id = ? AND (status IN ('monitored', 'missing')) AND monitored = 1 
         AND (air_date IS NULL OR date(air_date) <= ${getAiredCutoffSql()})
     `).all(req.params.id);
     
@@ -599,7 +599,7 @@ router.post('/shows/:id/download', async (req, res, next) => {
     
     await downloadClientService.addTorrent(torrentUrl, 'tv');
     db.prepare("UPDATE shows SET status = 'downloading' WHERE id = ?").run(req.params.id);
-    db.prepare("UPDATE episodes SET status = 'downloading' WHERE show_id = ? AND status = 'monitored'").run(req.params.id);
+    db.prepare("UPDATE episodes SET status = 'downloading' WHERE show_id = ? AND (status IN ('monitored', 'missing')) AND monitored = 1").run(req.params.id);
     
     res.json({ status: 'success', message: 'Season pack sent to download client' });
   } catch (err) {
@@ -666,7 +666,7 @@ router.post('/shows', async (req, res, next) => {
             const show = db.prepare('SELECT * FROM shows WHERE id = ?').get(result.id);
             const episodes = db.prepare(`
               SELECT * FROM episodes 
-              WHERE show_id = ? AND status = 'monitored' 
+              WHERE show_id = ? AND (status IN ('monitored', 'missing')) AND monitored = 1 
                 AND (air_date IS NULL OR date(air_date) <= ${getAiredCutoffSql()})
             `).all(result.id);
             eventBus.info('Auto-search started', { title: show.title, type: 'show', episodes: episodes.length });
