@@ -62,16 +62,19 @@ const addMovie = async (tmdbId, rootFolderPath = null) => {
 
   // Pre-create the movie folder
   try {
+    const paths = db.prepare('SELECT path, type FROM library_paths').all();
     let libraryRoot = rootFolderPath;
     if (!libraryRoot) {
-      const paths = db.prepare('SELECT path FROM library_paths').all();
       if (paths.length > 0) {
-        libraryRoot = paths.find(p => p.path.toLowerCase().includes('movie'))?.path || paths[0].path;
+        libraryRoot = paths.find(p => p.type === 'movies')?.path 
+          || paths.find(p => p.path.toLowerCase().includes('movie'))?.path 
+          || paths[0].path;
       }
     }
     
     if (libraryRoot) {
-      const isDedicatedPath = libraryRoot.toLowerCase().includes('movie');
+      const isDedicatedPath = paths.some(p => p.type === 'movies' && p.path === libraryRoot) 
+        || libraryRoot.toLowerCase().includes('movie');
       const config = getNamingConfig();
       
       let folderName = `${movieDetails.title} (${year})`;
@@ -298,16 +301,19 @@ const addShow = async (tmdbId, rootFolderPath = null, monitorLevel = 'all') => {
 
   // Pre-create the show folder
   try {
+    const paths = db.prepare('SELECT path, type FROM library_paths').all();
     let libraryRoot = rootFolderPath;
     if (!libraryRoot) {
-      const paths = db.prepare('SELECT path FROM library_paths').all();
       if (paths.length > 0) {
-        libraryRoot = paths.find(p => p.path.toLowerCase().includes('tv') || p.path.toLowerCase().includes('show'))?.path || paths[0].path;
+        libraryRoot = paths.find(p => p.type === 'tv')?.path 
+          || paths.find(p => p.path.toLowerCase().includes('tv') || p.path.toLowerCase().includes('show'))?.path 
+          || paths[0].path;
       }
     }
 
     if (libraryRoot) {
-      const isDedicatedPath = libraryRoot.toLowerCase().includes('tv') || libraryRoot.toLowerCase().includes('show');
+      const isDedicatedPath = paths.some(p => p.type === 'tv' && p.path === libraryRoot) 
+        || libraryRoot.toLowerCase().includes('tv') || libraryRoot.toLowerCase().includes('show');
       const config = getNamingConfig();
       
       const folderName = sanitizeTitle(showDetails.name, config);

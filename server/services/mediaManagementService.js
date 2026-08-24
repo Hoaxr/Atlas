@@ -269,9 +269,11 @@ const resetDownloadsNotInClient = async (torrentList) => {
   let list = torrentList;
   if (!list) {
     try {
-      list = await downloadClientService.getTorrents() || [];
-    } catch {
-      list = [];
+      list = await downloadClientService.getTorrents();
+      if (!Array.isArray(list)) return;
+    } catch (err) {
+      console.warn('[MediaManagement] Cannot fetch torrents to reset state — aborting reset:', err.message);
+      return;
     }
   }
 
@@ -355,12 +357,12 @@ const runMediaManagement = async () => {
     // Filter finished torrents
     const finishedTorrents = torrentList.filter(t => t.progress >= 100);
 
-    const pendingMovies = db.prepare("SELECT * FROM movies WHERE status IN ('downloading', 'monitored')").all();
+    const pendingMovies = db.prepare("SELECT * FROM movies WHERE status IN ('downloading', 'monitored', 'missing')").all();
     const pendingEpisodes = db.prepare(`
       SELECT e.*, s.title as show_title 
       FROM episodes e 
       JOIN shows s ON e.show_id = s.id 
-      WHERE e.status IN ('downloading', 'monitored')
+      WHERE e.status IN ('downloading', 'monitored', 'missing')
     `).all();
 
     for (const torrent of finishedTorrents) {
@@ -427,7 +429,7 @@ const importMovie = async (torrent, movie) => {
   console.log(`[MediaManagement] Importing movie: ${movie.title}`);
   
   try {
-    const paths = db.prepare('SELECT path FROM library_paths').all();
+    const paths = db.prepare('SELECT path, type FROM library_paths').all();
     if (paths.length === 0) {
       console.warn('[MediaManagement] No library paths configured to import to!');
       return;
@@ -461,8 +463,11 @@ const importMovie = async (torrent, movie) => {
     }
 
     const ext = path.extname(videoFile.path);
-    const libraryRoot = paths.find(p => p.path.toLowerCase().includes('movie'))?.path || paths[0].path;
-    const isDedicatedPath = libraryRoot.toLowerCase().includes('movie');
+    const libraryRoot = paths.find(p => p.type === 'movies')?.path 
+      || paths.find(p => p.path.toLowerCase().includes('movie'))?.path 
+      || paths[0].path;
+    const isDedicatedPath = paths.some(p => p.type === 'movies' && p.path === libraryRoot) 
+      || libraryRoot.toLowerCase().includes('movie');
     const config = getNamingConfig();
     
     // Build folder and file names from the naming format
@@ -478,9 +483,9 @@ const importMovie = async (torrent, movie) => {
       fileName = path.basename(videoFile.path, ext);
     }
     
-    const destFolder = isDedicatedPath 
-      ? path.join(libraryRoot, folderName) 
-      : path.join(libraryRoot, 'Movies', folderName);
+    const destFolder = (movie.folder_path && path.isAbsolute(movie.folder_path))
+      ? movie.folder_path
+      : (isDedicatedPath ? path.join(libraryRoot, folderName) : path.join(libraryRoot, 'Movies', folderName));
     
     await fs.promises.mkdir(destFolder, { recursive: true });
     const destFile = path.join(destFolder, `${fileName}${ext}`);
@@ -668,8 +673,11 @@ const importEpisode = async (torrent, episode) => {
     }
 
     const ext = path.extname(videoFile.path);
-    const libraryRoot = paths.find(p => p.path.toLowerCase().includes('tv') || p.path.toLowerCase().includes('show'))?.path || paths[0].path;
-    const isDedicatedPath = libraryRoot.toLowerCase().includes('tv') || libraryRoot.toLowerCase().includes('show');
+    const libraryRoot = paths.find(p => p.type === 'tv')?.path 
+      || paths.find(p => p.path.toLowerCase().includes('tv') || p.path.toLowerCase().includes('show'))?.path 
+      || paths[0].path;
+    const isDedicatedPath = paths.some(p => p.type === 'tv' && p.path === libraryRoot)
+      || libraryRoot.toLowerCase().includes('tv') || libraryRoot.toLowerCase().includes('show');
     const config = getNamingConfig();
     
     const s = episode.season_number.toString().padStart(2, '0');
@@ -696,9 +704,10 @@ const importEpisode = async (torrent, episode) => {
     
     if (!seasonFolder) seasonFolder = `Season ${s}`;
 
-    const destFolder = isDedicatedPath
-      ? path.join(libraryRoot, showFolder, seasonFolder)
-      : path.join(libraryRoot, 'TV Shows', showFolder, seasonFolder);
+    const showRow = db.prepare('SELECT folder_path FROM shows WHERE id = ?').get(episode.show_id);
+    const destFolder = (showRow && showRow.folder_path && path.isAbsolute(showRow.folder_path))
+      ? path.join(showRow.folder_path, seasonFolder)
+      : (isDedicatedPath ? path.join(libraryRoot, showFolder, seasonFolder) : path.join(libraryRoot, 'TV Shows', showFolder, seasonFolder));
     
     await fs.promises.mkdir(destFolder, { recursive: true });
     

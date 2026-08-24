@@ -592,14 +592,14 @@ router.post('/shows/:id/auto-search', async (req, res, next) => {
 
 router.post('/shows/:id/download', async (req, res, next) => {
   try {
-    const { torrentUrl } = req.body;
-    if (!torrentUrl || typeof torrentUrl !== 'string' || !/^https?:\/\//.test(torrentUrl)) {
-      return res.status(400).json({ status: 'error', message: 'Valid torrent URL (http/https) is required' });
+    const torrentUrl = req.body.link || req.body.torrentUrl;
+    if (!torrentUrl || typeof torrentUrl !== 'string' || !/^(https?:\/\/|magnet:)/.test(torrentUrl)) {
+      return res.status(400).json({ status: 'error', message: 'Valid torrent URL or magnet link is required' });
     }
     
     await downloadClientService.addTorrent(torrentUrl, 'tv');
     db.prepare("UPDATE shows SET status = 'downloading' WHERE id = ?").run(req.params.id);
-    db.prepare("UPDATE episodes SET status = 'downloading' WHERE show_id = ? AND (status IN ('monitored', 'missing')) AND monitored = 1").run(req.params.id);
+    db.prepare("UPDATE episodes SET status = 'downloading', scene_name = COALESCE(NULLIF(scene_name, ''), ?) WHERE show_id = ? AND (status IN ('monitored', 'missing')) AND monitored = 1").run(req.body.title || null, req.params.id);
     
     res.json({ status: 'success', message: 'Season pack sent to download client' });
   } catch (err) {
@@ -637,7 +637,7 @@ router.post('/shows/:id/seasons/:season/download', async (req, res, next) => {
     // Mark every episode in the season as downloading so the whole pack is
     // tracked and imported once it finishes. Already-downloaded episodes are
     // overwritten by the new pack.
-    db.prepare("UPDATE episodes SET status = 'downloading' WHERE show_id = ? AND season_number = ?").run(req.params.id, seasonNumber);
+    db.prepare("UPDATE episodes SET status = 'downloading', scene_name = COALESCE(NULLIF(scene_name, ''), ?) WHERE show_id = ? AND season_number = ?").run(req.body.title || null, req.params.id, seasonNumber);
     db.prepare("UPDATE shows SET status = 'downloading' WHERE id = ?").run(req.params.id);
     
     res.json({ status: 'success', message: `Season ${seasonNumber} pack sent to download client` });
@@ -679,8 +679,8 @@ router.post('/shows', async (req, res, next) => {
                 totalCamFiltered += results._camFiltered || 0;
                 if (results && results.length > 0) {
                   const bestResult = results[0];
-                  await downloadClientService.addTorrent(bestResult.link);
-                  db.prepare("UPDATE episodes SET status = 'downloading', scene_name = COALESCE(NULLIF(scene_name, ''), ?) WHERE id = ?").run(typeof bestResult !== "undefined" ? bestResult.title : (typeof result !== "undefined" ? result.title : null), ep.id);
+                  await downloadClientService.addTorrent(bestResult.link, 'tv');
+                  db.prepare("UPDATE episodes SET status = 'downloading', scene_name = COALESCE(NULLIF(scene_name, ''), ?) WHERE id = ?").run(bestResult.title || null, ep.id);
                   sentCount++;
                 }
               } catch (e) {
@@ -893,13 +893,17 @@ router.post('/episodes/:id/reset', async (req, res, next) => {
 
 router.post('/episodes/:id/download', async (req, res, next) => {
   try {
-    const { torrentUrl } = req.body;
+    const torrentUrl = req.body.link || req.body.torrentUrl;
     if (!torrentUrl || typeof torrentUrl !== 'string' || !/^(https?:\/\/|magnet:)/.test(torrentUrl)) {
       return res.status(400).json({ status: 'error', message: 'Valid torrent URL or magnet link is required' });
     }
 
     await downloadClientService.addTorrent(torrentUrl, 'tv');
-    db.prepare("UPDATE episodes SET status = 'downloading', scene_name = COALESCE(NULLIF(scene_name, ''), ?) WHERE id = ?").run(null, req.params.id);
+    db.prepare("UPDATE episodes SET status = 'downloading', scene_name = COALESCE(NULLIF(scene_name, ''), ?) WHERE id = ?").run(req.body.title || null, req.params.id);
+    const ep = db.prepare('SELECT show_id FROM episodes WHERE id = ?').get(req.params.id);
+    if (ep) {
+      db.prepare("UPDATE shows SET status = 'downloading' WHERE id = ?").run(ep.show_id);
+    }
     
     res.json({ status: 'success', message: 'Sent to download client' });
   } catch (err) {

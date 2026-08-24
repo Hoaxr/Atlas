@@ -438,7 +438,7 @@ const runMissingFilesCheck = async () => {
   }
 
   // Check Movies
-  const movies = db.prepare("SELECT id, title, folder_path, file_path FROM movies WHERE status != 'unmonitored'").all();
+  const movies = db.prepare("SELECT id, title, folder_path, file_path FROM movies WHERE status = 'downloaded'").all();
   let moviesRemoved = 0;
   const moviesToDelete = [];
   const moviesToReset = [];
@@ -483,7 +483,7 @@ const runMissingFilesCheck = async () => {
   }
 
   // Check Shows
-  const shows = db.prepare("SELECT id, title, folder_path FROM shows WHERE status != 'unmonitored'").all();
+  const shows = db.prepare("SELECT id, title, folder_path FROM shows WHERE status = 'downloaded'").all();
   let showsRemoved = 0;
   const showsToDelete = [];
   for (const show of shows) {
@@ -516,7 +516,7 @@ const runMissingFilesCheck = async () => {
   }
 
   // Check Episodes specifically — only for episodes whose show folder is on an accessible root
-  const episodes = db.prepare("SELECT e.id, e.title, e.file_path, e.show_id, s.folder_path as show_folder FROM episodes e LEFT JOIN shows s ON s.id = e.show_id WHERE e.file_path IS NOT NULL").all();
+  const episodes = db.prepare("SELECT e.id, e.title, e.file_path, e.show_id, s.folder_path as show_folder FROM episodes e LEFT JOIN shows s ON s.id = e.show_id WHERE e.status = 'downloaded' AND e.file_path IS NOT NULL").all();
   const episodesToReset = [];
   for (const ep of episodes) {
     // Only verify episodes of shows that aren't being deleted entirely

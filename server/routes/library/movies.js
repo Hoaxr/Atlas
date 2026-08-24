@@ -374,13 +374,13 @@ router.put('/:id/quality', (req, res, next) => {
 
 router.post('/:id/download', async (req, res, next) => {
   try {
-    const { torrentUrl } = req.body;
-    if (!torrentUrl || typeof torrentUrl !== 'string' || !/^https?:\/\//.test(torrentUrl)) {
-      return res.status(400).json({ status: 'error', message: 'Valid torrent URL (http/https) is required' });
+    const torrentUrl = req.body.link || req.body.torrentUrl;
+    if (!torrentUrl || typeof torrentUrl !== 'string' || !/^(https?:\/\/|magnet:)/.test(torrentUrl)) {
+      return res.status(400).json({ status: 'error', message: 'Valid torrent URL or magnet link is required' });
     }
     
-    await downloadClientService.addTorrent(torrentUrl);
-    db.prepare("UPDATE movies SET status = 'downloading', scene_name = COALESCE(NULLIF(scene_name, ''), ?) WHERE id = ?").run(null, req.params.id);
+    await downloadClientService.addTorrent(torrentUrl, 'movie');
+    db.prepare("UPDATE movies SET status = 'downloading', scene_name = COALESCE(NULLIF(scene_name, ''), ?) WHERE id = ?").run(req.body.title || null, req.params.id);
     
     res.json({ status: 'success', message: 'Sent to download client' });
   } catch (err) {
