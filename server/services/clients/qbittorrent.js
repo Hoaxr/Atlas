@@ -52,15 +52,22 @@ const addTorrent = async (client, torrentUrl) => {
     let finalUrl = torrentUrl;
 
     if (/^https?:/.test(torrentUrl)) {
-      const torrentRes = await http.get(torrentUrl, {
-        responseType: 'arraybuffer', timeout: 15000, maxRedirects: 0,
-        validateStatus: (status) => status >= 200 && status < 400
-      });
-      if (torrentRes.status >= 300 && torrentRes.status < 400 && torrentRes.headers.location) {
-        finalUrl = torrentRes.headers.location;
-      } else {
-        formData.append('torrents', Buffer.from(torrentRes.data), 'download.torrent');
-        finalUrl = null;
+      try {
+        const torrentRes = await http.get(torrentUrl, {
+          responseType: 'arraybuffer',
+          timeout: 15000,
+          maxRedirects: 5,
+          validateStatus: (status) => status >= 200 && status < 400
+        });
+        if (torrentRes.status >= 300 && torrentRes.status < 400 && torrentRes.headers.location) {
+          finalUrl = torrentRes.headers.location;
+        } else if (torrentRes.data && torrentRes.data.length > 0) {
+          formData.append('torrents', Buffer.from(torrentRes.data), 'download.torrent');
+          finalUrl = null;
+        }
+      } catch (fetchErr) {
+        console.warn(`[qBittorrent] Direct .torrent fetch failed (${fetchErr.message}) — falling back to passing URL directly to client`);
+        finalUrl = torrentUrl;
       }
     }
     if (finalUrl) formData.append('urls', finalUrl);

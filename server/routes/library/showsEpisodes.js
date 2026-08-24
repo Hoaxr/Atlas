@@ -992,8 +992,12 @@ router.post('/episodes/:id/grab', async (req, res, next) => {
   try {
     const { link, title } = req.body;
     if (!link) return res.status(400).json({ status: 'error', message: 'link is required' });
-    await downloadClientService.addTorrent(link);
+    await downloadClientService.addTorrent(link, 'tv');
     db.prepare("UPDATE episodes SET status = 'downloading', scene_name = COALESCE(NULLIF(scene_name, ''), ?) WHERE id = ?").run(title || null, req.params.id);
+    const ep = db.prepare('SELECT show_id FROM episodes WHERE id = ?').get(req.params.id);
+    if (ep) {
+      db.prepare("UPDATE shows SET status = 'downloading' WHERE id = ?").run(ep.show_id);
+    }
     eventBus.info('Manual grab started', { title: title || 'Unknown', type: 'episode' });
     res.json({ status: 'success', message: 'Download started' });
   } catch (err) { next(err); }

@@ -645,7 +645,7 @@ router.post('/:id/grab', async (req, res, next) => {
   try {
     const { link, title } = req.body;
     if (!link) return res.status(400).json({ status: 'error', message: 'link is required' });
-    await downloadClientService.addTorrent(link);
+    await downloadClientService.addTorrent(link, 'movie');
     db.prepare("UPDATE movies SET status = 'downloading', scene_name = COALESCE(NULLIF(scene_name, ''), ?) WHERE id = ?").run(title || null, req.params.id);
     eventBus.info('Manual grab started', { title: title || 'Unknown', type: 'movie' });
     res.json({ status: 'success', message: 'Download started' });

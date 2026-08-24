@@ -75,7 +75,13 @@ const PORT = process.env.PORT || 3000;
 // WebSocket server
 const wss = new WebSocketServer({ server, path: '/ws' });
 
+function wsHeartbeat() {
+  this.isAlive = true;
+}
+
 wss.on('connection', (ws, _req) => {
+  ws.isAlive = true;
+  ws.on('pong', wsHeartbeat);
   console.log('[WS] Client connected');
   let authenticated = false;
   let onEvent = null;
@@ -135,6 +141,21 @@ wss.on('connection', (ws, _req) => {
     }
     if (onEvent) eventBus.off('event', onEvent);
   });
+});
+
+const wsPingInterval = setInterval(() => {
+  wss.clients.forEach((ws) => {
+    if (ws.isAlive === false) {
+      try { ws.terminate(); } catch { /* ignore */ }
+      return;
+    }
+    ws.isAlive = false;
+    try { ws.ping(); } catch { /* ignore */ }
+  });
+}, 25000);
+
+wss.on('close', () => {
+  clearInterval(wsPingInterval);
 });
 
 // Init background jobs
