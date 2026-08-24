@@ -202,10 +202,24 @@ const runSearchCycle = async () => {
 
         let hasFile = false;
         if (showRow && showRow.folder_path && fs.existsSync(showRow.folder_path)) {
-          const s = String(ep.season_number).padStart(2,'0');
-          const eStr = String(ep.episode_number).padStart(2,'0');
-          const epRegex = new RegExp(`s${s}e${eStr}`, 'i');
+          const directRegex = new RegExp(`\\bS0?${ep.season_number}[._\\s-]*E0?${ep.episode_number}\\b`, 'i');
+          const sceneRegex = new RegExp(`\\b0?${ep.season_number}x0?${ep.episode_number}\\b`, 'i');
           
+          const isFileForEpisode = (filename) => {
+            if (directRegex.test(filename) || sceneRegex.test(filename)) return true;
+            const multiMatch = filename.match(/\bS(\d{1,2})[._\s-]*E(\d{1,3})(?:[-_E\s]+(?:S\d{1,2})?E?(\d{1,3}))+\b/i);
+            if (multiMatch) {
+              const sNum = parseInt(multiMatch[1], 10);
+              const eStart = parseInt(multiMatch[2], 10);
+              const extra = [...multiMatch[0].matchAll(/(\d{1,3})/g)].map(m => parseInt(m[1], 10));
+              const eEnd = extra[extra.length - 1];
+              if (sNum === ep.season_number && ep.episode_number >= eStart && ep.episode_number <= eEnd) {
+                return true;
+              }
+            }
+            return false;
+          };
+
           const checkDir = async (dir) => {
             if (hasFile) return;
             const entries = await fsp.readdir(dir, { withFileTypes: true });
@@ -213,7 +227,7 @@ const runSearchCycle = async () => {
               const fullPath = path.join(dir, entry.name);
               if (entry.isDirectory()) {
                 await checkDir(fullPath);
-              } else if (isVideoFile(entry.name) && epRegex.test(entry.name)) {
+              } else if (isVideoFile(entry.name) && isFileForEpisode(entry.name)) {
                 hasFile = true;
                 break;
               }

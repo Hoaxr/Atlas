@@ -76,15 +76,26 @@ const findAllVideoFiles = async (dirPath) => {
   return results;
 };
 
-// Parse season/episode numbers from a filename like "Show.Name.S01E02.mkv"
+// Parse season/episode numbers from a filename like "Show.Name.S01E02.mkv" or "Show.Name.S01E01-E02.mkv"
 const parseEpisodeFromFilename = (filePath) => {
   const name = path.basename(filePath).toLowerCase();
+  // Multi-episode: S01E01-E04, S01E01-E02, S01E01-02, S01E01E02, etc.
+  const multiMatch = name.match(/\bs(\d{1,2})[._\s-]*e(\d{1,3})(?:[-_e\s]+(?:s\d{1,2})?e?(\d{1,3}))+\b/i);
+  if (multiMatch) {
+    const season = parseInt(multiMatch[1], 10);
+    const eStart = parseInt(multiMatch[2], 10);
+    const extra = [...multiMatch[0].matchAll(/(\d{1,3})/g)].map(m => parseInt(m[1], 10));
+    const eEnd = extra[extra.length - 1];
+    const episodes = [];
+    for (let ep = eStart; ep <= eEnd; ep++) episodes.push(ep);
+    return { season, episode: eStart, episodes };
+  }
   // Try S01E02 pattern
   let match = name.match(/s(\d{1,2})e(\d{1,2})/i);
-  if (match) return { season: parseInt(match[1], 10), episode: parseInt(match[2], 10) };
+  if (match) return { season: parseInt(match[1], 10), episode: parseInt(match[2], 10), episodes: [parseInt(match[2], 10)] };
   // Try 01x02 pattern
   match = name.match(/(\d{1,2})x(\d{1,2})/i);
-  if (match) return { season: parseInt(match[1], 10), episode: parseInt(match[2], 10) };
+  if (match) return { season: parseInt(match[1], 10), episode: parseInt(match[2], 10), episodes: [parseInt(match[2], 10)] };
   return null;
 };
 
@@ -889,24 +900,27 @@ const importSeasonPack = async (torrent, { showId, showTitle, seasonNumber }) =>
       const parsed = parseEpisodeFromFilename(videoFile);
       if (!parsed || parsed.season !== seasonNumber) continue;
 
-      const episode = pendingEpisodes.find(ep => ep.episode_number === parsed.episode);
-      if (!episode) {
-        console.log(`[MediaManagement] No pending episode match for S${seasonNumber.toString().padStart(2, '0')}E${parsed.episode.toString().padStart(2, '0')} — skipping`);
-        continue;
-      }
+      const targetEpisodes = parsed.episodes || [parsed.episode];
+      for (const epNum of targetEpisodes) {
+        const episode = pendingEpisodes.find(ep => ep.episode_number === epNum);
+        if (!episode) {
+          console.log(`[MediaManagement] No pending episode match for S${seasonNumber.toString().padStart(2, '0')}E${epNum.toString().padStart(2, '0')} — skipping`);
+          continue;
+        }
 
-      // Build a synthetic torrent-like object for importEpisode (no hash — prevents per-episode torrent removal)
-      const fakeTorrent = {
-        name: path.basename(videoFile),
-        content_path: videoFile,
-        save_path: path.dirname(videoFile),
-      };
+        // Build a synthetic torrent-like object for importEpisode (no hash — prevents per-episode torrent removal)
+        const fakeTorrent = {
+          name: path.basename(videoFile),
+          content_path: videoFile,
+          save_path: path.dirname(videoFile),
+        };
 
-      try {
-        await importEpisode(fakeTorrent, episode);
-        importedCount++;
-      } catch (epErr) {
-        console.error(`[MediaManagement] Failed to import episode S${seasonNumber}E${parsed.episode}:`, epErr.message);
+        try {
+          await importEpisode(fakeTorrent, episode);
+          importedCount++;
+        } catch (epErr) {
+          console.error(`[MediaManagement] Failed to import episode S${seasonNumber}E${epNum}:`, epErr.message);
+        }
       }
     }
 

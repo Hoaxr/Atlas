@@ -10,12 +10,12 @@
 const parseResolution = (title) => {
   if (!title) return 'Unknown';
   const t = title.toLowerCase();
-  const camTerms = /\b(cam|ts|telesync|hdts|hdcam|hc|telecine|tc|workprint|wp|screener|scr)\b/;
-  if (camTerms.test(t)) return 'CAM';
   if (t.includes('2160p') || t.includes('4k')) return '2160p';
   if (t.includes('1080p')) return '1080p';
   if (t.includes('720p')) return '720p';
   if (t.includes('480p') || t.includes('dvdrip') || t.includes('xvid') || t.includes('hdtv') || t.match(/\bsd\b/)) return 'SD';
+  const camTerms = /\b(cam|telesync|hdts|hdcam|hc|telecine|workprint|screener|scr|camrip|tsrip)\b|[._ -](?:ts|tc|wp)[._ -]/i;
+  if (camTerms.test(t)) return 'CAM';
   return 'Unknown';
 };
 
