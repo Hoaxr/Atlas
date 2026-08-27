@@ -383,9 +383,14 @@ router.post('/episodes/:id/translate-subs', async (req, res, next) => {
   try {
     const targetLangRow = db.prepare("SELECT value FROM settings WHERE key = 'targetLang'").get();
     const targetLang = req.body.targetLang || (targetLangRow && targetLangRow.value ? targetLangRow.value : 'Dutch');
-    const langCode = LANG_CODE[targetLang] || 'nl';
+    const langCode = LANG_CODE[targetLang] || (typeof targetLang === 'string' && targetLang.length === 2 ? targetLang.toLowerCase() : 'nl');
 
-    const episode = db.prepare('SELECT * FROM episodes WHERE id = ?').get(req.params.id);
+    const episode = db.prepare(`
+      SELECT e.*, s.title as show_title
+      FROM episodes e
+      LEFT JOIN shows s ON e.show_id = s.id
+      WHERE e.id = ?
+    `).get(req.params.id);
     if (!episode) return res.status(404).json({ status: 'error', message: 'Episode not found' });
     if (!episode.file_path) return res.status(400).json({ status: 'error', message: 'Episode has no file path' });
     if (!fs.existsSync(episode.file_path)) return res.status(400).json({ status: 'error', message: 'Episode file not found on disk' });
@@ -406,7 +411,8 @@ router.post('/episodes/:id/translate-subs', async (req, res, next) => {
     const translatedText = await translateSrt(enSrtContent, targetLang);
     await fsp.writeFile(targetSubPath, translatedText);
 
-    eventBus.success('Subtitle translated', { title: `${episode.title}`, type: 'episode', language: targetLang });
+    const epTitle = episode.title || (episode.show_title ? `${episode.show_title} S${String(episode.season_number).padStart(2, '0')}E${String(episode.episode_number).padStart(2, '0')}` : 'Episode');
+    eventBus.success(`Subtitle translated: ${epTitle} (${targetLang})`, { title: epTitle, type: 'episode', language: targetLang });
 
     res.json({ status: 'success', message: `Translated to ${targetLang}`, data: { file: `${parsedPath.name}.${langCode}.srt` } });
   } catch (err) {

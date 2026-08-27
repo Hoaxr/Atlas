@@ -41,7 +41,7 @@ ${text}`;
 };
 
 const translateWithGoogleTranslate = async (text, targetLang) => {
-  const target = LANG_CODE[targetLang] || 'nl';
+  const target = LANG_CODE[targetLang] || (typeof targetLang === 'string' && targetLang.length === 2 ? targetLang.toLowerCase() : 'nl');
 
   // Split SRT into lines
   const lines = text.split('\n');
@@ -68,9 +68,19 @@ const translateWithGoogleTranslate = async (text, targetLang) => {
   for (let b = 0; b < textContents.length; b += BATCH_SIZE) {
     const batch = textContents.slice(b, b + BATCH_SIZE);
     try {
-      const res = await axios.get('https://translate.googleapis.com/translate_a/single', {
-        params: { client: 'gtx', sl: 'en', tl: target, dt: 't', q: batch.join(SEP) },
-        timeout: 10000
+      const formData = new URLSearchParams();
+      formData.append('client', 'gtx');
+      formData.append('sl', 'en');
+      formData.append('tl', target);
+      formData.append('dt', 't');
+      formData.append('q', batch.join(SEP));
+
+      const res = await axios.post('https://translate.googleapis.com/translate_a/single', formData.toString(), {
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded;charset=utf-8',
+          'User-Agent': 'Atlas/1.0'
+        },
+        timeout: 15000
       });
       // Collect all translated text across response segments
       const segments = res.data?.[0] || [];

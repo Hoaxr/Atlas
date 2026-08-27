@@ -436,7 +436,7 @@ router.post('/:id/translate-subs', async (req, res, next) => {
   try {
     const targetLangRow = db.prepare("SELECT value FROM settings WHERE key = 'targetLang'").get();
     const targetLang = req.body.targetLang || (targetLangRow && targetLangRow.value ? targetLangRow.value : 'Dutch');
-    const langCode = LANG_CODE[targetLang] || 'nl';
+    const langCode = LANG_CODE[targetLang] || (typeof targetLang === 'string' && targetLang.length === 2 ? targetLang.toLowerCase() : 'nl');
 
     const movie = db.prepare('SELECT * FROM movies WHERE id = ?').get(req.params.id);
     if (!movie) return res.status(404).json({ status: 'error', message: 'Movie not found' });
@@ -459,7 +459,7 @@ router.post('/:id/translate-subs', async (req, res, next) => {
     const translatedText = await translateSrt(enSrtContent, targetLang);
     await fsp.writeFile(targetSubPath, translatedText);
 
-    eventBus.success('Subtitle translated', { title: movie.title, type: 'movie', language: targetLang });
+    eventBus.success(`Subtitle translated: ${movie.title} (${targetLang})`, { title: movie.title, type: 'movie', language: targetLang });
 
     res.json({ status: 'success', message: `Translated to ${targetLang}`, data: { file: `${parsedPath.name}.${langCode}.srt` } });
   } catch (err) {
