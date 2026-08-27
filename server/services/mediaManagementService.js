@@ -99,7 +99,14 @@ const parseEpisodeFromFilename = (filePath) => {
   return null;
 };
 
-const normalizeForMatching = (s) => (s || '').toLowerCase().replace(/'/g, '').replace(/[^a-z0-9]/g, ' ').replace(/\s+/g, ' ').trim();
+const normalizeForMatching = (s) =>
+  (s || '')
+    .toLowerCase()
+    .replace(/&/g, ' and ')
+    .replace(/'/g, '')
+    .replace(/[^a-z0-9]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
 
 // Strip quality, audio, resolution, and release group tags to extract clean candidate title
 const stripReleaseTags = (rawName) => {
@@ -150,8 +157,18 @@ const matchMovieToTorrent = (torrent, movie) => {
   const strippedTitlePart = stripReleaseTags(rawName);
   const normTitlePart = normalizeForMatching(strippedTitlePart.replace(/\b(19\d{2}|20\d{2})\b/g, ''));
 
-  // Exact title stem match (e.g. "x" vs "x", "inception" vs "inception")
+  // Exact title stem match (e.g. "x" vs "x", "above and below" vs "above and below")
   if (normTitlePart === normMovieTitle) {
+    if (movie.year && torrentYear && Math.abs(movie.year - torrentYear) > 1) {
+      return false;
+    }
+    return true;
+  }
+
+  // Exact match with 'and' omitted (e.g. "above below" vs "above and below")
+  const normMovieNoAnd = normMovieTitle.replace(/\band\b/g, '').replace(/\s+/g, ' ').trim();
+  const normTitleNoAnd = normTitlePart.replace(/\band\b/g, '').replace(/\s+/g, ' ').trim();
+  if (normMovieNoAnd && normMovieNoAnd === normTitleNoAnd) {
     if (movie.year && torrentYear && Math.abs(movie.year - torrentYear) > 1) {
       return false;
     }

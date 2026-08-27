@@ -43,10 +43,36 @@ const getCircuitStatus = () => ({
   cooldownRemaining: CIRCUIT_BREAKER.openUntil ? Math.max(0, Math.ceil((CIRCUIT_BREAKER.openUntil - Date.now()) / 1000)) : 0,
 });
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-
 const cleanTitle = (title) =>
-  title.replace(/['']/g, '').replace(/[^a-zA-Z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+  (title || '')
+    .replace(/&/g, ' and ')
+    .replace(/['']/g, '')
+    .replace(/[^a-zA-Z0-9 ]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+const tokenizeTitle = (str) =>
+  (str || '')
+    .toLowerCase()
+    .replace(/&/g, ' and ')
+    .replace(/['"]/g, '')
+    .split(/[^a-z0-9]+/)
+    .filter(Boolean);
+
+const findTokenSequenceMatch = (resultWords, expectedWords) => {
+  if (expectedWords.length === 0 || resultWords.length < expectedWords.length) return -1;
+  for (let i = 0; i <= resultWords.length - expectedWords.length; i++) {
+    let isMatch = true;
+    for (let j = 0; j < expectedWords.length; j++) {
+      if (resultWords[i + j] !== expectedWords[j]) {
+        isMatch = false;
+        break;
+      }
+    }
+    if (isMatch) return i;
+  }
+  return -1;
+};
 
 // Extract a 4-digit release year (1900-2099) from a release title
 const extractReleaseYear = (title) => {
@@ -183,23 +209,17 @@ const filterAndSortResults = (results, profile, type, currentQuality = null, isM
     // Block torrents containing dangerous file extensions (virus/malware vectors)
     if (dangerousExts.test(r.title)) { dangerousFiltered++; return false; }
     if (expectedTitle) {
-      const expectedWords = expectedTitle.toLowerCase().replace(/['"]/g, '').split(/[^a-z0-9]+/).filter(Boolean);
-      const cleanTitle = r.title.replace(/\[.*?\]|\(.*?\)/g, '').trim();
-      const resultWords = cleanTitle.toLowerCase().replace(/['"]/g, '').split(/[^a-z0-9]+/).filter(Boolean);
-      
-      let matchIdx = -1;
-      for (let i = 0; i <= resultWords.length - expectedWords.length; i++) {
-        let isMatch = true;
-        for (let j = 0; j < expectedWords.length; j++) {
-          if (resultWords[i + j] !== expectedWords[j]) {
-            isMatch = false;
-            break;
-          }
-        }
-        if (isMatch) {
-          matchIdx = i;
-          break;
-        }
+      const expectedWords = tokenizeTitle(expectedTitle);
+      const cleanReleaseTitle = r.title.replace(/\[.*?\]|\(.*?\)/g, '').trim();
+      const resultWords = tokenizeTitle(cleanReleaseTitle);
+
+      let matchIdx = findTokenSequenceMatch(resultWords, expectedWords);
+
+      // If no direct sequence match and either title has 'and', try matching with 'and' omitted
+      if (matchIdx === -1 && (expectedWords.includes('and') || resultWords.includes('and'))) {
+        const expectedWithoutAnd = expectedWords.filter(w => w !== 'and');
+        const resultWithoutAnd = resultWords.filter(w => w !== 'and');
+        matchIdx = findTokenSequenceMatch(resultWithoutAnd, expectedWithoutAnd);
       }
 
       if (matchIdx === -1) return false;
@@ -283,6 +303,7 @@ const filterAndSortResults = (results, profile, type, currentQuality = null, isM
 
 const searchMovie = async (title, year, profile = null, currentQuality = null, isManualSearch = false, _tmdb_id = null) => {
   const cleanedTitle = cleanTitle(title);
+  const rawNoAndTitle = (title || '').replace(/['']/g, '').replace(/[^a-zA-Z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
   
   let allResults;
   
@@ -312,9 +333,25 @@ const searchMovie = async (title, year, profile = null, currentQuality = null, i
       }
       allResults = filtered;
     }
+
+    // If still no results and title contained '&' / 'and', try searching without 'and' (e.g. "Above Below 2015")
+    if (allResults.length === 0 && rawNoAndTitle !== cleanedTitle) {
+      console.log(`[IndexerService] Trying alternate search without 'and': "${rawNoAndTitle} ${year}"`);
+      rawResults = await searchProwlarr(`${rawNoAndTitle} ${year}`, 'movie');
+      filtered = filterAndSortResults(rawResults, profile, 'movies', currentQuality, isManualSearch, title, year);
+      if (filtered.length === 0) {
+        rawResults = await searchProwlarr(rawNoAndTitle, 'movie');
+        filtered = filterAndSortResults(rawResults, profile, 'movies', currentQuality, isManualSearch, title, year);
+      }
+      allResults = filtered;
+    }
   } else {
-    const rawResults = await searchProwlarr(cleanedTitle, 'movie');
+    let rawResults = await searchProwlarr(cleanedTitle, 'movie');
     allResults = filterAndSortResults(rawResults, profile, 'movies', currentQuality, isManualSearch, title);
+    if (allResults.length === 0 && rawNoAndTitle !== cleanedTitle) {
+      rawResults = await searchProwlarr(rawNoAndTitle, 'movie');
+      allResults = filterAndSortResults(rawResults, profile, 'movies', currentQuality, isManualSearch, title);
+    }
   }
   
   return allResults;
