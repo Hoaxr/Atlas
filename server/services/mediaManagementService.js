@@ -414,11 +414,6 @@ const runMediaManagement = async () => {
     // longer in the torrent client back to monitored (also fixes show status).
     await resetDownloadsNotInClient(torrentList);
 
-    if (importedAnything) {
-      console.log('[MediaManagement] New media imported. Triggering subtitle downloader task immediately.');
-      taskRegistry.executeTask('subtitle_downloader').catch(e => console.error('[MediaManagement] Failed to trigger subtitle_downloader', e.message));
-    }
-
   } catch (err) {
     console.error('[MediaManagement] Error during post-processing:', err.message);
   }
