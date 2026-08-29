@@ -198,6 +198,8 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_play_history_created ON play_history(created_at);
   CREATE INDEX IF NOT EXISTS idx_movies_file_path ON movies(file_path);
   CREATE INDEX IF NOT EXISTS idx_episodes_file_path ON episodes(file_path);
+  CREATE INDEX IF NOT EXISTS idx_episodes_air_date ON episodes(air_date);
+  CREATE INDEX IF NOT EXISTS idx_movies_release_date ON movies(release_date);
   CREATE INDEX IF NOT EXISTS idx_requests_tmdb_id ON requests(tmdb_id);
 
   CREATE TABLE IF NOT EXISTS watch_history (

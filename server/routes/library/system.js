@@ -505,12 +505,21 @@ router.post('/scan/retry-paths', async (req, res, next) => {
 
 router.get('/calendar', async (req, res, next) => {
   try {
+    // Compute the timezone shift once (0 or +1 day) and apply it in SQL
+    // so we don't need per-row JS Intl calls on potentially thousands of rows.
+    const { getAirDateShiftDays } = require('../../utils/airDate');
+    const shift = getAirDateShiftDays();
+    const shiftSql = shift === 0 ? 'e.air_date' : `date(e.air_date, '+${shift} days')`;
+    const shiftSqlM = shift === 0 ? 'm.release_date' : `date(m.release_date, '+${shift} days')`;
+
+    // Only fetch a rolling window: 90 days back → 120 days ahead.
+    // The client calendar never needs more than this range.
     const upcoming = db.prepare(`
       SELECT 
         e.title, 
         e.season_number, 
         e.episode_number, 
-        e.air_date AS date,
+        ${shiftSql} AS date,
         e.overview, 
         s.title as show_title, 
         s.id as show_id, 
@@ -521,12 +530,14 @@ router.get('/calendar', async (req, res, next) => {
       JOIN shows s ON e.show_id = s.id
       WHERE e.air_date IS NOT NULL 
         AND s.status != 'unmonitored'
+        AND e.air_date >= date('now', 'localtime', '-90 days')
+        AND e.air_date <= date('now', 'localtime', '+120 days')
       UNION ALL
       SELECT 
         m.title,
         NULL as season_number,
         NULL as episode_number,
-        m.release_date AS date,
+        ${shiftSqlM} AS date,
         m.overview,
         NULL as show_title,
         m.id as show_id,
@@ -536,20 +547,17 @@ router.get('/calendar', async (req, res, next) => {
       FROM movies m
       WHERE m.release_date IS NOT NULL
         AND m.status != 'unmonitored'
+        AND m.release_date >= date('now', 'localtime', '-90 days')
+        AND m.release_date <= date('now', 'localtime', '+120 days')
       ORDER BY date ASC
     `).all();
 
-    const formatted = upcoming.map(item => {
-      let dateStr = item.date;
-      if (dateStr && dateStr.includes('T')) {
-        dateStr = dateStr.split('T')[0];
-      }
-      // Convert US air dates to the configured local calendar day
-      if (item.type === 'episode') {
-        dateStr = localizeAirDate(dateStr);
-      }
-      return { ...item, date: dateStr };
-    });
+    // Strip any stray time component (already date-only after SQL shift,
+    // but guard against legacy ISO timestamps stored in older rows).
+    const formatted = upcoming.map(item => ({
+      ...item,
+      date: item.date ? String(item.date).split('T')[0] : item.date
+    }));
 
     res.json({ status: 'success', data: formatted });
   } catch (err) {
