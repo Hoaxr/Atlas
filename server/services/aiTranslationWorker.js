@@ -43,14 +43,13 @@ ${text}`;
 const translateWithGoogleTranslate = async (text, targetLang) => {
   const target = LANG_CODE[targetLang] || (typeof targetLang === 'string' && targetLang.length === 2 ? targetLang.toLowerCase() : 'nl');
 
-  // Split SRT into lines
   const lines = text.split('\n');
   const translatedLines = [];
-  
-  // Collect text lines with their indices for batch translation
+
+  // Separate structural lines (sequence numbers, timestamps, blank) from text lines
   const textIndices = [];
   const textContents = [];
-  
+
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     if (/^\d+$/.test(line.trim()) || /^\d{2}:\d{2}:\d{2}/.test(line.trim()) || line.trim() === '') {
@@ -60,52 +59,44 @@ const translateWithGoogleTranslate = async (text, targetLang) => {
       textContents.push(line);
     }
   }
-  
-  // Batch translate with a unique separator that Google won't merge across.
-  // This preserves the 1:1 line mapping and keeps subtitle sync intact.
-  const SEP = ' [===] ';
-  const BATCH_SIZE = 20;
-  for (let b = 0; b < textContents.length; b += BATCH_SIZE) {
-    const batch = textContents.slice(b, b + BATCH_SIZE);
-    try {
-      const formData = new URLSearchParams();
-      formData.append('client', 'gtx');
-      formData.append('sl', 'en');
-      formData.append('tl', target);
-      formData.append('dt', 't');
-      formData.append('q', batch.join(SEP));
 
-      const res = await axios.post('https://translate.googleapis.com/translate_a/single', formData.toString(), {
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded;charset=utf-8',
-          'User-Agent': 'Atlas/1.0'
-        },
-        timeout: 15000
-      });
-      // Collect all translated text across response segments
-      const segments = res.data?.[0] || [];
-      let fullText = '';
-      for (const seg of segments) {
-        fullText += (seg?.[0] || '');
-      }
-      if (fullText.includes(SEP)) {
-        const parts = fullText.split(SEP);
-        for (let j = 0; j < batch.length && j < parts.length; j++) {
-          translatedLines[textIndices[b + j]] = parts[j].trim();
+  // Translate each text line individually via GET to avoid URL-length (414) and
+  // method-not-allowed (405) errors. Add a small delay between requests to
+  // avoid rate-limiting.
+  const gtxGet = async (q, retries = 3) => {
+    for (let attempt = 0; attempt < retries; attempt++) {
+      try {
+        const res = await axios.get('https://translate.googleapis.com/translate_a/single', {
+          params: { client: 'gtx', sl: 'en', tl: target, dt: 't', q },
+          timeout: 10000
+        });
+        return res.data?.[0] || [];
+      } catch (err) {
+        const status = err?.response?.status;
+        if (status === 429 && attempt < retries - 1) {
+          // Rate-limited — wait 1s, 2s, 4s before retrying
+          await new Promise(r => setTimeout(r, 1000 * Math.pow(2, attempt)));
+          continue;
         }
-      } else {
-        // Separator lost — use array response directly
-        for (let j = 0; j < batch.length; j++) {
-          translatedLines[textIndices[b + j]] = segments[j]?.[0] || batch[j];
-        }
+        throw err;
       }
-    } catch (err) {
-      // Never write untranslated English into the target-language file — that would
-      // poison the output and block future retries (translateFile skips existing files).
-      throw new Error(`Google Translate batch failed: ${err?.message || err}`, { cause: err });
     }
+  };
+
+  for (let j = 0; j < textContents.length; j++) {
+    const line = textContents[j];
+    try {
+      const segments = await gtxGet(line);
+      let translated = '';
+      for (const seg of segments) translated += (seg?.[0] || '');
+      translatedLines[textIndices[j]] = translated || line;
+    } catch (err) {
+      throw new Error(`Google Translate failed on line ${j + 1}: ${err?.message || err}`, { cause: err });
+    }
+    // Small delay every 10 lines to avoid rate limiting
+    if (j > 0 && j % 10 === 0) await new Promise(r => setTimeout(r, 150));
   }
-  
+
   return translatedLines.join('\n');
 };
 
