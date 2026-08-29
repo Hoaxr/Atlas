@@ -456,6 +456,7 @@ router.post('/:id/translate-subs', async (req, res, next) => {
     }
 
     const enSrtContent = await fsp.readFile(enSubPath, 'utf8');
+    console.log(`[translate-subs] Translating movie ${req.params.id} — ${enSrtContent.length} chars, ${enSrtContent.split(/\n\n/).length} blocks, lang=${targetLang}`);
     const translatedText = await translateSrt(enSrtContent, targetLang);
     await fsp.writeFile(targetSubPath, translatedText);
 
@@ -463,7 +464,8 @@ router.post('/:id/translate-subs', async (req, res, next) => {
 
     res.json({ status: 'success', message: `Translated to ${targetLang}`, data: { file: `${parsedPath.name}.${langCode}.srt` } });
   } catch (err) {
-    next(err);
+    console.error(`[translate-subs] Movie ${req.params.id} failed:`, err?.message, err?.cause?.message || '');
+    res.status(500).json({ status: 'error', message: err?.message || 'Translation failed' });
   }
 });
 
