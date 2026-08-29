@@ -43,10 +43,11 @@ ${text}`;
 const translateWithGoogleTranslate = async (text, targetLang) => {
   const target = LANG_CODE[targetLang] || (typeof targetLang === 'string' && targetLang.length === 2 ? targetLang.toLowerCase() : 'nl');
 
+  // Split SRT into lines
   const lines = text.split('\n');
   const translatedLines = [];
 
-  // Separate structural lines (sequence numbers, timestamps, blank) from text lines
+  // Collect text lines with their indices for batch translation
   const textIndices = [];
   const textContents = [];
 
@@ -60,13 +61,13 @@ const translateWithGoogleTranslate = async (text, targetLang) => {
     }
   }
 
-  // Translate in batches of 10 lines joined by newline.
-  // Google preserves newlines in output, so we can split them back.
-  // This reduces ~500 individual requests to ~50, avoiding 429 rate limits.
-  const BATCH_SIZE = 10;
-  const DELAY_MS = 400; // ms between batch requests
+  // Batch translate with a unique separator that Google won't merge across.
+  // This preserves the 1:1 line mapping and keeps subtitle sync intact.
+  // Uses GET (POST returns 405). 20 lines × ~30 chars = ~600 chars per request, well under URL limits.
+  const SEP = ' [===] ';
+  const BATCH_SIZE = 20;
 
-  const gtxGet = async (q, retries = 5) => {
+  const gtxGet = async (q, retries = 4) => {
     for (let attempt = 0; attempt < retries; attempt++) {
       try {
         const res = await axios.get('https://translate.googleapis.com/translate_a/single', {
@@ -75,10 +76,9 @@ const translateWithGoogleTranslate = async (text, targetLang) => {
         });
         return res.data?.[0] || [];
       } catch (err) {
-        const status = err?.response?.status;
-        if (status === 429 && attempt < retries - 1) {
-          const wait = 1500 * Math.pow(2, attempt); // 1.5s, 3s, 6s, 12s
-          console.log(`[GoogleTranslate] Rate limited (429), retrying in ${wait}ms (attempt ${attempt + 1}/${retries})`);
+        if (err?.response?.status === 429 && attempt < retries - 1) {
+          const wait = 2000 * Math.pow(2, attempt); // 2s, 4s, 8s
+          console.log(`[GoogleTranslate] 429 rate limit, waiting ${wait}ms (attempt ${attempt + 1}/${retries})`);
           await new Promise(r => setTimeout(r, wait));
           continue;
         }
@@ -89,22 +89,24 @@ const translateWithGoogleTranslate = async (text, targetLang) => {
 
   for (let b = 0; b < textContents.length; b += BATCH_SIZE) {
     const batch = textContents.slice(b, b + BATCH_SIZE);
-    const batchText = batch.join('\n');
     try {
-      const segments = await gtxGet(batchText);
-      // Reconstruct translated text from all segments and split back into lines
-      let fullTranslated = '';
-      for (const seg of segments) fullTranslated += (seg?.[0] || '');
-      const translatedBatch = fullTranslated.split('\n');
-      for (let j = 0; j < batch.length; j++) {
-        translatedLines[textIndices[b + j]] = translatedBatch[j]?.trim() || batch[j];
+      const segments = await gtxGet(batch.join(SEP));
+      let fullText = '';
+      for (const seg of segments) fullText += (seg?.[0] || '');
+
+      if (fullText.includes(SEP)) {
+        const parts = fullText.split(SEP);
+        for (let j = 0; j < batch.length && j < parts.length; j++) {
+          translatedLines[textIndices[b + j]] = parts[j].trim();
+        }
+      } else {
+        // Separator was merged — use segment array directly
+        for (let j = 0; j < batch.length; j++) {
+          translatedLines[textIndices[b + j]] = segments[j]?.[0] || batch[j];
+        }
       }
     } catch (err) {
-      throw new Error(`Google Translate failed on batch starting at line ${b + 1}: ${err?.message || err}`, { cause: err });
-    }
-    // Delay between batches to stay under rate limits
-    if (b + BATCH_SIZE < textContents.length) {
-      await new Promise(r => setTimeout(r, DELAY_MS));
+      throw new Error(`Google Translate batch failed (lines ${b + 1}–${b + batch.length}): ${err?.message || err}`, { cause: err });
     }
   }
 
