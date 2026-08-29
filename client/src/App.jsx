@@ -8,6 +8,7 @@ import Dashboard from './pages/dashboard/Dashboard';
 import Discover from './pages/Discover';
 import ShowDetails from './pages/ShowDetails';
 import MovieDetails from './pages/MovieDetails';
+import Tracker from './pages/Tracker';
 import Spinner from './components/shared/Spinner';
 
 const Settings = lazy(() => import('./pages/Settings'));
@@ -23,7 +24,6 @@ const Login = lazy(() => import('./pages/Login'));
 const UserPortal = lazy(() => import('./pages/UserPortal'));
 const Requests = lazy(() => import('./pages/Requests'));
 const Watcher = lazy(() => import('./pages/Watcher'));
-const Tracker = lazy(() => import('./pages/Tracker'));
 
 import ProtectedRoute from './components/layout/ProtectedRoute';
 
@@ -84,7 +84,7 @@ function App() {
                   <Route path="stats/cleanup" element={<LazyPage><CleanupCandidates /></LazyPage>} />
                   <Route path="requests" element={<LazyPage><Requests /></LazyPage>} />
                   <Route path="watcher" element={<LazyPage><Watcher /></LazyPage>} />
-                  <Route path="tracker" element={<LazyPage><Tracker /></LazyPage>} />
+                  <Route path="tracker" element={<Tracker />} />
                   <Route path="person/:id" element={<LazyPage><PersonDetails /></LazyPage>} />
                 </Route>
                 <Route path="/portal" element={<LazyPage><UserPortal /></LazyPage>} />

@@ -348,8 +348,35 @@ const Tracker = () => {
 
   if (loading && !stats) {
     return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <Loader2 className="w-8 h-8 animate-spin text-cyan-500" />
+      <div className="w-full space-y-6 sm:space-y-8 md:space-y-10 pb-12 sm:pb-16 animate-pulse">
+        {/* Hero skeleton */}
+        <div className="relative rounded-2xl sm:rounded-3xl border border-slate-700/50 bg-slate-900/80 p-4 sm:p-6 md:p-10 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-8">
+          <div className="space-y-3 max-w-2xl w-full">
+            <div className="h-10 bg-slate-800 rounded-xl w-64" />
+            <div className="h-6 bg-slate-800/60 rounded-lg w-80 max-w-full" />
+            <div className="h-4 bg-slate-800/40 rounded-lg w-48" />
+          </div>
+        </div>
+
+        {/* Continue watching skeleton */}
+        <div className="space-y-4">
+          <div className="h-7 bg-slate-800/80 rounded-lg w-48" />
+          <div className="flex gap-3 sm:gap-5 overflow-hidden">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="w-48 sm:w-72 md:w-80 h-56 bg-slate-800/40 rounded-xl sm:rounded-2xl shrink-0 border border-slate-700/40" />
+            ))}
+          </div>
+        </div>
+
+        {/* Activity feed skeleton */}
+        <div className="p-4 sm:p-6 md:p-8 rounded-2xl sm:rounded-3xl border border-slate-700/50 bg-slate-800/40 space-y-4">
+          <div className="h-6 bg-slate-800 rounded-lg w-40" />
+          <div className="space-y-3">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <div key={i} className="h-20 bg-slate-900/60 rounded-xl border border-white/5" />
+            ))}
+          </div>
+        </div>
       </div>
     );
   }
