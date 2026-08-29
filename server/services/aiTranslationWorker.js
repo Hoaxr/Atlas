@@ -61,52 +61,58 @@ const translateWithGoogleTranslate = async (text, targetLang) => {
     }
   }
 
-  // Batch translate with a unique separator that Google won't merge across.
-  // This preserves the 1:1 line mapping and keeps subtitle sync intact.
-  // Uses GET (POST returns 405). 20 lines × ~30 chars = ~600 chars per request, well under URL limits.
-  const SEP = ' [===] ';
-  const BATCH_SIZE = 20;
-
-  const gtxGet = async (q, retries = 4) => {
+  // Translate lines using GET. Uses recursive halving: if a batch gets a 400
+  // (too long/malformed) it splits in half and retries, eventually falling
+  // back to one line at a time. Retries on 429 with exponential backoff.
+  const gtxTranslate = async (lines, targetCode, retries = 4) => {
+    if (lines.length === 0) return [];
+    const q = lines.join('\n');
     for (let attempt = 0; attempt < retries; attempt++) {
       try {
         const res = await axios.get('https://translate.googleapis.com/translate_a/single', {
-          params: { client: 'gtx', sl: 'en', tl: target, dt: 't', q },
-          timeout: 10000
+          params: { client: 'gtx', sl: 'en', tl: targetCode, dt: 't', q },
+          timeout: 12000
         });
-        return res.data?.[0] || [];
+        const segments = res.data?.[0] || [];
+        let fullText = '';
+        for (const seg of segments) fullText += (seg?.[0] || '');
+        // Split translated text back into lines — Google preserves \n
+        const parts = fullText.split('\n');
+        return lines.map((orig, i) => parts[i]?.trim() || orig);
       } catch (err) {
-        if (err?.response?.status === 429 && attempt < retries - 1) {
-          const wait = 2000 * Math.pow(2, attempt); // 2s, 4s, 8s
-          console.log(`[GoogleTranslate] 429 rate limit, waiting ${wait}ms (attempt ${attempt + 1}/${retries})`);
+        const status = err?.response?.status;
+        if (status === 429 && attempt < retries - 1) {
+          const wait = 2000 * Math.pow(2, attempt);
+          console.log(`[GoogleTranslate] 429, retrying in ${wait}ms`);
           await new Promise(r => setTimeout(r, wait));
           continue;
         }
-        throw err;
+        // 400/413/other: if more than one line, split in half and retry each half
+        if (lines.length > 1) {
+          const mid = Math.ceil(lines.length / 2);
+          await new Promise(r => setTimeout(r, 300));
+          const left = await gtxTranslate(lines.slice(0, mid), targetCode, retries);
+          await new Promise(r => setTimeout(r, 300));
+          const right = await gtxTranslate(lines.slice(mid), targetCode, retries);
+          return [...left, ...right];
+        }
+        // Single line still failing — keep the original
+        console.warn(`[GoogleTranslate] Failed to translate line, keeping original: ${err?.message}`);
+        return lines;
       }
     }
+    return lines; // fallback: return originals if all retries exhausted
   };
 
+  const BATCH_SIZE = 5;
   for (let b = 0; b < textContents.length; b += BATCH_SIZE) {
     const batch = textContents.slice(b, b + BATCH_SIZE);
-    try {
-      const segments = await gtxGet(batch.join(SEP));
-      let fullText = '';
-      for (const seg of segments) fullText += (seg?.[0] || '');
-
-      if (fullText.includes(SEP)) {
-        const parts = fullText.split(SEP);
-        for (let j = 0; j < batch.length && j < parts.length; j++) {
-          translatedLines[textIndices[b + j]] = parts[j].trim();
-        }
-      } else {
-        // Separator was merged — use segment array directly
-        for (let j = 0; j < batch.length; j++) {
-          translatedLines[textIndices[b + j]] = segments[j]?.[0] || batch[j];
-        }
-      }
-    } catch (err) {
-      throw new Error(`Google Translate batch failed (lines ${b + 1}–${b + batch.length}): ${err?.message || err}`, { cause: err });
+    const translated = await gtxTranslate(batch, target);
+    for (let j = 0; j < batch.length; j++) {
+      translatedLines[textIndices[b + j]] = translated[j] ?? batch[j];
+    }
+    if (b + BATCH_SIZE < textContents.length) {
+      await new Promise(r => setTimeout(r, 300));
     }
   }
 
