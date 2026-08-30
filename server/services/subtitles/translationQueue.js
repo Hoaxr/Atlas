@@ -15,7 +15,7 @@ const path = require('path');
 const db = require('../../config/database');
 const eventBus = require('../eventBus');
 const { LANG_TO_CODE } = require('../../utils/constants');
-const { parseSubtitles, serializeSubtitles } = require('./parser');
+const { parseSubtitles, serializeSubtitles, readSubtitleFile } = require('./parser');
 const { getTranslationProvider, createCueBatches } = require('./translationProviders');
 
 class SubtitleTranslationQueue {
@@ -227,12 +227,12 @@ class SubtitleTranslationQueue {
       job.progress = 5;
       this.emitJobUpdate(job);
 
-      // Read source file
-      const rawContent = await fsp.readFile(job.sourceFile, 'utf8');
+      // Read source file with auto-encoding detection (UTF-8, UTF-16 LE/BE, Latin1)
+      const rawContent = await readSubtitleFile(job.sourceFile);
       const { cues, format, header } = parseSubtitles(rawContent);
 
       if (cues.length === 0) {
-        throw new Error('Source subtitle file contains no valid dialogue cues');
+        throw new Error(`Source subtitle file contains no valid dialogue cues (File size: ${rawContent.length} chars)`);
       }
 
       job.totalCues = cues.length;

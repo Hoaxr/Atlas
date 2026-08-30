@@ -15,7 +15,7 @@ const fs = require('fs');
 const fsp = require('fs').promises;
 const path = require('path');
 const db = require('../../config/database');
-const { parseSubtitles, serializeSubtitles } = require('../../services/subtitles/parser');
+const { parseSubtitles, serializeSubtitles, readSubtitleFile } = require('../../services/subtitles/parser');
 const translationQueue = require('../../services/subtitles/translationQueue');
 const { LANG_TO_CODE, CODE_TO_LANG } = require('../../utils/constants');
 const { extractLang, getSubtitlesInDir } = require('./helpers');
@@ -290,7 +290,7 @@ router.get('/content/:mediaType/:mediaId/:filename', async (req, res, next) => {
       return res.status(404).json({ status: 'error', message: 'Subtitle file not found' });
     }
 
-    const rawContent = await fsp.readFile(safePath, 'utf8');
+    const rawContent = await readSubtitleFile(safePath);
     const { cues, format, header } = parseSubtitles(rawContent);
 
     res.json({

@@ -2,22 +2,123 @@
  * Subtitle Parser, Serializer & Tag Protection Engine
  * 
  * Supports:
- * - SubRip (.srt) and WebVTT (.vtt)
- * - Timing preservation (milliseconds start/end)
+ * - SubRip (.srt), WebVTT (.vtt), and Advanced SubStation Alpha (.ass/.ssa)
+ * - Auto encoding detection: UTF-8 (with/without BOM), UTF-16 LE, UTF-16 BE, Latin1/Windows-1252
+ * - Timing preservation (exact milliseconds start/end)
  * - Tag & formatting protection (HTML, ASS, Sound/Music, Speakers)
  */
 
+const fs = require('fs');
+const fsp = require('fs').promises;
+
 /**
- * Parses timestamp string (00:01:23,456 or 00:01:23.456) to milliseconds.
+ * Decodes a raw Buffer into a normalized UTF-8 string,
+ * automatically handling UTF-16 LE/BE, UTF-8 BOM, and Latin1 fallbacks.
+ * 
+ * @param {Buffer|string} input 
+ * @returns {string}
+ */
+function decodeSubtitleBuffer(input) {
+  if (!input) return '';
+  if (typeof input === 'string') {
+    // If it's a string, strip BOM and clean null bytes if it was misread
+    let s = input.replace(/^\uFEFF/, '').replace(/^\uFFFE/, '');
+    if (s.includes('\u0000')) {
+      s = s.replace(/\u0000/g, '');
+    }
+    return s.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  }
+
+  const buf = input;
+  if (!Buffer.isBuffer(buf) || buf.length === 0) return '';
+
+  let text = '';
+
+  // 1. UTF-16 LE BOM: 0xFF 0xFE
+  if (buf.length >= 2 && buf[0] === 0xFF && buf[1] === 0xFE) {
+    text = buf.slice(2).toString('utf16le');
+  }
+  // 2. UTF-16 BE BOM: 0xFE 0xFF
+  else if (buf.length >= 2 && buf[0] === 0xFE && buf[1] === 0xFF) {
+    const copy = Buffer.from(buf.slice(2));
+    copy.swap16();
+    text = copy.toString('utf16le');
+  }
+  // 3. UTF-8 BOM: 0xEF 0xBB 0xBF
+  else if (buf.length >= 3 && buf[0] === 0xEF && buf[1] === 0xBB && buf[2] === 0xBF) {
+    text = buf.slice(3).toString('utf8');
+  }
+  // 4. Check for high density of null bytes (UTF-16 without BOM)
+  else {
+    let nullCount = 0;
+    const sampleLen = Math.min(200, buf.length);
+    for (let i = 0; i < sampleLen; i++) {
+      if (buf[i] === 0) nullCount++;
+    }
+
+    if (nullCount > sampleLen * 0.15) {
+      text = buf.toString('utf16le');
+    } else {
+      const utf8Str = buf.toString('utf8');
+      // If invalid UTF-8 replacement characters present, fallback to latin1
+      if (utf8Str.includes('\uFFFD')) {
+        text = buf.toString('latin1');
+      } else {
+        text = utf8Str;
+      }
+    }
+  }
+
+  // Strip any remaining BOM or null bytes
+  text = text.replace(/^\uFEFF/, '').replace(/^\uFFFE/, '').replace(/\u0000/g, '');
+  return text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+}
+
+/**
+ * Safely reads and decodes a subtitle file from disk.
+ * 
+ * @param {string} filePath 
+ * @returns {Promise<string>}
+ */
+async function readSubtitleFile(filePath) {
+  if (!fs.existsSync(filePath)) {
+    throw new Error(`Subtitle file not found: ${filePath}`);
+  }
+  const buf = await fsp.readFile(filePath);
+  if (buf.length === 0) {
+    throw new Error('Subtitle file is empty (0 bytes)');
+  }
+  const text = decodeSubtitleBuffer(buf).trim();
+  if (!text) {
+    throw new Error('Subtitle file contains no readable text content');
+  }
+  if (text.toLowerCase().startsWith('<!doctype html') || text.toLowerCase().startsWith('<html')) {
+    throw new Error('File appears to be an HTML error page, not a valid subtitle');
+  }
+  return text;
+}
+
+/**
+ * Parses timestamp string (00:01:23,456 or 00:01:23.456 or 1:23:45.67) to milliseconds.
  */
 function timestampToMs(timeStr) {
   if (!timeStr) return 0;
-  const match = timeStr.trim().match(/(?:(\d{1,2}):)?(\d{2}):(\d{2})[,.](\d{3})/);
-  if (!match) return 0;
+  const match = timeStr.trim().match(/(?:(\d{1,2}):)?(\d{2}):(\d{2})[,.](\d{1,4})/);
+  if (!match) {
+    // Fallback: MM:SS,mmm format without hours
+    const matchNoHour = timeStr.trim().match(/(\d{1,2}):(\d{2})[,.](\d{1,4})/);
+    if (matchNoHour) {
+      const mins = parseInt(matchNoHour[1], 10);
+      const secs = parseInt(matchNoHour[2], 10);
+      const ms = parseInt(matchNoHour[3].padEnd(3, '0').slice(0, 3), 10);
+      return mins * 60000 + secs * 1000 + ms;
+    }
+    return 0;
+  }
   const hours = parseInt(match[1] || '0', 10);
   const minutes = parseInt(match[2], 10);
   const seconds = parseInt(match[3], 10);
-  const millis = parseInt(match[4], 10);
+  const millis = parseInt(match[4].padEnd(3, '0').slice(0, 3), 10);
   return hours * 3600000 + minutes * 60000 + seconds * 1000 + millis;
 }
 
@@ -71,7 +172,6 @@ function protectTags(text) {
 
   for (const pattern of TAG_PATTERNS) {
     protectedText = protectedText.replace(pattern, (match) => {
-      // If already a token, don't re-tokenize
       if (/^❲T\d+❳$/.test(match)) return match;
       const token = `❲T${tokenIndex++}❳`;
       tagMap.set(token, match);
@@ -94,14 +194,12 @@ function restoreTags(translatedText, tagMap) {
 
   let restored = translatedText;
 
-  // Handle minor spacing alterations translation engines might inject (e.g. "❲ T1 ❳" or "(T1)")
   for (const [token, originalTag] of tagMap.entries()) {
     const tokenNum = token.replace(/[^\d]/g, '');
     const flexibleRegex = new RegExp(`[❲\\[\\(]\\s*T\\s*${tokenNum}\\s*[❳\\]\\)]`, 'g');
     restored = restored.replace(flexibleRegex, originalTag);
   }
 
-  // Exact fallback
   for (const [token, originalTag] of tagMap.entries()) {
     if (restored.includes(token)) {
       restored = restored.split(token).join(originalTag);
@@ -112,44 +210,64 @@ function restoreTags(translatedText, tagMap) {
 }
 
 /**
- * Parses raw SRT or VTT content into an array of structured SubtitleCue objects.
+ * Parses raw SRT, VTT, or ASS/SSA content into an array of structured SubtitleCue objects.
  * 
- * @param {string} rawContent 
- * @returns {{ cues: Array<object>, format: 'srt'|'vtt', header: string }}
+ * @param {Buffer|string} rawInput 
+ * @returns {{ cues: Array<object>, format: 'srt'|'vtt'|'ass', header: string }}
  */
-/**
- * Parses raw SRT or VTT content into an array of structured SubtitleCue objects.
- * Handles UTF-8 BOM, irregular spacing, single/multi-line newlines, VTT settings, etc.
- * 
- * @param {string} rawContent 
- * @returns {{ cues: Array<object>, format: 'srt'|'vtt', header: string }}
- */
-function parseSubtitles(rawContent) {
-  if (!rawContent || typeof rawContent !== 'string') {
+function parseSubtitles(rawInput) {
+  const cleaned = decodeSubtitleBuffer(rawInput);
+  if (!cleaned) {
     return { cues: [], format: 'srt', header: '' };
   }
 
-  // Strip BOM markers and normalize line endings
-  const cleaned = rawContent
-    .replace(/^\uFEFF/, '')
-    .replace(/^\uFFFE/, '')
-    .replace(/\r\n/g, '\n')
-    .replace(/\r/g, '\n');
+  const isVtt = cleaned.startsWith('WEBVTT');
+  const isAss = cleaned.includes('[Events]') && cleaned.includes('Dialogue:');
+  const format = isVtt ? 'vtt' : (isAss ? 'ass' : 'srt');
 
-  const format = cleaned.startsWith('WEBVTT') ? 'vtt' : 'srt';
+  // Handle ASS / SSA subtitles
+  if (isAss) {
+    const cues = [];
+    const lines = cleaned.split('\n');
+    let cueId = 1;
+    for (const line of lines) {
+      const match = line.match(/^Dialogue:\s*\d+,\s*(\d{1,2}:\d{2}:\d{2}[.,]\d{2,3}),\s*(\d{1,2}:\d{2}:\d{2}[.,]\d{2,3}),[^,]*?,[^,]*?,[^,]*?,[^,]*?,[^,]*?,[^,]*?,(.*)$/i);
+      if (match) {
+        const startTime = match[1];
+        const endTime = match[2];
+        const text = match[3].replace(/\\N/g, '\n').replace(/\\n/g, '\n').trim();
+        const startMs = timestampToMs(startTime);
+        const endMs = timestampToMs(endTime);
+        cues.push({
+          id: cueId++,
+          startTime: msToTimestamp(startMs, 'srt'),
+          endTime: msToTimestamp(endMs, 'srt'),
+          startMs,
+          endMs,
+          settings: '',
+          text,
+          lines: text.split('\n')
+        });
+      }
+    }
+    return { cues, format: 'ass', header: '' };
+  }
+
+  // Handle SRT and VTT with line-by-line scanning
   const lines = cleaned.split('\n');
   const cues = [];
   let header = '';
   let i = 0;
 
-  if (format === 'vtt') {
+  if (isVtt) {
     while (i < lines.length && !lines[i].includes('-->')) {
       header += lines[i] + '\n';
       i++;
     }
   }
 
-  const timeRegex = /((?:\d{1,2}:)?\d{2}:\d{2}[,.]\d{2,4})\s*-->\s*((?:\d{1,2}:)?\d{2}:\d{2}[,.]\d{2,4})(?:[ \t]+([^\n\r]*))?/;
+  // Matches timestamps with --> or -> or —>
+  const timeRegex = /((?:\d{1,2}:)?\d{2}:\d{2}[,.]\d{1,4})\s*(?:-->|->|—>)\s*((?:\d{1,2}:)?\d{2}:\d{2}[,.]\d{1,4})(?:[ \t]+([^\n\r]*))?/;
 
   while (i < lines.length) {
     const line = lines[i].trim();
@@ -179,14 +297,14 @@ function parseSubtitles(rawContent) {
       while (i < lines.length) {
         const nextLine = lines[i];
         if (nextLine.trim() === '') {
-          // Check ahead if next content is another timestamp line or ID+timestamp
+          // Look ahead to check if next block is a new cue
           let peek = i + 1;
           while (peek < lines.length && lines[peek].trim() === '') peek++;
-          if (peek < lines.length && (lines[peek].includes('-->') || (/^\d+$/.test(lines[peek].trim()) && peek + 1 < lines.length && lines[peek + 1].includes('-->')))) {
+          if (peek < lines.length && (timeRegex.test(lines[peek]) || (/^\d+$/.test(lines[peek].trim()) && peek + 1 < lines.length && timeRegex.test(lines[peek + 1])))) {
             break;
           }
         }
-        if (nextLine.includes('-->') || (/^\d+$/.test(nextLine.trim()) && i + 1 < lines.length && lines[i + 1].includes('-->'))) {
+        if (timeRegex.test(nextLine) || (/^\d+$/.test(nextLine.trim()) && i + 1 < lines.length && timeRegex.test(lines[i + 1]))) {
           break;
         }
         textLines.push(nextLine);
@@ -199,8 +317,8 @@ function parseSubtitles(rawContent) {
 
       cues.push({
         id: explicitId || cues.length + 1,
-        startTime: msToTimestamp(startMs, format),
-        endTime: msToTimestamp(endMs, format),
+        startTime: msToTimestamp(startMs, format === 'vtt' ? 'vtt' : 'srt'),
+        endTime: msToTimestamp(endMs, format === 'vtt' ? 'vtt' : 'srt'),
         startMs,
         endMs,
         settings: settings.trim(),
@@ -242,17 +360,15 @@ function serializeSubtitles(cues, format = 'srt', header = '') {
     const settings = cue.settings ? ` ${cue.settings}` : '';
     const text = (cue.text || '').trim();
 
-    if (format === 'srt') {
-      blocks.push(`${id}\n${start} --> ${end}${settings}\n${text}`);
-    } else {
-      blocks.push(`${id}\n${start} --> ${end}${settings}\n${text}`);
-    }
+    blocks.push(`${id}\n${start} --> ${end}${settings}\n${text}`);
   }
 
   return blocks.join('\n\n') + '\n';
 }
 
 module.exports = {
+  decodeSubtitleBuffer,
+  readSubtitleFile,
   timestampToMs,
   msToTimestamp,
   protectTags,

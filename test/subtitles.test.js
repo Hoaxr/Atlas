@@ -1,5 +1,5 @@
 const assert = require('assert');
-const { parseSubtitles, serializeSubtitles, protectTags, restoreTags } = require('../server/services/subtitles/parser');
+const { parseSubtitles, serializeSubtitles, protectTags, restoreTags, decodeSubtitleBuffer } = require('../server/services/subtitles/parser');
 const { getTranslationProvider } = require('../server/services/subtitles/translationProviders');
 
 console.log('=== Running Subtitle System Tests ===\n');
@@ -54,8 +54,31 @@ assert(serialized.includes('00:01:20,123 --> 00:01:25,456'));
 assert(serialized.includes('JOHN: <i>Hallo daar!</i> [Dramatic music]'));
 console.log('✓ Serialization passed');
 
-// Test 4: Translation Provider
-console.log('Test 4: Translation Provider Factory');
+// Test 4: UTF-16 LE Encoding & Null Byte handling
+console.log('Test 4: UTF-16 LE Buffer Handling');
+const utf16leBuf = Buffer.from('\uFEFF1\r\n00:00:10,000 --> 00:00:15,000\r\nUTF-16 Encoded Line\r\n', 'utf16le');
+const parsedUtf16 = parseSubtitles(utf16leBuf);
+assert.strictEqual(parsedUtf16.cues.length, 1);
+assert.strictEqual(parsedUtf16.cues[0].text, 'UTF-16 Encoded Line');
+assert.strictEqual(parsedUtf16.cues[0].startTime, '00:00:10,000');
+console.log('✓ UTF-16 LE decoding passed');
+
+// Test 5: ASS / SSA Subtitle Support
+console.log('Test 5: ASS / SSA Subtitle Support');
+const assText = `[Script Info]
+Title: Dark Matter
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:01:20.12,0:01:25.45,Default,,0,0,0,,Hello from ASS dialogue!
+Dialogue: 0,0:01:26.00,0:01:29.99,Default,,0,0,0,,{\\an8}Second ASS line
+`;
+const parsedAss = parseSubtitles(assText);
+assert.strictEqual(parsedAss.cues.length, 2);
+assert.strictEqual(parsedAss.cues[0].text, 'Hello from ASS dialogue!');
+console.log('✓ ASS subtitle parsing passed');
+
+// Test 6: Translation Provider Factory
+console.log('Test 6: Translation Provider Factory');
 const gtx = getTranslationProvider('googleTranslate');
 assert(gtx.name === 'googleTranslate');
 console.log('✓ Provider factory passed');
