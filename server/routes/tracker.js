@@ -719,7 +719,7 @@ router.get('/this-week', (req, res) => {
       ORDER BY release_date ASC
     `).all(fromStr, toStr);
 
-    // Episodes airing this week (not yet watched)
+    // Episodes airing this week (only for shows the user has actually started watching)
     const episodes = db.prepare(`
       SELECT 
         e.id as episode_id,
@@ -737,6 +737,17 @@ router.get('/this-week', (req, res) => {
       WHERE e.air_date >= date(?, '-3 day') 
         AND e.air_date <= ? 
         AND e.watched = 0
+        AND (
+          EXISTS (
+            SELECT 1 FROM episodes ep_w 
+            WHERE ep_w.show_id = s.id 
+              AND (ep_w.watched = 1 OR ep_w.watch_progress > 0)
+          )
+          OR EXISTS (
+            SELECT 1 FROM watch_history wh
+            WHERE wh.tmdb_id = s.tmdb_id
+          )
+        )
       ORDER BY air_date ASC, s.title, e.season_number, e.episode_number
     `).all(wideFromStr, toStr);
 
