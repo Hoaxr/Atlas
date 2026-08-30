@@ -77,8 +77,18 @@ assert.strictEqual(parsedAss.cues.length, 2);
 assert.strictEqual(parsedAss.cues[0].text, 'Hello from ASS dialogue!');
 console.log('✓ ASS subtitle parsing passed');
 
-// Test 6: Translation Provider Factory
-console.log('Test 6: Translation Provider Factory');
+// Test 6: ZIP Archive Decoding
+console.log('Test 6: ZIP Archive Subtitle Decoding');
+const AdmZip = require('../server/node_modules/adm-zip');
+const zip = new AdmZip();
+zip.addFile('Dark Matter - S01E06.en.srt', Buffer.from('1\r\n00:00:01,000 --> 00:00:04,000\r\nHello from inside ZIP!\r\n', 'utf8'));
+const parsedZip = parseSubtitles(zip.toBuffer());
+assert.strictEqual(parsedZip.cues.length, 1);
+assert.strictEqual(parsedZip.cues[0].text, 'Hello from inside ZIP!');
+console.log('✓ ZIP subtitle buffer extraction passed');
+
+// Test 7: Translation Provider Factory
+console.log('Test 7: Translation Provider Factory');
 const gtx = getTranslationProvider('googleTranslate');
 assert(gtx.name === 'googleTranslate');
 console.log('✓ Provider factory passed');

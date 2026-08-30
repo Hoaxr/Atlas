@@ -8,6 +8,7 @@ const { runWithConcurrency } = require('../../utils/concurrency');
 const { registerJob } = require('../../utils/cronRegistry');
 const { translateWithProvider } = require('../aiTranslationWorker');
 const { LANG_TO_CODE } = require('../../utils/constants');
+const { decodeSubtitleBuffer } = require('./parser');
 
 const openSubtitles = require('./providers/openSubtitles');
 const subdl = require('./providers/subdl');
@@ -115,7 +116,8 @@ const downloadSubtitlesForMovie = async (movie, langCode) => {
 
   const srtContent = await tryDownloadNativeMovie(movie, langCode);
   if (srtContent) {
-    fs.writeFileSync(subPath, srtContent);
+    const cleanContent = decodeSubtitleBuffer(srtContent);
+    fs.writeFileSync(subPath, cleanContent);
     eventBus.success(`Subtitle downloaded: ${movie.title} (${langCode.toUpperCase()})`, { title: movie.title, language: langCode });
 
     // Handle auto-translate if enabled and English was fetched
@@ -140,7 +142,7 @@ const downloadSubtitlesForMovie = async (movie, langCode) => {
             try {
               const nativeContent = await tryDownloadNativeMovie(movie, tCode);
               if (nativeContent) {
-                fs.writeFileSync(targetSubPath, nativeContent);
+                fs.writeFileSync(targetSubPath, decodeSubtitleBuffer(nativeContent));
                 eventBus.success(`Subtitle downloaded: ${movie.title} (${tCode.toUpperCase()})`, { title: movie.title, language: tCode });
                 continue;
               }
@@ -148,7 +150,7 @@ const downloadSubtitlesForMovie = async (movie, langCode) => {
           }
 
           try {
-            const translated = await translateWithProvider(srtContent, lang);
+            const translated = await translateWithProvider(cleanContent, lang);
             fs.writeFileSync(targetSubPath, translated);
             eventBus.success(`Subtitle translated: ${movie.title} (${lang})`, { title: movie.title, language: lang });
           } catch (translateErr) {
@@ -172,7 +174,8 @@ const downloadSubtitlesForEpisode = async (episode, show, langCode) => {
 
   const srtContent = await tryDownloadNativeEpisode(show, episode, langCode);
   if (srtContent) {
-    fs.writeFileSync(subPath, srtContent);
+    const cleanContent = decodeSubtitleBuffer(srtContent);
+    fs.writeFileSync(subPath, cleanContent);
     const label = `${show?.title || episode.show_title || 'Episode'} S${String(episode.season_number).padStart(2, '0')}E${String(episode.episode_number).padStart(2, '0')}`;
     eventBus.success(`Subtitle downloaded: ${label} (${langCode.toUpperCase()})`, { title: label, language: langCode });
     return { success: true, langCode };

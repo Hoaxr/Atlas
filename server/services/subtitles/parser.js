@@ -10,45 +10,78 @@
 
 const fs = require('fs');
 const fsp = require('fs').promises;
+const zlib = require('zlib');
+const AdmZip = (() => { try { return require('adm-zip'); } catch { return null; } })();
 
 /**
  * Decodes a raw Buffer into a normalized UTF-8 string,
- * automatically handling UTF-16 LE/BE, UTF-8 BOM, and Latin1 fallbacks.
+ * automatically handling ZIP archives, GZIP compressed payloads,
+ * UTF-16 LE/BE, UTF-8 BOM, and Latin1 fallbacks.
  * 
  * @param {Buffer|string} input 
  * @returns {string}
  */
 function decodeSubtitleBuffer(input) {
   if (!input) return '';
+
+  let buf = input;
   if (typeof input === 'string') {
-    // If it's a string, strip BOM and clean null bytes if it was misread
-    let s = input.replace(/^\uFEFF/, '').replace(/^\uFFFE/, '');
-    if (s.includes('\u0000')) {
-      s = s.replace(/\u0000/g, '');
+    // If input is a string starting with ZIP magic bytes, convert to binary buffer
+    if (input.startsWith('PK\x03\x04') || input.startsWith('PK\x05\x06') || input.startsWith('PK\x07\x08')) {
+      buf = Buffer.from(input, 'binary');
+    } else {
+      let s = input.replace(/^\uFEFF/, '').replace(/^\uFFFE/, '');
+      if (s.includes('\u0000')) {
+        s = s.replace(/\u0000/g, '');
+      }
+      return s.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
     }
-    return s.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
   }
 
-  const buf = input;
   if (!Buffer.isBuffer(buf) || buf.length === 0) return '';
+
+  // 1. Check for ZIP archive magic header: PK (0x50 0x4B)
+  if (buf.length >= 4 && buf[0] === 0x50 && buf[1] === 0x4B && AdmZip) {
+    try {
+      const zip = new AdmZip(buf);
+      const entries = zip.getEntries();
+      const subEntry = entries.find(e => !e.isDirectory && /\.(srt|vtt|ass|ssa|sub|txt)$/i.test(e.entryName)) || entries.find(e => !e.isDirectory);
+      if (subEntry) {
+        const extractedBuf = subEntry.getData();
+        return decodeSubtitleBuffer(extractedBuf);
+      }
+    } catch (err) {
+      console.error('[SubtitleParser] Failed to unpack zip archive:', err.message);
+    }
+  }
+
+  // 2. Check for GZIP magic header: 0x1F 0x8B
+  if (buf.length >= 2 && buf[0] === 0x1F && buf[1] === 0x8B) {
+    try {
+      const gunzipped = zlib.gunzipSync(buf);
+      return decodeSubtitleBuffer(gunzipped);
+    } catch (err) {
+      console.error('[SubtitleParser] Failed to decompress gzip:', err.message);
+    }
+  }
 
   let text = '';
 
-  // 1. UTF-16 LE BOM: 0xFF 0xFE
+  // 3. UTF-16 LE BOM: 0xFF 0xFE
   if (buf.length >= 2 && buf[0] === 0xFF && buf[1] === 0xFE) {
     text = buf.slice(2).toString('utf16le');
   }
-  // 2. UTF-16 BE BOM: 0xFE 0xFF
+  // 4. UTF-16 BE BOM: 0xFE 0xFF
   else if (buf.length >= 2 && buf[0] === 0xFE && buf[1] === 0xFF) {
     const copy = Buffer.from(buf.slice(2));
     copy.swap16();
     text = copy.toString('utf16le');
   }
-  // 3. UTF-8 BOM: 0xEF 0xBB 0xBF
+  // 5. UTF-8 BOM: 0xEF 0xBB 0xBF
   else if (buf.length >= 3 && buf[0] === 0xEF && buf[1] === 0xBB && buf[2] === 0xBF) {
     text = buf.slice(3).toString('utf8');
   }
-  // 4. Check for high density of null bytes (UTF-16 without BOM)
+  // 6. Check for high density of null bytes (UTF-16 without BOM)
   else {
     let nullCount = 0;
     const sampleLen = Math.min(200, buf.length);
