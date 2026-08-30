@@ -117,46 +117,83 @@ function restoreTags(translatedText, tagMap) {
  * @param {string} rawContent 
  * @returns {{ cues: Array<object>, format: 'srt'|'vtt', header: string }}
  */
+/**
+ * Parses raw SRT or VTT content into an array of structured SubtitleCue objects.
+ * Handles UTF-8 BOM, irregular spacing, single/multi-line newlines, VTT settings, etc.
+ * 
+ * @param {string} rawContent 
+ * @returns {{ cues: Array<object>, format: 'srt'|'vtt', header: string }}
+ */
 function parseSubtitles(rawContent) {
   if (!rawContent || typeof rawContent !== 'string') {
     return { cues: [], format: 'srt', header: '' };
   }
 
-  // Normalize line breaks
-  const normalized = rawContent.replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim();
-  const format = normalized.startsWith('WEBVTT') ? 'vtt' : 'srt';
+  // Strip BOM markers and normalize line endings
+  const cleaned = rawContent
+    .replace(/^\uFEFF/, '')
+    .replace(/^\uFFFE/, '')
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n');
 
+  const format = cleaned.startsWith('WEBVTT') ? 'vtt' : 'srt';
+  const lines = cleaned.split('\n');
+  const cues = [];
   let header = '';
-  let body = normalized;
+  let i = 0;
 
   if (format === 'vtt') {
-    const firstDoubleBreak = normalized.indexOf('\n\n');
-    if (firstDoubleBreak !== -1) {
-      header = normalized.substring(0, firstDoubleBreak).trim();
-      body = normalized.substring(firstDoubleBreak + 2).trim();
+    while (i < lines.length && !lines[i].includes('-->')) {
+      header += lines[i] + '\n';
+      i++;
     }
   }
 
-  const blocks = body.split(/\n\n+/);
-  const cues = [];
+  const timeRegex = /((?:\d{1,2}:)?\d{2}:\d{2}[,.]\d{2,4})\s*-->\s*((?:\d{1,2}:)?\d{2}:\d{2}[,.]\d{2,4})(?:[ \t]+([^\n\r]*))?/;
 
-  const timeLineRegex = /(?:(\d+)\n)?((?:\d{1,2}:)?\d{2}:\d{2}[,.]\d{3})\s*-->\s*((?:\d{1,2}:)?\d{2}:\d{2}[,.]\d{3})(?:[ \t]+([^\n\r]*))?/;
+  while (i < lines.length) {
+    const line = lines[i].trim();
+    if (!line) {
+      i++;
+      continue;
+    }
 
-  for (let i = 0; i < blocks.length; i++) {
-    const block = blocks[i].trim();
-    if (!block) continue;
+    let timeMatch = line.match(timeRegex);
+    let explicitId = null;
 
-    const match = block.match(timeLineRegex);
-    if (match) {
-      const explicitId = match[1] ? parseInt(match[1], 10) : null;
-      const startTime = match[2];
-      const endTime = match[3];
-      const settings = match[4] || '';
+    if (!timeMatch && /^\d+$/.test(line) && i + 1 < lines.length) {
+      explicitId = parseInt(line, 10);
+      timeMatch = lines[i + 1].trim().match(timeRegex);
+      if (timeMatch) {
+        i++; // skip sequence ID line
+      }
+    }
 
-      const matchIndex = match.index || 0;
-      const matchLength = match[0].length;
-      const textAfterTime = block.substring(matchIndex + matchLength).trim();
+    if (timeMatch) {
+      const startTime = timeMatch[1];
+      const endTime = timeMatch[2];
+      const settings = timeMatch[3] || '';
+      i++;
 
+      const textLines = [];
+      while (i < lines.length) {
+        const nextLine = lines[i];
+        if (nextLine.trim() === '') {
+          // Check ahead if next content is another timestamp line or ID+timestamp
+          let peek = i + 1;
+          while (peek < lines.length && lines[peek].trim() === '') peek++;
+          if (peek < lines.length && (lines[peek].includes('-->') || (/^\d+$/.test(lines[peek].trim()) && peek + 1 < lines.length && lines[peek + 1].includes('-->')))) {
+            break;
+          }
+        }
+        if (nextLine.includes('-->') || (/^\d+$/.test(nextLine.trim()) && i + 1 < lines.length && lines[i + 1].includes('-->'))) {
+          break;
+        }
+        textLines.push(nextLine);
+        i++;
+      }
+
+      const cueText = textLines.join('\n').trim();
       const startMs = timestampToMs(startTime);
       const endMs = timestampToMs(endTime);
 
@@ -167,13 +204,15 @@ function parseSubtitles(rawContent) {
         startMs,
         endMs,
         settings: settings.trim(),
-        text: textAfterTime,
-        lines: textAfterTime.split('\n')
+        text: cueText,
+        lines: textLines
       });
+    } else {
+      i++;
     }
   }
 
-  return { cues, format, header };
+  return { cues, format, header: header.trim() };
 }
 
 /**

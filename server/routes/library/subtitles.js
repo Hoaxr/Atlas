@@ -39,8 +39,71 @@ const resolveMedia = (mediaType, mediaId) => {
     if (!episode) return null;
     const dir = episode.file_path ? path.dirname(episode.file_path) : episode.show_folder_path;
     const title = `${episode.show_title || 'Show'} S${String(episode.season_number).padStart(2, '0')}E${String(episode.episode_number).padStart(2, '0')}`;
-    return { media: episode, dir, title, filePath: episode.file_path };
+    return {
+      media: episode,
+      dir,
+      title,
+      filePath: episode.file_path,
+      seasonNumber: episode.season_number,
+      episodeNumber: episode.episode_number
+    };
   }
+  return null;
+};
+
+/**
+ * Finds the correct English source subtitle for a specific movie or episode
+ */
+const findSourceSubtitle = async (resolved, preferredSourceFile) => {
+  if (preferredSourceFile && fs.existsSync(preferredSourceFile)) {
+    return preferredSourceFile;
+  }
+
+  if (!resolved.dir || !fs.existsSync(resolved.dir)) return null;
+  const files = await fsp.readdir(resolved.dir);
+
+  // 1. If media has a filePath on disk, check exact matching basename first
+  if (resolved.filePath) {
+    const parsed = path.parse(resolved.filePath);
+    const exactEn = path.join(parsed.dir, `${parsed.name}.en.srt`);
+    if (fs.existsSync(exactEn)) return exactEn;
+    const exactEng = path.join(parsed.dir, `${parsed.name}.eng.srt`);
+    if (fs.existsSync(exactEng)) return exactEng;
+    const exactSrt = path.join(parsed.dir, `${parsed.name}.srt`);
+    if (fs.existsSync(exactSrt)) return exactSrt;
+  }
+
+  // 2. For TV episodes, match specifically by season/episode pattern (e.g. S01E09 or 1x09)
+  if (resolved.seasonNumber !== undefined && resolved.episodeNumber !== undefined) {
+    const sPad = String(resolved.seasonNumber).padStart(2, '0');
+    const ePad = String(resolved.episodeNumber).padStart(2, '0');
+    const pattern1 = `s${sPad}e${ePad}`.toLowerCase();
+    const pattern2 = `${resolved.seasonNumber}x${ePad}`.toLowerCase();
+
+    // Prefer English
+    const enEpFile = files.find(f => {
+      const fLower = f.toLowerCase();
+      return (fLower.includes(pattern1) || fLower.includes(pattern2)) && (fLower.endsWith('.en.srt') || fLower.endsWith('.eng.srt'));
+    });
+    if (enEpFile) return path.join(resolved.dir, enEpFile);
+
+    // Fallback to any srt for this episode
+    const anyEpSrt = files.find(f => {
+      const fLower = f.toLowerCase();
+      return (fLower.includes(pattern1) || fLower.includes(pattern2)) && fLower.endsWith('.srt');
+    });
+    if (anyEpSrt) return path.join(resolved.dir, anyEpSrt);
+
+    return null;
+  }
+
+  // 3. For movies, look for English subtitle in the movie folder
+  const enFile = files.find(f => f.toLowerCase().endsWith('.en.srt') || f.toLowerCase().endsWith('.eng.srt'));
+  if (enFile) return path.join(resolved.dir, enFile);
+
+  const anySrt = files.find(f => f.toLowerCase().endsWith('.srt'));
+  if (anySrt) return path.join(resolved.dir, anySrt);
+
   return null;
 };
 
@@ -81,23 +144,12 @@ router.post('/translate', async (req, res, next) => {
     }
 
     // Determine source subtitle file
-    let chosenSourceFile = sourceFile;
-    if (!chosenSourceFile) {
-      // Find existing English or primary subtitle
-      const files = await fsp.readdir(resolved.dir);
-      const enFile = files.find(f => f.toLowerCase().endsWith('.en.srt') || f.toLowerCase().endsWith('.eng.srt'));
-      if (enFile) {
-        chosenSourceFile = path.join(resolved.dir, enFile);
-      } else {
-        const anySrt = files.find(f => f.toLowerCase().endsWith('.srt'));
-        if (anySrt) chosenSourceFile = path.join(resolved.dir, anySrt);
-      }
-    }
+    const chosenSourceFile = await findSourceSubtitle(resolved, sourceFile);
 
     if (!chosenSourceFile || !fs.existsSync(chosenSourceFile)) {
       return res.status(400).json({
         status: 'error',
-        message: 'No source subtitle found to translate. Please download English subtitles first.'
+        message: `No English subtitle found for ${resolved.title}. Please download English subtitles first.`
       });
     }
 
