@@ -89,4 +89,4 @@ const getAiredCutoffSql = () => {
   return shift === 0 ? "date('now', 'localtime')" : `date('now', 'localtime', '-${shift} day')`;
 };
 
-module.exports = { localizeAirDate, getUserTimezone, invalidateTimezoneCache, getAiredCutoffSql };
+module.exports = { localizeAirDate, getUserTimezone, invalidateTimezoneCache, getAiredCutoffSql, getAirDateShiftDays };
