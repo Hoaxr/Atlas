@@ -4,9 +4,13 @@ const router = express.Router();
 const moviesRouter = require('./movies');
 const showsEpisodesRouter = require('./showsEpisodes');
 const systemRouter = require('./system');
+const subtitlesRouter = require('./subtitles');
 
 // Movie routes under /movies
 router.use('/movies', moviesRouter);
+
+// Subtitles routes under /subtitles
+router.use('/subtitles', subtitlesRouter);
 
 // Show + episode routes (both prefixed appropriately in the router)
 router.use('/', showsEpisodesRouter);

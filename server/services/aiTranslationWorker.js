@@ -151,10 +151,12 @@ ${text}`;
   return res.data.content[0].text;
 };
 
+const { parseSubtitles, serializeSubtitles } = require('./subtitles/parser');
+const { getTranslationProvider, createCueBatches } = require('./subtitles/translationProviders');
+
 /**
  * Centralized translation dispatch — reads provider & API keys from DB settings
- * and routes to the correct translation function. Use this everywhere instead of
- * duplicating the 4-way if/else chain.
+ * and routes through the robust parser and provider abstraction.
  *
  * @param {string} srtContent - Raw SRT text to translate
  * @param {string} targetLang - Target language name (e.g. 'Dutch', 'French')
@@ -162,30 +164,31 @@ ${text}`;
  * @returns {Promise<string>} Translated SRT text
  */
 const translateWithProvider = async (srtContent, targetLang, overrides = {}) => {
-  const provider = overrides.provider ||
-    db.prepare("SELECT value FROM settings WHERE key = 'translationProvider'").get()?.value ||
-    'googleTranslate';
+  const { cues, format, header } = parseSubtitles(srtContent);
+  if (!cues || cues.length === 0) return srtContent;
 
-  const getApiKey = (keyName) => overrides[keyName] ||
-    db.prepare(`SELECT value FROM settings WHERE key = ?`).get(keyName)?.value;
+  const providerInstance = getTranslationProvider(overrides.provider, overrides);
+  const batchSize = providerInstance.name === 'googleTranslate' ? 15 : 25;
+  const batches = createCueBatches(cues, batchSize);
 
-  if (provider === 'gemini') {
-    const apiKey = getApiKey('geminiApiKey');
-    if (!apiKey) throw new Error('Gemini API Key missing');
-    return translateChunked(translateWithGemini, srtContent, targetLang, apiKey);
+  const translatedCues = [];
+  for (let i = 0; i < batches.length; i++) {
+    const batch = batches[i];
+    const translatedBatch = await providerInstance.translateBatch(batch, 'English', targetLang, overrides);
+    for (let j = 0; j < batch.length; j++) {
+      const originalCue = batch[j];
+      const transResult = translatedBatch.find(t => String(t.id) === String(originalCue.id)) || translatedBatch[j];
+      translatedCues.push({
+        ...originalCue,
+        text: transResult?.text || originalCue.text
+      });
+    }
+    if (i < batches.length - 1) {
+      await new Promise(r => setTimeout(r, 150));
+    }
   }
-  if (provider === 'deepseek') {
-    const apiKey = getApiKey('deepseekApiKey');
-    if (!apiKey) throw new Error('DeepSeek API Key missing');
-    return translateChunked(translateWithDeepSeek, srtContent, targetLang, apiKey);
-  }
-  if (provider === 'claude') {
-    const apiKey = getApiKey('claudeApiKey');
-    if (!apiKey) throw new Error('Claude API Key missing');
-    return translateChunked(translateWithClaude, srtContent, targetLang, apiKey);
-  }
-  // Default: Google Translate (no API key needed)
-  return translateWithGoogleTranslate(srtContent, targetLang);
+
+  return serializeSubtitles(translatedCues, format, header);
 };
 
 const translateSubtitles = async () => {

@@ -16,6 +16,7 @@ import { posterUrl, tmdbImgUrl } from '../lib/posterUrl';
 import InlineError from '../components/shared/InlineError';
 
 import SubtitleLanguageBadge from '../components/shared/SubtitleLanguageBadge';
+import SubtitleManagerModal from '../components/subtitles/SubtitleManagerModal';
 import { ProviderLabel } from '../utils/providerColors';
 import CustomSelect from '../components/shared/CustomSelect';
 
@@ -39,6 +40,7 @@ export default function ShowDetails() {
   const [mobileDeleteMenuOpen, setMobileDeleteMenuOpen] = useState(false);
   const mobileDeleteMenuRef = useOutsideClick(() => setMobileDeleteMenuOpen(false), mobileDeleteMenuOpen);
   const [isOverviewExpanded, setIsOverviewExpanded] = useState(false);
+  const [subManagerEpisode, setSubManagerEpisode] = useState(null);
 
   // Prev/next navigation
   const [siblingIds, setSiblingIds] = useState([]);
@@ -1061,12 +1063,14 @@ export default function ShowDetails() {
                                           }}
                                           onAutoTranslate={async () => {
                                             setOpenLangMenu(null);
-                                            customAlert(`Translating to ${LANG_NAME[code]}...`, 'info');
                                             try {
-                                              const res = await api.post(`/library/episodes/${ep.id}/translate-subs`, { targetLang: LANG_NAME[code] });
+                                              const res = await api.post('/library/subtitles/translate', {
+                                                mediaType: 'episode',
+                                                mediaId: ep.id,
+                                                targetLangs: [LANG_NAME[code] || 'Dutch']
+                                              });
                                               if (res.data.status === 'success') {
-                                                customAlert(res.data.message);
-                                                fetchShowData();
+                                                customAlert(`Started translating ${LANG_NAME[code] || code} in background`, 'success');
                                               }
                                             } catch (err) {
                                               customAlert(err.response?.data?.message || 'Translation failed', 'error');
@@ -1271,12 +1275,14 @@ export default function ShowDetails() {
                                           }}
                                           onAutoTranslate={async () => {
                                             setOpenLangMenu(null);
-                                            customAlert(`Translating to ${LANG_NAME[code]}...`, 'info');
                                             try {
-                                              const res = await api.post(`/library/episodes/${ep.id}/translate-subs`, { targetLang: LANG_NAME[code] });
+                                              const res = await api.post('/library/subtitles/translate', {
+                                                mediaType: 'episode',
+                                                mediaId: ep.id,
+                                                targetLangs: [LANG_NAME[code] || 'Dutch']
+                                              });
                                               if (res.data.status === 'success') {
-                                                customAlert(res.data.message);
-                                                fetchShowData();
+                                                customAlert(`Started translating ${LANG_NAME[code] || code} in background`, 'success');
                                               }
                                             } catch (err) {
                                               customAlert(err.response?.data?.message || 'Translation failed', 'error');
@@ -1497,21 +1503,16 @@ export default function ShowDetails() {
               }}
               onAutoTranslate={async () => {
                 setOpenLangMenu(null);
-                customAlert(`Translating to ${LANG_NAME[code]}...`, 'info');
                 try {
-                  const res = await api.post(`/library/episodes/${ep.id}/translate-subs`, { targetLang: LANG_NAME[code] });
+                  const res = await api.post('/library/subtitles/translate', {
+                    mediaType: 'episode',
+                    mediaId: ep.id,
+                    targetLangs: [LANG_NAME[code] || 'Dutch']
+                  });
                   if (res.data.status === 'success') {
-                    customAlert(res.data.message);
-                    fetchShowData();
-                    setDetailsModalEpisode(prev => {
-                       const newSubs = Array.isArray(prev.subtitles) ? [...prev.subtitles, code] : (prev.subtitles ? JSON.parse(prev.subtitles).concat(code) : [code]);
-                       return {...prev, subtitles: JSON.stringify(newSubs)};
-                    });
-                  } else {
-                    customAlert('Translation failed or no subs to translate', 'error');
+                    customAlert(`Started translating ${LANG_NAME[code] || code} in background`, 'success');
                   }
                 } catch (err) {
-                  console.error(err);
                   customAlert(err.response?.data?.message || 'Translation failed', 'error');
                 }
               }}
@@ -1776,6 +1777,26 @@ export default function ShowDetails() {
             </div>
           </div>
         </div>
+      )}
+      {/* Subtitle Manager Modal */}
+      {subManagerEpisode && (
+        <SubtitleManagerModal
+          open={Boolean(subManagerEpisode)}
+          onClose={() => setSubManagerEpisode(null)}
+          mediaType="episode"
+          mediaId={subManagerEpisode.id}
+          title={`${show?.title} - S${String(subManagerEpisode.season_number).padStart(2, '0')}E${String(subManagerEpisode.episode_number).padStart(2, '0')} (${subManagerEpisode.title || 'Episode'})`}
+          onRefresh={fetchShowData}
+          onOpenSubSearch={() => {
+            setSubSearchModal({
+              open: true,
+              code: 'en',
+              label: 'English',
+              episodeId: subManagerEpisode.id,
+              subKey: `m-${subManagerEpisode.id}`
+            });
+          }}
+        />
       )}
     </motion.div>
     </div>

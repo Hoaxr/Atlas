@@ -23,6 +23,7 @@ import InlineError from '../components/shared/InlineError';
 import { ProviderLabel } from '../utils/providerColors';
 import FolderBrowserModal from '../components/FolderBrowserModal';
 import SubtitleLanguageBadge from '../components/shared/SubtitleLanguageBadge';
+import SubtitleManagerModal from '../components/subtitles/SubtitleManagerModal';
 import CustomSelect from '../components/shared/CustomSelect';
 
 export default function MovieDetails() {
@@ -55,6 +56,7 @@ export default function MovieDetails() {
   const [subSearchResults, setSubSearchResults] = useState([]);
   const [subSearching, setSubSearching] = useState(false);
   const [subSearched, setSubSearched] = useState(false);
+  const [subManagerOpen, setSubManagerOpen] = useState(false);
 
   const [folderBrowserOpen, setFolderBrowserOpen] = useState(false);
   const [deleteMenuOpen, setDeleteMenuOpen] = useState(false);
@@ -805,7 +807,17 @@ export default function MovieDetails() {
                     </p>
                   </div>
                   <div>
-                    <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500 block mb-1">Subtitles</span>
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500 block">Subtitles</span>
+                      {movie.file_path && (
+                        <button
+                          onClick={() => setSubManagerOpen(true)}
+                          className="text-[10px] font-semibold text-pink-400 hover:text-pink-300 transition-colors uppercase tracking-wider flex items-center gap-1"
+                        >
+                          Manage
+                        </button>
+                      )}
+                    </div>
                     {!movie.file_path ? (
                       <p className="text-slate-600 italic text-xs">No file on disk</p>
                     ) : (
@@ -849,12 +861,14 @@ export default function MovieDetails() {
                               }}
                               onAutoTranslate={async () => {
                                 setOpenLangMenu(null);
-                                customAlert(`Translating to ${LANG_NAME[code]}...`, 'info');
                                 try {
-                                  const res = await api.post(`/library/movies/${movie.id}/translate-subs`, { targetLang: LANG_NAME[code] });
+                                  const res = await api.post('/library/subtitles/translate', {
+                                    mediaType: 'movie',
+                                    mediaId: movie.id,
+                                    targetLangs: [LANG_NAME[code] || 'Dutch']
+                                  });
                                   if (res.data.status === 'success') {
-                                    customAlert(res.data.message);
-                                    fetchMovieData();
+                                    customAlert(`Started translating ${LANG_NAME[code] || code} in background`, 'success');
                                   }
                                 } catch (err) {
                                   customAlert(err.response?.data?.message || 'Translation failed', 'error');
@@ -1221,6 +1235,19 @@ export default function MovieDetails() {
         }}
         itemId={movie?.id}
         itemType="movies"
+      />
+
+      {/* Subtitle Manager Modal */}
+      <SubtitleManagerModal
+        open={subManagerOpen}
+        onClose={() => setSubManagerOpen(false)}
+        mediaType="movie"
+        mediaId={movie?.id}
+        title={movie?.title}
+        onRefresh={fetchMovieData}
+        onOpenSubSearch={() => {
+          setSubSearchModal({ open: true, code: 'en', label: 'English' });
+        }}
       />
     </div>
   );

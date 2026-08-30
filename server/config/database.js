@@ -214,6 +214,49 @@ db.exec(`
   );
   CREATE INDEX IF NOT EXISTS idx_watch_history_tmdb_id ON watch_history(tmdb_id);
   CREATE INDEX IF NOT EXISTS idx_watch_history_type ON watch_history(type);
+
+  CREATE TABLE IF NOT EXISTS subtitle_jobs (
+    id TEXT PRIMARY KEY,
+    media_type TEXT NOT NULL,
+    media_id INTEGER NOT NULL,
+    title TEXT,
+    source_lang TEXT NOT NULL,
+    target_lang TEXT NOT NULL,
+    source_file TEXT,
+    target_file TEXT,
+    provider TEXT NOT NULL,
+    status TEXT DEFAULT 'pending',
+    progress INTEGER DEFAULT 0,
+    current_step TEXT,
+    total_cues INTEGER DEFAULT 0,
+    processed_cues INTEGER DEFAULT 0,
+    error TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    completed_at DATETIME
+  );
+  CREATE INDEX IF NOT EXISTS idx_subtitle_jobs_media ON subtitle_jobs(media_type, media_id);
+  CREATE INDEX IF NOT EXISTS idx_subtitle_jobs_status ON subtitle_jobs(status);
+
+  CREATE TABLE IF NOT EXISTS subtitle_tracks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    media_type TEXT NOT NULL,
+    media_id INTEGER NOT NULL,
+    filename TEXT NOT NULL,
+    file_path TEXT NOT NULL,
+    lang_code TEXT NOT NULL,
+    lang_name TEXT,
+    format TEXT DEFAULT 'srt',
+    track_type TEXT DEFAULT 'original', -- 'original', 'downloaded', 'translated', 'edited'
+    source_lang TEXT,
+    provider TEXT,
+    manually_edited INTEGER DEFAULT 0,
+    file_size INTEGER DEFAULT 0,
+    cue_count INTEGER DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(media_type, media_id, filename)
+  );
+  CREATE INDEX IF NOT EXISTS idx_subtitle_tracks_media ON subtitle_tracks(media_type, media_id);
 `);
 
 db.exec(`

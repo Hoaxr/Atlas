@@ -9,6 +9,7 @@ import useWebSocket, { closeWebSocket } from '../../lib/useWebSocket';
 import { setCachedMovies, setCachedShows } from '../../lib/libraryCache';
 import useKeyboardShortcuts from '../../lib/useKeyboardShortcuts';
 import ShortcutsModal from '../shared/ShortcutsModal';
+import SubtitleJobBanner from '../subtitles/SubtitleJobBanner';
 
 const navSections = [
   {
@@ -501,7 +502,8 @@ export default function Layout() {
         </div>
       </main>
 
-
+      {/* Floating Background Subtitle Job Progress Banner */}
+      <SubtitleJobBanner />
     </div>
   );
 }
