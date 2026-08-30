@@ -960,9 +960,18 @@ router.get('/status', async (req, res) => {
   if (geminiKey) {
     await test('gemini', 'Gemini', async () => {
       const genAI = new GoogleGenerativeAI(geminiKey);
-      const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
-      await model.generateContent('Reply with just the word OK');
-      return { status: 'connected' };
+      const candidateModels = ['gemini-1.5-flash', 'gemini-2.0-flash', 'gemini-2.5-flash'];
+      let lastErr = null;
+      for (const m of candidateModels) {
+        try {
+          const model = genAI.getGenerativeModel({ model: m });
+          await model.generateContent('Reply with OK');
+          return { status: 'connected' };
+        } catch (err) {
+          lastErr = err;
+        }
+      }
+      throw lastErr || new Error('Gemini API test failed');
     });
   } else {
     services.gemini = { status: 'unconfigured' };

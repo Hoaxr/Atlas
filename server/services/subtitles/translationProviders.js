@@ -140,7 +140,6 @@ class GeminiProvider extends BaseTranslationProvider {
     });
 
     const genAI = new GoogleGenerativeAI(this.apiKey);
-    const model = genAI.getGenerativeModel({ model: this.modelName });
 
     const cuesPayload = protectedItems.map(item => ({
       id: item.id,
@@ -162,8 +161,25 @@ ${JSON.stringify(cuesPayload, null, 2)}
 
 Output ONLY valid JSON array (no markdown code fences if possible, or \`\`\`json):`;
 
-    const result = await model.generateContent(prompt);
-    const rawOutput = result.response.text().trim();
+    const candidateModels = [this.modelName, 'gemini-1.5-flash', 'gemini-2.0-flash', 'gemini-2.5-flash'].filter(Boolean);
+    let rawOutput = '';
+    let lastErr = null;
+
+    for (const m of candidateModels) {
+      try {
+        const model = genAI.getGenerativeModel({ model: m });
+        const result = await model.generateContent(prompt);
+        rawOutput = result.response.text().trim();
+        if (rawOutput) break;
+      } catch (err) {
+        lastErr = err;
+        console.warn(`[GeminiProvider] Model ${m} failed: ${err.message}, trying next model...`);
+      }
+    }
+
+    if (!rawOutput) {
+      throw lastErr || new Error('Gemini translation request failed');
+    }
     
     let parsedArray = [];
     try {
