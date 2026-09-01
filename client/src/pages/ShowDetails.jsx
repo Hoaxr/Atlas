@@ -17,6 +17,7 @@ import InlineError from '../components/shared/InlineError';
 
 import SubtitleLanguageBadge from '../components/shared/SubtitleLanguageBadge';
 import SubtitleManagerModal from '../components/subtitles/SubtitleManagerModal';
+import ModalShell from '../components/shared/ModalShell';
 import { ProviderLabel } from '../utils/providerColors';
 import CustomSelect from '../components/shared/CustomSelect';
 
@@ -1562,9 +1563,15 @@ export default function ShowDetails() {
 
       {/* Subtitle Manual Search Modal */}
       {subSearchModal.open && (
-        <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4" onClick={() => setSubSearchModal({ open: false, code: '', label: '', episodeId: null })}>
-          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
-          <div className="relative bg-slate-900 border border-white/10 rounded-2xl w-full max-w-3xl max-h-[85vh] flex flex-col shadow-2xl" onClick={e => e.stopPropagation()}>
+        <ModalShell
+          open
+          onClose={() => setSubSearchModal({ open: false, code: '', label: '', episodeId: null, subKey: null })}
+          size="2xl"
+          noHeader
+          noFloatingClose
+          noPadding
+        >
+          <div className="flex flex-col max-h-[85vh]">
             <div className="p-5 border-b border-white/5 flex items-center justify-between shrink-0">
               <div>
                 <h3 className="text-lg font-bold text-slate-200 flex items-center gap-2">
@@ -1776,7 +1783,7 @@ export default function ShowDetails() {
               </button>
             </div>
           </div>
-        </div>
+        </ModalShell>
       )}
       {/* Subtitle Manager Modal */}
       {subManagerEpisode && (

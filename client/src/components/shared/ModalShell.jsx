@@ -63,7 +63,7 @@ export default function ModalShell({
   const maxW = SIZE_MAP[size] || SIZE_MAP.xl;
 
   return createPortal(
-    <div className="fixed inset-0 z-40 flex items-center justify-center p-4 animate-fade-in">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-fade-in">
       {/* Backdrop */}
       <div
         className={`absolute inset-0 ${backdropClass} ${noBackdropBlur ? '' : 'backdrop-blur-sm'}`}
