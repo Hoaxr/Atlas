@@ -32,8 +32,8 @@ const downloadForMovie = async (apiKey, movie, langCode) => {
     { file_id: fileId },
     { headers: { 'Api-Key': apiKey, 'Content-Type': 'application/json', 'Accept': 'application/json', 'User-Agent': 'Atlas/1.0' }, timeout: 30000 }
   );
-  const srtRes = await axios.get(downloadRes.data.link, { responseType: 'text', timeout: 30000 });
-  return srtRes.data;
+  const srtRes = await axios.get(downloadRes.data.link, { responseType: 'arraybuffer', timeout: 30000 });
+  return Buffer.from(srtRes.data);
 };
 
 const downloadForEpisode = async (apiKey, show, episode, langCode) => {
@@ -49,8 +49,8 @@ const downloadForEpisode = async (apiKey, show, episode, langCode) => {
     { file_id: fileId },
     { headers: { 'Api-Key': apiKey, 'Content-Type': 'application/json', 'Accept': 'application/json', 'User-Agent': 'Atlas/1.0' }, timeout: 30000 }
   );
-  const srtRes = await axios.get(downloadRes.data.link, { responseType: 'text', timeout: 30000 });
-  return srtRes.data;
+  const srtRes = await axios.get(downloadRes.data.link, { responseType: 'arraybuffer', timeout: 30000 });
+  return Buffer.from(srtRes.data);
 };
 
 const searchForMovie = async (apiKey, movie, langCode) => {

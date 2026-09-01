@@ -213,7 +213,8 @@ const downloadSubtitlesForMovies = async () => {
         const srtContent = await tryDownloadNativeMovie(movie, langCode);
 
         if (srtContent) {
-          fs.writeFileSync(subPath, srtContent);
+          const cleanContent = decodeSubtitleBuffer(srtContent);
+          fs.writeFileSync(subPath, cleanContent);
           console.log(`[SubtitleService] Saved ${langCode} subtitle to ${subPath}`);
           eventBus.success('Subtitle downloaded', { title: movie.title, language: langCode });
 
@@ -227,14 +228,14 @@ const downloadSubtitlesForMovies = async () => {
               if (isPreferNative) {
                 const nativeContent = await tryDownloadNativeMovie(movie, tCode);
                 if (nativeContent) {
-                  fs.writeFileSync(targetSubPath, nativeContent);
+                  fs.writeFileSync(targetSubPath, decodeSubtitleBuffer(nativeContent));
                   eventBus.success('Subtitle downloaded', { title: movie.title, language: tCode });
                   continue;
                 }
               }
 
               try {
-                const translated = await translateWithProvider(srtContent, lang);
+                const translated = await translateWithProvider(cleanContent, lang);
                 fs.writeFileSync(targetSubPath, translated);
                 eventBus.success('Subtitle translated', { title: movie.title, language: lang });
               } catch (translateErr) {
@@ -252,6 +253,16 @@ const downloadSubtitlesForMovies = async () => {
 
 const downloadSubtitlesForEpisodes = async () => {
   const providerLangs = getProviderLangs();
+  const autoTranslate = db.prepare("SELECT value FROM settings WHERE key = 'autoTranslate'").get();
+  const isAutoTranslate = autoTranslate && autoTranslate.value === 'true';
+  const preferNative = db.prepare("SELECT value FROM settings WHERE key = 'preferNativeBeforeTranslate'").get();
+  const isPreferNative = preferNative && preferNative.value === 'true';
+  let targetLangs = [];
+  try {
+    const row = db.prepare("SELECT value FROM settings WHERE key = 'targetLangs'").get();
+    if (row) targetLangs = JSON.parse(row.value);
+  } catch { /* ignore */ }
+
   const episodes = db.prepare(`
     SELECT e.*, s.title as show_title, s.tmdb_id, s.year
     FROM episodes e
@@ -277,9 +288,36 @@ const downloadSubtitlesForEpisodes = async () => {
         const srtContent = await tryDownloadNativeEpisode(show, ep, langCode);
 
         if (srtContent) {
-          fs.writeFileSync(subPath, srtContent);
+          const cleanContent = decodeSubtitleBuffer(srtContent);
+          fs.writeFileSync(subPath, cleanContent);
           console.log(`[SubtitleService] Saved ${langCode} subtitle to ${subPath}`);
           eventBus.success('Subtitle downloaded', { title: label, language: langCode });
+
+          if (langCode === 'en' && isAutoTranslate && targetLangs.length > 0) {
+            for (const lang of targetLangs) {
+              const tCode = LANG_TO_CODE[lang];
+              if (!tCode || providerLangs.includes(tCode)) continue;
+              const targetSubPath = path.join(parsedPath.dir, `${parsedPath.name}.${sanitizeLangCode(tCode)}.srt`);
+              if (langFileExists(parsedPath.dir, parsedPath.name, tCode)) continue;
+
+              if (isPreferNative) {
+                const nativeContent = await tryDownloadNativeEpisode(show, ep, tCode);
+                if (nativeContent) {
+                  fs.writeFileSync(targetSubPath, decodeSubtitleBuffer(nativeContent));
+                  eventBus.success('Subtitle downloaded', { title: label, language: tCode });
+                  continue;
+                }
+              }
+
+              try {
+                const translated = await translateWithProvider(cleanContent, lang);
+                fs.writeFileSync(targetSubPath, translated);
+                eventBus.success('Subtitle translated', { title: label, language: lang });
+              } catch (translateErr) {
+                console.error(`[SubtitleService] Auto-translate to ${lang} failed for ${label}:`, translateErr.message);
+              }
+            }
+          }
         }
       }
     } catch (err) { console.error(`[SubtitleService] Failed for episode ${ep.show_title}:`, err.message); }

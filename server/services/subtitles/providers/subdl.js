@@ -18,8 +18,8 @@ const downloadForMovie = async (apiKey, movie, langCode) => {
   const url = match.unpack_files?.[0]?.url || match.url;
   if (!url) return null;
   const downloadUrl = `https://dl.subdl.com${url.startsWith('/') ? url : '/' + url}`;
-  const srtRes = await axios.get(downloadUrl, { responseType: 'text', timeout: 30000 });
-  return srtRes.data;
+  const srtRes = await axios.get(downloadUrl, { responseType: 'arraybuffer', timeout: 30000 });
+  return Buffer.from(srtRes.data);
 };
 
 const downloadForEpisode = async (apiKey, show, episode, langCode) => {
@@ -40,8 +40,8 @@ const downloadForEpisode = async (apiKey, show, episode, langCode) => {
   const url = match.unpack_files?.[0]?.url || match.url;
   if (!url) return null;
   const downloadUrl = `https://dl.subdl.com${url.startsWith('/') ? url : '/' + url}`;
-  const srtRes = await axios.get(downloadUrl, { responseType: 'text', timeout: 30000 });
-  return srtRes.data;
+  const srtRes = await axios.get(downloadUrl, { responseType: 'arraybuffer', timeout: 30000 });
+  return Buffer.from(srtRes.data);
 };
 
 const searchForMovie = async (apiKey, movie, langCode) => {

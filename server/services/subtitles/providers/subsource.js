@@ -18,12 +18,12 @@ const downloadForMovie = async (apiKey, movie, langCode) => {
   const subId = subsRes.data.data[0].subtitleId;
   const dlRes = await axios.get(`https://api.subsource.net/api/v1/subtitles/${subId}/download`, {
     params: { api_key: apiKey },
-    responseType: 'text',
+    responseType: 'arraybuffer',
     validateStatus: () => true,
     timeout: 30000
   });
   if (dlRes.status !== 200) return null;
-  return dlRes.data;
+  return Buffer.from(dlRes.data);
 };
 
 const downloadForEpisode = async (apiKey, show, episode, langCode) => {
@@ -34,12 +34,12 @@ const downloadForEpisode = async (apiKey, show, episode, langCode) => {
   const subId = results[0].subId;
   const dlRes = await axios.get(`https://api.subsource.net/api/v1/subtitles/${subId}/download`, {
     params: { api_key: apiKey },
-    responseType: 'text',
+    responseType: 'arraybuffer',
     validateStatus: () => true,
     timeout: 30000
   });
   if (dlRes.status !== 200) return null;
-  return dlRes.data;
+  return Buffer.from(dlRes.data);
 };
 
 const searchForMovie = async (apiKey, movie, langCode) => {

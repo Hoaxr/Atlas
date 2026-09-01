@@ -9,6 +9,7 @@ const eventBus = require('./eventBus');
 const { runWithConcurrency } = require('../utils/concurrency');
 const { registerJob } = require('../utils/cronRegistry');
 const { LANG_CODE } = require('../routes/library/helpers');
+const { decodeSubtitleBuffer } = require('./subtitles/parser');
 
 // LLM output is token-limited — long SRTs must be translated in small numbered-block
 // chunks and concatenated, otherwise the response gets truncated mid-file.
@@ -242,11 +243,24 @@ const translateSubtitles = async () => {
     // Determine target path from the found English subtitle name
     const enParsed = path.parse(enSub);
     const targetSub = path.join(dir, `${enParsed.name.replace(/\.en$/, '')}.${langCode}.srt`);
-    if (fs.existsSync(targetSub)) return null;
+    if (fs.existsSync(targetSub)) {
+      try {
+        const existingBuf = fs.readFileSync(targetSub);
+        const isCorrupt = existingBuf.length >= 4 && existingBuf[0] === 0x50 && existingBuf[1] === 0x4B;
+        if (!isCorrupt && existingBuf.length > 50) return null;
+        console.log(`[AITranslator] Existing target subtitle ${targetSub} is corrupt (raw zip) — re-translating...`);
+      } catch { /* proceed */ }
+    }
+
+    const rawBuf = fs.readFileSync(enSub);
+    const enSrtContent = decodeSubtitleBuffer(rawBuf);
+
+    if (!enSrtContent || enSrtContent.startsWith('PK') || enSrtContent.length < 10) {
+      console.warn(`[AITranslator] English subtitle for ${displayName} is corrupt or not valid text (${enSub}) — skipping translation`);
+      return null;
+    }
 
     console.log(`[AITranslator] Translating subtitles for ${displayName} into ${targetLang} (via ${activeProvider})...`);
-    
-    const enSrtContent = fs.readFileSync(enSub, 'utf8');
     
     const translatedText = await translateWithProvider(enSrtContent, targetLang, {
       provider: activeProvider,
@@ -254,6 +268,11 @@ const translateSubtitles = async () => {
       deepseekApiKey: deepseekApiKeyRow?.value,
       claudeApiKey: claudeApiKeyRow?.value
     });
+
+    if (!translatedText || translatedText.length < 10) {
+      console.warn(`[AITranslator] Translation returned empty result for ${displayName} — skipping write`);
+      return null;
+    }
 
     // Atomic write: temp file + rename so a crash never leaves a torn/partial subtitle
     // that would block future retries (existing files are skipped).
