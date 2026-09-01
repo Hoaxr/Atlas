@@ -46,7 +46,8 @@ const sanitizeTitle = (title, config) => {
     sanitized = sanitized.replace(/[<>"/\\|?*]/g, '');
   }
 
-  return sanitized.trim().replace(/\s+/g, ' ');
+  // Strip trailing dots and spaces to protect SMB/NFS/Windows filesystems
+  return sanitized.trim().replace(/\s+/g, ' ').replace(/[.\s]+$/, '');
 };
 
 
@@ -291,13 +292,28 @@ const matchSeasonPackToTorrent = (torrent, showTitle, seasonNumber) => {
   if (!rawName) return false;
 
   // Must NOT have individual episode IDs
-  const hasEpisodeIds = /\bS\d{1,2}[._\s-]*E\d{1,3}\b/i.test(rawName) || /\b\d{1,2}x\d{1,3}\b/i.test(rawName);
+  const hasEpisodeIds = /\bS\d{1,2}[._\s-]*(?:E|EP)\d{1,3}\b/i.test(rawName) || /\b\d{1,2}x\d{1,3}\b/i.test(rawName);
   if (hasEpisodeIds) return false;
 
-  // Must match season pattern: S04, Season 4, Season 04, Complete Season 4
+  // Must match season pattern: S04, Season 4, Season 04, Complete Season 4, Seasons 1-4, Complete Series
   const s = String(seasonNumber).padStart(2, '0');
   const seasonRegex = new RegExp(`\\b(S${s}|S${seasonNumber}|Season[._\\s]*0?${seasonNumber}|Complete[._\\s]*Season[._\\s]*0?${seasonNumber})\\b`, 'i');
-  if (!seasonRegex.test(rawName)) return false;
+
+  let matchesSeason = seasonRegex.test(rawName);
+  if (!matchesSeason) {
+    const multiSeasonMatch = rawName.match(/\b(?:S|Seasons?[._\s]*)(\d{1,2})\s*[-–to]+\s*(?:S|Seasons?[._\s]*)?(\d{1,2})\b/i);
+    if (multiSeasonMatch) {
+      const sStart = parseInt(multiSeasonMatch[1], 10);
+      const sEnd = parseInt(multiSeasonMatch[2], 10);
+      if (seasonNumber >= sStart && seasonNumber <= sEnd) {
+        matchesSeason = true;
+      }
+    } else if (/\bComplete[._\s]*(?:Series|Collection)\b/i.test(rawName)) {
+      matchesSeason = true;
+    }
+  }
+
+  if (!matchesSeason) return false;
 
   // Check show title on word boundary
   const normShowTitle = normalizeForMatching(showTitle);
@@ -425,22 +441,30 @@ const runMediaManagement = async () => {
 
       // 1. If torrent is a TV release, match episodes and season packs
       if (isTvTorrentName(torrent.name)) {
-        // Individual episode match
-        for (const ep of pendingEpisodes) {
-          if (matchEpisodeToTorrent(torrent, ep)) {
-            const success = await importEpisode(torrent, ep);
+        // Individual episode match (supporting multi-episode torrents like S01E01-E02)
+        const matchingEps = pendingEpisodes.filter(ep => matchEpisodeToTorrent(torrent, ep));
+        if (matchingEps.length > 0) {
+          for (let i = 0; i < matchingEps.length; i++) {
+            const ep = matchingEps[i];
+            const isLast = (i === matchingEps.length - 1);
+            // If not the last episode in multi-episode release, pass fakeTorrent without hash so torrent isn't removed prematurely
+            const torToImport = isLast ? torrent : { ...torrent, hash: null };
+            const success = await importEpisode(torToImport, ep);
             if (success) {
               importedAnything = true;
               torrentHandled = true;
-              break;
             }
           }
         }
 
         // Season pack match (if not matched to an individual episode)
         if (!torrentHandled) {
+          const matchedShows = new Set();
           for (const ep of pendingEpisodes) {
+            const key = `${ep.show_id}_${ep.season_number}`;
+            if (matchedShows.has(key)) continue;
             if (matchSeasonPackToTorrent(torrent, ep.show_title, ep.season_number)) {
+              matchedShows.add(key);
               const success = await importSeasonPack(torrent, { showId: ep.show_id, showTitle: ep.show_title, seasonNumber: ep.season_number });
               if (success) {
                 importedAnything = true;
@@ -1003,25 +1027,21 @@ const importSeasonPack = async (torrent, { showId, showTitle, seasonNumber }) =>
     }
     console.log(`[MediaManagement] Found ${videoFiles.length} video files in season pack`);
 
-    // Get all episodes for this show/season
-    const pendingEpisodes = db.prepare(`
-      SELECT e.*, s.title as show_title 
-      FROM episodes e 
-      JOIN shows s ON e.show_id = s.id 
-      WHERE e.show_id = ? AND e.season_number = ?
-    `).all(showId, seasonNumber);
-
-    let importedCount = 0;
-
     for (const videoFile of videoFiles) {
       const parsed = parseEpisodeFromFilename(videoFile);
-      if (!parsed || parsed.season !== seasonNumber) continue;
+      if (!parsed) continue;
 
       const targetEpisodes = parsed.episodes || [parsed.episode];
       for (const epNum of targetEpisodes) {
-        const episode = pendingEpisodes.find(ep => ep.episode_number === epNum);
+        const episode = db.prepare(`
+          SELECT e.*, s.title as show_title 
+          FROM episodes e 
+          JOIN shows s ON e.show_id = s.id 
+          WHERE e.show_id = ? AND e.season_number = ? AND e.episode_number = ?
+        `).get(showId, parsed.season, epNum);
+
         if (!episode) {
-          console.log(`[MediaManagement] No pending episode match for S${seasonNumber.toString().padStart(2, '0')}E${epNum.toString().padStart(2, '0')} — skipping`);
+          console.log(`[MediaManagement] No episode match for ${showTitle} S${parsed.season.toString().padStart(2, '0')}E${epNum.toString().padStart(2, '0')} — skipping`);
           continue;
         }
 
@@ -1036,7 +1056,7 @@ const importSeasonPack = async (torrent, { showId, showTitle, seasonNumber }) =>
           await importEpisode(fakeTorrent, episode);
           importedCount++;
         } catch (epErr) {
-          console.error(`[MediaManagement] Failed to import episode S${seasonNumber}E${epNum}:`, epErr.message);
+          console.error(`[MediaManagement] Failed to import episode S${parsed.season}E${epNum}:`, epErr.message);
         }
       }
     }

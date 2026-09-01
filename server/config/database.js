@@ -181,6 +181,8 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_shows_status ON shows(status);
   CREATE INDEX IF NOT EXISTS idx_episodes_show_id ON episodes(show_id);
   CREATE INDEX IF NOT EXISTS idx_episodes_status ON episodes(status);
+  CREATE INDEX IF NOT EXISTS idx_episodes_show_season ON episodes(show_id, season_number);
+  CREATE INDEX IF NOT EXISTS idx_episodes_show_season_ep ON episodes(show_id, season_number, episode_number);
   CREATE INDEX IF NOT EXISTS idx_movie_collections_coll ON movie_collections(collection_id);
 
   CREATE TABLE IF NOT EXISTS play_history (
@@ -1004,6 +1006,16 @@ const MIGRATIONS = [
         CREATE INDEX IF NOT EXISTS idx_shows_title_nocase ON shows(title COLLATE NOCASE);
         CREATE INDEX IF NOT EXISTS idx_play_history_created_at ON play_history(created_at);
         CREATE INDEX IF NOT EXISTS idx_indexer_stats_created_at ON indexer_stats(created_at);
+      `);
+    }
+  },
+  {
+    id: 35,
+    name: 'episode_season_lookup_indexes',
+    run: (db) => {
+      db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_episodes_show_season ON episodes(show_id, season_number);
+        CREATE INDEX IF NOT EXISTS idx_episodes_show_season_ep ON episodes(show_id, season_number, episode_number);
       `);
     }
   }

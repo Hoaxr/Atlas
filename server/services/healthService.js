@@ -28,7 +28,7 @@ const checkFileIntegrity = async (filePath) => {
       '-show_entries', 'format=duration',
       '-of', 'default=noprint_wrappers=1:nokey=1',
       filePath
-    ]);
+    ], { timeout: 30000 });
     return stdout.trim().length > 0;
   } catch (err) {
     // String error codes (ENOENT/EACCES) mean the binary couldn't spawn; numeric codes are
