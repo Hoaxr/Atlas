@@ -28,12 +28,19 @@ const downloadForMovie = async (apiKey, movie, langCode) => {
   const data = searchRes.data.data;
   if (!data || data.length === 0) return null;
   const fileId = data[0].attributes.files[0].file_id;
-  const downloadRes = await axios.post('https://api.opensubtitles.com/api/v1/download',
-    { file_id: fileId },
-    { headers: { 'Api-Key': apiKey, 'Content-Type': 'application/json', 'Accept': 'application/json', 'User-Agent': 'Atlas/1.0' }, timeout: 30000 }
-  );
-  const srtRes = await axios.get(downloadRes.data.link, { responseType: 'arraybuffer', timeout: 30000 });
-  return Buffer.from(srtRes.data);
+  try {
+    const downloadRes = await axios.post('https://api.opensubtitles.com/api/v1/download',
+      { file_id: fileId },
+      { headers: { 'Api-Key': apiKey, 'Content-Type': 'application/json', 'Accept': 'application/json', 'User-Agent': 'Atlas/1.0' }, timeout: 30000 }
+    );
+    if (!downloadRes.data?.link) return null;
+    const srtRes = await axios.get(downloadRes.data.link, { responseType: 'arraybuffer', timeout: 30000 });
+    return Buffer.from(srtRes.data);
+  } catch (err) {
+    const msg = err.response?.data?.message || err.message;
+    console.warn(`[OpenSubtitles] Download failed: ${msg}`);
+    throw new Error(`OpenSubtitles: ${msg}`);
+  }
 };
 
 const downloadForEpisode = async (apiKey, show, episode, langCode) => {
@@ -45,12 +52,19 @@ const downloadForEpisode = async (apiKey, show, episode, langCode) => {
   const data = searchRes.data.data;
   if (!data || data.length === 0) return null;
   const fileId = data[0].attributes.files[0].file_id;
-  const downloadRes = await axios.post('https://api.opensubtitles.com/api/v1/download',
-    { file_id: fileId },
-    { headers: { 'Api-Key': apiKey, 'Content-Type': 'application/json', 'Accept': 'application/json', 'User-Agent': 'Atlas/1.0' }, timeout: 30000 }
-  );
-  const srtRes = await axios.get(downloadRes.data.link, { responseType: 'arraybuffer', timeout: 30000 });
-  return Buffer.from(srtRes.data);
+  try {
+    const downloadRes = await axios.post('https://api.opensubtitles.com/api/v1/download',
+      { file_id: fileId },
+      { headers: { 'Api-Key': apiKey, 'Content-Type': 'application/json', 'Accept': 'application/json', 'User-Agent': 'Atlas/1.0' }, timeout: 30000 }
+    );
+    if (!downloadRes.data?.link) return null;
+    const srtRes = await axios.get(downloadRes.data.link, { responseType: 'arraybuffer', timeout: 30000 });
+    return Buffer.from(srtRes.data);
+  } catch (err) {
+    const msg = err.response?.data?.message || err.message;
+    console.warn(`[OpenSubtitles] Download failed: ${msg}`);
+    throw new Error(`OpenSubtitles: ${msg}`);
+  }
 };
 
 const searchForMovie = async (apiKey, movie, langCode) => {

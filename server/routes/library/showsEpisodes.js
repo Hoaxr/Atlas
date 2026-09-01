@@ -456,17 +456,26 @@ router.post('/episodes/:id/download-subs', async (req, res, next) => {
       if (!osApiKeyRow?.value) {
         return res.status(400).json({ status: 'error', message: 'OpenSubtitles API key not set' });
       }
-      const downloadRes = await axios.post('https://api.opensubtitles.com/api/v1/download',
-        { file_id: fileId },
-        { headers: { 'Api-Key': osApiKeyRow.value, 'Content-Type': 'application/json', 'Accept': 'application/json', 'User-Agent': 'Atlas/1.0' }, timeout: 30000 }
-      );
-      const srtRes = await axios.get(downloadRes.data.link, { responseType: 'arraybuffer', headers: { 'User-Agent': 'Atlas/1.0' }, timeout: 30000 });
-      const cleanContent = decodeSubtitleBuffer(Buffer.from(srtRes.data));
-      if (!cleanContent || cleanContent.length < 10) {
-        return res.status(422).json({ status: 'error', message: 'Downloaded subtitle file is empty or invalid' });
+      try {
+        const downloadRes = await axios.post('https://api.opensubtitles.com/api/v1/download',
+          { file_id: fileId },
+          { headers: { 'Api-Key': osApiKeyRow.value, 'Content-Type': 'application/json', 'Accept': 'application/json', 'User-Agent': 'Atlas/1.0' }, timeout: 30000 }
+        );
+        if (!downloadRes.data?.link) {
+          return res.status(422).json({ status: 'error', message: 'OpenSubtitles did not return a valid download link' });
+        }
+        const srtRes = await axios.get(downloadRes.data.link, { responseType: 'arraybuffer', headers: { 'User-Agent': 'Atlas/1.0' }, timeout: 30000 });
+        const cleanContent = decodeSubtitleBuffer(Buffer.from(srtRes.data));
+        if (!cleanContent || cleanContent.length < 10) {
+          return res.status(422).json({ status: 'error', message: 'Downloaded subtitle file is empty or invalid' });
+        }
+        await fsp.writeFile(subPath, cleanContent);
+        return res.json({ status: 'success', message: `Downloaded "${langCode}" subtitle` });
+      } catch (osErr) {
+        const osMsg = osErr.response?.data?.message || osErr.message || 'OpenSubtitles download failed';
+        const statusCode = osErr.response?.status === 406 || osErr.response?.status === 429 ? 429 : 400;
+        return res.status(statusCode).json({ status: 'error', message: `OpenSubtitles: ${osMsg}` });
       }
-      await fsp.writeFile(subPath, cleanContent);
-      return res.json({ status: 'success', message: `Downloaded "${langCode}" subtitle` });
     }
 
     // If a SubSource subId is provided, download from the SubSource API
