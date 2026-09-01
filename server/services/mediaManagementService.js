@@ -10,7 +10,7 @@ const tmdbService = require('./tmdbService');
 const imageService = require('./imageService');
 
 const { getSetting } = require('../utils/settings');
-const { isVideoFile, findLargestVideoFile } = require('../utils/fileUtils');
+const { isVideoFile, isSubtitleFile, findLargestVideoFile } = require('../utils/fileUtils');
 const { getMediaMetadata, parseAudioFromFileName } = require('../utils/videoUtils');
 const subtitleService = require('./subtitles');
 
@@ -76,26 +76,64 @@ const findAllVideoFiles = async (dirPath) => {
   return results;
 };
 
-// Parse season/episode numbers from a filename like "Show.Name.S01E02.mkv" or "Show.Name.S01E01-E02.mkv"
+// Parse season/episode numbers from a filename like "Show.Name.S01E02.mkv", "BILLIONS - S02 E01 - Title.mp4", or "Show.S01E01-E02.mkv"
 const parseEpisodeFromFilename = (filePath) => {
-  const name = path.basename(filePath).toLowerCase();
-  // Multi-episode: S01E01-E04, S01E01-E02, S01E01-02, S01E01E02, etc.
-  const multiMatch = name.match(/\bs(\d{1,2})[._\s-]*e(\d{1,3})(?:[-_e\s]+(?:s\d{1,2})?e?(\d{1,3}))+\b/i);
+  const name = path.basename(filePath);
+
+  // 1. Multi-episode explicit: S01E01-E04, S01E01-04, S01E01E02, S01 E01 - E04, S01 E01-04
+  const multiMatch = name.match(/\bS(\d{1,2})[._\s-]*(?:E|EP)(\d{1,3})(?:[-_.\s]*(?:S\d{1,2})?(?:E|EP)?(\d{1,3}))+\b/i);
   if (multiMatch) {
     const season = parseInt(multiMatch[1], 10);
     const eStart = parseInt(multiMatch[2], 10);
-    const extra = [...multiMatch[0].matchAll(/(\d{1,3})/g)].map(m => parseInt(m[1], 10));
-    const eEnd = extra[extra.length - 1];
-    const episodes = [];
-    for (let ep = eStart; ep <= eEnd; ep++) episodes.push(ep);
-    return { season, episode: eStart, episodes };
+    const rest = multiMatch[0].replace(/^S\d{1,2}[._\s-]*(?:E|EP)\d{1,3}/i, '');
+    const extraParts = [...rest.matchAll(/(?:[-_.\s]*(?:S\d{1,2})?(?:E|EP)|[-_]+)(\d{1,3})/gi)].map(m => parseInt(m[1], 10));
+    if (extraParts.length > 0) {
+      const eEnd = extraParts[extraParts.length - 1];
+      if (eEnd >= eStart && (eEnd - eStart) <= 50) {
+        const episodes = [];
+        for (let ep = eStart; ep <= eEnd; ep++) episodes.push(ep);
+        return { season, episode: eStart, episodes };
+      }
+    }
   }
-  // Try S01E02 pattern
-  let match = name.match(/s(\d{1,2})e(\d{1,2})/i);
-  if (match) return { season: parseInt(match[1], 10), episode: parseInt(match[2], 10), episodes: [parseInt(match[2], 10)] };
-  // Try 01x02 pattern
-  match = name.match(/(\d{1,2})x(\d{1,2})/i);
-  if (match) return { season: parseInt(match[1], 10), episode: parseInt(match[2], 10), episodes: [parseInt(match[2], 10)] };
+
+  // 2. Multi-episode scene format: 01x01-04, 1x01-02
+  const sceneMultiMatch = name.match(/\b(\d{1,2})x(\d{1,3})[-_]+(\d{1,3})\b/i);
+  if (sceneMultiMatch) {
+    const season = parseInt(sceneMultiMatch[1], 10);
+    const eStart = parseInt(sceneMultiMatch[2], 10);
+    const eEnd = parseInt(sceneMultiMatch[3], 10);
+    if (eEnd >= eStart && (eEnd - eStart) <= 50) {
+      const episodes = [];
+      for (let ep = eStart; ep <= eEnd; ep++) episodes.push(ep);
+      return { season, episode: eStart, episodes };
+    }
+  }
+
+  // 3. Single episode standard: S01E02, S01 E02, S1E2, S1 E2, S01.E02, S01_E02, S01-E02, S01EP02, S01 EP02
+  let match = name.match(/\bS(\d{1,2})[._\s-]*(?:E|EP)(\d{1,3})\b/i);
+  if (match) {
+    const season = parseInt(match[1], 10);
+    const episode = parseInt(match[2], 10);
+    return { season, episode, episodes: [episode] };
+  }
+
+  // 4. Single episode scene: 01x02, 1x02
+  match = name.match(/\b(\d{1,2})x(\d{1,3})\b/i);
+  if (match) {
+    const season = parseInt(match[1], 10);
+    const episode = parseInt(match[2], 10);
+    return { season, episode, episodes: [episode] };
+  }
+
+  // 5. Full words: Season 1 Episode 2, Season 01 Episode 02, Season 1 Ep 2
+  match = name.match(/\bSeason[._\s]*(\d{1,2})[._\s]*(?:Episode|Ep)[._\s]*(\d{1,3})\b/i);
+  if (match) {
+    const season = parseInt(match[1], 10);
+    const episode = parseInt(match[2], 10);
+    return { season, episode, episodes: [episode] };
+  }
+
   return null;
 };
 
@@ -543,6 +581,35 @@ const importMovie = async (torrent, movie) => {
       }
     }
 
+    // Import companion subtitle files if present alongside movie video file
+    try {
+      const videoDir = path.dirname(videoFile.path);
+      const baseVideoName = path.basename(videoFile.path, ext);
+      const dirEntries = await fs.promises.readdir(videoDir).catch(() => []);
+      for (const entry of dirEntries) {
+        const subExt = path.extname(entry).toLowerCase();
+        if (isSubtitleFile(entry)) {
+          const entryBase = path.basename(entry, subExt);
+          if (entryBase === baseVideoName || entryBase.startsWith(`${baseVideoName}.`)) {
+            const subLangSuffix = entryBase.startsWith(`${baseVideoName}.`) ? entryBase.substring(baseVideoName.length) : '';
+            const srcSubPath = path.join(videoDir, entry);
+            const destSubPath = path.join(destFolder, `${fileName}${subLangSuffix}${subExt}`);
+            try {
+              if (fs.existsSync(destSubPath)) await fs.promises.unlink(destSubPath).catch(() => {});
+              await fs.promises.link(srcSubPath, destSubPath).catch(async () => {
+                await fs.promises.copyFile(srcSubPath, destSubPath);
+              });
+              console.log(`[MediaManagement] Imported companion subtitle: ${destSubPath}`);
+            } catch (subErr) {
+              console.warn(`[MediaManagement] Could not import companion subtitle ${entry}:`, subErr.message);
+            }
+          }
+        }
+      }
+    } catch (subImportErr) {
+      console.warn('[MediaManagement] Companion subtitle import error:', subImportErr.message);
+    }
+
     // Remove torrent from client first (if enabled), so failed removal keeps status as 'downloading' for retry
     const removeSetting = db.prepare('SELECT value FROM settings WHERE key = ?').get('removeCompletedDownloads');
     const deleteFilesSetting = db.prepare('SELECT value FROM settings WHERE key = ?').get('deleteTorrentFiles');
@@ -752,6 +819,35 @@ const importEpisode = async (torrent, episode) => {
       }
     }
 
+    // Import companion subtitle files if present alongside episode video file
+    try {
+      const videoDir = path.dirname(videoFile.path);
+      const baseVideoName = path.basename(videoFile.path, ext);
+      const dirEntries = await fs.promises.readdir(videoDir).catch(() => []);
+      for (const entry of dirEntries) {
+        const subExt = path.extname(entry).toLowerCase();
+        if (isSubtitleFile(entry)) {
+          const entryBase = path.basename(entry, subExt);
+          if (entryBase === baseVideoName || entryBase.startsWith(`${baseVideoName}.`)) {
+            const subLangSuffix = entryBase.startsWith(`${baseVideoName}.`) ? entryBase.substring(baseVideoName.length) : '';
+            const srcSubPath = path.join(videoDir, entry);
+            const destSubPath = path.join(destFolder, `${fileName}${subLangSuffix}${subExt}`);
+            try {
+              if (fs.existsSync(destSubPath)) await fs.promises.unlink(destSubPath).catch(() => {});
+              await fs.promises.link(srcSubPath, destSubPath).catch(async () => {
+                await fs.promises.copyFile(srcSubPath, destSubPath);
+              });
+              console.log(`[MediaManagement] Imported companion subtitle: ${destSubPath}`);
+            } catch (subErr) {
+              console.warn(`[MediaManagement] Could not import companion subtitle ${entry}:`, subErr.message);
+            }
+          }
+        }
+      }
+    } catch (subImportErr) {
+      console.warn('[MediaManagement] Companion subtitle import error:', subImportErr.message);
+    }
+
     // Remove torrent from client first (if enabled and has a hash — skip for season pack sub-imports)
     const removeSettingEp = db.prepare('SELECT value FROM settings WHERE key = ?').get('removeCompletedDownloads');
     const deleteFilesSettingEp = db.prepare('SELECT value FROM settings WHERE key = ?').get('deleteTorrentFiles');
@@ -907,12 +1003,12 @@ const importSeasonPack = async (torrent, { showId, showTitle, seasonNumber }) =>
     }
     console.log(`[MediaManagement] Found ${videoFiles.length} video files in season pack`);
 
-    // Get pending episodes for this show/season
+    // Get all episodes for this show/season
     const pendingEpisodes = db.prepare(`
       SELECT e.*, s.title as show_title 
       FROM episodes e 
       JOIN shows s ON e.show_id = s.id 
-      WHERE e.show_id = ? AND e.season_number = ? AND e.status IN ('downloading', 'monitored')
+      WHERE e.show_id = ? AND e.season_number = ?
     `).all(showId, seasonNumber);
 
     let importedCount = 0;
