@@ -13,6 +13,7 @@ const downloadClientService = require('../../services/downloadClientService');
 const eventBus = require('../../services/eventBus');
 const tmdbService = require('../../services/tmdbService');
 const subtitleService = require('../../services/subtitles');
+const { decodeSubtitleBuffer } = require('../../services/subtitles/parser');
 const { getMediaMetadata, parseAudioFromFileName } = require('../../utils/videoUtils');
 const { isWatchedSyncEnabled, getSubtitlesInDir, extractLang, translateSrt, LANG_CODE } = require('./helpers');
 const simklService = require('../../services/simklService');
@@ -440,48 +441,69 @@ router.post('/episodes/:id/download-subs', async (req, res, next) => {
 
     // If a direct URL is provided, download from there (used by SubDL unpack files)
     if (url) {
-      const srtRes = await axios.get(url, { responseType: 'text' });
-      await fsp.writeFile(subPath, srtRes.data);
+      const srtRes = await axios.get(url, { responseType: 'arraybuffer', timeout: 30000 });
+      const cleanContent = decodeSubtitleBuffer(Buffer.from(srtRes.data));
+      if (!cleanContent || cleanContent.length < 10) {
+        return res.status(422).json({ status: 'error', message: 'Downloaded subtitle file is empty or invalid' });
+      }
+      await fsp.writeFile(subPath, cleanContent);
       return res.json({ status: 'success', message: `Downloaded "${langCode}" subtitle` });
     }
 
     // If a fileId is provided (OpenSubtitles), download by file ID
     if (fileId && provider === 'OpenSubtitles') {
       const osApiKeyRow = db.prepare("SELECT value FROM settings WHERE key = 'osApiKey'").get();
-      if (osApiKeyRow?.value) {
-        const downloadRes = await axios.post('https://api.opensubtitles.com/api/v1/download',
-          { file_id: fileId },
-          { headers: { 'Api-Key': osApiKeyRow.value, 'Content-Type': 'application/json', 'Accept': 'application/json', 'User-Agent': 'Atlas/1.0' } }
-        );
-        const srtRes = await axios.get(downloadRes.data.link, { responseType: 'text', headers: { 'User-Agent': 'Atlas/1.0' } });
-        await fsp.writeFile(subPath, srtRes.data);
-        return res.json({ status: 'success', message: `Downloaded "${langCode}" subtitle` });
+      if (!osApiKeyRow?.value) {
+        return res.status(400).json({ status: 'error', message: 'OpenSubtitles API key not set' });
       }
+      const downloadRes = await axios.post('https://api.opensubtitles.com/api/v1/download',
+        { file_id: fileId },
+        { headers: { 'Api-Key': osApiKeyRow.value, 'Content-Type': 'application/json', 'Accept': 'application/json', 'User-Agent': 'Atlas/1.0' }, timeout: 30000 }
+      );
+      const srtRes = await axios.get(downloadRes.data.link, { responseType: 'arraybuffer', headers: { 'User-Agent': 'Atlas/1.0' }, timeout: 30000 });
+      const cleanContent = decodeSubtitleBuffer(Buffer.from(srtRes.data));
+      if (!cleanContent || cleanContent.length < 10) {
+        return res.status(422).json({ status: 'error', message: 'Downloaded subtitle file is empty or invalid' });
+      }
+      await fsp.writeFile(subPath, cleanContent);
+      return res.json({ status: 'success', message: `Downloaded "${langCode}" subtitle` });
     }
 
     // If a SubSource subId is provided, download from the SubSource API
     if (provider === 'SubSource' && req.body.subId) {
-      const parsedPath = path.parse(episode.file_path);
       const epSubPath = path.join(parsedPath.dir, `${parsedPath.name}.${langCode}.srt`);
       const subsourceApiKeyRow = db.prepare("SELECT value FROM settings WHERE key = 'subsourceApiKey'").get();
-      if (!subsourceApiKeyRow?.value) throw new Error('SubSource API key not set');
+      if (!subsourceApiKeyRow?.value) {
+        return res.status(400).json({ status: 'error', message: 'SubSource API key not set' });
+      }
       const dlRes = await axios.get(`https://api.subsource.net/api/v1/subtitles/${req.body.subId}/download`,
-        { params: { api_key: subsourceApiKeyRow.value }, responseType: 'text', validateStatus: () => true });
-      if (dlRes.status !== 200) throw new Error(`SubSource download failed (HTTP ${dlRes.status})`);
-      await fsp.writeFile(epSubPath, dlRes.data);
+        { params: { api_key: subsourceApiKeyRow.value }, responseType: 'arraybuffer', validateStatus: () => true, timeout: 30000 });
+      if (dlRes.status !== 200) {
+        return res.status(dlRes.status || 502).json({ status: 'error', message: `SubSource download failed (HTTP ${dlRes.status})` });
+      }
+      const cleanContent = decodeSubtitleBuffer(Buffer.from(dlRes.data));
+      if (!cleanContent || cleanContent.length < 10) {
+        return res.status(422).json({ status: 'error', message: 'Downloaded subtitle file is empty or invalid' });
+      }
+      await fsp.writeFile(epSubPath, cleanContent);
       return res.json({ status: 'success', message: `Downloaded "${langCode}" subtitle` });
     }
 
     const show = db.prepare('SELECT * FROM shows WHERE id = ?').get(episode.show_id);
     if (!show) return res.status(404).json({ status: 'error', message: 'Show not found' });
 
-    const result = await subtitleService.downloadSubtitlesForEpisode(episode, show, langCode);
-    if (result.alreadyExists) {
-      return res.json({ status: 'success', message: `Subtitle already exists for "${langCode}"` });
+    try {
+      const result = await subtitleService.downloadSubtitlesForEpisode(episode, show, langCode);
+      if (result.alreadyExists) {
+        return res.json({ status: 'success', message: `Subtitle already exists for "${langCode}"` });
+      }
+      return res.json({ status: 'success', message: `Downloaded "${langCode}" subtitle` });
+    } catch (subErr) {
+      return res.status(404).json({ status: 'error', message: subErr.message || `No subtitle found for "${langCode}"` });
     }
-    res.json({ status: 'success', message: `Downloaded "${langCode}" subtitle` });
   } catch (err) {
-    next(err);
+    console.error(`[download-subs] Episode ${req.params.id} error:`, err?.message);
+    res.status(500).json({ status: 'error', message: err?.message || 'Download failed' });
   }
 });
 
