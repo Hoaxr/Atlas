@@ -19,27 +19,27 @@ const getSubtitlesInDir = async (dir, fsp, pathLib) => {
   }
 };
 
+const { VALID_LANGUAGES } = require('../../utils/languages');
+
 const extractLang = (filename, pathLib) => {
-  const name = pathLib.basename(filename, pathLib.extname(filename));
-  // Try language code at the very end first (e.g. .en, _nl)
-  let match = name.match(/[._]([a-z]{2,3})$/i);
-  // Fallback: language code followed by another separator (e.g. .en.forced)
-  if (!match) match = name.match(/[._]([a-z]{2,3})(?=[._])/i);
+  let name = pathLib.basename(filename, pathLib.extname(filename));
+  name = name.replace(/[._-](?:forced|sdh|hi|cc|\d+)$/i, '');
+  let match = name.match(/[._-]([a-z]{2,3})$/i);
   if (match) {
     const code = match[1].toLowerCase();
-    // Map 3-letter and full codes to 2-letter
     const langMap = {
       eng: 'en', english: 'en',
-      nld: 'nl', dutch: 'nl',
+      nld: 'nl', dutch: 'nl', dut: 'nl',
       fra: 'fr', fre: 'fr', french: 'fr',
       deu: 'de', ger: 'de', german: 'de',
       spa: 'es', spanish: 'es',
       ita: 'it', italian: 'it',
       por: 'pt', portuguese: 'pt',
     };
-    return langMap[code] || code;
+    const mapped = langMap[code] || code;
+    if (VALID_LANGUAGES.has(mapped)) return mapped;
   }
-  return 'unknown';
+  return 'en';
 };
 
 const translateSrt = async (enSrtContent, targetLang) => {

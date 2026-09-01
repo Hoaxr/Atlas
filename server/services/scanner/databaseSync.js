@@ -327,12 +327,14 @@ const scanLibrarySubtitles = async (scanProgress, nextStage, mode = 'full') => {
         const s = ep.season_number;
         const e = ep.episode_number;
         const matchStr1 = `s${String(s).padStart(2, '0')}e${String(e).padStart(2, '0')}`;
-        const matchStr2 = `${s}x${String(e).padStart(2, '0')}`;
-
+        const normBase = baseName.toLowerCase().replace(/[^a-z0-9]/g, '');
         const matchingSubs = subFiles.filter(f => {
           if (f.startsWith(baseName)) return true;
           const fLower = f.toLowerCase();
-          return fLower.includes(matchStr1) || fLower.includes(matchStr2);
+          if (fLower.includes(matchStr1) || fLower.includes(matchStr2)) return true;
+          const fNorm = fLower.replace(/\.[^.]+$/, '').replace(/[^a-z0-9]/g, '');
+          if (normBase && (fNorm.startsWith(normBase) || normBase.startsWith(fNorm))) return true;
+          return false;
         });
 
         const langs = [...new Set(
@@ -342,9 +344,19 @@ const scanLibrarySubtitles = async (scanProgress, nextStage, mode = 'full') => {
             const m = name.match(/[._-]([a-z]{2,3})$/i);
             if (m) {
               const code = m[1].toLowerCase();
-              if (VALID_LANGUAGES.has(code)) return code;
+              const langMap = {
+                eng: 'en', english: 'en',
+                nld: 'nl', dutch: 'nl', dut: 'nl',
+                fra: 'fr', fre: 'fr', french: 'fr',
+                deu: 'de', ger: 'de', german: 'de',
+                spa: 'es', spanish: 'es',
+                ita: 'it', italian: 'it',
+                por: 'pt', portuguese: 'pt',
+              };
+              const mapped = langMap[code] || code;
+              if (VALID_LANGUAGES.has(mapped)) return mapped;
             }
-            return null;
+            return 'en';
           }).filter(Boolean)
         )];
 

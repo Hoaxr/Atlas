@@ -34,26 +34,38 @@ const SUBTITLE_EXTS = [...SUBTITLE_EXTENSIONS];
 const scanSubtitleLangs = async (filePath) => {
   const dir = path.dirname(filePath);
   const videoBase = path.basename(filePath, path.extname(filePath)).toLowerCase();
+  const normVideo = videoBase.replace(/[^a-z0-9]/g, '');
   try {
     const items = await fs.readdir(dir);
     return [...new Set(
       items
         .filter(item => {
           if (!SUBTITLE_EXTS.includes(path.extname(item).toLowerCase())) return false;
-          // Only consider subtitle files that belong to this video file
-          return item.toLowerCase().startsWith(videoBase);
+          const itemLower = item.toLowerCase();
+          if (itemLower.startsWith(videoBase)) return true;
+          const normSub = itemLower.replace(/\.[^.]+$/, '').replace(/[^a-z0-9]/g, '');
+          if (normVideo && (normSub.startsWith(normVideo) || normVideo.startsWith(normSub))) return true;
+          return false;
         })
         .map(item => {
-          // Strip extension, then strip trailing numeric index or qualifiers
-          // e.g. "Movie.en.0" → "Movie.en", "Movie.en.forced" → "Movie.en"
           let name = path.basename(item, path.extname(item));
-          name = name.replace(/\.(?:forced|sdh|hi|cc|\d+)$/i, '');
-          const match = name.match(/\.([a-z]{2,3})$/i);
+          name = name.replace(/[._-](?:forced|sdh|hi|cc|\d+)$/i, '');
+          const match = name.match(/[._-]([a-z]{2,3})$/i);
           if (match) {
             const code = match[1].toLowerCase();
-            if (VALID_LANGUAGES.has(code)) return code;
+            const langMap = {
+              eng: 'en', english: 'en',
+              nld: 'nl', dutch: 'nl', dut: 'nl',
+              fra: 'fr', fre: 'fr', french: 'fr',
+              deu: 'de', ger: 'de', german: 'de',
+              spa: 'es', spanish: 'es',
+              ita: 'it', italian: 'it',
+              por: 'pt', portuguese: 'pt',
+            };
+            const mapped = langMap[code] || code;
+            if (VALID_LANGUAGES.has(mapped)) return mapped;
           }
-          return null;
+          return 'en';
         })
         .filter(Boolean)
     )];
