@@ -960,7 +960,7 @@ router.get('/status', async (req, res) => {
   if (geminiKey) {
     await test('gemini', 'Gemini', async () => {
       const genAI = new GoogleGenerativeAI(geminiKey);
-      const candidateModels = ['gemini-1.5-flash', 'gemini-2.0-flash', 'gemini-2.5-flash'];
+      const candidateModels = ['gemini-1.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash-8b'];
       let lastErr = null;
       for (const m of candidateModels) {
         try {

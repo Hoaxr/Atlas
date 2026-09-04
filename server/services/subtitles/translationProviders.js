@@ -161,24 +161,61 @@ ${JSON.stringify(cuesPayload, null, 2)}
 
 Output ONLY valid JSON array (no markdown code fences if possible, or \`\`\`json):`;
 
-    const candidateModels = [this.modelName, 'gemini-1.5-flash', 'gemini-2.0-flash', 'gemini-2.5-flash'].filter(Boolean);
+    const candidateModels = [...new Set([this.modelName, 'gemini-1.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash-8b'].filter(Boolean))];
     let rawOutput = '';
     let lastErr = null;
 
-    for (const m of candidateModels) {
+    const isRateLimitError = (err) => {
+      const msg = String(err?.message || '').toLowerCase();
+      const status = err?.status || err?.response?.status;
+      return status === 429 || msg.includes('429') || msg.includes('quota') || msg.includes('resource_exhausted') || msg.includes('too many requests');
+    };
+
+    const extractRetryDelay = (err) => {
       try {
-        const model = genAI.getGenerativeModel({ model: m });
-        const result = await model.generateContent(prompt);
-        rawOutput = result.response.text().trim();
-        if (rawOutput) break;
-      } catch (err) {
-        lastErr = err;
-        console.warn(`[GeminiProvider] Model ${m} failed: ${err.message}, trying next model...`);
+        const msg = String(err?.message || '');
+        const match = msg.match(/retryDelay["']?\s*:\s*["']?(\d+(?:\.\d+)?)(s)?/i) || msg.match(/wait\s*(\d+)\s*s/i);
+        if (match && match[1]) {
+          return Math.ceil(parseFloat(match[1]) * 1000);
+        }
+      } catch { /* ignore */ }
+      return null;
+    };
+
+    // Try models with rate limit backoff
+    for (const m of candidateModels) {
+      const maxRetries = 3;
+      for (let attempt = 0; attempt < maxRetries; attempt++) {
+        try {
+          const model = genAI.getGenerativeModel({ model: m });
+          const result = await model.generateContent(prompt);
+          rawOutput = result.response.text().trim();
+          if (rawOutput) break;
+        } catch (err) {
+          lastErr = err;
+          if (isRateLimitError(err) && attempt < maxRetries - 1) {
+            const waitMs = extractRetryDelay(err) || (4000 * Math.pow(2, attempt));
+            console.log(`[GeminiProvider] Rate limit / quota hit for ${m} (attempt ${attempt + 1}/${maxRetries}). Backing off ${waitMs}ms before retry...`);
+            await new Promise(r => setTimeout(r, waitMs));
+            continue;
+          }
+          console.warn(`[GeminiProvider] Model ${m} attempt ${attempt + 1} failed: ${err.message}`);
+          break; // Move to next candidate model if not a retryable 429 or retries exhausted
+        }
       }
+      if (rawOutput) break;
     }
 
+    // If all Gemini models fail or quota is exhausted, fall back to Google Translate
+    // so the subtitle translation completes rather than failing with an error toast
     if (!rawOutput) {
-      throw lastErr || new Error('Gemini translation request failed');
+      console.warn(`[GeminiProvider] All Gemini attempts failed (${lastErr?.message}). Falling back to Google Translate for this batch...`);
+      try {
+        const gtx = new GoogleTranslateProvider();
+        return await gtx.translateBatch(cues, sourceLang, targetLang, options);
+      } catch (gtxErr) {
+        throw lastErr || gtxErr;
+      }
     }
     
     let parsedArray = [];

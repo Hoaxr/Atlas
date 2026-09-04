@@ -18,6 +18,16 @@ const { LANG_TO_CODE } = require('../../utils/constants');
 const { parseSubtitles, serializeSubtitles, readSubtitleFile } = require('./parser');
 const { getTranslationProvider, createCueBatches } = require('./translationProviders');
 
+const formatTranslationError = (err) => {
+  if (!err) return 'Unknown translation error';
+  let msg = typeof err === 'string' ? err : (err.message || String(err));
+  if (msg.includes('429') || /quota|resource_exhausted|too many requests/i.test(msg)) {
+    return 'Gemini API rate limit or quota exceeded. Check your plan at ai.dev/rate-limit or switch to Google Translate in Settings.';
+  }
+  msg = msg.replace(/\[\{"@type":[\s\S]*$/, '').replace(/\* Quota metric:[\s\S]*$/, '').trim();
+  return msg || 'Translation failed';
+};
+
 class SubtitleTranslationQueue {
   constructor() {
     this.activeJobs = new Map(); // id -> job object
@@ -242,7 +252,7 @@ class SubtitleTranslationQueue {
       this.emitJobUpdate(job);
 
       const providerInstance = getTranslationProvider(job.provider, job.overrides);
-      const batchSize = job.provider === 'googleTranslate' ? 15 : 25;
+      const batchSize = providerInstance.name === 'googleTranslate' ? 20 : 60;
       const batches = createCueBatches(cues, batchSize);
 
       const translatedCues = [];
@@ -278,9 +288,10 @@ class SubtitleTranslationQueue {
         job.currentStep = `Translated ${job.processedCues} of ${job.totalCues} cues (${job.progress}%)`;
         this.emitJobUpdate(job);
 
-        // Small delay between batches to be courteous to translation endpoints
+        // Pacing between batches to respect provider rate limits (e.g. Gemini free tier 15 RPM)
         if (i < batches.length - 1) {
-          await new Promise(r => setTimeout(r, 200));
+          const pacingMs = providerInstance.name === 'gemini' ? 3500 : (providerInstance.name === 'googleTranslate' ? 200 : 1000);
+          await new Promise(r => setTimeout(r, pacingMs));
         }
       }
 
@@ -358,18 +369,19 @@ class SubtitleTranslationQueue {
       });
 
     } catch (err) {
-      console.error(`[SubtitleQueue] Job ${job.id} failed:`, err.message);
+      const cleanError = formatTranslationError(err);
+      console.error(`[SubtitleQueue] Job ${job.id} failed:`, cleanError, err.message);
       job.status = 'failed';
-      job.error = err.message;
-      job.currentStep = `Failed: ${err.message}`;
+      job.error = cleanError;
+      job.currentStep = `Failed: ${cleanError}`;
       job.completedAt = new Date().toISOString();
       this.emitJobUpdate(job);
 
-      eventBus.error(`Subtitle translation failed: ${job.title} (${job.targetLang}) — ${err.message}`, {
+      eventBus.error(`Subtitle translation failed: ${job.title} (${job.targetLang}) — ${cleanError}`, {
         title: job.title,
         type: job.mediaType,
         language: job.targetLang,
-        error: err.message
+        error: cleanError
       });
     }
   }

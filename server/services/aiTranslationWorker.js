@@ -169,7 +169,7 @@ const translateWithProvider = async (srtContent, targetLang, overrides = {}) => 
   if (!cues || cues.length === 0) return srtContent;
 
   const providerInstance = getTranslationProvider(overrides.provider, overrides);
-  const batchSize = providerInstance.name === 'googleTranslate' ? 15 : 25;
+  const batchSize = providerInstance.name === 'googleTranslate' ? 20 : 60;
   const batches = createCueBatches(cues, batchSize);
 
   const translatedCues = [];
@@ -185,7 +185,8 @@ const translateWithProvider = async (srtContent, targetLang, overrides = {}) => 
       });
     }
     if (i < batches.length - 1) {
-      await new Promise(r => setTimeout(r, 150));
+      const pacingMs = providerInstance.name === 'gemini' ? 3500 : (providerInstance.name === 'googleTranslate' ? 200 : 1000);
+      await new Promise(r => setTimeout(r, pacingMs));
     }
   }
 
