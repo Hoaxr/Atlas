@@ -326,6 +326,9 @@ const runRefreshMetadata = async () => {
       if (tmdbData) {
         db.prepare("UPDATE movies SET rating = ?, poster_path = ?, overview = ?, last_refreshed_at = datetime('now') WHERE id = ?")
           .run(tmdbData.vote_average || 0, tmdbData.poster_path, tmdbData.overview, movie.id);
+        if (tmdbData.poster_path) {
+          imageService.ensurePoster('movies', movie.tmdb_id, tmdbData.poster_path).catch(() => {});
+        }
         moviesUpdated++;
       } else {
         db.prepare("UPDATE movies SET last_refreshed_at = datetime('now') WHERE id = ?").run(movie.id);
@@ -345,6 +348,9 @@ const runRefreshMetadata = async () => {
       if (data) {
         db.prepare("UPDATE shows SET rating = ?, poster_path = ?, overview = ?, tmdb_status = ?, last_refreshed_at = datetime('now') WHERE id = ?")
           .run(data.vote_average || 0, data.poster_path, data.overview, data.status || '', show.id);
+        if (data.poster_path) {
+          imageService.ensurePoster('shows', show.tmdb_id, data.poster_path).catch(() => {});
+        }
 
         const seasons = await tmdbService.getShowSeasons(show.tmdb_id);
         const insertEp = db.prepare(`
@@ -812,6 +818,9 @@ const runDeepMetadataRefresh = async () => {
       if (tmdbData) {
         db.prepare("UPDATE movies SET rating = ?, poster_path = ?, overview = ?, last_refreshed_at = datetime('now') WHERE id = ?")
           .run(tmdbData.vote_average || 0, tmdbData.poster_path, tmdbData.overview, movie.id);
+        if (tmdbData.poster_path) {
+          imageService.ensurePoster('movies', movie.tmdb_id, tmdbData.poster_path).catch(() => {});
+        }
         moviesUpdated++;
       } else {
         db.prepare("UPDATE movies SET last_refreshed_at = datetime('now') WHERE id = ?").run(movie.id);
@@ -836,6 +845,9 @@ const runDeepMetadataRefresh = async () => {
       if (data) {
         db.prepare("UPDATE shows SET rating = ?, poster_path = ?, overview = ?, tmdb_status = ?, last_refreshed_at = datetime('now') WHERE id = ?")
           .run(data.vote_average || 0, data.poster_path, data.overview, data.status || '', show.id);
+        if (data.poster_path) {
+          imageService.ensurePoster('shows', show.tmdb_id, data.poster_path).catch(() => {});
+        }
 
         const seasons = await tmdbService.getShowSeasons(show.tmdb_id);
         const insertEp = db.prepare(`

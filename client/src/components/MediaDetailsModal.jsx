@@ -135,9 +135,15 @@ export default function MediaDetailsModal({ isOpen, onClose, mediaId, mediaType,
                 {details.poster_path ? (
                   <img 
                     src={isInLibrary
-                      ? posterUrl(mediaType === 'movie' ? 'movies' : 'shows', details.id)
+                      ? posterUrl(mediaType === 'movie' ? 'movies' : 'shows', details.id, details.poster_path)
                       : tmdbImgUrl(details.poster_path)} 
                     alt="Poster" 
+                    onError={(e) => {
+                      if (details.poster_path && !e.currentTarget.dataset.fallback) {
+                        e.currentTarget.dataset.fallback = 'true';
+                        e.currentTarget.src = `https://image.tmdb.org/t/p/w500${details.poster_path}`;
+                      }
+                    }}
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                   />
                 ) : (

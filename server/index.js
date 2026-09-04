@@ -57,6 +57,7 @@ const aiTranslationWorker = require('./services/aiTranslationWorker');
 const notificationService = require('./services/notificationService');
 const telegramBotService = require('./services/telegramBotService');
 const imageService = require('./services/imageService');
+const tmdbService = require('./services/tmdbService');
 const healthService = require('./services/healthService');
 const retentionService = require('./services/retentionService');
 const cleanupWorker = require('./services/cleanupWorker');
@@ -379,25 +380,68 @@ app.get('/api/images/:type/:tmdbId/poster', async (req, res) => {
   }
 
   // This route bypasses authMiddleware, so verify a Bearer JWT manually when present.
-  // Anonymous (unauthenticated) requests get cache-only service — no outbound TMDB fetches,
-  // preventing quota burn / disk fill by unauthenticated traffic.
+  // Check Authorization header or query parameter 'token' (used by <img> tags)
   let isAuthenticated = false;
   const authHeader = req.headers.authorization;
-  if (authHeader && authHeader.startsWith('Bearer ')) {
+  const token = (authHeader && authHeader.startsWith('Bearer '))
+    ? authHeader.split(' ')[1]
+    : (req.query.token || null);
+
+  if (token) {
     try {
-      const decoded = jwt.verify(authHeader.split(' ')[1], process.env.JWT_SECRET);
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
       isAuthenticated = !!decoded?.id;
     } catch { /* invalid token — treat as anonymous */ }
   }
+
+  if (!isAuthenticated) {
+    try {
+      const authEnabled = getSetting('authEnabled') !== 'false';
+      if (!authEnabled) {
+        isAuthenticated = true;
+      }
+    } catch { /* ignore */ }
+  }
+
   if (!isAuthenticated) {
     return res.status(404).json({ error: 'No poster available' });
   }
 
   // Cache miss (authenticated) — look up poster_path from DB and download
   try {
-    const table      = type === 'movies' ? 'movies' : 'shows';
-    const row        = db.prepare(`SELECT poster_path FROM ${table} WHERE tmdb_id = ?`).get(tmdbId);
-    const tmdbPath   = row?.poster_path;
+    const table = type === 'movies' ? 'movies' : 'shows';
+    const row   = db.prepare(`SELECT poster_path FROM ${table} WHERE tmdb_id = ?`).get(tmdbId);
+    let tmdbPath = row?.poster_path;
+
+    if (!tmdbPath) {
+      // Check requests table
+      const reqRow = db.prepare('SELECT poster_path FROM requests WHERE tmdb_id = ? AND type = ?').get(tmdbId, type === 'movies' ? 'movie' : 'show');
+      tmdbPath = reqRow?.poster_path;
+    }
+
+    if (!tmdbPath) {
+      // Fallback: look up directly from TMDB
+      try {
+        if (type === 'movies') {
+          const tmdbData = await tmdbService.getMovieById(tmdbId);
+          if (tmdbData?.poster_path) {
+            tmdbPath = tmdbData.poster_path;
+            if (row) {
+              db.prepare('UPDATE movies SET poster_path = ? WHERE tmdb_id = ?').run(tmdbPath, tmdbId);
+            }
+          }
+        } else {
+          const tmdbData = await tmdbService.getShowById(tmdbId);
+          if (tmdbData?.poster_path) {
+            tmdbPath = tmdbData.poster_path;
+            if (row) {
+              db.prepare('UPDATE shows SET poster_path = ? WHERE tmdb_id = ?').run(tmdbPath, tmdbId);
+            }
+          }
+        }
+      } catch { /* ignore */ }
+    }
+
     const cachedPath = await imageService.ensurePoster(type, tmdbId, tmdbPath);
 
     if (!cachedPath || !fs.existsSync(cachedPath)) {

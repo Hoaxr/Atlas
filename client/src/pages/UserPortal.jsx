@@ -603,9 +603,16 @@ export default function UserPortal() {
                             {(req.poster_path || libraryItem?.poster_path) ? (
                               <img
                                 src={libraryItem
-                                  ? posterUrl(req.type === 'movie' ? 'movies' : 'shows', req.tmdb_id)
+                                  ? posterUrl(req.type === 'movie' ? 'movies' : 'shows', req.tmdb_id, req.poster_path || libraryItem?.poster_path)
                                   : tmdbImgUrl(req.poster_path || libraryItem?.poster_path, 'w92')}
                                 alt={req.title}
+                                onError={(e) => {
+                                  const fallbackPath = req.poster_path || libraryItem?.poster_path;
+                                  if (fallbackPath && !e.currentTarget.dataset.fallback) {
+                                    e.currentTarget.dataset.fallback = 'true';
+                                    e.currentTarget.src = `https://image.tmdb.org/t/p/w92${fallbackPath}`;
+                                  }
+                                }}
                                 className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
                               />
                             ) : (

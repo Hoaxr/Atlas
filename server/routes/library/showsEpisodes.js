@@ -17,6 +17,7 @@ const { decodeSubtitleBuffer } = require('../../services/subtitles/parser');
 const { getMediaMetadata, parseAudioFromFileName } = require('../../utils/videoUtils');
 const { isWatchedSyncEnabled, getSubtitlesInDir, extractLang, translateSrt, LANG_CODE } = require('./helpers');
 const simklService = require('../../services/simklService');
+const imageService = require('../../services/imageService');
 
 router.post('/shows/:id/watched', async (req, res, next) => {
   try {
@@ -260,6 +261,9 @@ const refreshShowData = async (id) => {
       if (data) {
         db.prepare('UPDATE shows SET rating = ?, poster_path = ?, overview = ?, tmdb_status = ? WHERE id = ?')
           .run(data.vote_average || 0, data.poster_path, data.overview, data.status || '', show.id);
+        if (data.poster_path) {
+          imageService.ensurePoster('shows', show.tmdb_id, data.poster_path).catch(() => {});
+        }
 
         const seasons = await tmdbService.getShowSeasons(show.tmdb_id);
         const insertEp = db.prepare(`

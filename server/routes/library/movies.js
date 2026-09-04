@@ -18,6 +18,7 @@ const { isWatchedSyncEnabled, extractLang, translateSrt, LANG_CODE } = require('
 const { isRootLibraryPath, findLargestVideoFile } = require('../../utils/fileUtils');
 const { scanSubtitleLangs } = require('../../services/scanner/fileScanner');
 const requireAdmin = require('../../middleware/requireAdmin');
+const imageService = require('../../services/imageService');
 
 // In-memory cache for network mount directory scans — movies are on a CIFS/SMB
 // mount with actimeo=1, so every fresh request hits the NAS. Cache avoids that.
@@ -302,6 +303,9 @@ const refreshMovieData = async (id) => {
       if (!releaseDate) releaseDate = data.release_date || null;
       db.prepare('UPDATE movies SET rating = ?, poster_path = ?, overview = ?, release_date = ?, runtime = ? WHERE id = ?')
         .run(data.vote_average || 0, data.poster_path, data.overview, releaseDate, data.runtime || null, movie.id);
+      if (data.poster_path) {
+        imageService.ensurePoster('movies', movie.tmdb_id, data.poster_path).catch(() => {});
+      }
     }
   } catch (e) { console.error('TMDB refresh failed for movie:', e.message); }
 

@@ -6,6 +6,7 @@ const path = require('path');
 const { getNamingConfig, sanitizeTitle } = require('./mediaManagementService');
 const { isWatchedSyncEnabled } = require('../utils/settings');
 const eventBus = require('./eventBus');
+const imageService = require('./imageService');
 
 const sanitizeWatched = (items) => {
   if (isWatchedSyncEnabled()) return items;
@@ -111,6 +112,12 @@ const addMovie = async (tmdbId, rootFolderPath = null) => {
     if (watchedEntry) {
       db.prepare('UPDATE movies SET watched = 1 WHERE id = ?').run(result.lastInsertRowid);
     }
+  }
+
+  // Pre-cache poster in background
+  if (movieDetails.poster_path) {
+    imageService.ensurePoster('movies', movieDetails.id, movieDetails.poster_path)
+      .catch(err => console.error(`[LibraryService] Failed to cache poster for movie ${movieDetails.title}:`, err.message));
   }
 
   return { id: result.lastInsertRowid, tmdb_id: movieDetails.id, title: movieDetails.title };
@@ -343,6 +350,12 @@ const addShow = async (tmdbId, rootFolderPath = null, monitorLevel = 'all') => {
     if (watchedEntry) {
       db.prepare('UPDATE shows SET watched = 1 WHERE id = ?').run(internalShowId);
     }
+  }
+
+  // Pre-cache poster in background
+  if (showDetails.poster_path) {
+    imageService.ensurePoster('shows', showDetails.id, showDetails.poster_path)
+      .catch(err => console.error(`[LibraryService] Failed to cache poster for show ${showDetails.name}:`, err.message));
   }
 
   return { id: internalShowId, tmdb_id: showDetails.id, title: showDetails.name };

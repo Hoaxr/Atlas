@@ -404,8 +404,14 @@ export default function MovieDetails() {
               {/* Poster */}
               <div className="relative group rounded-2xl overflow-hidden shadow-2xl border border-white/10 aspect-[2/3]">
                 <img
-                  src={posterUrl('movies', movie.tmdb_id)}
+                  src={posterUrl('movies', movie.tmdb_id, movie.poster_path)}
                   alt={movie.title}
+                  onError={(e) => {
+                    if (movie.poster_path && !e.currentTarget.dataset.fallback) {
+                      e.currentTarget.dataset.fallback = 'true';
+                      e.currentTarget.src = `https://image.tmdb.org/t/p/w500${movie.poster_path}`;
+                    }
+                  }}
                   className="w-full h-full object-cover"
                 />
                 <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-slate-900 to-transparent pointer-events-none" />

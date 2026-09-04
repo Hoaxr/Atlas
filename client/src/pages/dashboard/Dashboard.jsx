@@ -308,7 +308,7 @@ export default function Dashboard() {
             const imagePreloads = Promise.all(topItems.filter(item => item.poster_path && item.tmdb_id).map(item => {
               return new Promise(resolve => {
                 const img = new window.Image();
-                img.src = posterUrl(mode, item.tmdb_id);
+                img.src = posterUrl(mode, item.tmdb_id, item.poster_path);
                 if (img.decode) {
                   img.decode().then(resolve).catch(resolve);
                 } else {
@@ -1032,10 +1032,16 @@ export default function Dashboard() {
                     )}
 
                     <img 
-                      src={posterUrl(viewMode, item.tmdb_id)} 
+                      src={posterUrl(viewMode, item.tmdb_id, item.poster_path)} 
                       alt={item.title}
                       width="500"
                       height="750"
+                      onError={(e) => {
+                        if (item.poster_path && !e.currentTarget.dataset.fallback) {
+                          e.currentTarget.dataset.fallback = 'true';
+                          e.currentTarget.src = `https://image.tmdb.org/t/p/w500${item.poster_path}`;
+                        }
+                      }}
                       className="w-full h-full object-cover relative"
                     />
                     <div className="absolute inset-0 bg-slate-950/80 opacity-0 md:group-hover:opacity-100 transition-opacity duration-300 hidden md:flex items-center justify-center p-3 z-10 pointer-events-none">

@@ -55,8 +55,8 @@ const downloadImage = async (tmdbImagePath, destPath, size = 'w500') => {
     throw new Error(`Image exceeds size limit (${contentLength} bytes)`);
   }
 
-  // Write to a temp file first so a torn/partial download is never served from the final path
-  const tmpPath = `${destPath}.tmp`;
+  // Write to a unique temp file first so a torn/partial download is never served from the final path
+  const tmpPath = `${destPath}.${process.pid}.${Date.now()}.${Math.random().toString(36).slice(2)}.tmp`;
   try {
     const writer = fs.createWriteStream(tmpPath);
     response.data.pipe(writer);
@@ -72,6 +72,9 @@ const downloadImage = async (tmdbImagePath, destPath, size = 'w500') => {
   }
 };
 
+// Map of in-flight downloads to prevent concurrent duplicate TMDB requests
+const _inFlight = new Map();
+
 /**
  * Ensure a poster is cached locally, downloading from TMDB if needed.
  * Returns the absolute local path (whether the file existed or was just downloaded).
@@ -85,15 +88,27 @@ const ensurePoster = async (type, tmdbId, tmdbImagePath) => {
   if (!tmdbImagePath) return null;
 
   const dest = posterPath(type, tmdbId);
-  if (!fs.existsSync(dest)) {
+  if (fs.existsSync(dest)) return dest;
+
+  const key = `${type}:${tmdbId}`;
+  if (_inFlight.has(key)) {
+    return _inFlight.get(key);
+  }
+
+  const promise = (async () => {
     try {
       await downloadImage(tmdbImagePath, dest);
+      return dest;
     } catch (err) {
       console.error(`[ImageService] Failed to download poster for ${type}/${tmdbId}:`, err.message);
       return null;
+    } finally {
+      _inFlight.delete(key);
     }
-  }
-  return dest;
+  })();
+
+  _inFlight.set(key, promise);
+  return promise;
 };
 
 /**

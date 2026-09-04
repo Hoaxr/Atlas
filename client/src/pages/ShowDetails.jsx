@@ -396,8 +396,14 @@ export default function ShowDetails() {
               {/* Poster */}
               <div className="relative group rounded-2xl overflow-hidden shadow-2xl border border-white/10 aspect-[2/3]">
                 <img
-                  src={posterUrl('shows', show.tmdb_id)}
+                  src={posterUrl('shows', show.tmdb_id, show.poster_path)}
                   alt={show.title}
+                  onError={(e) => {
+                    if (show.poster_path && !e.currentTarget.dataset.fallback) {
+                      e.currentTarget.dataset.fallback = 'true';
+                      e.currentTarget.src = `https://image.tmdb.org/t/p/w500${show.poster_path}`;
+                    }
+                  }}
                   className="w-full h-full object-cover"
                 />
                 <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-slate-900 to-transparent pointer-events-none" />
