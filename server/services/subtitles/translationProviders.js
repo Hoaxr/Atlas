@@ -120,6 +120,14 @@ class GoogleTranslateProvider extends BaseTranslationProvider {
   }
 }
 
+const callWithTimeout = (promise, ms = 25000) => {
+  let timer;
+  const timeoutPromise = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`Gemini request timed out after ${Math.round(ms / 1000)}s`)), ms);
+  });
+  return Promise.race([promise, timeoutPromise]).finally(() => clearTimeout(timer));
+};
+
 /**
  * Gemini AI Provider
  */
@@ -127,11 +135,17 @@ class GeminiProvider extends BaseTranslationProvider {
   constructor(apiKey, modelName) {
     super('gemini');
     this.apiKey = apiKey || db.prepare("SELECT value FROM settings WHERE key = 'geminiApiKey'").get()?.value;
-    this.modelName = modelName || db.prepare("SELECT value FROM settings WHERE key = 'geminiModel'").get()?.value || 'gemini-2.5-flash';
+    const dbModel = db.prepare("SELECT value FROM settings WHERE key = 'geminiModel'").get()?.value;
+    const chosen = modelName || dbModel || 'gemini-1.5-flash';
+    this.modelName = (chosen.includes('2.5') || chosen.includes('3.5') || chosen.includes('3.6')) ? 'gemini-1.5-flash' : chosen;
+    this.fallbackGtx = new GoogleTranslateProvider();
   }
 
   async translateBatch(cues, sourceLang, targetLang, options = {}) {
-    if (!this.apiKey) throw new Error('Gemini API key is required. Please configure it in Settings.');
+    if (!this.apiKey) {
+      console.warn('[GeminiProvider] No API key configured, falling back to Google Translate');
+      return await this.fallbackGtx.translateBatch(cues, sourceLang, targetLang, options);
+    }
     if (!cues || cues.length === 0) return [];
 
     const protectedItems = cues.map(cue => {
@@ -159,16 +173,14 @@ CRITICAL RULES:
 Input cues JSON:
 ${JSON.stringify(cuesPayload, null, 2)}
 
-Output ONLY valid JSON array (no markdown code fences if possible, or \`\`\`json):`;
+Output ONLY valid JSON array (no markdown code fences):`;
 
     const candidateModels = [...new Set([
       this.modelName,
-      'gemini-2.5-flash',
-      'gemini-3.5-flash-lite',
-      'gemini-3.6-flash',
       'gemini-1.5-flash',
-      'gemini-2.0-flash'
-    ].filter(Boolean))];
+      'gemini-2.0-flash',
+      'gemini-1.5-pro'
+    ].filter(m => m && !m.includes('2.5') && !m.includes('3.5') && !m.includes('3.6')))];
     let rawOutput = '';
     let lastErr = null;
 
@@ -191,30 +203,42 @@ Output ONLY valid JSON array (no markdown code fences if possible, or \`\`\`json
 
     // Try models with rate limit backoff
     for (const m of candidateModels) {
-      const maxRetries = 3;
+      const maxRetries = 2;
       for (let attempt = 0; attempt < maxRetries; attempt++) {
         try {
-          const model = genAI.getGenerativeModel({ model: m });
-          const result = await model.generateContent(prompt);
+          const model = genAI.getGenerativeModel({
+            model: m,
+            generationConfig: {
+              responseMimeType: "application/json"
+            }
+          });
+          const result = await callWithTimeout(model.generateContent(prompt), 25000);
           rawOutput = result.response.text().trim();
           if (rawOutput) break;
         } catch (err) {
           lastErr = err;
           if (isRateLimitError(err) && attempt < maxRetries - 1) {
-            const waitMs = extractRetryDelay(err) || (4000 * Math.pow(2, attempt));
-            console.log(`[GeminiProvider] Rate limit / quota hit for ${m} (attempt ${attempt + 1}/${maxRetries}). Backing off ${waitMs}ms before retry...`);
+            const waitMs = Math.min(extractRetryDelay(err) || (3000 * Math.pow(1.5, attempt)), 8000);
+            console.log(`[GeminiProvider] Rate limit / quota hit for ${m} (attempt ${attempt + 1}/${maxRetries}). Backing off ${waitMs}ms...`);
+            if (typeof options.onStep === 'function') {
+              options.onStep(`Gemini rate limit: waiting ${Math.round(waitMs / 1000)}s...`);
+            }
             await new Promise(r => setTimeout(r, waitMs));
             continue;
           }
           console.warn(`[GeminiProvider] Model ${m} attempt ${attempt + 1} failed: ${err.message}`);
-          break; // Move to next candidate model if not a retryable 429 or retries exhausted
+          break; // Move to next candidate model
         }
       }
       if (rawOutput) break;
     }
 
     if (!rawOutput) {
-      throw lastErr || new Error('Gemini translation failed: no response received from models');
+      console.warn(`[GeminiProvider] All Gemini models failed (${lastErr?.message}). Gracefully falling back to Google Translate for this batch.`);
+      if (typeof options.onStep === 'function') {
+        options.onStep('Falling back to Google Translate...');
+      }
+      return await this.fallbackGtx.translateBatch(cues, sourceLang, targetLang, options);
     }
     
     let parsedArray = [];
@@ -222,7 +246,11 @@ Output ONLY valid JSON array (no markdown code fences if possible, or \`\`\`json
       const cleaned = rawOutput.replace(/```json/gi, '').replace(/```/g, '').trim();
       parsedArray = JSON.parse(cleaned);
     } catch (e) {
-      console.warn('[GeminiProvider] JSON parse failed, falling back to line mapping:', e.message);
+      console.warn('[GeminiProvider] JSON parse failed, falling back to Google Translate:', e.message);
+      if (typeof options.onStep === 'function') {
+        options.onStep('Falling back to Google Translate...');
+      }
+      return await this.fallbackGtx.translateBatch(cues, sourceLang, targetLang, options);
     }
 
     const resultMap = new Map();

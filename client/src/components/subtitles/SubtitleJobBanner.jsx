@@ -48,9 +48,9 @@ export default function SubtitleJobBanner() {
   }, []);
 
   const handleCancel = async (jobId) => {
+    setJobs(prev => prev.filter(j => j.id !== jobId));
     try {
       await api.post(`/library/subtitles/jobs/${jobId}/cancel`);
-      setJobs(prev => prev.filter(j => j.id !== jobId));
     } catch { /* ignore */ }
   };
 

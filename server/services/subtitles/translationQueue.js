@@ -36,6 +36,26 @@ class SubtitleTranslationQueue {
     this.running = 0;
     this.maxConcurrent = 2;
     this.isProcessing = false;
+    this.recoverStaleJobs();
+  }
+
+  /**
+   * Reset any orphaned/stuck jobs from previous server restarts
+   */
+  recoverStaleJobs() {
+    try {
+      const stale = db.prepare("SELECT id FROM subtitle_jobs WHERE status IN ('processing', 'pending')").all();
+      if (stale && stale.length > 0) {
+        console.log(`[SubtitleQueue] Cleaning up ${stale.length} stale subtitle job(s) from previous server run.`);
+        db.prepare(`
+          UPDATE subtitle_jobs 
+          SET status = 'cancelled', current_step = 'Cancelled due to server restart', completed_at = ?
+          WHERE status IN ('processing', 'pending')
+        `).run(new Date().toISOString());
+      }
+    } catch (e) {
+      console.warn('[SubtitleQueue] Failed to recover stale jobs:', e.message);
+    }
   }
 
   /**
@@ -248,12 +268,12 @@ class SubtitleTranslationQueue {
 
       job.totalCues = cues.length;
       job.processedCues = 0;
-      job.currentStep = `Translating 0 of ${cues.length} cues...`;
       job.progress = 10;
+      job.currentStep = `Starting translation (0/${cues.length} cues)...`;
       this.emitJobUpdate(job);
 
       const providerInstance = getTranslationProvider(job.provider, job.overrides);
-      const batchSize = providerInstance.name === 'googleTranslate' ? 20 : 60;
+      const batchSize = providerInstance.name === 'googleTranslate' ? 20 : 25;
       const batches = createCueBatches(cues, batchSize);
 
       const translatedCues = [];
@@ -262,16 +282,28 @@ class SubtitleTranslationQueue {
         if (job.cancelled) {
           job.status = 'cancelled';
           job.currentStep = 'Cancelled by user';
+          job.completedAt = new Date().toISOString();
           this.emitJobUpdate(job);
           return;
         }
 
         const batch = batches[i];
+        const startCue = i * batchSize + 1;
+        const endCue = Math.min((i + 1) * batchSize, cues.length);
+        job.currentStep = `Translating batch ${i + 1}/${batches.length} (cues ${startCue}-${endCue} of ${cues.length})...`;
+        this.emitJobUpdate(job);
+
         const translatedBatch = await providerInstance.translateBatch(
           batch,
           job.sourceLang,
           job.targetLang,
-          job.overrides
+          {
+            ...job.overrides,
+            onStep: (stepMsg) => {
+              job.currentStep = stepMsg;
+              this.emitJobUpdate(job);
+            }
+          }
         );
 
         // Map translated text back to original cues to guarantee 100% timing integrity
@@ -289,9 +321,9 @@ class SubtitleTranslationQueue {
         job.currentStep = `Translated ${job.processedCues} of ${job.totalCues} cues (${job.progress}%)`;
         this.emitJobUpdate(job);
 
-        // Pacing between batches to respect provider rate limits (e.g. Gemini free tier 15 RPM)
+        // Pacing between batches to respect provider rate limits
         if (i < batches.length - 1) {
-          const pacingMs = providerInstance.name === 'gemini' ? 3500 : (providerInstance.name === 'googleTranslate' ? 200 : 1000);
+          const pacingMs = providerInstance.name === 'gemini' ? 1500 : (providerInstance.name === 'googleTranslate' ? 200 : 1000);
           await new Promise(r => setTimeout(r, pacingMs));
         }
       }
@@ -391,14 +423,35 @@ class SubtitleTranslationQueue {
     const job = this.activeJobs.get(jobId);
     if (job) {
       job.cancelled = true;
-      if (job.status === 'pending') {
-        job.status = 'cancelled';
-        job.currentStep = 'Cancelled by user';
-        this.emitJobUpdate(job);
-      }
-      return true;
+      job.status = 'cancelled';
+      job.currentStep = 'Cancelled by user';
+      job.completedAt = new Date().toISOString();
+      this.emitJobUpdate(job);
+      this.activeJobs.delete(jobId);
     }
-    return false;
+
+    try {
+      db.prepare(`
+        UPDATE subtitle_jobs 
+        SET status = 'cancelled', current_step = 'Cancelled by user', completed_at = ?
+        WHERE id = ? AND status IN ('processing', 'pending')
+      `).run(new Date().toISOString(), jobId);
+
+      eventBus.emit('event', {
+        type: 'SUBTITLE_JOB_UPDATE',
+        level: 'info',
+        job: {
+          id: jobId,
+          status: 'cancelled',
+          currentStep: 'Cancelled by user'
+        },
+        timestamp: new Date().toISOString()
+      });
+      return true;
+    } catch (e) {
+      console.warn('[SubtitleQueue] Failed to update cancelled job in DB:', e.message);
+      return !!job;
+    }
   }
 
   /**
