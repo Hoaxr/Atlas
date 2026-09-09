@@ -34,12 +34,46 @@ const downloadForEpisode = async (apiKey, show, episode, langCode) => {
   };
   const searchRes = await axios.get('https://api.subdl.com/api/v1/subtitles', { params, timeout: 30000 });
   if (!searchRes.data.status || !searchRes.data.subtitles || searchRes.data.subtitles.length === 0) return null;
-  const match = searchRes.data.subtitles.find(s => (s.language || '').toLowerCase() === langCode);
-  if (!match) return null;
 
-  const url = match.unpack_files?.[0]?.url || match.url;
-  if (!url) return null;
-  const downloadUrl = `https://dl.subdl.com${url.startsWith('/') ? url : '/' + url}`;
+  const targetSeason = Number(episode.season_number);
+  const targetEp = Number(episode.episode_number);
+  const targetEpPadded = String(targetEp).padStart(2, '0');
+  const targetSeasonPadded = String(targetSeason).padStart(2, '0');
+  const seCode = `s${targetSeasonPadded}e${targetEpPadded}`;
+
+  const matching = searchRes.data.subtitles.filter(s => {
+    if ((s.language || '').toLowerCase() !== langCode) return false;
+    if (s.season && Number(s.season) !== targetSeason) return false;
+    return true;
+  });
+
+  let downloadFileUrl = null;
+
+  for (const sub of matching) {
+    if (sub.unpack_files && sub.unpack_files.length > 0) {
+      const epFile = sub.unpack_files.find(f => Number(f.episode) === targetEp)
+        || sub.unpack_files.find(f => {
+          const name = (f.name || '').toLowerCase();
+          return name.includes(seCode) || name.includes(`e${targetEpPadded}`) || name.includes(`episode ${targetEp}`);
+        });
+      if (epFile?.url) {
+        downloadFileUrl = epFile.url;
+        break;
+      }
+    } else if (sub.episode && Number(sub.episode) === targetEp) {
+      downloadFileUrl = sub.url;
+      break;
+    } else if (!sub.episode && !sub.full_season) {
+      const rel = (sub.release_name || '').toLowerCase();
+      if (rel.includes(seCode)) {
+        downloadFileUrl = sub.url;
+        break;
+      }
+    }
+  }
+
+  if (!downloadFileUrl) return null;
+  const downloadUrl = `https://dl.subdl.com${downloadFileUrl.startsWith('/') ? downloadFileUrl : '/' + downloadFileUrl}`;
   const srtRes = await axios.get(downloadUrl, { responseType: 'arraybuffer', timeout: 30000 });
   return Buffer.from(srtRes.data);
 };
@@ -74,11 +108,25 @@ const searchForEpisode = async (apiKey, show, episode, langCode) => {
     params: { api_key: apiKey, tmdb_id: show.tmdb_id, type: 'tv', season_number: episode.season_number, episode_number: episode.episode_number, languages: LANG_MAP[langCode] || 'EN', unpack: '1' }, timeout: 30000
   });
   if (res.data.status && res.data.subtitles?.length > 0) {
-    const matching = res.data.subtitles.filter(s => (s.language || '').toLowerCase() === langCode);
+    const targetSeason = Number(episode.season_number);
+    const targetEp = Number(episode.episode_number);
+    const targetEpPadded = String(targetEp).padStart(2, '0');
+    const targetSeasonPadded = String(targetSeason).padStart(2, '0');
+    const seCode = `s${targetSeasonPadded}e${targetEpPadded}`;
+
+    const matching = res.data.subtitles.filter(s => {
+      if ((s.language || '').toLowerCase() !== langCode) return false;
+      if (s.season && Number(s.season) !== targetSeason) return false;
+      return true;
+    });
     const items = [];
     for (const sub of matching) {
-      if (sub.full_season && sub.unpack_files?.length > 0) {
-        const epFile = sub.unpack_files.find(f => f.episode === episode.episode_number);
+      if (sub.unpack_files?.length > 0) {
+        const epFile = sub.unpack_files.find(f => Number(f.episode) === targetEp)
+          || sub.unpack_files.find(f => {
+            const name = (f.name || '').toLowerCase();
+            return name.includes(seCode) || name.includes(`e${targetEpPadded}`) || name.includes(`episode ${targetEp}`);
+          });
         if (epFile) {
           items.push({
             id: epFile.file_n_id || sub.sd_id,
@@ -96,7 +144,7 @@ const searchForEpisode = async (apiKey, show, episode, langCode) => {
             subdlId: sub.sd_id || sub.id
           });
         }
-      } else {
+      } else if (!sub.episode || Number(sub.episode) === targetEp) {
         items.push({
           id: sub.sd_id || sub.id,
           name: sub.filename || 'Subtitle',

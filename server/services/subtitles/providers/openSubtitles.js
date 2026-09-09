@@ -51,7 +51,19 @@ const downloadForEpisode = async (apiKey, show, episode, langCode) => {
   });
   const data = searchRes.data.data;
   if (!data || data.length === 0) return null;
-  const fileId = data[0].attributes.files[0].file_id;
+
+  const targetSeason = Number(episode.season_number);
+  const targetEp = Number(episode.episode_number);
+
+  const match = data.find(d => {
+    const fd = d.attributes?.feature_details;
+    if (fd?.season_number && Number(fd.season_number) !== targetSeason) return false;
+    if (fd?.episode_number && Number(fd.episode_number) !== targetEp) return false;
+    return !!d.attributes?.files?.[0]?.file_id;
+  });
+  if (!match) return null;
+
+  const fileId = match.attributes.files[0].file_id;
   try {
     const downloadRes = await axios.post('https://api.opensubtitles.com/api/v1/download',
       { file_id: fileId },

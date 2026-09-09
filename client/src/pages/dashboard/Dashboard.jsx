@@ -107,6 +107,29 @@ export default function Dashboard() {
   const [ratingFilter, setRatingFilter] = useState('all');
   const [sort, setSort] = useState(() => localStorage.getItem(scopeKey('Sort')) || 'added_desc');
   const [viewStyle, setViewStyle] = useState(() => localStorage.getItem('dashboardViewStyle') || 'grid');
+  const [posterSize, setPosterSize] = useState(() => {
+    try {
+      const saved = localStorage.getItem('dashboardPosterSize');
+      if (saved) {
+        const parsed = Number(saved);
+        if (!isNaN(parsed) && parsed >= 100 && parsed <= 260) {
+          return parsed;
+        }
+      }
+    } catch {
+      // ignore
+    }
+    return 180;
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('dashboardPosterSize', String(posterSize));
+    } catch {
+      // ignore
+    }
+  }, [posterSize]);
+
   const [searchQuery, setSearchQuery] = useState('');
   const [alphaFilter, setAlphaFilter] = useState(null);
   
@@ -753,6 +776,52 @@ export default function Dashboard() {
                 Filters {activeFilterCount > 0 && <span className="bg-cyan-500 text-slate-900 rounded-full px-1.5 py-0.5 text-[10px] font-bold ml-1">{activeFilterCount}</span>}
               </button>
             </div>
+
+            {/* Poster Size Slider Control (Grid View only) */}
+            {viewStyle === 'grid' && (
+              <div className="flex items-center gap-2 bg-slate-900/60 border border-white/5 px-2.5 py-1.5 rounded-xl ml-auto">
+                <button
+                  type="button"
+                  onClick={() => setPosterSize(prev => Math.max(110, prev - 15))}
+                  className={`p-0.5 transition-colors rounded ${
+                    posterSize <= 125
+                      ? viewMode === 'movies' ? 'text-cyan-400' : 'text-purple-400'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                  title="Kleinere posters (meer posters in beeld)"
+                  aria-label="Kleinere posters"
+                >
+                  <LayoutGrid className="w-3.5 h-3.5" />
+                </button>
+                <input
+                  type="range"
+                  min="110"
+                  max="250"
+                  step="5"
+                  value={posterSize}
+                  onChange={e => setPosterSize(Number(e.target.value))}
+                  onDoubleClick={() => setPosterSize(180)}
+                  title={`Poster grootte: ${posterSize}px (dubbelklik voor standaard 180px)`}
+                  aria-label="Poster grootte bepalen"
+                  className={`w-20 sm:w-28 h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer ${
+                    viewMode === 'movies' ? 'accent-cyan-400' : 'accent-purple-400'
+                  }`}
+                />
+                <button
+                  type="button"
+                  onClick={() => setPosterSize(prev => Math.min(250, prev + 15))}
+                  className={`p-0.5 transition-colors rounded ${
+                    posterSize >= 215
+                      ? viewMode === 'movies' ? 'text-cyan-400' : 'text-purple-400'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                  title="Grotere posters"
+                  aria-label="Grotere posters"
+                >
+                  <LayoutGrid className="w-4.5 h-4.5" />
+                </button>
+              </div>
+            )}
           </div>
 
           {showAdvancedFilters && (
@@ -910,6 +979,7 @@ export default function Dashboard() {
               opacity: loading ? 0 : (isReordering ? 0.5 : 1),
               transition: 'opacity 0.2s ease',
               pointerEvents: loading ? 'none' : 'auto',
+              '--poster-min-width': `${posterSize}px`,
             }}
           >
 
@@ -925,8 +995,12 @@ export default function Dashboard() {
                   <div
                     ref={ref}
                     {...props}
-                    style={style}
-                    className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 gap-3 sm:gap-4 relative"
+                    style={{
+                      ...style,
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, var(--poster-min-width, 180px)), 1fr))',
+                    }}
+                    className="gap-3 sm:gap-4 relative"
                   >
                     {children}
                   </div>
@@ -935,6 +1009,7 @@ export default function Dashboard() {
               }}
               itemContent={(index, item) => {
                 if (!item) return <div key={`empty-${index}`} />;
+                const isCompact = posterSize <= 140;
                 return (
                 <div 
                   key={item.id}
@@ -954,7 +1029,7 @@ export default function Dashboard() {
                   }}
                   className={`cursor-pointer glass-panel interactive-glow-card rounded-xl overflow-hidden group hover:scale-[1.02] transition-all duration-300 relative flex flex-col focus:outline-none focus:ring-2 focus:ring-cyan-500/50 hover:shadow-[0_0_30px_-5px_rgba(6,182,212,0.25)] hover:border-cyan-500/40`}
                 >
-                  <div className="absolute top-2 left-2 z-20">
+                  <div className={`absolute ${isCompact ? 'top-1.5 left-1.5' : 'top-2 left-2'} z-20`}>
                     <button 
                       onClick={async (e) => {
                         e.stopPropagation(); e.preventDefault();
@@ -969,65 +1044,65 @@ export default function Dashboard() {
                           customAlert('Failed to toggle monitor status', 'error');
                         }
                       }}
-                      className="w-8 h-8 rounded-full bg-slate-900/80 hover:bg-slate-800 transition-colors shadow-lg flex items-center justify-center group/btn"
+                      className={`${isCompact ? 'w-6 h-6' : 'w-8 h-8'} rounded-full bg-slate-900/80 hover:bg-slate-800 transition-colors shadow-lg flex items-center justify-center group/btn`}
                       title={item.monitored ? 'Unmonitor' : 'Monitor'}
                     >
                       {item.monitored ? (
-                        <Bookmark className="w-5 h-5 text-emerald-500 fill-emerald-500 group-hover/btn:text-rose-400 group-hover/btn:fill-transparent" />
+                        <Bookmark className={`${isCompact ? 'w-3.5 h-3.5' : 'w-5 h-5'} text-emerald-500 fill-emerald-500 group-hover/btn:text-rose-400 group-hover/btn:fill-transparent`} />
                       ) : (
-                        <Bookmark className="w-5 h-5 text-rose-400 group-hover/btn:text-emerald-400" />
+                        <Bookmark className={`${isCompact ? 'w-3.5 h-3.5' : 'w-5 h-5'} text-rose-400 group-hover/btn:text-emerald-400`} />
                       )}
                     </button>
                   </div>
 
-                  <div className="absolute top-2 right-2 z-20 flex gap-2">
+                  <div className={`absolute ${isCompact ? 'top-1.5 right-1.5 gap-1' : 'top-2 right-2 gap-2'} z-20 flex`}>
                     {(item.status === 'downloading' || (viewMode === 'shows' && item.downloading_episodes > 0)) && (
-                      <div className="w-8 h-8 rounded-full bg-slate-900/80 flex items-center justify-center shadow-lg" title="Downloading">
-                        <Activity className="w-5 h-5 text-blue-400 animate-pulse" />
+                      <div className={`${isCompact ? 'w-6 h-6' : 'w-8 h-8'} rounded-full bg-slate-900/80 flex items-center justify-center shadow-lg`} title="Downloading">
+                        <Activity className={`${isCompact ? 'w-3.5 h-3.5' : 'w-5 h-5'} text-blue-400 animate-pulse`} />
                       </div>
                     )}
                     {viewMode === 'shows' && item.status !== 'downloading' && !item.downloading_episodes && (
                       item.missing_episodes > 0 ? (
-                        <div className="w-8 h-8 rounded-full bg-slate-900/80 flex items-center justify-center shadow-lg" title={`${item.missing_episodes} Missing Episode${item.missing_episodes > 1 ? 's' : ''}`}>
-                          <AlertCircle className="w-5 h-5 text-amber-500" />
+                        <div className={`${isCompact ? 'w-6 h-6' : 'w-8 h-8'} rounded-full bg-slate-900/80 flex items-center justify-center shadow-lg`} title={`${item.missing_episodes} Missing Episode${item.missing_episodes > 1 ? 's' : ''}`}>
+                          <AlertCircle className={`${isCompact ? 'w-3.5 h-3.5' : 'w-5 h-5'} text-amber-500`} />
                         </div>
                       ) : (item.downloaded_episodes > 0 || item.status === 'downloaded') ? (
-                        <div className="w-8 h-8 rounded-full bg-slate-900/80 flex items-center justify-center shadow-lg" title="Available">
-                          <CheckCircle2 className="w-5 h-5 text-emerald-400 fill-emerald-400/20" />
+                        <div className={`${isCompact ? 'w-6 h-6' : 'w-8 h-8'} rounded-full bg-slate-900/80 flex items-center justify-center shadow-lg`} title="Available">
+                          <CheckCircle2 className={`${isCompact ? 'w-3.5 h-3.5' : 'w-5 h-5'} text-emerald-400 fill-emerald-400/20`} />
                         </div>
                       ) : null
                     )}
                     {viewMode === 'movies' && item.status !== 'downloading' && (
                       <>
                         {item.status === 'downloaded' && (
-                          <div className="w-8 h-8 rounded-full bg-slate-900/80 flex items-center justify-center shadow-lg" title="Available">
-                            <CheckCircle2 className="w-5 h-5 text-emerald-400 fill-emerald-400/20" />
+                          <div className={`${isCompact ? 'w-6 h-6' : 'w-8 h-8'} rounded-full bg-slate-900/80 flex items-center justify-center shadow-lg`} title="Available">
+                            <CheckCircle2 className={`${isCompact ? 'w-3.5 h-3.5' : 'w-5 h-5'} text-emerald-400 fill-emerald-400/20`} />
                           </div>
                         )}
                         {item.status === 'monitored' && (
-                          <div className="w-8 h-8 rounded-full bg-slate-900/80 flex items-center justify-center shadow-lg" title={
+                          <div className={`${isCompact ? 'w-6 h-6' : 'w-8 h-8'} rounded-full bg-slate-900/80 flex items-center justify-center shadow-lg`} title={
                             item.release_date && new Date(item.release_date) > new Date()
                               ? 'Missing / Not Released Yet'
                               : 'Missing'
                           }>
-                            <AlertCircle className={`w-5 h-5 ${item.release_date && new Date(item.release_date) > new Date() ? 'text-amber-400' : 'text-amber-500'}`} />
+                            <AlertCircle className={`${isCompact ? 'w-3.5 h-3.5' : 'w-5 h-5'} ${item.release_date && new Date(item.release_date) > new Date() ? 'text-amber-400' : 'text-amber-500'}`} />
                           </div>
                         )}
                       </>
                     )}
                   </div>
 
-                  <div className="aspect-[2/3] relative bg-slate-800 min-h-[200px] flex-shrink-0">
+                  <div className="aspect-[2/3] relative bg-slate-800 flex-shrink-0">
                     {item.watched ? (
-                      <div className="absolute bottom-2 left-2 z-20 flex items-center gap-1 bg-slate-950/80 backdrop-blur px-2 py-1 rounded-md border border-emerald-500/30 shadow-lg md:group-hover:opacity-0 transition-opacity duration-200">
-                        <Eye className="w-3 h-3 text-emerald-400" />
-                        <span className="text-[10px] font-bold text-emerald-400">Watched</span>
+                      <div className={`absolute ${isCompact ? 'bottom-1.5 left-1.5 px-1.5 py-0.5' : 'bottom-2 left-2 px-2 py-1'} z-20 flex items-center gap-1 bg-slate-950/80 backdrop-blur rounded-md border border-emerald-500/30 shadow-lg md:group-hover:opacity-0 transition-opacity duration-200`}>
+                        <Eye className={`${isCompact ? 'w-2.5 h-2.5' : 'w-3 h-3'} text-emerald-400`} />
+                        <span className={`${isCompact ? 'text-[9px]' : 'text-[10px]'} font-bold text-emerald-400`}>Watched</span>
                       </div>
                     ) : null}
                     {viewMode === 'shows' && item.season_count > 0 && (
-                      <div className="absolute bottom-2 right-2 z-20 flex items-center gap-1 bg-slate-950/80 backdrop-blur px-2 py-1 rounded-md border border-purple-500/30 shadow-lg md:group-hover:opacity-0 transition-opacity duration-200">
-                        <Tv className="w-3 h-3 text-purple-400" />
-                        <span className="text-[10px] font-bold text-purple-400">{item.season_count}</span>
+                      <div className={`absolute ${isCompact ? 'bottom-1.5 right-1.5 px-1.5 py-0.5' : 'bottom-2 right-2 px-2 py-1'} z-20 flex items-center gap-1 bg-slate-950/80 backdrop-blur rounded-md border border-purple-500/30 shadow-lg md:group-hover:opacity-0 transition-opacity duration-200`}>
+                        <Tv className={`${isCompact ? 'w-2.5 h-2.5' : 'w-3 h-3'} text-purple-400`} />
+                        <span className={`${isCompact ? 'text-[9px]' : 'text-[10px]'} font-bold text-purple-400`}>{item.season_count}</span>
                       </div>
                     )}
 
@@ -1044,9 +1119,9 @@ export default function Dashboard() {
                       }}
                       className="w-full h-full object-cover relative"
                     />
-                    <div className="absolute inset-0 bg-slate-950/80 opacity-0 md:group-hover:opacity-100 transition-opacity duration-300 hidden md:flex items-center justify-center p-3 z-10 pointer-events-none">
+                    <div className="absolute inset-0 bg-slate-950/80 opacity-0 md:group-hover:opacity-100 transition-opacity duration-300 hidden md:flex items-center justify-center p-2 sm:p-3 z-10 pointer-events-none">
                       {/* Center Floating Action Dock */}
-                      <div className="flex items-center gap-2 p-1.5 rounded-full bg-slate-900/90 backdrop-blur-md border border-white/10 shadow-2xl pointer-events-auto">
+                      <div className={`flex items-center ${isCompact ? 'gap-1 p-1' : 'gap-2 p-1.5'} rounded-full bg-slate-900/90 backdrop-blur-md border border-white/10 shadow-2xl pointer-events-auto`}>
                         <button 
                           onClick={async (e) => { 
                             e.stopPropagation(); e.preventDefault(); 
@@ -1063,10 +1138,10 @@ export default function Dashboard() {
                               customAlert('Auto-search failed to find any results', 'error');
                             }
                           }}
-                          className="bg-amber-400 hover:bg-amber-300 text-slate-950 w-10 h-10 rounded-full font-bold flex items-center justify-center transition-transform hover:scale-110 shadow-lg"
+                          className={`bg-amber-400 hover:bg-amber-300 text-slate-950 ${isCompact ? 'w-7 h-7' : 'w-10 h-10'} rounded-full font-bold flex items-center justify-center transition-transform hover:scale-110 shadow-lg`}
                           title="Auto Search"
                         >
-                          <Zap className="w-4 h-4 fill-current" />
+                          <Zap className={`${isCompact ? 'w-3 h-3' : 'w-4 h-4'} fill-current`} />
                         </button>
                         <button 
                           onClick={(e) => { 
@@ -1076,10 +1151,10 @@ export default function Dashboard() {
                             setSearchMediaTitle(item.title);
                             setSearchModalOpen(true);
                           }}
-                          className="bg-cyan-500 hover:bg-cyan-400 text-slate-950 w-10 h-10 rounded-full font-bold flex items-center justify-center transition-transform hover:scale-110 shadow-lg"
+                          className={`bg-cyan-500 hover:bg-cyan-400 text-slate-950 ${isCompact ? 'w-7 h-7' : 'w-10 h-10'} rounded-full font-bold flex items-center justify-center transition-transform hover:scale-110 shadow-lg`}
                           title="Manual Search"
                         >
-                          <Search className="w-4 h-4" />
+                          <Search className={`${isCompact ? 'w-3 h-3' : 'w-4 h-4'}`} />
                         </button>
                         <button 
                           onClick={async (e) => {
@@ -1089,46 +1164,44 @@ export default function Dashboard() {
                               const endpoint = viewMode === 'movies' 
                                 ? `/library/movies/${item.id}/watched` 
                                 : `/library/shows/${item.id}/watched`;
-                              const res = await api.post(endpoint, { watched: newWatched });
+                              const res = await api.patch(endpoint, { watched: newWatched });
                               if (res.data.status === 'success') {
-                                customAlert(newWatched ? 'Marked as watched' : 'Marked as unwatched');
                                 refreshLibrary();
+                                customAlert(newWatched ? 'Marked as watched' : 'Marked as unwatched');
                               }
-                            } catch (err) {
-                              console.error(err);
+                            } catch {
                               customAlert('Failed to update watch status', 'error');
                             }
                           }}
-                          className={`w-10 h-10 rounded-full font-bold flex items-center justify-center transition-transform hover:scale-110 shadow-lg ${
+                          className={`${isCompact ? 'w-7 h-7' : 'w-10 h-10'} rounded-full font-bold flex items-center justify-center transition-transform hover:scale-110 shadow-lg ${
                             item.watched 
                               ? 'bg-emerald-500 hover:bg-emerald-400 text-slate-950' 
                               : 'bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-white/10'
                           }`}
                           title={item.watched ? 'Mark as Unwatched' : 'Mark as Watched'}
                         >
-                          {item.watched ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+                          {item.watched ? <Eye className={`${isCompact ? 'w-3 h-3' : 'w-4 h-4'}`} /> : <EyeOff className={`${isCompact ? 'w-3 h-3' : 'w-4 h-4'}`} />}
                         </button>
                       </div>
-
-                      {/* Bottom spacing keeping poster view clean & open */}
-                      <div />
                     </div>
                   </div>
 
-                  <div className="p-4 relative z-20 bg-gradient-to-b from-slate-800/95 to-slate-900/95 border-t border-white/10 group-hover:border-cyan-500/30 transition-colors">
+                  <div className={`${isCompact ? 'p-2 sm:p-2.5' : 'p-3 sm:p-4'} relative z-20 bg-gradient-to-b from-slate-800/95 to-slate-900/95 border-t border-white/10 group-hover:border-cyan-500/30 transition-colors`}>
                     <div className="flex items-center justify-between gap-1">
-                      <h3 className="font-semibold text-sm text-slate-100 group-hover:text-cyan-400 transition-colors truncate tracking-wide flex-1" title={item.title}>
+                      <h3 className={`font-semibold ${isCompact ? 'text-xs leading-snug' : 'text-sm'} text-slate-100 group-hover:text-cyan-400 transition-colors truncate tracking-wide flex-1`} title={item.title}>
                         {item.title}
                       </h3>
-                      <ArrowRight className="w-3.5 h-3.5 text-cyan-400 opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-200 flex-shrink-0" />
+                      {!isCompact && (
+                        <ArrowRight className="w-3.5 h-3.5 text-cyan-400 opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-200 flex-shrink-0" />
+                      )}
                     </div>
-                    <div className="flex justify-between items-center mt-2">
-                      <span className="text-xs text-slate-500 font-medium tracking-wider uppercase">{item.year}</span>
-                      <div className="flex items-center gap-2">
+                    <div className={`flex justify-between items-center ${isCompact ? 'mt-1' : 'mt-2'}`}>
+                      <span className={`${isCompact ? 'text-[11px]' : 'text-xs'} text-slate-500 font-medium tracking-wider uppercase`}>{item.year}</span>
+                      <div className="flex items-center gap-1.5">
                         {item.rating > 0 && (
-                          <div className="flex items-center gap-1 bg-amber-500/10 px-2 py-0.5 rounded-md border border-amber-500/20">
-                            <Star className="w-3 h-3 text-amber-400 fill-amber-400" />
-                            <span className="text-xs font-bold text-amber-300">{Number(item.rating).toFixed(1)}</span>
+                          <div className={`flex items-center gap-1 bg-amber-500/10 ${isCompact ? 'px-1.5 py-0.5' : 'px-2 py-0.5'} rounded-md border border-amber-500/20`}>
+                            <Star className={`${isCompact ? 'w-2.5 h-2.5' : 'w-3 h-3'} text-amber-400 fill-amber-400`} />
+                            <span className={`${isCompact ? 'text-[11px]' : 'text-xs'} font-bold text-amber-300`}>{Number(item.rating).toFixed(1)}</span>
                           </div>
                         )}
                       </div>
