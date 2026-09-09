@@ -66,20 +66,18 @@ export default function SubtitlesTab({ settings, setSettings, keyStatuses, handl
             <label className="block text-sm font-medium text-slate-300">Translation Provider</label>
             <CustomSelect 
               className="mt-2"
-              value={settings.translationProvider} 
+              value={settings.translationProvider || 'gemini'} 
               onChange={(e) => setSettings({ ...settings, translationProvider: e.target.value })}
               options={[
                 { label: 'Gemini AI', value: 'gemini' },
                 { label: 'DeepSeek', value: 'deepseek' },
-                { label: 'Claude (Anthropic)', value: 'claude' },
-                { label: 'Google Translate (free)', value: 'googleTranslate' }
+                { label: 'Claude (Anthropic)', value: 'claude' }
               ]}
             />
             <p className="text-xs text-slate-500 mt-2">
               {settings.translationProvider === 'gemini' && 'Gemini AI — high quality, requires a Gemini API key.'}
               {settings.translationProvider === 'deepseek' && 'DeepSeek — very affordable, requires a DeepSeek API key.'}
               {settings.translationProvider === 'claude' && 'Claude by Anthropic — high quality, requires an Anthropic API key.'}
-              {settings.translationProvider === 'googleTranslate' && 'Google Translate (free) — no API key needed, uses the free web endpoint.'}
             </p>
           </div>
 

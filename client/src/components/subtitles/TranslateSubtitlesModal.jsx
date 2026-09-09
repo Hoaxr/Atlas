@@ -27,7 +27,7 @@ export default function TranslateSubtitlesModal({
   const [selectedSourceTrack, setSelectedSourceTrack] = useState(null);
   const [selectedTargetLangs, setSelectedTargetLangs] = useState(['Dutch']);
   const [retranslate, setRetranslate] = useState(false);
-  const [provider, setProvider] = useState('googleTranslate');
+  const [provider, setProvider] = useState('gemini');
   const [loading, setLoading] = useState(false);
   const [activeJobs, setActiveJobs] = useState([]);
 
@@ -219,7 +219,6 @@ export default function TranslateSubtitlesModal({
               onChange={(e) => setProvider(e.target.value)}
               className="w-full bg-slate-800/80 border border-white/10 rounded-xl px-3.5 py-2.5 text-sm text-slate-200 focus:outline-none focus:border-pink-500/50"
             >
-              <option value="googleTranslate">Google Translate (Free, fast & unlimited)</option>
               <option value="gemini">Gemini AI (High quality, uses Gemini API key)</option>
               <option value="deepseek">DeepSeek AI (Accurate & affordable)</option>
               <option value="claude">Claude by Anthropic (High quality)</option>

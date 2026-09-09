@@ -125,7 +125,7 @@ class SubtitleTranslationQueue {
 
     const activeProvider = provider ||
       db.prepare("SELECT value FROM settings WHERE key = 'translationProvider'").get()?.value ||
-      'googleTranslate';
+      'gemini';
 
     const sourceDir = path.dirname(sourceFile);
     const sourceParsed = path.parse(sourceFile);

@@ -89,8 +89,10 @@ console.log('✓ ZIP subtitle buffer extraction passed');
 
 // Test 7: Translation Provider Factory
 console.log('Test 7: Translation Provider Factory');
-const gtx = getTranslationProvider('googleTranslate');
-assert(gtx.name === 'googleTranslate');
+const gem = getTranslationProvider('gemini');
+assert(gem.name === 'gemini');
+const def = getTranslationProvider();
+assert(def.name === 'gemini');
 console.log('✓ Provider factory passed');
 
 console.log('\n=== All Tests Passed Successfully! ===');

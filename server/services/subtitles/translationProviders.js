@@ -213,16 +213,8 @@ Output ONLY valid JSON array (no markdown code fences if possible, or \`\`\`json
       if (rawOutput) break;
     }
 
-    // If all Gemini models fail or quota is exhausted, fall back to Google Translate
-    // so the subtitle translation completes rather than failing with an error toast
     if (!rawOutput) {
-      console.warn(`[GeminiProvider] All Gemini attempts failed (${lastErr?.message}). Falling back to Google Translate for this batch...`);
-      try {
-        const gtx = new GoogleTranslateProvider();
-        return await gtx.translateBatch(cues, sourceLang, targetLang, options);
-      } catch (gtxErr) {
-        throw lastErr || gtxErr;
-      }
+      throw lastErr || new Error('Gemini translation failed: no response received from models');
     }
     
     let parsedArray = [];
@@ -411,18 +403,18 @@ function getTranslationProvider(providerName, overrides = {}) {
   const provider = providerName ||
     overrides.provider ||
     db.prepare("SELECT value FROM settings WHERE key = 'translationProvider'").get()?.value ||
-    'googleTranslate';
+    'gemini';
 
   switch (provider) {
-    case 'gemini':
-      return new GeminiProvider(overrides.geminiApiKey, overrides.geminiModel);
     case 'deepseek':
       return new DeepSeekProvider(overrides.deepseekApiKey, overrides.deepseekModel);
     case 'claude':
       return new ClaudeProvider(overrides.claudeApiKey, overrides.claudeModel);
     case 'googleTranslate':
-    default:
       return new GoogleTranslateProvider();
+    case 'gemini':
+    default:
+      return new GeminiProvider(overrides.geminiApiKey, overrides.geminiModel);
   }
 }
 

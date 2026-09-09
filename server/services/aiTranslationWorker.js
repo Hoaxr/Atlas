@@ -200,7 +200,7 @@ const translateSubtitles = async () => {
   const claudeApiKeyRow = db.prepare("SELECT value FROM settings WHERE key = 'claudeApiKey'").get();
   const targetLangRow = db.prepare("SELECT value FROM settings WHERE key = 'targetLang'").get();
 
-  const activeProvider = (provider && provider.value) || 'googleTranslate';
+  const activeProvider = (provider && provider.value) || 'gemini';
   const targetLang = targetLangRow && targetLangRow.value ? targetLangRow.value : 'Dutch';
 
   const providerChecks = {
