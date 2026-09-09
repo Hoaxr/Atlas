@@ -208,6 +208,12 @@ const filterAndSortResults = (results, profile, type, currentQuality = null, isM
   let filtered = results.filter(r => {
     // Block torrents containing dangerous file extensions (virus/malware vectors)
     if (dangerousExts.test(r.title)) { dangerousFiltered++; return false; }
+
+    // Block suspiciously small fake torrents during automated background searches
+    if (!isManualSearch && r.size && r.size > 0) {
+      const minSizeBytes = type === 'movie' ? 150 * 1024 * 1024 : 35 * 1024 * 1024;
+      if (r.size < minSizeBytes) return false;
+    }
     if (expectedTitle) {
       const expectedWords = tokenizeTitle(expectedTitle);
       const cleanReleaseTitle = r.title.replace(/\[.*?\]|\(.*?\)/g, '').trim();

@@ -907,6 +907,14 @@ router.post('/episodes/:id/auto-search', async (req, res, next) => {
       return res.json({ status: 'success', message: 'Episode is already downloaded on disk. Skipping search.' });
     }
 
+    if (episode.air_date) {
+      const epDateOnly = episode.air_date.split('T')[0];
+      const todayDateOnly = new Intl.DateTimeFormat('en-CA').format(new Date());
+      if (epDateOnly > todayDateOnly && req.query.force !== 'true') {
+        return res.status(400).json({ status: 'error', message: `Episode has not aired yet (air date: ${epDateOnly}). Automatic search skipped to avoid fake releases.` });
+      }
+    }
+
     const results = await indexerService.searchEpisode(episode.show_title, episode.season_number, episode.episode_number, null, null, false, episode.show_tmdb_id);
     
     if (!results || results.length === 0) {

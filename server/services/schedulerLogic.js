@@ -7,18 +7,13 @@ const getSchedulerConfig = () => ({
   backoffMultiplier: parseFloat(getSetting('scheduler_backoff_multiplier') || '1.5')
 });
 
-// Plain date strings (YYYY-MM-DD) are parsed as UTC midnight by the JS engine.
-// On servers east of UTC this shifts the boundary into the next local day, causing
-// episodes that aired "today" to appear scheduled for "tomorrow".
-// Parsing as local noon is timezone-safe: it stays on the correct calendar day
-// regardless of the server's UTC offset (±12 h worst case).
+// Plain date strings (YYYY-MM-DD): interpret as local midnight (start of release day)
 const parseDateSafe = (str) => {
   if (!str) return new Date(str);
   // If already has a time component (contains 'T' or a space), use as-is
   if (str.includes('T') || str.includes(' ')) return new Date(str);
-  // Plain date: interpret as local noon to avoid UTC midnight boundary issues
   const [year, month, day] = str.split('-').map(Number);
-  return new Date(year, month - 1, day, 12, 0, 0);
+  return new Date(year, month - 1, day, 0, 0, 0);
 };
 
 /**
@@ -139,17 +134,15 @@ const scheduleEpisode = (retryCount, diffHours, config, currentDate, isDownloade
   let state;
   let nextMs = currentDate.getTime();
 
-  // Start searching 36 hours BEFORE the official TMDB air date.
-  // This covers episodes that drop up to 1.5 days early (e.g. AMC+, Max Sunday drops for a Monday air date)
-  // without reaching back unnecessarily far (Saturday for a Monday air date).
-  const preReleaseHours = -36; 
+  // Never search before the official air date to avoid downloading fake/malicious releases.
+  const preReleaseHours = 0; 
 
   if (diffHours < preReleaseHours) {
-    // Not aired yet and not in early-drop window
+    // Not aired yet
     state = 'PENDING';
     nextMs += Math.abs(diffHours - preReleaseHours) * 3600000;
   } else if (diffHours >= preReleaseHours && diffHours <= 72) {
-    // RELEASE WINDOW (1 day early -> 3 days after)
+    // RELEASE WINDOW (air date -> 3 days after)
     state = isDownloaded ? 'UPGRADING' : 'RELEASE_WINDOW';
     const mins = Math.min(30 * Math.pow(config.backoffMultiplier, retryCount), isDownloaded ? 720 : 240);
     nextMs += mins * 60000;

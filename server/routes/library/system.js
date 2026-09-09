@@ -7,7 +7,7 @@ const libraryService = require('../../services/libraryService');
 const scannerService = require('../../services/scanner');
 const downloadClientService = require('../../services/downloadClientService');
 const { deleteFolderRecursive } = require('../../utils/fileUtils');
-const { localizeAirDate, getAiredCutoffSql } = require('../../utils/airDate');
+const { getAiredCutoffSql } = require('../../utils/airDate');
 const { parseResolution } = require('../../utils/mediaParsing');
 const cleanupWorker = require('../../services/cleanupWorker');
 
@@ -505,12 +505,9 @@ router.post('/scan/retry-paths', async (req, res, next) => {
 
 router.get('/calendar', async (req, res, next) => {
   try {
-    // Compute the timezone shift once (0 or +1 day) and apply it in SQL
-    // so we don't need per-row JS Intl calls on library items.
-    const { getAirDateShiftDays } = require('../../utils/airDate');
-    const shift = getAirDateShiftDays();
-    const shiftSql = shift === 0 ? 'e.air_date' : `date(e.air_date, '+${shift} day')`;
-    const shiftSqlM = shift === 0 ? 'm.release_date' : `date(m.release_date, '+${shift} day')`;
+    // Use canonical air_date and release_date aligned with official TMDB schedules
+    const shiftSql = 'e.air_date';
+    const shiftSqlM = 'm.release_date';
 
     const upcoming = db.prepare(`
       SELECT 
