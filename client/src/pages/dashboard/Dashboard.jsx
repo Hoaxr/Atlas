@@ -622,6 +622,40 @@ export default function Dashboard() {
     return () => observer.disconnect();
   }, [paginatedItems.length, displayItems.length]);
 
+  // Proactive background prefetch for upcoming posters
+  useEffect(() => {
+    if (!displayItems || displayItems.length === 0) return;
+
+    let cancelled = false;
+    // Prefetch next ~100 items into the browser cache
+    const urls = displayItems
+      .slice(0, 100)
+      .map(item => posterUrl(viewMode, item.tmdb_id, item.poster_path))
+      .filter(Boolean);
+
+    const scheduleChunk = (startIdx) => {
+      if (cancelled || startIdx >= urls.length) return;
+      const chunk = urls.slice(startIdx, startIdx + 6);
+      chunk.forEach(url => {
+        if (typeof window !== 'undefined') {
+          const img = new window.Image();
+          img.src = url;
+        }
+      });
+      if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+        window.requestIdleCallback(() => scheduleChunk(startIdx + 6), { timeout: 800 });
+      } else {
+        setTimeout(() => scheduleChunk(startIdx + 6), 120);
+      }
+    };
+
+    const timer = setTimeout(() => scheduleChunk(0), 150);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [displayItems, viewMode]);
+
   const gridComponents = useMemo(() => ({
     List: forwardRef(({ style, children, ...props }, ref) => (
       <div
@@ -1010,7 +1044,7 @@ export default function Dashboard() {
             scrollElement ? (
               <VirtuosoGrid
                 customScrollParent={scrollElement}
-                overscan={3000}
+                overscan={4000}
                 initialItemCount={Math.min(40, displayItems.length)}
                 data={displayItems}
                 components={gridComponents}
@@ -1127,7 +1161,6 @@ export default function Dashboard() {
                       alt={item.title}
                       width="500"
                       height="750"
-                      loading="lazy"
                       decoding="async"
                       onError={(e) => {
                         if (item.poster_path && !e.currentTarget.dataset.fallback) {
