@@ -622,6 +622,27 @@ export default function Dashboard() {
     return () => observer.disconnect();
   }, [paginatedItems.length, displayItems.length]);
 
+  const gridComponents = useMemo(() => ({
+    List: forwardRef(({ style, children, ...props }, ref) => (
+      <div
+        ref={ref}
+        {...props}
+        style={{
+          ...style,
+          '--poster-size': `${posterSize}px`,
+        }}
+        className="dashboard-poster-grid gap-2 sm:gap-4 relative"
+      >
+        {children}
+      </div>
+    )),
+    Item: ({ children, ...props }) => (
+      <div {...props} className="w-full h-full flex flex-col min-w-0">
+        {children}
+      </div>
+    )
+  }), [posterSize]);
+
   return (
     <div className="space-y-3">
       <div ref={headerRef} className="flex items-start sm:items-center justify-between gap-3">
@@ -992,44 +1013,29 @@ export default function Dashboard() {
                 overscan={3000}
                 initialItemCount={Math.min(40, displayItems.length)}
                 data={displayItems}
-                components={{
-                List: forwardRef(({ style, children, ...props }, ref) => (
-                  <div
-                    ref={ref}
-                    {...props}
-                    style={{
-                      ...style,
-                      '--poster-size': `${posterSize}px`,
-                    }}
-                    className="dashboard-poster-grid gap-2 sm:gap-4 relative"
-                  >
-                    {children}
-                  </div>
-                )),
-                Item: ({ children, ...props }) => <div {...props} className="flex">{children}</div>
-              }}
-              itemContent={(index, item) => {
-                if (!item) return <div key={`empty-${index}`} />;
-                const isCompact = posterSize <= 150;
-                return (
-                <div 
-                  key={item.id}
-                  role="button"
-                  tabIndex={0}
-                  aria-label={`View details for ${item.title}`}
-                  onClick={() => {
-                    if (viewMode === 'shows') navigate(`/shows/${item.id}`);
-                    else navigate(`/movies/${item.id}`);
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault();
+                components={gridComponents}
+                itemContent={(index, item) => {
+                  if (!item) return <div key={`empty-${index}`} />;
+                  const isCompact = posterSize <= 150;
+                  return (
+                  <div 
+                    key={item.id}
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`View details for ${item.title}`}
+                    onClick={() => {
                       if (viewMode === 'shows') navigate(`/shows/${item.id}`);
                       else navigate(`/movies/${item.id}`);
-                    }
-                  }}
-                  className={`cursor-pointer glass-panel interactive-glow-card rounded-xl overflow-hidden group hover:scale-[1.02] transition-all duration-300 relative flex flex-col focus:outline-none focus:ring-2 focus:ring-cyan-500/50 hover:shadow-[0_0_30px_-5px_rgba(6,182,212,0.25)] hover:border-cyan-500/40`}
-                >
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        if (viewMode === 'shows') navigate(`/shows/${item.id}`);
+                        else navigate(`/movies/${item.id}`);
+                      }
+                    }}
+                    className={`w-full h-full min-w-0 cursor-pointer glass-panel interactive-glow-card rounded-xl overflow-hidden group hover:scale-[1.02] transition-all duration-300 relative flex flex-col focus:outline-none focus:ring-2 focus:ring-cyan-500/50 hover:shadow-[0_0_30px_-5px_rgba(6,182,212,0.25)] hover:border-cyan-500/40`}
+                  >
                   <div className={`absolute ${isCompact ? 'top-1 left-1' : 'top-1.5 sm:top-2 left-1.5 sm:left-2'} z-20`}>
                     <button 
                       onClick={async (e) => {
@@ -1093,7 +1099,16 @@ export default function Dashboard() {
                     )}
                   </div>
 
-                  <div className="aspect-[2/3] relative bg-slate-800 flex-shrink-0">
+                  <div className="w-full aspect-[2/3] relative bg-slate-800 flex-shrink-0 overflow-hidden">
+                    {/* Placeholder backdrop icon */}
+                    <div className="absolute inset-0 flex items-center justify-center text-slate-700/60 pointer-events-none">
+                      {viewMode === 'shows' ? (
+                        <Tv className={`${isCompact ? 'w-8 h-8' : 'w-10 h-10'} stroke-[1.5]`} />
+                      ) : (
+                        <Film className={`${isCompact ? 'w-8 h-8' : 'w-10 h-10'} stroke-[1.5]`} />
+                      )}
+                    </div>
+
                     {item.watched ? (
                       <div className={`absolute ${isCompact ? 'bottom-1.5 left-1.5 px-1.5 py-0.5' : 'bottom-2 left-2 px-2 py-1'} z-20 flex items-center gap-1 bg-slate-950/80 backdrop-blur rounded-md border border-emerald-500/30 shadow-lg md:group-hover:opacity-0 transition-opacity duration-200`}>
                         <Eye className={`${isCompact ? 'w-2.5 h-2.5' : 'w-3 h-3'} text-emerald-400`} />
@@ -1112,13 +1127,15 @@ export default function Dashboard() {
                       alt={item.title}
                       width="500"
                       height="750"
+                      loading="lazy"
+                      decoding="async"
                       onError={(e) => {
                         if (item.poster_path && !e.currentTarget.dataset.fallback) {
                           e.currentTarget.dataset.fallback = 'true';
                           e.currentTarget.src = `https://image.tmdb.org/t/p/w500${item.poster_path}`;
                         }
                       }}
-                      className="w-full h-full object-cover relative"
+                      className="w-full h-full object-cover relative z-10"
                     />
                     <div className="absolute inset-0 bg-slate-950/80 opacity-0 md:group-hover:opacity-100 transition-opacity duration-300 hidden md:flex items-center justify-center p-2 sm:p-3 z-10 pointer-events-none">
                       {/* Center Floating Action Dock */}
@@ -1187,7 +1204,7 @@ export default function Dashboard() {
                     </div>
                   </div>
 
-                  <div className={`${isCompact ? 'p-1.5 sm:p-2.5' : 'p-2 sm:p-3 md:p-4'} relative z-20 bg-gradient-to-b from-slate-800/95 to-slate-900/95 border-t border-white/10 group-hover:border-cyan-500/30 transition-colors`}>
+                  <div className={`${isCompact ? 'p-1.5 sm:p-2.5' : 'p-2 sm:p-3 md:p-4'} w-full flex-1 flex flex-col justify-between relative z-20 bg-gradient-to-b from-slate-800/95 to-slate-900/95 border-t border-white/10 group-hover:border-cyan-500/30 transition-colors`}>
                     <div className="flex items-center justify-between gap-1">
                       <h3 className={`font-semibold ${isCompact ? 'text-[11px] sm:text-xs leading-snug' : 'text-xs sm:text-sm'} text-slate-100 group-hover:text-cyan-400 transition-colors truncate tracking-wide flex-1`} title={item.title}>
                         {item.title}
