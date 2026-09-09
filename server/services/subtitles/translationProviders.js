@@ -127,7 +127,7 @@ class GeminiProvider extends BaseTranslationProvider {
   constructor(apiKey, modelName) {
     super('gemini');
     this.apiKey = apiKey || db.prepare("SELECT value FROM settings WHERE key = 'geminiApiKey'").get()?.value;
-    this.modelName = modelName || db.prepare("SELECT value FROM settings WHERE key = 'geminiModel'").get()?.value || 'gemini-1.5-flash';
+    this.modelName = modelName || db.prepare("SELECT value FROM settings WHERE key = 'geminiModel'").get()?.value || 'gemini-2.5-flash';
   }
 
   async translateBatch(cues, sourceLang, targetLang, options = {}) {
@@ -161,7 +161,14 @@ ${JSON.stringify(cuesPayload, null, 2)}
 
 Output ONLY valid JSON array (no markdown code fences if possible, or \`\`\`json):`;
 
-    const candidateModels = [...new Set([this.modelName, 'gemini-1.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash-8b'].filter(Boolean))];
+    const candidateModels = [...new Set([
+      this.modelName,
+      'gemini-2.5-flash',
+      'gemini-3.5-flash-lite',
+      'gemini-3.6-flash',
+      'gemini-1.5-flash',
+      'gemini-2.0-flash'
+    ].filter(Boolean))];
     let rawOutput = '';
     let lastErr = null;
 

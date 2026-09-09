@@ -30,7 +30,7 @@ const translateChunked = async (translateFn, srtContent, targetLang, apiKey) => 
 };
 
 const translateWithGemini = async (text, targetLang, apiKey) => {
-  const modelName = db.prepare("SELECT value FROM settings WHERE key = 'geminiModel'").get()?.value || 'gemini-1.5-flash';
+  const modelName = db.prepare("SELECT value FROM settings WHERE key = 'geminiModel'").get()?.value || 'gemini-2.5-flash';
   const genAI = new GoogleGenerativeAI(apiKey);
   const model = genAI.getGenerativeModel({ model: modelName });
   const prompt = `You are a professional subtitle translator. Translate the following SRT file from English to ${targetLang}. 

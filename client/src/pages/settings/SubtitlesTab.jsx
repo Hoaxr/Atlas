@@ -92,17 +92,24 @@ export default function SubtitlesTab({ settings, setSettings, keyStatuses, handl
               <div className="flex items-center justify-between">
                 <label className="block text-sm font-medium text-slate-300">{p.id.charAt(0).toUpperCase() + p.id.slice(1)} API Key</label>
                 {keyStatuses[p.id]?.status && (
-                  <span className={`flex items-center gap-1 text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${
-                    keyStatuses[p.id]?.status === 'connected'
-                      ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-                      : 'bg-red-500/20 text-red-400 border border-red-500/30'
-                  }`}>
+                  <span
+                    title={keyStatuses[p.id]?.message || ''}
+                    className={`flex items-center gap-1 text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${
+                      keyStatuses[p.id]?.status === 'connected'
+                        ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                        : 'bg-red-500/20 text-red-400 border border-red-500/30'
+                    }`}>
                     <span className={`w-1.5 h-1.5 rounded-full ${keyStatuses[p.id]?.status === 'connected' ? 'bg-emerald-400' : 'bg-red-400'}`} />
                     {keyStatuses[p.id]?.status === 'connected' ? 'Connected' : 'Error'}
                   </span>
                 )}
               </div>
               <PasswordInput placeholder={`${p.id.charAt(0).toUpperCase() + p.id.slice(1)} API Key`} className="glass-input w-full mt-2" value={p.key} onChange={(e) => p.setter(e.target.value)} />
+              {keyStatuses[p.id]?.status === 'error' && keyStatuses[p.id]?.message && (
+                <p className="text-xs text-red-400 mt-1.5 break-words">
+                  {keyStatuses[p.id].message}
+                </p>
+              )}
               <p className="text-xs text-slate-500 mt-2">Get key from: <a href={{
                 gemini: 'https://aistudio.google.com/apikey',
                 deepseek: 'https://platform.deepseek.com/api_keys',
