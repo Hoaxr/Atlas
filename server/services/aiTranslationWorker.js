@@ -12,23 +12,6 @@ const { LANG_CODE } = require('../routes/library/helpers');
 const { decodeSubtitleBuffer } = require('./subtitles/parser');
 const { syncMovieSubtitles, syncEpisodeSubtitles } = require('./subtitles/sync');
 
-// LLM output is token-limited — long SRTs must be translated in small numbered-block
-// chunks and concatenated, otherwise the response gets truncated mid-file.
-const LLM_BLOCK_CHUNK_SIZE = 40;
-
-const splitSrtBlocks = (text) =>
-  text.split(/\r?\n\r?\n/).map(b => b.trim()).filter(Boolean);
-
-// Runs an LLM translate function once per chunk of subtitle blocks, preserving block order.
-const translateChunked = async (translateFn, srtContent, targetLang, apiKey) => {
-  const blocks = splitSrtBlocks(srtContent);
-  const results = [];
-  for (let i = 0; i < blocks.length; i += LLM_BLOCK_CHUNK_SIZE) {
-    const chunk = blocks.slice(i, i + LLM_BLOCK_CHUNK_SIZE).join('\n\n');
-    results.push((await translateFn(chunk, targetLang, apiKey)).trim());
-  }
-  return results.join('\n\n');
-};
 
 const translateWithGemini = async (text, targetLang, apiKey) => {
   let modelName = db.prepare("SELECT value FROM settings WHERE key = 'geminiModel'").get()?.value || 'gemini-1.5-flash';

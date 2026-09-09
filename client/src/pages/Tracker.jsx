@@ -6,7 +6,7 @@ import api from '../lib/api';
 import useWebSocket from '../lib/useWebSocket';
 import { 
   Clock, Film, Tv, Play, ChevronRight, ChevronLeft, Trash2, Undo2, 
-  Calendar, CheckCircle2, TrendingUp, Zap, Loader2
+  Calendar, CheckCircle2, TrendingUp, Zap
 } from 'lucide-react';
 import { tmdbImgUrl } from '../lib/posterUrl';
 import StickyBar from '../components/shared/StickyBar';

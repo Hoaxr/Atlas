@@ -12,7 +12,7 @@
 const axios = require('axios');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const db = require('../../config/database');
-const { LANG_TO_CODE, CODE_TO_LANG } = require('../../utils/constants');
+const { LANG_TO_CODE } = require('../../utils/constants');
 const { protectTags, restoreTags } = require('./parser');
 
 /**
@@ -23,11 +23,11 @@ class BaseTranslationProvider {
     this.name = name;
   }
 
-  async translateBatch(cues, sourceLang, targetLang, options = {}) {
+  async translateBatch(cues, sourceLang, targetLang, _options = {}) {
     throw new Error('translateBatch must be implemented by subclass');
   }
 
-  async detectLanguage(sampleText) {
+  async detectLanguage(_sampleText) {
     return 'en';
   }
 }
@@ -41,7 +41,7 @@ class GoogleTranslateProvider extends BaseTranslationProvider {
     super('googleTranslate');
   }
 
-  async translateBatch(cues, sourceLang, targetLang, options = {}) {
+  async translateBatch(cues, sourceLang, targetLang, _options = {}) {
     if (!cues || cues.length === 0) return [];
 
     const targetCode = LANG_TO_CODE[targetLang] || (typeof targetLang === 'string' && targetLang.length === 2 ? targetLang.toLowerCase() : 'nl');
@@ -241,7 +241,7 @@ Output ONLY valid JSON array (no markdown code fences):`;
       return await this.fallbackGtx.translateBatch(cues, sourceLang, targetLang, options);
     }
     
-    let parsedArray = [];
+    let parsedArray;
     try {
       const cleaned = rawOutput.replace(/```json/gi, '').replace(/```/g, '').trim();
       parsedArray = JSON.parse(cleaned);
@@ -282,7 +282,7 @@ class DeepSeekProvider extends BaseTranslationProvider {
     this.modelName = modelName || 'deepseek-chat';
   }
 
-  async translateBatch(cues, sourceLang, targetLang, options = {}) {
+  async translateBatch(cues, sourceLang, targetLang, _options = {}) {
     if (!this.apiKey) throw new Error('DeepSeek API key is required. Please configure it in Settings.');
     if (!cues || cues.length === 0) return [];
 
@@ -356,7 +356,7 @@ class ClaudeProvider extends BaseTranslationProvider {
     this.modelName = modelName || db.prepare("SELECT value FROM settings WHERE key = 'claudeModel'").get()?.value || 'claude-3-haiku-20240307';
   }
 
-  async translateBatch(cues, sourceLang, targetLang, options = {}) {
+  async translateBatch(cues, sourceLang, targetLang, _options = {}) {
     if (!this.apiKey) throw new Error('Claude API key is required. Please configure it in Settings.');
     if (!cues || cues.length === 0) return [];
 

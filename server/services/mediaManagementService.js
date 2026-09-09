@@ -13,6 +13,7 @@ const { getSetting } = require('../utils/settings');
 const { isVideoFile, isSubtitleFile, findLargestVideoFile } = require('../utils/fileUtils');
 const { getMediaMetadata, parseAudioFromFileName } = require('../utils/videoUtils');
 const subtitleService = require('./subtitles');
+const { syncMovieSubtitles, syncEpisodeSubtitles, invalidateStats } = require('./subtitles/sync');
 
 
 const getNamingConfig = () => {
@@ -493,6 +494,10 @@ const runMediaManagement = async () => {
     // longer in the torrent client back to monitored (also fixes show status).
     await resetDownloadsNotInClient(torrentList);
 
+    if (importedAnything) {
+      invalidateStats();
+    }
+
   } catch (err) {
     console.error('[MediaManagement] Error during post-processing:', err.message);
   }
@@ -728,6 +733,17 @@ const importMovie = async (torrent, movie) => {
       console.error(`[MediaManagement] Failed to cache poster for movie ${movie.title}:`, metaErr.message);
     }
     
+    // Sync subtitles and invalidate stats
+    try {
+      await syncMovieSubtitles(movie.id, destFile);
+      invalidateStats();
+    } catch { /* ignore */ }
+
+    // Auto-download missing subtitles if enabled in settings
+    try {
+      subtitleService.downloadSubtitlesForMovie(movie).catch(() => {});
+    } catch { /* ignore */ }
+
     return true;
 
   } catch (err) {
@@ -993,6 +1009,21 @@ const importEpisode = async (torrent, episode) => {
       console.error(`[MediaManagement] Failed to calculate folder size for episode:`, metaErr.message);
     }
     
+    // Sync subtitles and invalidate stats
+    try {
+      await syncEpisodeSubtitles(episode.id, destFile);
+      invalidateStats();
+    } catch { /* ignore */ }
+
+    // Auto-download missing subtitles if enabled in settings
+    try {
+      const fullEp = db.prepare('SELECT * FROM episodes WHERE id = ?').get(episode.id);
+      const show = db.prepare('SELECT * FROM shows WHERE id = ?').get(episode.show_id);
+      if (fullEp && show) {
+        subtitleService.downloadSubtitlesForEpisode(fullEp, show).catch(() => {});
+      }
+    } catch { /* ignore */ }
+
     return true;
 
   } catch (err) {

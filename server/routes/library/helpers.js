@@ -1,4 +1,3 @@
-const db = require('../../config/database');
 const { isWatchedSyncEnabled } = require('../../utils/settings');
 const { LANG_TO_CODE } = require('../../utils/constants');
 // aiTranslationWorker is lazy-required inside translateSrt to break the
@@ -24,7 +23,7 @@ const { VALID_LANGUAGES } = require('../../utils/languages');
 const extractLang = (filename, pathLib) => {
   let name = pathLib.basename(filename, pathLib.extname(filename));
   name = name.replace(/[._-](?:forced|sdh|hi|cc|\d+)$/i, '');
-  let match = name.match(/[._-]([a-z]{2,3})$/i);
+  const match = name.match(/[._-]([a-z]{2,3})$/i);
   if (match) {
     const code = match[1].toLowerCase();
     const langMap = {

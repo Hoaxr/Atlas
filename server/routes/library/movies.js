@@ -450,7 +450,7 @@ router.post('/', async (req, res, next) => {
   }
 });
 
-router.post('/:id/translate-subs', async (req, res, next) => {
+router.post('/:id/translate-subs', async (req, res, _next) => {
   try {
     const targetLangRow = db.prepare("SELECT value FROM settings WHERE key = 'targetLang'").get();
     const targetLang = req.body.targetLang || (targetLangRow && targetLangRow.value ? targetLangRow.value : 'Dutch');
@@ -489,7 +489,7 @@ router.post('/:id/translate-subs', async (req, res, next) => {
   }
 });
 
-router.post('/:id/download-subs', async (req, res, next) => {
+router.post('/:id/download-subs', async (req, res, _next) => {
   try {
     const { langCode, url, fileId, subId, provider } = req.body;
 

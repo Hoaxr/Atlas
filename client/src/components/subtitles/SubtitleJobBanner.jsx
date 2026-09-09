@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Sparkles, X, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
+import { Sparkles, X } from 'lucide-react';
 import api from '../../lib/api';
 
 export default function SubtitleJobBanner() {

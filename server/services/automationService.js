@@ -69,6 +69,7 @@ const runSearchCycle = async () => {
       WHERE (m.status IN ('monitored', 'missing') OR (m.status = 'downloaded' AND qp.upgrade_allowed = 1))
         AND m.monitored = 1
         AND (m.next_search_at IS NULL OR m.next_search_at <= datetime('now'))
+        AND (m.release_date IS NOT NULL AND date(m.release_date) <= date('now', 'localtime'))
     `).all();
     
     // Sort by priority, highest first
@@ -138,10 +139,12 @@ const runSearchCycle = async () => {
           await downloadClientService.addTorrent(bestRelease.link);
           db.prepare("UPDATE movies SET status = 'downloading', scene_name = COALESCE(NULLIF(scene_name, ''), ?), search_state = 'COMPLETED', retry_count = 0, last_success_at = datetime('now'), next_search_at = NULL WHERE id = ?").run(bestRelease.title, movie.id);
           eventBus.info('Download started', { title: movie.title, type: 'movie', release: bestRelease.title });
+          return;
         } else {
+          // No results found: calculate next backoff search time
           movie.retry_count = (movie.retry_count || 0) + 1;
-          const next = calculateNextSearchAt(movie, 'movie', { isDownloaded: (movie.status === 'downloaded' || hasFile), isCutoffMet });
-          db.prepare("UPDATE movies SET last_searched_at = datetime('now'), search_state = ?, next_search_at = ?, retry_count = ?, last_failure_at = datetime('now') WHERE id = ?")
+          const next = calculateNextSearchAt(movie, 'movie', { isDownloaded: (movie.status === 'downloaded' || hasFile), isCutoffMet: false });
+          db.prepare("UPDATE movies SET last_searched_at = datetime('now'), search_state = ?, next_search_at = ?, retry_count = ? WHERE id = ?")
             .run(next.state, next.nextSearch ? next.nextSearch.toISOString() : null, movie.retry_count, movie.id);
         }
       } catch (err) {
@@ -166,7 +169,7 @@ const runSearchCycle = async () => {
         AND e.monitored = 1
         AND s.monitored = 1
         AND (e.next_search_at IS NULL OR e.next_search_at <= datetime('now'))
-        AND (e.air_date IS NULL OR date(e.air_date) <= date('now', 'localtime'))
+        AND (e.air_date IS NOT NULL AND date(e.air_date) <= date('now', 'localtime'))
     `).all();
 
     monitoredEpisodes.forEach(e => {

@@ -31,8 +31,8 @@ function decodeSubtitleBuffer(input, options = {}) {
       buf = Buffer.from(input, 'binary');
     } else {
       let s = input.replace(/^\uFEFF/, '').replace(/^\uFFFE/, '');
-      if (s.includes('\u0000')) {
-        s = s.replace(/\u0000/g, '');
+      if (s.includes('\0')) {
+        s = s.replaceAll('\0', '');
       }
       return s.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
     }
@@ -100,7 +100,7 @@ function decodeSubtitleBuffer(input, options = {}) {
     }
   }
 
-  let text = '';
+  let text;
 
   // 3. UTF-16 LE BOM: 0xFF 0xFE
   if (buf.length >= 2 && buf[0] === 0xFF && buf[1] === 0xFE) {
@@ -138,7 +138,7 @@ function decodeSubtitleBuffer(input, options = {}) {
   }
 
   // Strip any remaining BOM or null bytes
-  text = text.replace(/^\uFEFF/, '').replace(/^\uFFFE/, '').replace(/\u0000/g, '');
+  text = text.replace(/^\uFEFF/, '').replace(/^\uFFFE/, '').replaceAll('\0', '');
   return text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
 }
 

@@ -1,12 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
 import { 
-  Languages, FileText, Download, Trash2, Edit3, Sparkles, Plus, 
-  Search, RefreshCw, X, Loader2, CheckCircle2, AlertCircle 
+  Languages, Download, Trash2, Edit3, Sparkles, 
+  Search, X, Loader2 
 } from 'lucide-react';
 import ModalShell from '../shared/ModalShell';
 import api from '../../lib/api';
 import { customAlert } from '../../utils/alerts';
-import { formatSize, formatRelativeTime, LANG_LABEL, LANG_NAME } from '../../lib/format';
+import { formatSize, LANG_LABEL, LANG_NAME } from '../../lib/format';
 import TranslateSubtitlesModal from './TranslateSubtitlesModal';
 import SubtitleEditorModal from './SubtitleEditorModal';
 

@@ -1,9 +1,8 @@
 import { useState, useEffect } from 'react';
-import { Languages, CheckCircle2, AlertTriangle, Loader2, Sparkles, X, CheckSquare, Square, RefreshCw } from 'lucide-react';
+import { Languages, CheckCircle2, AlertTriangle, Loader2, Sparkles, X, CheckSquare, Square } from 'lucide-react';
 import ModalShell from '../shared/ModalShell';
 import api from '../../lib/api';
 import { customAlert } from '../../utils/alerts';
-import { LANG_NAME, LANG_LABEL } from '../../lib/format';
 
 const AVAILABLE_LANGUAGES = [
   { name: 'Dutch', code: 'nl' },
@@ -29,7 +28,7 @@ export default function TranslateSubtitlesModal({
   const [retranslate, setRetranslate] = useState(false);
   const [provider, setProvider] = useState('gemini');
   const [loading, setLoading] = useState(false);
-  const [activeJobs, setActiveJobs] = useState([]);
+  const [_activeJobs, setActiveJobs] = useState([]);
 
   // Find English track as default source
   useEffect(() => {

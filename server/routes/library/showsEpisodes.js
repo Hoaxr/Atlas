@@ -385,7 +385,7 @@ router.get('/shows/:id/episodes', async (req, res, next) => {
   }
 });
 
-router.post('/episodes/:id/translate-subs', async (req, res, next) => {
+router.post('/episodes/:id/translate-subs', async (req, res, _next) => {
   try {
     const targetLangRow = db.prepare("SELECT value FROM settings WHERE key = 'targetLang'").get();
     const targetLang = req.body.targetLang || (targetLangRow && targetLangRow.value ? targetLangRow.value : 'Dutch');
@@ -429,7 +429,7 @@ router.post('/episodes/:id/translate-subs', async (req, res, next) => {
   }
 });
 
-router.post('/episodes/:id/download-subs', async (req, res, next) => {
+router.post('/episodes/:id/download-subs', async (req, res, _next) => {
   try {
     const { langCode, url, fileId, provider } = req.body;
 

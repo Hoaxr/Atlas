@@ -17,7 +17,7 @@ const path = require('path');
 const db = require('../../config/database');
 const { parseSubtitles, serializeSubtitles, readSubtitleFile } = require('../../services/subtitles/parser');
 const translationQueue = require('../../services/subtitles/translationQueue');
-const { LANG_TO_CODE, CODE_TO_LANG } = require('../../utils/constants');
+const { CODE_TO_LANG } = require('../../utils/constants');
 const { extractLang, getSubtitlesInDir } = require('./helpers');
 
 /**
@@ -127,7 +127,7 @@ const getSafeFilePath = (dir, filename) => {
  * POST /api/library/subtitles/translate
  * Start translation jobs for 1 or more target languages
  */
-router.post('/translate', async (req, res, next) => {
+router.post('/translate', async (req, res, _next) => {
   try {
     const { mediaType, mediaId, targetLangs, sourceLang, sourceFile, provider, retranslate, overrides } = req.body;
 

@@ -1,9 +1,8 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Search, Save, Download, Trash2, Plus, X, Loader2, Clock, Check, FileText } from 'lucide-react';
+import { Search, Save, Download, Trash2, Plus, X, Loader2, Clock, FileText } from 'lucide-react';
 import ModalShell from '../shared/ModalShell';
 import api from '../../lib/api';
 import { customAlert } from '../../utils/alerts';
-import { formatSize } from '../../lib/format';
 
 export default function SubtitleEditorModal({
   open,
@@ -17,7 +16,7 @@ export default function SubtitleEditorModal({
   const [saving, setSaving] = useState(false);
   const [cues, setCues] = useState([]);
   const [format, setFormat] = useState('srt');
-  const [header, setHeader] = useState('');
+  const [_header, setHeader] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCueIndex, setSelectedCueIndex] = useState(0);
 
@@ -197,7 +196,7 @@ export default function SubtitleEditorModal({
                   No cues match your search query.
                 </div>
               ) : (
-                filteredCues.map((cue, idx) => {
+                filteredCues.map((cue) => {
                   const originalIndex = cues.findIndex(c => c === cue);
                   const isSelected = selectedCueIndex === originalIndex;
 

@@ -260,7 +260,7 @@ class SubtitleTranslationQueue {
 
       // Read source file with auto-encoding detection (UTF-8, UTF-16 LE/BE, Latin1)
       const rawContent = await readSubtitleFile(job.sourceFile);
-      const { cues, format, header } = parseSubtitles(rawContent);
+      const { cues } = parseSubtitles(rawContent);
 
       if (cues.length === 0) {
         throw new Error(`Source subtitle file contains no valid dialogue cues (File size: ${rawContent.length} chars)`);

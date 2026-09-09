@@ -2,6 +2,18 @@ const axios = require('axios');
 
 const LANG_MAP = { en: 'EN', nl: 'NL', fr: 'FR', de: 'DE', es: 'ES', it: 'IT', pt: 'PT' };
 
+const scoreRelease = (relName, sceneName) => {
+  if (!relName || !sceneName) return 0;
+  const norm = s => s.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  const rWords = new Set(norm(relName).split(/\s+/));
+  const sWords = new Set(norm(sceneName).split(/\s+/));
+  let count = 0;
+  for (const w of rWords) {
+    if (sWords.has(w)) count++;
+  }
+  return count;
+};
+
 const downloadForMovie = async (apiKey, movie, langCode) => {
   const params = {
     api_key: apiKey,
@@ -12,11 +24,31 @@ const downloadForMovie = async (apiKey, movie, langCode) => {
   };
   const searchRes = await axios.get('https://api.subdl.com/api/v1/subtitles', { params, timeout: 30000 });
   if (!searchRes.data.status || !searchRes.data.subtitles || searchRes.data.subtitles.length === 0) return null;
-  const match = searchRes.data.subtitles.find(s => (s.language || '').toLowerCase() === langCode);
-  if (!match) return null;
+  const matching = searchRes.data.subtitles.filter(s => (s.language || '').toLowerCase() === langCode);
+  if (matching.length === 0) return null;
 
-  const url = match.unpack_files?.[0]?.url || match.url;
+  const sorted = [...matching].sort((a, b) => {
+    const scoreA = scoreRelease(a.release_name || a.name, movie.scene_name);
+    const scoreB = scoreRelease(b.release_name || b.name, movie.scene_name);
+    if (scoreA !== scoreB) return scoreB - scoreA;
+    return (b.downloads || 0) - (a.downloads || 0);
+  });
+
+  let url = null;
+  for (const match of sorted) {
+    if (match.unpack_files && match.unpack_files.length > 0) {
+      const regularFile = match.unpack_files.find(f => !/forced|commentary/i.test(f.name || '')) || match.unpack_files[0];
+      if (regularFile?.url) {
+        url = regularFile.url;
+        break;
+      }
+    } else if (match.url) {
+      url = match.url;
+      break;
+    }
+  }
   if (!url) return null;
+
   const downloadUrl = `https://dl.subdl.com${url.startsWith('/') ? url : '/' + url}`;
   const srtRes = await axios.get(downloadUrl, { responseType: 'arraybuffer', timeout: 30000 });
   return Buffer.from(srtRes.data);
@@ -47,9 +79,16 @@ const downloadForEpisode = async (apiKey, show, episode, langCode) => {
     return true;
   });
 
+  const sorted = [...matching].sort((a, b) => {
+    const scoreA = scoreRelease(a.release_name || a.name, episode.scene_name);
+    const scoreB = scoreRelease(b.release_name || b.name, episode.scene_name);
+    if (scoreA !== scoreB) return scoreB - scoreA;
+    return (b.downloads || 0) - (a.downloads || 0);
+  });
+
   let downloadFileUrl = null;
 
-  for (const sub of matching) {
+  for (const sub of sorted) {
     if (sub.unpack_files && sub.unpack_files.length > 0) {
       const epFile = sub.unpack_files.find(f => Number(f.episode) === targetEp)
         || sub.unpack_files.find(f => {
