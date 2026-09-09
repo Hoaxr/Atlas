@@ -21,7 +21,7 @@ const AdmZip = (() => { try { return require('adm-zip'); } catch { return null; 
  * @param {Buffer|string} input 
  * @returns {string}
  */
-function decodeSubtitleBuffer(input) {
+function decodeSubtitleBuffer(input, options = {}) {
   if (!input) return '';
 
   let buf = input;
@@ -44,11 +44,46 @@ function decodeSubtitleBuffer(input) {
   if (buf.length >= 4 && buf[0] === 0x50 && buf[1] === 0x4B && AdmZip) {
     try {
       const zip = new AdmZip(buf);
-      const entries = zip.getEntries();
-      const subEntry = entries.find(e => !e.isDirectory && /\.(srt|vtt|ass|ssa|sub|txt)$/i.test(e.entryName)) || entries.find(e => !e.isDirectory);
+      const entries = zip.getEntries().filter(e => !e.isDirectory);
+      const subEntries = entries.filter(e => /\.(srt|vtt|ass|ssa|sub|txt)$/i.test(e.entryName));
+      const candidates = subEntries.length > 0 ? subEntries : entries;
+
+      let subEntry = null;
+      const targetEp = options.episode ?? options.episodeNumber;
+      const targetSeason = options.season ?? options.seasonNumber;
+
+      if (targetEp !== undefined && targetEp !== null && candidates.length > 1) {
+        const epNum = Number(targetEp);
+        const sNum = targetSeason !== undefined && targetSeason !== null ? Number(targetSeason) : null;
+
+        // Try matching season + episode first: e.g. S01E02, 1x02, S1E2
+        if (sNum !== null) {
+          const sePatterns = [
+            new RegExp(`\\bs0?${sNum}[._\\s-]*e0?${epNum}\\b`, 'i'),
+            new RegExp(`\\b0?${sNum}x0?${epNum}\\b`, 'i')
+          ];
+          subEntry = candidates.find(e => sePatterns.some(p => p.test(e.entryName)));
+        }
+
+        // Next try matching episode number alone: e.g. E02, Episode 2, Ep 2, Part 2
+        if (!subEntry) {
+          const epPatterns = [
+            new RegExp(`\\be0?${epNum}\\b`, 'i'),
+            new RegExp(`\\bep(?:isode)?[._\\s-]*0?${epNum}\\b`, 'i'),
+            new RegExp(`\\bpart[._\\s-]*0?${epNum}\\b`, 'i'),
+            new RegExp(`[._ -]0?${epNum}[._ -]`, 'i')
+          ];
+          subEntry = candidates.find(e => epPatterns.some(p => p.test(e.entryName)));
+        }
+      }
+
+      if (!subEntry && candidates.length > 0) {
+        subEntry = candidates[0];
+      }
+
       if (subEntry) {
         const extractedBuf = subEntry.getData();
-        return decodeSubtitleBuffer(extractedBuf);
+        return decodeSubtitleBuffer(extractedBuf, options);
       }
     } catch (err) {
       console.error('[SubtitleParser] Failed to unpack zip archive:', err.message);
@@ -59,7 +94,7 @@ function decodeSubtitleBuffer(input) {
   if (buf.length >= 2 && buf[0] === 0x1F && buf[1] === 0x8B) {
     try {
       const gunzipped = zlib.gunzipSync(buf);
-      return decodeSubtitleBuffer(gunzipped);
+      return decodeSubtitleBuffer(gunzipped, options);
     } catch (err) {
       console.error('[SubtitleParser] Failed to decompress gzip:', err.message);
     }

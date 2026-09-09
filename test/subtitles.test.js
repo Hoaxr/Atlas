@@ -81,11 +81,16 @@ console.log('✓ ASS subtitle parsing passed');
 console.log('Test 6: ZIP Archive Subtitle Decoding');
 const AdmZip = require('../server/node_modules/adm-zip');
 const zip = new AdmZip();
-zip.addFile('Dark Matter - S01E06.en.srt', Buffer.from('1\r\n00:00:01,000 --> 00:00:04,000\r\nHello from inside ZIP!\r\n', 'utf8'));
-const parsedZip = parseSubtitles(zip.toBuffer());
-assert.strictEqual(parsedZip.cues.length, 1);
-assert.strictEqual(parsedZip.cues[0].text, 'Hello from inside ZIP!');
-console.log('✓ ZIP subtitle buffer extraction passed');
+zip.addFile('The.Gentlemen.S01E01.nl.srt', Buffer.from('1\r\n00:00:01,000 --> 00:00:04,000\r\nEpisode 1 dialog\r\n', 'utf8'));
+zip.addFile('The.Gentlemen.S01E02.nl.srt', Buffer.from('1\r\n00:00:01,000 --> 00:00:04,000\r\nEpisode 2 dialog\r\n', 'utf8'));
+zip.addFile('The.Gentlemen.S01E03.nl.srt', Buffer.from('1\r\n00:00:01,000 --> 00:00:04,000\r\nEpisode 3 dialog\r\n', 'utf8'));
+const zipBuf = zip.toBuffer();
+
+const ep2Decoded = decodeSubtitleBuffer(zipBuf, { season: 1, episode: 2 });
+assert(ep2Decoded.includes('Episode 2 dialog'), 'Should extract Episode 2 from season pack');
+const ep3Decoded = decodeSubtitleBuffer(zipBuf, { season: 1, episode: 3 });
+assert(ep3Decoded.includes('Episode 3 dialog'), 'Should extract Episode 3 from season pack');
+console.log('✓ ZIP subtitle buffer & season pack extraction passed');
 
 // Test 7: Translation Provider Factory
 console.log('Test 7: Translation Provider Factory');

@@ -129,7 +129,7 @@ const downloadSubtitlesForMovie = async (movie, langCode) => {
         const row = db.prepare("SELECT value FROM settings WHERE key = 'targetLangs'").get();
         if (row) targetLangs = JSON.parse(row.value);
         const preferNative = db.prepare("SELECT value FROM settings WHERE key = 'preferNativeBeforeTranslate'").get();
-        const isPreferNative = preferNative && preferNative.value === 'true';
+        const isPreferNative = preferNative ? preferNative.value === 'true' : true;
 
         for (const lang of targetLangs) {
           const tCode = LANG_TO_CODE[lang];
@@ -173,7 +173,7 @@ const downloadSubtitlesForEpisode = async (episode, show, langCode) => {
 
   const srtContent = await tryDownloadNativeEpisode(show, episode, langCode);
   if (srtContent) {
-    const cleanContent = decodeSubtitleBuffer(srtContent);
+    const cleanContent = decodeSubtitleBuffer(srtContent, { season: episode.season_number, episode: episode.episode_number });
     fs.writeFileSync(subPath, cleanContent);
     const label = `${show?.title || episode.show_title || 'Episode'} S${String(episode.season_number).padStart(2, '0')}E${String(episode.episode_number).padStart(2, '0')}`;
     eventBus.success(`Subtitle downloaded: ${label} (${langCode.toUpperCase()})`, { title: label, language: langCode });
@@ -187,7 +187,7 @@ const downloadSubtitlesForEpisode = async (episode, show, langCode) => {
         const row = db.prepare("SELECT value FROM settings WHERE key = 'targetLangs'").get();
         if (row) targetLangs = JSON.parse(row.value);
         const preferNative = db.prepare("SELECT value FROM settings WHERE key = 'preferNativeBeforeTranslate'").get();
-        const isPreferNative = preferNative && preferNative.value === 'true';
+        const isPreferNative = preferNative ? preferNative.value === 'true' : true;
 
         for (const lang of targetLangs) {
           const tCode = LANG_TO_CODE[lang];
@@ -199,7 +199,7 @@ const downloadSubtitlesForEpisode = async (episode, show, langCode) => {
             try {
               const nativeContent = await tryDownloadNativeEpisode(show, episode, tCode);
               if (nativeContent) {
-                fs.writeFileSync(targetSubPath, decodeSubtitleBuffer(nativeContent));
+                fs.writeFileSync(targetSubPath, decodeSubtitleBuffer(nativeContent, { season: episode.season_number, episode: episode.episode_number }));
                 eventBus.success(`Subtitle downloaded: ${label} (${tCode.toUpperCase()})`, { title: label, language: tCode });
                 continue;
               }
@@ -227,7 +227,7 @@ const downloadSubtitlesForMovies = async () => {
   const autoTranslate = db.prepare("SELECT value FROM settings WHERE key = 'autoTranslate'").get();
   const isAutoTranslate = autoTranslate && autoTranslate.value === 'true';
   const preferNative = db.prepare("SELECT value FROM settings WHERE key = 'preferNativeBeforeTranslate'").get();
-  const isPreferNative = preferNative && preferNative.value === 'true';
+  const isPreferNative = preferNative ? preferNative.value === 'true' : true;
   let targetLangs = [];
   try {
     const row = db.prepare("SELECT value FROM settings WHERE key = 'targetLangs'").get();
@@ -244,42 +244,49 @@ const downloadSubtitlesForMovies = async () => {
       if (missingLangs.length === 0) return;
 
       console.log(`[SubtitleService] Checking subtitles for: ${movie.title}`);
+
+      // Pass 1: Try downloading native subtitles for all configured provider languages
       for (const langCode of providerLangs) {
         const subPath = path.join(parsedPath.dir, `${parsedPath.name}.${sanitizeLangCode(langCode)}.srt`);
         if (langFileExists(parsedPath.dir, parsedPath.name, langCode)) continue;
 
-        console.log(`[SubtitleService] Searching ${langCode} subtitle for: ${movie.title}`);
+        console.log(`[SubtitleService] Searching native ${langCode} subtitle for: ${movie.title}`);
         const srtContent = await tryDownloadNativeMovie(movie, langCode);
 
         if (srtContent) {
           const cleanContent = decodeSubtitleBuffer(srtContent);
           fs.writeFileSync(subPath, cleanContent);
-          console.log(`[SubtitleService] Saved ${langCode} subtitle to ${subPath}`);
+          console.log(`[SubtitleService] Saved native ${langCode} subtitle to ${subPath}`);
           eventBus.success('Subtitle downloaded', { title: movie.title, language: langCode });
+        }
+      }
 
-          if (langCode === 'en' && isAutoTranslate && targetLangs.length > 0) {
-            for (const lang of targetLangs) {
-              const tCode = LANG_TO_CODE[lang];
-              if (!tCode) continue;
-              const targetSubPath = path.join(parsedPath.dir, `${parsedPath.name}.${sanitizeLangCode(tCode)}.srt`);
-              if (langFileExists(parsedPath.dir, parsedPath.name, tCode)) continue;
+      // Pass 2: For any target languages still missing, try native first (if preferNative) then translate from English
+      if (isAutoTranslate && targetLangs.length > 0) {
+        const enPath = path.join(parsedPath.dir, `${parsedPath.name}.en.srt`);
+        if (fs.existsSync(enPath)) {
+          const enContent = fs.readFileSync(enPath, 'utf8');
+          for (const lang of targetLangs) {
+            const tCode = LANG_TO_CODE[lang];
+            if (!tCode) continue;
+            const targetSubPath = path.join(parsedPath.dir, `${parsedPath.name}.${sanitizeLangCode(tCode)}.srt`);
+            if (langFileExists(parsedPath.dir, parsedPath.name, tCode)) continue;
 
-              if (isPreferNative) {
-                const nativeContent = await tryDownloadNativeMovie(movie, tCode);
-                if (nativeContent) {
-                  fs.writeFileSync(targetSubPath, decodeSubtitleBuffer(nativeContent));
-                  eventBus.success('Subtitle downloaded', { title: movie.title, language: tCode });
-                  continue;
-                }
+            if (isPreferNative) {
+              const nativeContent = await tryDownloadNativeMovie(movie, tCode);
+              if (nativeContent) {
+                fs.writeFileSync(targetSubPath, decodeSubtitleBuffer(nativeContent));
+                eventBus.success('Subtitle downloaded', { title: movie.title, language: tCode });
+                continue;
               }
+            }
 
-              try {
-                const translated = await translateWithProvider(cleanContent, lang);
-                fs.writeFileSync(targetSubPath, translated);
-                eventBus.success('Subtitle translated', { title: movie.title, language: lang });
-              } catch (translateErr) {
-                console.error(`[SubtitleService] Auto-translate to ${lang} failed for ${movie.title}:`, translateErr.message);
-              }
+            try {
+              const translated = await translateWithProvider(enContent, lang);
+              fs.writeFileSync(targetSubPath, translated);
+              eventBus.success('Subtitle translated', { title: movie.title, language: lang });
+            } catch (translateErr) {
+              console.error(`[SubtitleService] Auto-translate to ${lang} failed for ${movie.title}:`, translateErr.message);
             }
           }
         }
@@ -295,7 +302,7 @@ const downloadSubtitlesForEpisodes = async () => {
   const autoTranslate = db.prepare("SELECT value FROM settings WHERE key = 'autoTranslate'").get();
   const isAutoTranslate = autoTranslate && autoTranslate.value === 'true';
   const preferNative = db.prepare("SELECT value FROM settings WHERE key = 'preferNativeBeforeTranslate'").get();
-  const isPreferNative = preferNative && preferNative.value === 'true';
+  const isPreferNative = preferNative ? preferNative.value === 'true' : true;
   let targetLangs = [];
   try {
     const row = db.prepare("SELECT value FROM settings WHERE key = 'targetLangs'").get();
@@ -318,43 +325,51 @@ const downloadSubtitlesForEpisodes = async () => {
       if (missingLangs.length === 0) return;
 
       console.log(`[SubtitleService] Checking subtitles for: ${label}`);
+
+      // Pass 1: Try downloading native subtitles for all configured provider languages
       for (const langCode of providerLangs) {
         const subPath = path.join(parsedPath.dir, `${parsedPath.name}.${sanitizeLangCode(langCode)}.srt`);
         if (langFileExists(parsedPath.dir, parsedPath.name, langCode)) continue;
 
-        console.log(`[SubtitleService] Searching ${langCode} subtitle for: ${label}`);
+        console.log(`[SubtitleService] Searching native ${langCode} subtitle for: ${label}`);
         const show = { tmdb_id: ep.tmdb_id, title: ep.show_title, year: ep.year };
         const srtContent = await tryDownloadNativeEpisode(show, ep, langCode);
 
         if (srtContent) {
-          const cleanContent = decodeSubtitleBuffer(srtContent);
+          const cleanContent = decodeSubtitleBuffer(srtContent, { season: ep.season_number, episode: ep.episode_number });
           fs.writeFileSync(subPath, cleanContent);
-          console.log(`[SubtitleService] Saved ${langCode} subtitle to ${subPath}`);
+          console.log(`[SubtitleService] Saved native ${langCode} subtitle to ${subPath}`);
           eventBus.success('Subtitle downloaded', { title: label, language: langCode });
+        }
+      }
 
-          if (langCode === 'en' && isAutoTranslate && targetLangs.length > 0) {
-            for (const lang of targetLangs) {
-              const tCode = LANG_TO_CODE[lang];
-              if (!tCode) continue;
-              const targetSubPath = path.join(parsedPath.dir, `${parsedPath.name}.${sanitizeLangCode(tCode)}.srt`);
-              if (langFileExists(parsedPath.dir, parsedPath.name, tCode)) continue;
+      // Pass 2: For any target languages still missing, try native first (if preferNative) then translate from English
+      if (isAutoTranslate && targetLangs.length > 0) {
+        const enPath = path.join(parsedPath.dir, `${parsedPath.name}.en.srt`);
+        if (fs.existsSync(enPath)) {
+          const enContent = fs.readFileSync(enPath, 'utf8');
+          for (const lang of targetLangs) {
+            const tCode = LANG_TO_CODE[lang];
+            if (!tCode) continue;
+            const targetSubPath = path.join(parsedPath.dir, `${parsedPath.name}.${sanitizeLangCode(tCode)}.srt`);
+            if (langFileExists(parsedPath.dir, parsedPath.name, tCode)) continue;
 
-              if (isPreferNative) {
-                const nativeContent = await tryDownloadNativeEpisode(show, ep, tCode);
-                if (nativeContent) {
-                  fs.writeFileSync(targetSubPath, decodeSubtitleBuffer(nativeContent));
-                  eventBus.success('Subtitle downloaded', { title: label, language: tCode });
-                  continue;
-                }
+            if (isPreferNative) {
+              const show = { tmdb_id: ep.tmdb_id, title: ep.show_title, year: ep.year };
+              const nativeContent = await tryDownloadNativeEpisode(show, ep, tCode);
+              if (nativeContent) {
+                fs.writeFileSync(targetSubPath, decodeSubtitleBuffer(nativeContent, { season: ep.season_number, episode: ep.episode_number }));
+                eventBus.success('Subtitle downloaded', { title: label, language: tCode });
+                continue;
               }
+            }
 
-              try {
-                const translated = await translateWithProvider(cleanContent, lang);
-                fs.writeFileSync(targetSubPath, translated);
-                eventBus.success('Subtitle translated', { title: label, language: lang });
-              } catch (translateErr) {
-                console.error(`[SubtitleService] Auto-translate to ${lang} failed for ${label}:`, translateErr.message);
-              }
+            try {
+              const translated = await translateWithProvider(enContent, lang);
+              fs.writeFileSync(targetSubPath, translated);
+              eventBus.success('Subtitle translated', { title: label, language: lang });
+            } catch (translateErr) {
+              console.error(`[SubtitleService] Auto-translate to ${lang} failed for ${label}:`, translateErr.message);
             }
           }
         }
@@ -467,7 +482,7 @@ const autoTranslateExisting = async () => {
     if (isPreferNative) {
       const nativeContent = await tryDownloadNativeEpisode(show, ep, tCode);
       if (nativeContent) {
-        fs.writeFileSync(targetSubPath, decodeSubtitleBuffer(nativeContent));
+        fs.writeFileSync(targetSubPath, decodeSubtitleBuffer(nativeContent, { season: ep.season_number, episode: ep.episode_number }));
         eventBus.success('Subtitle downloaded', { title: label, language: tCode });
         return;
       }
@@ -560,7 +575,7 @@ const upgradeTranslatedToNative = async () => {
         if (!langFileExists(parsedPath.dir, parsedPath.name, tCode)) continue;
         const nativeContent = await tryDownloadNativeEpisode(show, ep, tCode);
         if (nativeContent) {
-          fs.writeFileSync(subPath, decodeSubtitleBuffer(nativeContent));
+          fs.writeFileSync(subPath, decodeSubtitleBuffer(nativeContent, { season: ep.season_number, episode: ep.episode_number }));
           eventBus.success('Subtitle upgraded', { title: label, language: tCode });
         }
       }

@@ -446,7 +446,7 @@ router.post('/episodes/:id/download-subs', async (req, res, next) => {
     // If a direct URL is provided, download from there (used by SubDL unpack files)
     if (url) {
       const srtRes = await axios.get(url, { responseType: 'arraybuffer', timeout: 30000 });
-      const cleanContent = decodeSubtitleBuffer(Buffer.from(srtRes.data));
+      const cleanContent = decodeSubtitleBuffer(Buffer.from(srtRes.data), { season: episode.season_number, episode: episode.episode_number });
       if (!cleanContent || cleanContent.length < 10) {
         return res.status(422).json({ status: 'error', message: 'Downloaded subtitle file is empty or invalid' });
       }
@@ -469,7 +469,7 @@ router.post('/episodes/:id/download-subs', async (req, res, next) => {
           return res.status(422).json({ status: 'error', message: 'OpenSubtitles did not return a valid download link' });
         }
         const srtRes = await axios.get(downloadRes.data.link, { responseType: 'arraybuffer', headers: { 'User-Agent': 'Atlas/1.0' }, timeout: 30000 });
-        const cleanContent = decodeSubtitleBuffer(Buffer.from(srtRes.data));
+        const cleanContent = decodeSubtitleBuffer(Buffer.from(srtRes.data), { season: episode.season_number, episode: episode.episode_number });
         if (!cleanContent || cleanContent.length < 10) {
           return res.status(422).json({ status: 'error', message: 'Downloaded subtitle file is empty or invalid' });
         }
@@ -494,7 +494,7 @@ router.post('/episodes/:id/download-subs', async (req, res, next) => {
       if (dlRes.status !== 200) {
         return res.status(dlRes.status || 502).json({ status: 'error', message: `SubSource download failed (HTTP ${dlRes.status})` });
       }
-      const cleanContent = decodeSubtitleBuffer(Buffer.from(dlRes.data));
+      const cleanContent = decodeSubtitleBuffer(Buffer.from(dlRes.data), { season: episode.season_number, episode: episode.episode_number });
       if (!cleanContent || cleanContent.length < 10) {
         return res.status(422).json({ status: 'error', message: 'Downloaded subtitle file is empty or invalid' });
       }
