@@ -35,22 +35,60 @@ const scanSubtitleLangs = async (filePath) => {
   const dir = path.dirname(filePath);
   const videoBase = path.basename(filePath, path.extname(filePath)).toLowerCase();
   const normVideo = videoBase.replace(/[^a-z0-9]/g, '');
+
+  // Check if video file has season and episode numbers (e.g. S01E02 or 1x02)
+  const epMatch = videoBase.match(/(?:s(\d+)[ex](\d+)|\b(\d+)x(\d+)\b)/i);
+  let sPattern1 = null;
+  let sPattern2 = null;
+  if (epMatch) {
+    const s = parseInt(epMatch[1] || epMatch[3], 10);
+    const e = parseInt(epMatch[2] || epMatch[4], 10);
+    sPattern1 = `s${String(s).padStart(2, '0')}e${String(e).padStart(2, '0')}`;
+    sPattern2 = `${s}x${String(e).padStart(2, '0')}`;
+  }
+
   try {
     const items = await fs.readdir(dir);
+
+    // Count other video files in directory to determine if this is a dedicated movie folder
+    let otherVideosCount = 0;
+    const baseFileLower = path.basename(filePath).toLowerCase();
+    for (const item of items) {
+      if (item.toLowerCase() !== baseFileLower && isVideoFile(item)) {
+        otherVideosCount++;
+      }
+    }
+    const isSingleVideoDir = otherVideosCount === 0;
+
     return [...new Set(
       items
         .filter(item => {
           if (!SUBTITLE_EXTS.includes(path.extname(item).toLowerCase())) return false;
           const itemLower = item.toLowerCase();
+
+          // 1. Direct prefix match (e.g. "Movie (2026).en.srt" starts with "movie (2026)")
           if (itemLower.startsWith(videoBase)) return true;
+
+          // 2. Normalized prefix match (e.g. "movie2026.en.srt")
           const normSub = itemLower.replace(/\.[^.]+$/, '').replace(/[^a-z0-9]/g, '');
           if (normVideo && (normSub.startsWith(normVideo) || normVideo.startsWith(normSub))) return true;
+
+          // 3. Episode season & episode match (e.g. "Show.S01E02.HDTV.nl.srt" matching "Show - S01E02 - Title.mkv")
+          if (sPattern1 && (itemLower.includes(sPattern1) || itemLower.includes(sPattern2))) {
+            return true;
+          }
+
+          // 4. In a dedicated folder with only 1 video file (standard movie folder), any subtitle belongs to this video
+          if (isSingleVideoDir && !sPattern1) {
+            return true;
+          }
+
           return false;
         })
         .map(item => {
           let name = path.basename(item, path.extname(item));
           name = name.replace(/[._-](?:forced|sdh|hi|cc|\d+)$/i, '');
-          const match = name.match(/[._-]([a-z]{2,3})$/i);
+          const match = name.match(/(?:^|[._-])([a-z]{2,3}|english|dutch|french|german|spanish|italian|portuguese)$/i);
           if (match) {
             const code = match[1].toLowerCase();
             const langMap = {

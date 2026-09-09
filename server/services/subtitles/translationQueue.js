@@ -17,6 +17,7 @@ const eventBus = require('../eventBus');
 const { LANG_TO_CODE } = require('../../utils/constants');
 const { parseSubtitles, serializeSubtitles, readSubtitleFile } = require('./parser');
 const { getTranslationProvider, createCueBatches } = require('./translationProviders');
+const { syncMovieSubtitles, syncEpisodeSubtitles } = require('./sync');
 
 const formatTranslationError = (err) => {
   if (!err) return 'Unknown translation error';
@@ -343,14 +344,11 @@ class SubtitleTranslationQueue {
           translatedCues.length
         );
 
-        // Also update movie/episode subtitles JSON column
-        const table = job.mediaType === 'movie' ? 'movies' : 'episodes';
-        const existingRow = db.prepare(`SELECT subtitles FROM ${table} WHERE id = ?`).get(job.mediaId);
-        let langs = [];
-        try { langs = JSON.parse(existingRow?.subtitles || '[]'); } catch { langs = []; }
-        if (!langs.includes(targetCode)) {
-          langs.push(targetCode);
-          db.prepare(`UPDATE ${table} SET subtitles = ? WHERE id = ?`).run(JSON.stringify(langs), job.mediaId);
+        // Also update movie/episode subtitles JSON column and invalidate stats cache
+        if (job.mediaType === 'movie') {
+          await syncMovieSubtitles(job.mediaId);
+        } else {
+          await syncEpisodeSubtitles(job.mediaId);
         }
       } catch (trackErr) {
         console.warn('[SubtitleQueue] Failed to update subtitle_tracks table:', trackErr.message);

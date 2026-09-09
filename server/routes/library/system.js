@@ -10,6 +10,7 @@ const { deleteFolderRecursive } = require('../../utils/fileUtils');
 const { getAiredCutoffSql } = require('../../utils/airDate');
 const { parseResolution } = require('../../utils/mediaParsing');
 const cleanupWorker = require('../../services/cleanupWorker');
+const { scanSubtitleLangs } = require('../../services/scanner/fileScanner');
 
 // ── Stats cache — avoids 20+ DB queries on every dashboard load ──
 let _statsCache = null;
@@ -365,16 +366,58 @@ router.get('/stats', (req, res, next) => {
   }
 });
 
-router.get('/missing-subs', (req, res, next) => {
+router.get('/missing-subs', async (req, res, next) => {
   try {
-    // Movies with files but no subtitles
-    const movies = db.prepare(`
+    // 1. Candidate movies with files but DB says no subtitles
+    const rawMovies = db.prepare(`
       SELECT id, tmdb_id, title, year, file_path, added_at FROM movies 
       WHERE file_path IS NOT NULL AND (subtitles IS NULL OR subtitles = '[]')
       ORDER BY title ASC
     `).all();
 
-    // Shows with episodes missing subtitles — consolidated with COUNT in one query
+    let statsInvalidated = false;
+    const movies = [];
+
+    // Auto-heal movies: check if subtitles already exist on disk
+    for (const m of rawMovies) {
+      if (!m.file_path) continue;
+      try {
+        const langs = await scanSubtitleLangs(m.file_path);
+        if (langs.length > 0) {
+          db.prepare('UPDATE movies SET subtitles = ? WHERE id = ?').run(JSON.stringify(langs), m.id);
+          statsInvalidated = true;
+        } else {
+          movies.push(m);
+        }
+      } catch {
+        movies.push(m);
+      }
+    }
+
+    // 2. Candidate episodes missing subtitles
+    const rawEpisodes = db.prepare(`
+      SELECT e.id, e.file_path
+      FROM episodes e
+      WHERE e.file_path IS NOT NULL AND (e.subtitles IS NULL OR e.subtitles = '[]')
+    `).all();
+
+    // Auto-heal episodes: check if subtitles exist on disk
+    for (const ep of rawEpisodes) {
+      if (!ep.file_path) continue;
+      try {
+        const langs = await scanSubtitleLangs(ep.file_path);
+        if (langs.length > 0) {
+          db.prepare('UPDATE episodes SET subtitles = ? WHERE id = ?').run(JSON.stringify(langs), ep.id);
+          statsInvalidated = true;
+        }
+      } catch { /* ignore */ }
+    }
+
+    if (statsInvalidated) {
+      invalidateStatsCache();
+    }
+
+    // Shows with episodes missing subtitles — re-query to reflect auto-healed episodes
     const showsWithCounts = db.prepare(`
       SELECT s.id, s.tmdb_id, s.title, s.folder_path, s.added_at,
         COUNT(e.id) as missing_episode_count

@@ -10,6 +10,7 @@ const { runWithConcurrency } = require('../utils/concurrency');
 const { registerJob } = require('../utils/cronRegistry');
 const { LANG_CODE } = require('../routes/library/helpers');
 const { decodeSubtitleBuffer } = require('./subtitles/parser');
+const { syncMovieSubtitles, syncEpisodeSubtitles } = require('./subtitles/sync');
 
 // LLM output is token-limited — long SRTs must be translated in small numbered-block
 // chunks and concatenated, otherwise the response gets truncated mid-file.
@@ -292,6 +293,7 @@ const translateSubtitles = async () => {
     try {
       const result = await translateFile(movie.file_path, movie.title);
       if (result) {
+        await syncMovieSubtitles(movie.id, movie.file_path);
         eventBus.success('Subtitle translated', { title: movie.title, type: 'movie', language: targetLang });
         translatedCount++;
       }
@@ -311,6 +313,7 @@ const translateSubtitles = async () => {
       const label = `${ep.show_title} S${String(ep.season_number).padStart(2, '0')}E${String(ep.episode_number).padStart(2, '0')}`;
       const result = await translateFile(ep.file_path, label, ep.season_number, ep.episode_number);
       if (result) {
+        await syncEpisodeSubtitles(ep.id, ep.file_path);
         eventBus.success('Subtitle translated', { title: label, type: 'episode', language: targetLang });
         translatedCount++;
       }

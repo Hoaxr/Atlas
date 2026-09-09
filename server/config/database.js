@@ -1036,7 +1036,7 @@ const MIGRATIONS = [
           if (filtered.length !== parsed.length) {
             db.prepare('UPDATE movies SET subtitles = ? WHERE id = ?').run(JSON.stringify(filtered), row.id);
           }
-        } catch {}
+        } catch { /* ignore */ }
       }
       const epRows = db.prepare("SELECT id, subtitles FROM episodes WHERE subtitles IS NOT NULL AND subtitles != '[]'").all();
       for (const row of epRows) {
@@ -1046,7 +1046,7 @@ const MIGRATIONS = [
           if (filtered.length !== parsed.length) {
             db.prepare('UPDATE episodes SET subtitles = ? WHERE id = ?').run(JSON.stringify(filtered), row.id);
           }
-        } catch {}
+        } catch { /* ignore */ }
       }
     }
   }

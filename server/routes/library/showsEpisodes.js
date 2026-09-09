@@ -18,6 +18,7 @@ const { getMediaMetadata, parseAudioFromFileName } = require('../../utils/videoU
 const { isWatchedSyncEnabled, getSubtitlesInDir, extractLang, translateSrt, LANG_CODE } = require('./helpers');
 const simklService = require('../../services/simklService');
 const imageService = require('../../services/imageService');
+const { syncEpisodeSubtitles } = require('../../services/subtitles/sync');
 
 router.post('/shows/:id/watched', async (req, res, next) => {
   try {
@@ -416,6 +417,7 @@ router.post('/episodes/:id/translate-subs', async (req, res, next) => {
     console.log(`[translate-subs] Translating episode ${req.params.id} — ${enSrtContent.length} chars, ${enSrtContent.split(/\n\n/).length} blocks, lang=${targetLang}`);
     const translatedText = await translateSrt(enSrtContent, targetLang);
     await fsp.writeFile(targetSubPath, translatedText);
+    await syncEpisodeSubtitles(episode.id, episode.file_path);
 
     const epTitle = episode.title || (episode.show_title ? `${episode.show_title} S${String(episode.season_number).padStart(2, '0')}E${String(episode.episode_number).padStart(2, '0')}` : 'Episode');
     eventBus.success(`Subtitle translated: ${epTitle} (${targetLang})`, { title: epTitle, type: 'episode', language: targetLang });
@@ -451,6 +453,7 @@ router.post('/episodes/:id/download-subs', async (req, res, next) => {
         return res.status(422).json({ status: 'error', message: 'Downloaded subtitle file is empty or invalid' });
       }
       await fsp.writeFile(subPath, cleanContent);
+      await syncEpisodeSubtitles(episode.id, episode.file_path);
       return res.json({ status: 'success', message: `Downloaded "${langCode}" subtitle` });
     }
 
@@ -474,6 +477,7 @@ router.post('/episodes/:id/download-subs', async (req, res, next) => {
           return res.status(422).json({ status: 'error', message: 'Downloaded subtitle file is empty or invalid' });
         }
         await fsp.writeFile(subPath, cleanContent);
+        await syncEpisodeSubtitles(episode.id, episode.file_path);
         return res.json({ status: 'success', message: `Downloaded "${langCode}" subtitle` });
       } catch (osErr) {
         const osMsg = osErr.response?.data?.message || osErr.message || 'OpenSubtitles download failed';
@@ -499,6 +503,7 @@ router.post('/episodes/:id/download-subs', async (req, res, next) => {
         return res.status(422).json({ status: 'error', message: 'Downloaded subtitle file is empty or invalid' });
       }
       await fsp.writeFile(epSubPath, cleanContent);
+      await syncEpisodeSubtitles(episode.id, episode.file_path);
       return res.json({ status: 'success', message: `Downloaded "${langCode}" subtitle` });
     }
 
@@ -507,6 +512,7 @@ router.post('/episodes/:id/download-subs', async (req, res, next) => {
 
     try {
       const result = await subtitleService.downloadSubtitlesForEpisode(episode, show, langCode);
+      await syncEpisodeSubtitles(episode.id, episode.file_path);
       if (result.alreadyExists) {
         return res.json({ status: 'success', message: `Subtitle already exists for "${langCode}"` });
       }

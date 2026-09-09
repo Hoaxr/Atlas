@@ -9,6 +9,7 @@ const { registerJob } = require('../../utils/cronRegistry');
 const { translateWithProvider } = require('../aiTranslationWorker');
 const { LANG_TO_CODE } = require('../../utils/constants');
 const { decodeSubtitleBuffer } = require('./parser');
+const { syncMovieSubtitles, syncEpisodeSubtitles, autoHealMissingSubtitles } = require('./sync');
 
 const openSubtitles = require('./providers/openSubtitles');
 const subdl = require('./providers/subdl');
@@ -159,6 +160,7 @@ const downloadSubtitlesForMovie = async (movie, langCode) => {
       }
     } catch { /* ignore */ }
 
+    await syncMovieSubtitles(movie.id, movie.file_path);
     return { success: true, langCode };
   }
   throw new Error(`No subtitle found for language "${langCode}" from any provider`);
@@ -217,6 +219,7 @@ const downloadSubtitlesForEpisode = async (episode, show, langCode) => {
       }
     } catch { /* ignore */ }
 
+    await syncEpisodeSubtitles(episode.id, episode.file_path);
     return { success: true, langCode };
   }
   throw new Error(`No subtitle found for language "${langCode}" from any provider`);
@@ -291,6 +294,7 @@ const downloadSubtitlesForMovies = async () => {
           }
         }
       }
+      await syncMovieSubtitles(movie.id, movie.file_path);
     } catch (err) { console.error(`[SubtitleService] Failed for ${movie.title}:`, err.message); }
   };
 
@@ -374,6 +378,7 @@ const downloadSubtitlesForEpisodes = async () => {
           }
         }
       }
+      await syncEpisodeSubtitles(ep.id, ep.file_path);
     } catch (err) { console.error(`[SubtitleService] Failed for episode ${ep.show_title}:`, err.message); }
   };
 
@@ -504,6 +509,7 @@ const autoTranslateExisting = async () => {
 
       const enSrtContent = fs.readFileSync(enSubPath, 'utf-8');
       for (const lang of targetLangs) await translateOrNativeMovie(parsedPath, movie, lang, enSrtContent);
+      await syncMovieSubtitles(movie.id, movie.file_path);
     } catch { /* ignore */ }
   });
 
@@ -523,6 +529,7 @@ const autoTranslateExisting = async () => {
       const show = { tmdb_id: ep.tmdb_id, title: ep.show_title, year: ep.year };
       const enSrtContent = fs.readFileSync(enSubPath, 'utf-8');
       for (const lang of targetLangs) await translateOrNativeEpisode(parsedPath, show, ep, lang, enSrtContent);
+      await syncEpisodeSubtitles(ep.id, ep.file_path);
     } catch { /* ignore */ }
   });
 };
@@ -555,6 +562,7 @@ const upgradeTranslatedToNative = async () => {
           eventBus.success('Subtitle upgraded', { title: movie.title, language: tCode });
         }
       }
+      await syncMovieSubtitles(movie.id, movie.file_path);
     } catch { /* ignore */ }
   });
 
@@ -579,6 +587,7 @@ const upgradeTranslatedToNative = async () => {
           eventBus.success('Subtitle upgraded', { title: label, language: tCode });
         }
       }
+      await syncEpisodeSubtitles(ep.id, ep.file_path);
     } catch { /* ignore */ }
   });
 };
@@ -594,6 +603,11 @@ const init = () => {
   taskRegistry.registerTask('subtitle_downloader', 'Subtitle Downloader', 'Searches and downloads subtitles.', cronExp, runAll);
   const job = cron.schedule(cronExp, () => taskRegistry.executeTask('subtitle_downloader'));
   registerJob(job);
+
+  // Auto-heal missing subtitles from disk 3 seconds after server startup
+  setTimeout(() => {
+    autoHealMissingSubtitles().catch(() => {});
+  }, 3000);
 };
 
 module.exports = {
@@ -602,5 +616,8 @@ module.exports = {
   downloadSubtitlesForMovie,
   downloadSubtitlesForEpisode,
   searchSubtitlesForMovie,
-  searchSubtitlesForEpisode
+  searchSubtitlesForEpisode,
+  syncMovieSubtitles,
+  syncEpisodeSubtitles,
+  autoHealMissingSubtitles
 };

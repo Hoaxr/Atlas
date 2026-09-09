@@ -58,16 +58,17 @@ export default function Statistics() {
 
   const openMissingSubs = async () => {
     setMissingSubsModal(true);
-    if (!missingSubsData) {
-      setMissingSubsLoading(true);
-      try {
-        const res = await api.get('/library/missing-subs');
-        if (res.data.status === 'success') setMissingSubsData(res.data.data);
-      } catch (e) {
-        console.error('Failed to fetch missing subs', e);
-      } finally {
-        setMissingSubsLoading(false);
+    setMissingSubsLoading(true);
+    try {
+      const res = await api.get('/library/missing-subs');
+      if (res.data.status === 'success') {
+        setMissingSubsData(res.data.data);
+        fetchStats();
       }
+    } catch (e) {
+      console.error('Failed to fetch missing subs', e);
+    } finally {
+      setMissingSubsLoading(false);
     }
   };
 

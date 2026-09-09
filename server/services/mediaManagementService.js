@@ -1027,6 +1027,7 @@ const importSeasonPack = async (torrent, { showId, showTitle, seasonNumber }) =>
     }
     console.log(`[MediaManagement] Found ${videoFiles.length} video files in season pack`);
 
+    let importedCount = 0;
     for (const videoFile of videoFiles) {
       const parsed = parseEpisodeFromFilename(videoFile);
       if (!parsed) continue;

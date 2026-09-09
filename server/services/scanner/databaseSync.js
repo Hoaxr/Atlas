@@ -327,6 +327,7 @@ const scanLibrarySubtitles = async (scanProgress, nextStage, mode = 'full') => {
         const s = ep.season_number;
         const e = ep.episode_number;
         const matchStr1 = `s${String(s).padStart(2, '0')}e${String(e).padStart(2, '0')}`;
+        const matchStr2 = `${s}x${String(e).padStart(2, '0')}`;
         const normBase = baseName.toLowerCase().replace(/[^a-z0-9]/g, '');
         const matchingSubs = subFiles.filter(f => {
           if (f.startsWith(baseName)) return true;

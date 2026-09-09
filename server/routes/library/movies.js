@@ -19,12 +19,22 @@ const { isRootLibraryPath, findLargestVideoFile } = require('../../utils/fileUti
 const { scanSubtitleLangs } = require('../../services/scanner/fileScanner');
 const requireAdmin = require('../../middleware/requireAdmin');
 const imageService = require('../../services/imageService');
+const { syncMovieSubtitles, invalidateStats } = require('../../services/subtitles/sync');
 
 // In-memory cache for network mount directory scans — movies are on a CIFS/SMB
 // mount with actimeo=1, so every fresh request hits the NAS. Cache avoids that.
 const dirCache = new Map();
 const DIR_CACHE_TTL = 60_000; // 60 seconds
 const MAX_DIR_CACHE = 200; // LRU eviction limit
+
+const clearDirCache = (dirPath) => {
+  if (dirPath) {
+    dirCache.delete(dirPath);
+  } else {
+    dirCache.clear();
+  }
+};
+router.clearDirCache = clearDirCache;
 
 const scanDirectory = async (dirPath) => {
   const cached = dirCache.get(dirPath);
@@ -125,6 +135,7 @@ router.get('/:id', async (req, res, next) => {
         // Persist subtitle languages for stats
         const subLangs = [...new Set(subtitles.map(s => s.lang).filter(Boolean))];
         db.prepare('UPDATE movies SET subtitles = ? WHERE id = ?').run(JSON.stringify(subLangs), movie.id);
+        invalidateStats();
       }
       if (statResult.status === 'rejected' && (statResult.reason?.message === 'stat timeout' || statResult.reason?.code === 'ENOENT')) {
         db.prepare("UPDATE movies SET file_path = NULL, file_size = NULL, status = 'monitored' WHERE id = ?").run(movie.id);
@@ -309,6 +320,8 @@ const refreshMovieData = async (id) => {
     }
   } catch (e) { console.error('TMDB refresh failed for movie:', e.message); }
 
+  await syncMovieSubtitles(id);
+  invalidateStats();
   return db.prepare('SELECT * FROM movies WHERE id = ?').get(id);
 };
 
@@ -464,6 +477,8 @@ router.post('/:id/translate-subs', async (req, res, next) => {
     console.log(`[translate-subs] Translating movie ${req.params.id} — ${enSrtContent.length} chars, ${enSrtContent.split(/\n\n/).length} blocks, lang=${targetLang}`);
     const translatedText = await translateSrt(enSrtContent, targetLang);
     await fsp.writeFile(targetSubPath, translatedText);
+    clearDirCache(parsedPath.dir);
+    await syncMovieSubtitles(movie.id, movie.file_path);
 
     eventBus.success(`Subtitle translated: ${movie.title} (${targetLang})`, { title: movie.title, type: 'movie', language: targetLang });
 
@@ -510,6 +525,8 @@ router.post('/:id/download-subs', async (req, res, next) => {
           return res.status(422).json({ status: 'error', message: 'Downloaded subtitle file is empty or invalid' });
         }
         await fsp.writeFile(subPath, cleanContent);
+        clearDirCache(parsedPath.dir);
+        await syncMovieSubtitles(movie.id, movie.file_path);
         return res.json({ status: 'success', message: `Downloaded "${langCode}" subtitle via OpenSubtitles` });
       } catch (osErr) {
         const osMsg = osErr.response?.data?.message || osErr.message || 'OpenSubtitles download failed';
@@ -534,6 +551,8 @@ router.post('/:id/download-subs', async (req, res, next) => {
         return res.status(422).json({ status: 'error', message: 'Downloaded subtitle file is empty or invalid' });
       }
       await fsp.writeFile(subPath, cleanContent);
+      clearDirCache(parsedPath.dir);
+      await syncMovieSubtitles(movie.id, movie.file_path);
       return res.json({ status: 'success', message: `Downloaded "${langCode}" subtitle via SubSource` });
     }
 
@@ -545,11 +564,15 @@ router.post('/:id/download-subs', async (req, res, next) => {
         return res.status(422).json({ status: 'error', message: 'Downloaded subtitle file is empty or invalid' });
       }
       await fsp.writeFile(subPath, cleanContent);
+      clearDirCache(parsedPath.dir);
+      await syncMovieSubtitles(movie.id, movie.file_path);
       return res.json({ status: 'success', message: `Downloaded "${langCode}" subtitle from URL` });
     }
 
     try {
       const result = await subtitleService.downloadSubtitlesForMovie(movie, langCode);
+      clearDirCache(parsedPath.dir);
+      await syncMovieSubtitles(movie.id, movie.file_path);
       if (result.alreadyExists) {
         return res.json({ status: 'success', message: `Subtitle already exists for "${langCode}"` });
       }
