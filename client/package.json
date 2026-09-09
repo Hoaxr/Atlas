@@ -3,6 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "prebuild": "node ../scripts/generate-version.js 2>/dev/null || true",
     "dev": "vite --port 3001 --host --clearScreen false",
     "build": "vite build",
     "lint": "eslint src",

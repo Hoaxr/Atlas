@@ -5,7 +5,10 @@
     "start": "concurrently --kill-others \"npm start --prefix server\" \"npm start --prefix client\"",
     "dev": "concurrently --kill-others \"npm run dev --prefix server\" \"npm run dev --prefix client\"",
     "format": "prettier --write .",
-    "lint": "npm run lint --prefix server && npm run lint --prefix client"
+    "lint": "npm run lint --prefix server && npm run lint --prefix client",
+    "version:gen": "node scripts/generate-version.js",
+    "build:docker": "node scripts/generate-version.js && docker build --build-arg GIT_COMMIT=$(git rev-parse HEAD) --build-arg GIT_BRANCH=$(git rev-parse --abbrev-ref HEAD) --build-arg GIT_DATE=$(git log -1 --format=%cd --date=short) --build-arg GIT_MESSAGE=\"$(git log -1 --format=%s)\" --build-arg GIT_COUNT=$(git rev-list --count HEAD) -t bdekkernl/atlas:$(git rev-parse --short HEAD) -t bdekkernl/atlas:latest -t atlas-atlas:latest .",
+    "push:docker": "docker push bdekkernl/atlas:$(git rev-parse --short HEAD) && docker push bdekkernl/atlas:latest"
   },
   "devDependencies": {
     "concurrently": "^8.2.2",

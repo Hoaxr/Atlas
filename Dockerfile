@@ -3,6 +3,18 @@
 # ============================================================
 FROM node:22-alpine AS client-builder
 
+ARG GIT_COMMIT
+ARG GIT_BRANCH
+ARG GIT_DATE
+ARG GIT_MESSAGE
+ARG GIT_COUNT
+
+ENV GIT_COMMIT=$GIT_COMMIT
+ENV GIT_BRANCH=$GIT_BRANCH
+ENV GIT_DATE=$GIT_DATE
+ENV GIT_MESSAGE=$GIT_MESSAGE
+ENV GIT_COUNT=$GIT_COUNT
+
 WORKDIR /app/client
 
 COPY client/package.json client/package-lock.json* ./

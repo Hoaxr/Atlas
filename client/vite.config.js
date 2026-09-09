@@ -39,13 +39,24 @@ try {
     commitCount = parseInt(execSync('git rev-list --count HEAD', { stdio: ['pipe', 'pipe', 'ignore'] }).toString().trim(), 10) || 0;
   }
 } catch {
-  if (process.env.GIT_COMMIT) {
-    commit = process.env.GIT_COMMIT.slice(0, 7);
-    fullCommit = process.env.GIT_COMMIT;
-  }
-  if (process.env.GIT_BRANCH) {
-    branch = process.env.GIT_BRANCH;
-  }
+  // git not available, check environment variables
+}
+
+if (process.env.GIT_COMMIT) {
+  commit = process.env.GIT_COMMIT.slice(0, 7);
+  fullCommit = process.env.GIT_COMMIT;
+}
+if (process.env.GIT_BRANCH) {
+  branch = process.env.GIT_BRANCH;
+}
+if (process.env.GIT_DATE) {
+  date = process.env.GIT_DATE;
+}
+if (process.env.GIT_MESSAGE) {
+  message = process.env.GIT_MESSAGE;
+}
+if (process.env.GIT_COUNT) {
+  commitCount = parseInt(process.env.GIT_COUNT, 10) || commitCount;
 }
 
 export default defineConfig({
