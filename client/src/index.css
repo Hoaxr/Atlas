@@ -257,3 +257,16 @@ h1, h2, h3, h4, h5, h6 {
   animation: laser-glow 4.5s infinite cubic-bezier(0.4, 0, 0.2, 1);
 }
 
+/* Dynamic responsive poster grid */
+.dashboard-poster-grid {
+  display: grid !important;
+  /* Mobile: minimum 2 columns (clamped to max 50% - gap), scaled proportionally from poster size */
+  grid-template-columns: repeat(auto-fill, minmax(min(calc(50% - 6px), max(80px, calc(var(--poster-size, 180px) * 0.72))), 1fr));
+}
+
+@media (min-width: 640px) {
+  .dashboard-poster-grid {
+    grid-template-columns: repeat(auto-fill, minmax(var(--poster-size, 180px), 1fr));
+  }
+}
+

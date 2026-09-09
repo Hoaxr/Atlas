@@ -112,7 +112,7 @@ export default function Dashboard() {
       const saved = localStorage.getItem('dashboardPosterSize');
       if (saved) {
         const parsed = Number(saved);
-        if (!isNaN(parsed) && parsed >= 100 && parsed <= 260) {
+        if (!isNaN(parsed) && parsed >= 80 && parsed <= 260) {
           return parsed;
         }
       }
@@ -747,13 +747,14 @@ export default function Dashboard() {
         <div className={`border-b ${viewMode === 'movies' ? 'border-cyan-500/30' : 'border-purple-500/30'} bg-slate-900/50 rounded-t-2xl`}>
           
           {/* Main Controls Row */}
-          <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 p-3 sm:p-4 pb-2 sm:pb-3 justify-between">
-            <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+          <div className="flex items-center gap-1.5 sm:gap-2 p-2.5 sm:p-4 pb-2 sm:pb-3 justify-between">
+            <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 flex-1">
               <FilterSelect
                 value={sort}
                 onChange={e => setSort(e.target.value)}
                 label="Sort: Recently Added"
                 hideAll
+                className="max-w-[130px] sm:max-w-none shrink-0"
               >
                 <option value="added_desc">Recently Added</option>
                 <option value="rating_desc">Highest Rating</option>
@@ -766,59 +767,60 @@ export default function Dashboard() {
 
               <button
                 onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
-                className={`flex items-center gap-1.5 text-xs font-medium px-3 py-2 rounded-lg border transition-colors ${
+                className={`flex items-center gap-1 sm:gap-1.5 text-xs font-medium px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl border transition-colors shrink-0 ${
                   showAdvancedFilters || activeFilterCount > 0
                     ? 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30'
                     : 'bg-slate-900/50 text-slate-400 border-white/5 hover:bg-slate-800/50 hover:text-slate-200'
                 }`}
               >
-                <FilterIcon className="w-3.5 h-3.5" />
-                Filters {activeFilterCount > 0 && <span className="bg-cyan-500 text-slate-900 rounded-full px-1.5 py-0.5 text-[10px] font-bold ml-1">{activeFilterCount}</span>}
+                <FilterIcon className="w-3.5 h-3.5 shrink-0" />
+                <span>Filters</span>
+                {activeFilterCount > 0 && <span className="bg-cyan-500 text-slate-900 rounded-full px-1.5 py-0.5 text-[10px] font-bold ml-0.5">{activeFilterCount}</span>}
               </button>
             </div>
 
             {/* Poster Size Slider Control (Grid View only) */}
             {viewStyle === 'grid' && (
-              <div className="flex items-center gap-2 bg-slate-900/60 border border-white/5 px-2.5 py-1.5 rounded-xl ml-auto">
+              <div className="flex items-center gap-1 sm:gap-2 bg-slate-900/60 border border-white/5 px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-xl shrink-0">
                 <button
                   type="button"
-                  onClick={() => setPosterSize(prev => Math.max(110, prev - 15))}
+                  onClick={() => setPosterSize(prev => Math.max(90, prev - 15))}
                   className={`p-0.5 transition-colors rounded ${
-                    posterSize <= 125
+                    posterSize <= 120
                       ? viewMode === 'movies' ? 'text-cyan-400' : 'text-purple-400'
                       : 'text-slate-400 hover:text-slate-200'
                   }`}
                   title="Kleinere posters (meer posters in beeld)"
                   aria-label="Kleinere posters"
                 >
-                  <LayoutGrid className="w-3.5 h-3.5" />
+                  <LayoutGrid className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
                 </button>
                 <input
                   type="range"
-                  min="110"
-                  max="250"
+                  min="90"
+                  max="240"
                   step="5"
                   value={posterSize}
                   onChange={e => setPosterSize(Number(e.target.value))}
                   onDoubleClick={() => setPosterSize(180)}
                   title={`Poster grootte: ${posterSize}px (dubbelklik voor standaard 180px)`}
                   aria-label="Poster grootte bepalen"
-                  className={`w-20 sm:w-28 h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer ${
+                  className={`w-14 sm:w-24 md:w-28 h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer ${
                     viewMode === 'movies' ? 'accent-cyan-400' : 'accent-purple-400'
                   }`}
                 />
                 <button
                   type="button"
-                  onClick={() => setPosterSize(prev => Math.min(250, prev + 15))}
+                  onClick={() => setPosterSize(prev => Math.min(240, prev + 15))}
                   className={`p-0.5 transition-colors rounded ${
-                    posterSize >= 215
+                    posterSize >= 210
                       ? viewMode === 'movies' ? 'text-cyan-400' : 'text-purple-400'
                       : 'text-slate-400 hover:text-slate-200'
                   }`}
                   title="Grotere posters"
                   aria-label="Grotere posters"
                 >
-                  <LayoutGrid className="w-4.5 h-4.5" />
+                  <LayoutGrid className="w-3.5 h-3.5 sm:w-4.5 sm:h-4.5" />
                 </button>
               </div>
             )}
@@ -979,7 +981,7 @@ export default function Dashboard() {
               opacity: loading ? 0 : (isReordering ? 0.5 : 1),
               transition: 'opacity 0.2s ease',
               pointerEvents: loading ? 'none' : 'auto',
-              '--poster-min-width': `${posterSize}px`,
+              '--poster-size': `${posterSize}px`,
             }}
           >
 
@@ -997,10 +999,9 @@ export default function Dashboard() {
                     {...props}
                     style={{
                       ...style,
-                      display: 'grid',
-                      gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, var(--poster-min-width, 180px)), 1fr))',
+                      '--poster-size': `${posterSize}px`,
                     }}
-                    className="gap-3 sm:gap-4 relative"
+                    className="dashboard-poster-grid gap-2 sm:gap-4 relative"
                   >
                     {children}
                   </div>
@@ -1009,7 +1010,7 @@ export default function Dashboard() {
               }}
               itemContent={(index, item) => {
                 if (!item) return <div key={`empty-${index}`} />;
-                const isCompact = posterSize <= 140;
+                const isCompact = posterSize <= 150;
                 return (
                 <div 
                   key={item.id}
@@ -1029,7 +1030,7 @@ export default function Dashboard() {
                   }}
                   className={`cursor-pointer glass-panel interactive-glow-card rounded-xl overflow-hidden group hover:scale-[1.02] transition-all duration-300 relative flex flex-col focus:outline-none focus:ring-2 focus:ring-cyan-500/50 hover:shadow-[0_0_30px_-5px_rgba(6,182,212,0.25)] hover:border-cyan-500/40`}
                 >
-                  <div className={`absolute ${isCompact ? 'top-1.5 left-1.5' : 'top-2 left-2'} z-20`}>
+                  <div className={`absolute ${isCompact ? 'top-1 left-1' : 'top-1.5 sm:top-2 left-1.5 sm:left-2'} z-20`}>
                     <button 
                       onClick={async (e) => {
                         e.stopPropagation(); e.preventDefault();
@@ -1044,48 +1045,48 @@ export default function Dashboard() {
                           customAlert('Failed to toggle monitor status', 'error');
                         }
                       }}
-                      className={`${isCompact ? 'w-6 h-6' : 'w-8 h-8'} rounded-full bg-slate-900/80 hover:bg-slate-800 transition-colors shadow-lg flex items-center justify-center group/btn`}
+                      className={`${isCompact ? 'w-5 h-5' : 'w-6 h-6 sm:w-8 sm:h-8'} rounded-full bg-slate-900/80 hover:bg-slate-800 transition-colors shadow-lg flex items-center justify-center group/btn`}
                       title={item.monitored ? 'Unmonitor' : 'Monitor'}
                     >
                       {item.monitored ? (
-                        <Bookmark className={`${isCompact ? 'w-3.5 h-3.5' : 'w-5 h-5'} text-emerald-500 fill-emerald-500 group-hover/btn:text-rose-400 group-hover/btn:fill-transparent`} />
+                        <Bookmark className={`${isCompact ? 'w-3 h-3' : 'w-3.5 h-3.5 sm:w-5 sm:h-5'} text-emerald-500 fill-emerald-500 group-hover/btn:text-rose-400 group-hover/btn:fill-transparent`} />
                       ) : (
-                        <Bookmark className={`${isCompact ? 'w-3.5 h-3.5' : 'w-5 h-5'} text-rose-400 group-hover/btn:text-emerald-400`} />
+                        <Bookmark className={`${isCompact ? 'w-3 h-3' : 'w-3.5 h-3.5 sm:w-5 sm:h-5'} text-rose-400 group-hover/btn:text-emerald-400`} />
                       )}
                     </button>
                   </div>
 
-                  <div className={`absolute ${isCompact ? 'top-1.5 right-1.5 gap-1' : 'top-2 right-2 gap-2'} z-20 flex`}>
+                  <div className={`absolute ${isCompact ? 'top-1 right-1 gap-1' : 'top-1.5 sm:top-2 right-1.5 sm:right-2 gap-1 sm:gap-2'} z-20 flex`}>
                     {(item.status === 'downloading' || (viewMode === 'shows' && item.downloading_episodes > 0)) && (
-                      <div className={`${isCompact ? 'w-6 h-6' : 'w-8 h-8'} rounded-full bg-slate-900/80 flex items-center justify-center shadow-lg`} title="Downloading">
-                        <Activity className={`${isCompact ? 'w-3.5 h-3.5' : 'w-5 h-5'} text-blue-400 animate-pulse`} />
+                      <div className={`${isCompact ? 'w-5 h-5' : 'w-6 h-6 sm:w-8 sm:h-8'} rounded-full bg-slate-900/80 flex items-center justify-center shadow-lg`} title="Downloading">
+                        <Activity className={`${isCompact ? 'w-3 h-3' : 'w-3.5 h-3.5 sm:w-5 sm:h-5'} text-blue-400 animate-pulse`} />
                       </div>
                     )}
                     {viewMode === 'shows' && item.status !== 'downloading' && !item.downloading_episodes && (
                       item.missing_episodes > 0 ? (
-                        <div className={`${isCompact ? 'w-6 h-6' : 'w-8 h-8'} rounded-full bg-slate-900/80 flex items-center justify-center shadow-lg`} title={`${item.missing_episodes} Missing Episode${item.missing_episodes > 1 ? 's' : ''}`}>
-                          <AlertCircle className={`${isCompact ? 'w-3.5 h-3.5' : 'w-5 h-5'} text-amber-500`} />
+                        <div className={`${isCompact ? 'w-5 h-5' : 'w-6 h-6 sm:w-8 sm:h-8'} rounded-full bg-slate-900/80 flex items-center justify-center shadow-lg`} title={`${item.missing_episodes} Missing Episode${item.missing_episodes > 1 ? 's' : ''}`}>
+                          <AlertCircle className={`${isCompact ? 'w-3 h-3' : 'w-3.5 h-3.5 sm:w-5 sm:h-5'} text-amber-500`} />
                         </div>
                       ) : (item.downloaded_episodes > 0 || item.status === 'downloaded') ? (
-                        <div className={`${isCompact ? 'w-6 h-6' : 'w-8 h-8'} rounded-full bg-slate-900/80 flex items-center justify-center shadow-lg`} title="Available">
-                          <CheckCircle2 className={`${isCompact ? 'w-3.5 h-3.5' : 'w-5 h-5'} text-emerald-400 fill-emerald-400/20`} />
+                        <div className={`${isCompact ? 'w-5 h-5' : 'w-6 h-6 sm:w-8 sm:h-8'} rounded-full bg-slate-900/80 flex items-center justify-center shadow-lg`} title="Available">
+                          <CheckCircle2 className={`${isCompact ? 'w-3 h-3' : 'w-3.5 h-3.5 sm:w-5 sm:h-5'} text-emerald-400 fill-emerald-400/20`} />
                         </div>
                       ) : null
                     )}
                     {viewMode === 'movies' && item.status !== 'downloading' && (
                       <>
                         {item.status === 'downloaded' && (
-                          <div className={`${isCompact ? 'w-6 h-6' : 'w-8 h-8'} rounded-full bg-slate-900/80 flex items-center justify-center shadow-lg`} title="Available">
-                            <CheckCircle2 className={`${isCompact ? 'w-3.5 h-3.5' : 'w-5 h-5'} text-emerald-400 fill-emerald-400/20`} />
+                          <div className={`${isCompact ? 'w-5 h-5' : 'w-6 h-6 sm:w-8 sm:h-8'} rounded-full bg-slate-900/80 flex items-center justify-center shadow-lg`} title="Available">
+                            <CheckCircle2 className={`${isCompact ? 'w-3 h-3' : 'w-3.5 h-3.5 sm:w-5 sm:h-5'} text-emerald-400 fill-emerald-400/20`} />
                           </div>
                         )}
                         {item.status === 'monitored' && (
-                          <div className={`${isCompact ? 'w-6 h-6' : 'w-8 h-8'} rounded-full bg-slate-900/80 flex items-center justify-center shadow-lg`} title={
+                          <div className={`${isCompact ? 'w-5 h-5' : 'w-6 h-6 sm:w-8 sm:h-8'} rounded-full bg-slate-900/80 flex items-center justify-center shadow-lg`} title={
                             item.release_date && new Date(item.release_date) > new Date()
                               ? 'Missing / Not Released Yet'
                               : 'Missing'
                           }>
-                            <AlertCircle className={`${isCompact ? 'w-3.5 h-3.5' : 'w-5 h-5'} ${item.release_date && new Date(item.release_date) > new Date() ? 'text-amber-400' : 'text-amber-500'}`} />
+                            <AlertCircle className={`${isCompact ? 'w-3 h-3' : 'w-3.5 h-3.5 sm:w-5 sm:h-5'} ${item.release_date && new Date(item.release_date) > new Date() ? 'text-amber-400' : 'text-amber-500'}`} />
                           </div>
                         )}
                       </>
@@ -1186,22 +1187,22 @@ export default function Dashboard() {
                     </div>
                   </div>
 
-                  <div className={`${isCompact ? 'p-2 sm:p-2.5' : 'p-3 sm:p-4'} relative z-20 bg-gradient-to-b from-slate-800/95 to-slate-900/95 border-t border-white/10 group-hover:border-cyan-500/30 transition-colors`}>
+                  <div className={`${isCompact ? 'p-1.5 sm:p-2.5' : 'p-2 sm:p-3 md:p-4'} relative z-20 bg-gradient-to-b from-slate-800/95 to-slate-900/95 border-t border-white/10 group-hover:border-cyan-500/30 transition-colors`}>
                     <div className="flex items-center justify-between gap-1">
-                      <h3 className={`font-semibold ${isCompact ? 'text-xs leading-snug' : 'text-sm'} text-slate-100 group-hover:text-cyan-400 transition-colors truncate tracking-wide flex-1`} title={item.title}>
+                      <h3 className={`font-semibold ${isCompact ? 'text-[11px] sm:text-xs leading-snug' : 'text-xs sm:text-sm'} text-slate-100 group-hover:text-cyan-400 transition-colors truncate tracking-wide flex-1`} title={item.title}>
                         {item.title}
                       </h3>
                       {!isCompact && (
-                        <ArrowRight className="w-3.5 h-3.5 text-cyan-400 opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-200 flex-shrink-0" />
+                        <ArrowRight className="w-3.5 h-3.5 text-cyan-400 opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-200 flex-shrink-0 hidden sm:block" />
                       )}
                     </div>
-                    <div className={`flex justify-between items-center ${isCompact ? 'mt-1' : 'mt-2'}`}>
-                      <span className={`${isCompact ? 'text-[11px]' : 'text-xs'} text-slate-500 font-medium tracking-wider uppercase`}>{item.year}</span>
-                      <div className="flex items-center gap-1.5">
+                    <div className={`flex justify-between items-center ${isCompact ? 'mt-0.5' : 'mt-1 sm:mt-2'}`}>
+                      <span className={`${isCompact ? 'text-[10px]' : 'text-[11px] sm:text-xs'} text-slate-500 font-medium tracking-wider uppercase`}>{item.year}</span>
+                      <div className="flex items-center gap-1">
                         {item.rating > 0 && (
-                          <div className={`flex items-center gap-1 bg-amber-500/10 ${isCompact ? 'px-1.5 py-0.5' : 'px-2 py-0.5'} rounded-md border border-amber-500/20`}>
-                            <Star className={`${isCompact ? 'w-2.5 h-2.5' : 'w-3 h-3'} text-amber-400 fill-amber-400`} />
-                            <span className={`${isCompact ? 'text-[11px]' : 'text-xs'} font-bold text-amber-300`}>{Number(item.rating).toFixed(1)}</span>
+                          <div className={`flex items-center gap-1 bg-amber-500/10 ${isCompact ? 'px-1 py-0.5' : 'px-1.5 sm:px-2 py-0.5'} rounded-md border border-amber-500/20`}>
+                            <Star className={`${isCompact ? 'w-2 h-2 sm:w-2.5 sm:h-2.5' : 'w-2.5 h-2.5 sm:w-3 sm:h-3'} text-amber-400 fill-amber-400`} />
+                            <span className={`${isCompact ? 'text-[10px]' : 'text-[11px] sm:text-xs'} font-bold text-amber-300`}>{Number(item.rating).toFixed(1)}</span>
                           </div>
                         )}
                       </div>
