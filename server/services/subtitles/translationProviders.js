@@ -136,8 +136,7 @@ class GeminiProvider extends BaseTranslationProvider {
     super('gemini');
     this.apiKey = apiKey || db.prepare("SELECT value FROM settings WHERE key = 'geminiApiKey'").get()?.value;
     const dbModel = db.prepare("SELECT value FROM settings WHERE key = 'geminiModel'").get()?.value;
-    const chosen = modelName || dbModel || 'gemini-1.5-flash';
-    this.modelName = (chosen.includes('2.5') || chosen.includes('3.5') || chosen.includes('3.6')) ? 'gemini-1.5-flash' : chosen;
+    this.modelName = modelName || dbModel || 'gemini-2.5-flash';
     this.fallbackGtx = new GoogleTranslateProvider();
   }
 
@@ -177,10 +176,10 @@ Output ONLY valid JSON array (no markdown code fences):`;
 
     const candidateModels = [...new Set([
       this.modelName,
-      'gemini-1.5-flash',
-      'gemini-2.0-flash',
-      'gemini-1.5-pro'
-    ].filter(m => m && !m.includes('2.5') && !m.includes('3.5') && !m.includes('3.6')))];
+      'gemini-2.5-flash',
+      'gemini-2.5-pro',
+      'gemini-flash-latest'
+    ].filter(Boolean))];
     let rawOutput = '';
     let lastErr = null;
 

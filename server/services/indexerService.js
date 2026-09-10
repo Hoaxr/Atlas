@@ -87,6 +87,15 @@ const isEpisodeRelease = (title) => {
   return /\bs\d{1,2}[._ -]?e\d{1,2}\b/.test(t) || /\b\d{1,2}x\d{1,2}\b/.test(t) || /\be[pp]?\d{1,3}\b/.test(t) && /s\d{1,2}/.test(t);
 };
 
+// Dangerous file extensions and fake/spam honeypot terms (.exe, .zipx, fake MeGusta zipx bot releases, etc.)
+const DANGEROUS_EXTS = /\.(exe|bat|cmd|com|msi|scr|pif|vbs|ps1|jar|lnk|url|app|dmg|sh|bin|reg|hta|jse|wsf|wsh|msc|cpl|apk)\b/i;
+const FAKE_RELEASE_TERMS = /\b(zipx)\b/i;
+
+const isMaliciousOrFakeRelease = (title) => {
+  if (!title) return false;
+  return DANGEROUS_EXTS.test(title) || FAKE_RELEASE_TERMS.test(title);
+};
+
 // ─── Prowlarr JSON Search ─────────────────────────────────────────────
 
 const searchProwlarr = async (query, type = 'search') => {
@@ -199,21 +208,21 @@ const filterAndSortResults = (results, profile, type, currentQuality = null, isM
     } catch { /* ignore */ }
   }
 
-  // Dangerous file extensions — block known malware/virus vectors (.exe, .bat, etc.)
-  const dangerousExts = /\.(exe|bat|cmd|com|msi|scr|pif|vbs|ps1|jar|lnk|url|app|dmg|sh|bin|reg|hta|jse|wsf|wsh|msc|cpl)\b/i;
-
   const camTerms = /\b(cam|ts|telesync|hdts|hdcam|hc|telecine|tc|workprint|wp|screener|scr)\b/;
   let camFiltered = 0;
   let dangerousFiltered = 0;
   let filtered = results.filter(r => {
-    // Block torrents containing dangerous file extensions (virus/malware vectors)
-    if (dangerousExts.test(r.title)) { dangerousFiltered++; return false; }
+    // Block torrents containing dangerous file extensions or fake/spam honeypot markers
+    if (isMaliciousOrFakeRelease(r.title)) { dangerousFiltered++; return false; }
 
     // Block suspiciously small fake torrents during automated background searches
     if (!isManualSearch && r.size && r.size > 0) {
       const minSizeBytes = type === 'movie' ? 150 * 1024 * 1024 : 35 * 1024 * 1024;
       if (r.size < minSizeBytes) return false;
     }
+
+    // Require at least 1 seeder for automated background downloads
+    if (!isManualSearch && (!r.seeders || r.seeders < 1)) return false;
     if (expectedTitle) {
       const expectedWords = tokenizeTitle(expectedTitle);
       const cleanReleaseTitle = r.title.replace(/\[.*?\]|\(.*?\)/g, '').trim();
@@ -388,9 +397,8 @@ const searchSeasonPack = async (showTitle, seasonNumber, _profile = null, _curre
   // Season pack search is a manual browse: show every available full-season
   // pack option and skip release-profile / quality / CAM filters. Individual
   // episode releases (SxxExx / xxXxx) are excluded.
-  const dangerousExts = /\.(exe|bat|cmd|com|msi|scr|pif|vbs|ps1|jar|lnk|url|app|dmg|sh|bin|reg|hta|jse|wsf|wsh|msc|cpl)\b/i;
   const packs = (results || [])
-    .filter(r => !isEpisodeRelease(r.title) && !dangerousExts.test(r.title))
+    .filter(r => !isEpisodeRelease(r.title) && !isMaliciousOrFakeRelease(r.title))
     .sort((a, b) => b.seeders - a.seeders);
 
   // Deduplicate on normalized title stem

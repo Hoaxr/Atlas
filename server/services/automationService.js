@@ -15,6 +15,7 @@ const { registerJob } = require('../utils/cronRegistry');
 const { isVideoFile, deleteFolderRecursive } = require('../utils/fileUtils');
 const { isRootLibraryPath } = require('../utils/fileUtils');
 const { calculateNextSearchAt, calculatePriority } = require('./schedulerLogic');
+const { parseResolution, isCutoffMet } = require('../utils/mediaParsing');
 
 const DEFAULT_SCHEDULES = {
   search_cycle:       '0 * * * *',
@@ -102,7 +103,6 @@ const runSearchCycle = async () => {
           }
         }
 
-        let isCutoffMet = false;
         let currentQuality = null;
 
         if (movie.status === 'downloaded' || hasFile) {
@@ -112,20 +112,18 @@ const runSearchCycle = async () => {
             return;
           }
           
-          currentQuality = indexerService.parseQuality(movie.scene_name || '');
-          if (currentQuality === profile.cutoff) {
-            isCutoffMet = true;
-          } else {
-            let qualities = [];
-            try { qualities = JSON.parse(profile.qualities); } catch { qualities = []; }
-            const currentIdx = qualities.indexOf(currentQuality);
-            const cutoffIdx = qualities.indexOf(profile.cutoff);
-            if (currentIdx !== -1 && cutoffIdx !== -1 && currentIdx <= cutoffIdx) {
-              isCutoffMet = true;
-            }
+          currentQuality = movie.resolution;
+          if (!currentQuality || currentQuality === 'Unknown') {
+            currentQuality = parseResolution(movie.scene_name || '');
+          }
+          if (!currentQuality || currentQuality === 'Unknown') {
+            currentQuality = parseResolution(movie.file_path || '');
           }
 
-          if (isCutoffMet) {
+          let qualities = [];
+          try { qualities = JSON.parse(profile.qualities); } catch { qualities = []; }
+
+          if (isCutoffMet(currentQuality, profile.cutoff, qualities)) {
             const next = calculateNextSearchAt(movie, 'movie', { isDownloaded: true, isCutoffMet: true });
             db.prepare("UPDATE movies SET last_searched_at = datetime('now'), search_state = ?, next_search_at = ? WHERE id = ?").run(next.state, next.nextSearch ? next.nextSearch.toISOString() : null, movie.id);
             return;
@@ -262,7 +260,6 @@ const runSearchCycle = async () => {
           }
         }
 
-        let isCutoffMet = false;
         let currentQuality = null;
 
         if (ep.status === 'downloaded' || hasFile) {
@@ -272,20 +269,18 @@ const runSearchCycle = async () => {
             return;
           }
           
-          currentQuality = indexerService.parseQuality(ep.scene_name || '');
-          if (currentQuality === profile.cutoff) {
-            isCutoffMet = true;
-          } else {
-            let qualities = [];
-            try { qualities = JSON.parse(profile.qualities); } catch { qualities = []; }
-            const currentIdx = qualities.indexOf(currentQuality);
-            const cutoffIdx = qualities.indexOf(profile.cutoff);
-            if (currentIdx !== -1 && cutoffIdx !== -1 && currentIdx <= cutoffIdx) {
-              isCutoffMet = true;
-            }
+          currentQuality = ep.resolution;
+          if (!currentQuality || currentQuality === 'Unknown') {
+            currentQuality = parseResolution(ep.scene_name || '');
+          }
+          if (!currentQuality || currentQuality === 'Unknown') {
+            currentQuality = parseResolution(ep.file_path || '');
           }
 
-          if (isCutoffMet) {
+          let qualities = [];
+          try { qualities = JSON.parse(profile.qualities); } catch { qualities = []; }
+
+          if (isCutoffMet(currentQuality, profile.cutoff, qualities)) {
             const next = calculateNextSearchAt(ep, 'episode', { isDownloaded: true, isCutoffMet: true });
             db.prepare("UPDATE episodes SET last_searched_at = datetime('now'), search_state = ?, next_search_at = ? WHERE id = ?").run(next.state, next.nextSearch ? next.nextSearch.toISOString() : null, ep.id);
             return;

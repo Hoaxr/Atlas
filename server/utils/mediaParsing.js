@@ -67,4 +67,53 @@ const parseAudio = (title) => {
   return null;
 };
 
-module.exports = { parseResolution, parseCodec, parseAudio };
+/**
+ * Resolution quality rank hierarchy (higher number = higher quality).
+ */
+const RESOLUTION_RANK = {
+  '2160p': 4,
+  '4k': 4,
+  '1080p': 3,
+  '720p': 2,
+  '480p': 1,
+  'sd': 1,
+  'cam': 0,
+};
+
+const getResolutionRank = (res) => {
+  if (!res) return -1;
+  const key = String(res).toLowerCase().trim();
+  return RESOLUTION_RANK[key] !== undefined ? RESOLUTION_RANK[key] : -1;
+};
+
+/**
+ * Checks whether currentQuality meets or exceeds cutoff.
+ * If cutoff is not specified, returns true.
+ * If currentQuality is unknown, returns false.
+ */
+const isCutoffMet = (currentQuality, cutoff, qualities = null) => {
+  if (!cutoff) return true;
+  if (!currentQuality || currentQuality === 'Unknown') return false;
+
+  const currentRank = getResolutionRank(currentQuality);
+  const cutoffRank = getResolutionRank(cutoff);
+
+  if (currentRank !== -1 && cutoffRank !== -1) {
+    return currentRank >= cutoffRank;
+  }
+
+  if (currentQuality.toLowerCase() === cutoff.toLowerCase()) return true;
+
+  if (Array.isArray(qualities) && qualities.length > 0) {
+    const curIdx = qualities.indexOf(currentQuality);
+    const cutIdx = qualities.indexOf(cutoff);
+    if (curIdx !== -1 && cutIdx !== -1) {
+      const isLowToHigh = getResolutionRank(qualities[0]) < getResolutionRank(qualities[qualities.length - 1]);
+      return isLowToHigh ? curIdx >= cutIdx : curIdx <= cutIdx;
+    }
+  }
+
+  return false;
+};
+
+module.exports = { parseResolution, parseCodec, parseAudio, getResolutionRank, isCutoffMet };

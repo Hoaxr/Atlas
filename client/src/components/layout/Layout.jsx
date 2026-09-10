@@ -497,7 +497,7 @@ export default function Layout() {
 
       {/* Main Content */}
       <main className="flex-1 min-w-0 w-full overflow-y-auto overflow-x-hidden relative z-10">
-        <div className="p-3 sm:p-4 md:p-6 lg:p-8 w-full max-w-full overflow-x-hidden">
+        <div className="p-3 sm:p-4 md:p-6 lg:p-8 w-full max-w-full overflow-x-clip">
           <Outlet />
         </div>
       </main>

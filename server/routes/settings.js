@@ -963,10 +963,10 @@ router.get('/status', async (req, res) => {
       const configuredModel = getSetting('geminiModel');
       const candidateModels = [...new Set([
         configuredModel,
-        'gemini-1.5-flash',
-        'gemini-2.0-flash',
-        'gemini-1.5-pro'
-      ].filter(m => m && !m.includes('2.5') && !m.includes('3.5') && !m.includes('3.6')))];
+        'gemini-2.5-flash',
+        'gemini-2.5-pro',
+        'gemini-flash-latest'
+      ].filter(Boolean))];
       let lastErr = null;
       for (const m of candidateModels) {
         try {

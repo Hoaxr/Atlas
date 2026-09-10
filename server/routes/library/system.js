@@ -8,7 +8,7 @@ const scannerService = require('../../services/scanner');
 const downloadClientService = require('../../services/downloadClientService');
 const { deleteFolderRecursive } = require('../../utils/fileUtils');
 const { getAiredCutoffSql } = require('../../utils/airDate');
-const { parseResolution } = require('../../utils/mediaParsing');
+const { parseResolution, isCutoffMet } = require('../../utils/mediaParsing');
 const cleanupWorker = require('../../services/cleanupWorker');
 const { scanSubtitleLangs } = require('../../services/scanner/fileScanner');
 
@@ -23,7 +23,7 @@ const invalidateStatsCache = () => { _statsCache = null; _statsCacheTimestamp = 
 router.get('/health', (req, res, next) => {
   try {
     const movies = db.prepare(`
-      SELECT m.id, m.title, m.status, m.scene_name, m.file_path, qp.cutoff, qp.qualities
+      SELECT m.id, m.title, m.status, m.scene_name, m.file_path, m.resolution, qp.cutoff, qp.qualities
       FROM movies m
       LEFT JOIN quality_profiles qp ON m.quality_profile_id = qp.id
       WHERE m.status IN ('monitored', 'downloaded') AND m.monitored = 1
@@ -41,23 +41,19 @@ router.get('/health', (req, res, next) => {
         continue;
       }
 
-      let currentQuality = parseResolution(m.scene_name);
-      if (currentQuality === 'Unknown' && m.file_path) {
+      let currentQuality = m.resolution;
+      if (!currentQuality || currentQuality === 'Unknown') {
+        currentQuality = parseResolution(m.scene_name);
+      }
+      if (!currentQuality || currentQuality === 'Unknown') {
         currentQuality = parseResolution(m.file_path);
       }
       item.currentQuality = currentQuality;
 
-      if (!m.cutoff || !m.qualities) {
-        cutoffUnmetMovies.push(item);
-        continue;
-      }
-
       let qualities = [];
       try { qualities = JSON.parse(m.qualities); } catch { /* ignore parse error */ }
-      const currentIdx = qualities.indexOf(currentQuality);
-      const cutoffIdx = qualities.indexOf(m.cutoff);
 
-      if (currentIdx !== -1 && cutoffIdx !== -1 && currentIdx <= cutoffIdx) {
+      if (isCutoffMet(currentQuality, m.cutoff, qualities)) {
         cutoffMetMovies.push(item);
       } else {
         cutoffUnmetMovies.push(item);
@@ -65,7 +61,7 @@ router.get('/health', (req, res, next) => {
     }
 
     const eps = db.prepare(`
-      SELECT e.id, s.id as show_id, s.title || ' - S' || printf('%02d', e.season_number) || 'E' || printf('%02d', e.episode_number) as title, e.status, e.scene_name, e.file_path, qp.cutoff, qp.qualities
+      SELECT e.id, s.id as show_id, s.title || ' - S' || printf('%02d', e.season_number) || 'E' || printf('%02d', e.episode_number) as title, e.status, e.scene_name, e.file_path, e.resolution, qp.cutoff, qp.qualities
       FROM episodes e
       JOIN shows s ON e.show_id = s.id
       LEFT JOIN quality_profiles qp ON s.quality_profile_id = qp.id
@@ -84,23 +80,19 @@ router.get('/health', (req, res, next) => {
         continue;
       }
       
-      let currentQuality = parseResolution(e.scene_name);
-      if (currentQuality === 'Unknown' && e.file_path) {
+      let currentQuality = e.resolution;
+      if (!currentQuality || currentQuality === 'Unknown') {
+        currentQuality = parseResolution(e.scene_name);
+      }
+      if (!currentQuality || currentQuality === 'Unknown') {
         currentQuality = parseResolution(e.file_path);
       }
       item.currentQuality = currentQuality;
 
-      if (!e.cutoff || !e.qualities) {
-        cutoffUnmetEps.push(item);
-        continue;
-      }
-
       let qualities = [];
       try { qualities = JSON.parse(e.qualities); } catch { /* ignore parse error */ }
-      const currentIdx = qualities.indexOf(currentQuality);
-      const cutoffIdx = qualities.indexOf(e.cutoff);
 
-      if (currentIdx !== -1 && cutoffIdx !== -1 && currentIdx <= cutoffIdx) {
+      if (isCutoffMet(currentQuality, e.cutoff, qualities)) {
         cutoffMetEps.push(item);
       } else {
         cutoffUnmetEps.push(item);

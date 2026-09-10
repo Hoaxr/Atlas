@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../lib/api';
-import { Activity, ShieldCheck, ArrowLeft, ChevronDown, ChevronUp, Search } from 'lucide-react';
+import { Activity, ShieldCheck, ChevronDown, ChevronUp, Search } from 'lucide-react';
 import { useStickyBar } from '../lib/useStickyBar';
 import StickyBar from '../components/shared/StickyBar';
 
@@ -126,18 +126,12 @@ export default function MediaHealth() {
           <h1 className="font-semibold text-slate-200">Media Health</h1>
         </div>
       </StickyBar>
-      <div ref={headerRef} className="pt-2">
+      <div ref={headerRef} className="pt-2 mb-6">
         <h1 className="text-2xl font-bold text-slate-100 flex items-center gap-2">
           <Activity className="w-6 h-6 text-emerald-400" />
           Media Health Dashboard
         </h1>
         <p className="text-slate-400 mt-1">Self-healing status and library completeness</p>
-      </div>
-
-      <div className="flex items-center gap-3 mb-6">
-        <button onClick={() => navigate('/stats')} className="p-2 hover:bg-white/5 rounded-full transition-colors text-slate-400 hover:text-white">
-          <ArrowLeft className="w-5 h-5" />
-        </button>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

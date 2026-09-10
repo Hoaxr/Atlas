@@ -334,99 +334,101 @@ export default function Discover() {
 
   return (
     <div className="space-y-3">
-      <div ref={headerRef} className="flex items-center justify-between gap-3">
-        <div className="min-w-0">
-          <h1 className="text-xl sm:text-3xl font-black text-slate-800 dark:text-slate-100 flex items-center gap-2 sm:gap-3 !mb-0">
-            <SearchIcon className="w-5 h-5 sm:w-8 sm:h-8 text-emerald-400" /> <span className="truncate">Discover</span>
-          </h1>
-          <p className="text-slate-400 mt-1 text-sm sm:text-base hidden sm:block">Search and add new media to your library.</p>
-        </div>
-        
-        {/* Mode Toggle */}
-        <div className="flex items-center gap-2 shrink-0">
-          <div className="flex relative bg-slate-800/60 p-0.5 rounded-xl border border-white/5">
-            <motion.div
-              layoutId="discover-mode-slider"
-              className={`absolute top-0.5 bottom-0.5 rounded-lg shadow-sm ${mode === 'movies' ? 'left-0.5 bg-cyan-500/15 border border-cyan-500/20' : 'right-0.5 bg-purple-500/15 border border-purple-500/20'}`}
-              style={{ width: 'calc(50% - 2px)' }}
-              transition={{ type: 'spring', stiffness: 400, damping: 30 }}
-            />
-            <button 
-              onClick={() => setMode('movies')}
-              className={`relative z-10 flex-1 flex items-center justify-center gap-2 px-3 sm:px-6 py-2.5 rounded-lg text-sm font-semibold whitespace-nowrap transition-colors duration-200 ${mode === 'movies' ? 'text-cyan-300' : 'text-slate-500 hover:text-slate-300'}`}
-            >
-              <Film className="w-4 h-4 shrink-0" />
-              <span className="hidden sm:inline">Movies</span>
-            </button>
-            <button 
-              onClick={() => setMode('shows')}
-              className={`relative z-10 flex-1 flex items-center justify-center gap-2 px-3 sm:px-6 py-2.5 rounded-lg text-sm font-semibold whitespace-nowrap transition-colors duration-200 ${mode === 'shows' ? 'text-purple-300' : 'text-slate-500 hover:text-slate-300'}`}
-            >
-              <Tv className="w-4 h-4 shrink-0" />
-              <span className="hidden sm:inline">TV Shows</span>
-            </button>
+      <div ref={headerRef} className="space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <h1 className="text-xl sm:text-3xl font-black text-slate-800 dark:text-slate-100 flex items-center gap-2 sm:gap-3 !mb-0">
+              <SearchIcon className="w-5 h-5 sm:w-8 sm:h-8 text-emerald-400" /> <span className="truncate">Discover</span>
+            </h1>
+            <p className="text-slate-400 mt-1 text-sm sm:text-base hidden sm:block">Search and add new media to your library.</p>
           </div>
           
-          {/* Row visibility options */}
-          {isDiscovering && !loading && (
-            <div ref={rowsMenuRef} className="relative">
-              <button
-                onClick={() => setRowsMenuOpen(!rowsMenuOpen)}
-                className={`p-2 rounded-xl transition-colors ${rowsMenuOpen ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
-                title="Toggle rows"
+          {/* Mode Toggle */}
+          <div className="flex items-center gap-2 shrink-0">
+            <div className="flex relative bg-slate-800/60 p-0.5 rounded-xl border border-white/5">
+              <motion.div
+                layoutId="discover-mode-slider"
+                className={`absolute top-0.5 bottom-0.5 rounded-lg shadow-sm ${mode === 'movies' ? 'left-0.5 bg-cyan-500/15 border border-cyan-500/20' : 'right-0.5 bg-purple-500/15 border border-purple-500/20'}`}
+                style={{ width: 'calc(50% - 2px)' }}
+                transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+              />
+              <button 
+                onClick={() => setMode('movies')}
+                className={`relative z-10 flex-1 flex items-center justify-center gap-2 px-3 sm:px-6 py-2.5 rounded-lg text-sm font-semibold whitespace-nowrap transition-colors duration-200 ${mode === 'movies' ? 'text-cyan-300' : 'text-slate-500 hover:text-slate-300'}`}
               >
-                <ListFilter className="w-5 h-5" />
+                <Film className="w-4 h-4 shrink-0" />
+                <span className="hidden sm:inline">Movies</span>
               </button>
-              {rowsMenuOpen && (
-                <div className="absolute right-0 top-full mt-3 w-48 bg-slate-800 border border-white/10 rounded-xl shadow-xl z-[60] overflow-hidden">
-                  <div className="px-4 py-2.5 border-b border-white/10 text-xs font-bold text-slate-400 uppercase tracking-wider">Visible Rows</div>
-                  <div className="p-1.5 flex flex-col gap-0.5">
-                    {ROW_KEYS.filter(k => k !== 'upcoming' || mode === 'movies').map(key => (
-                      <label key={key} className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-white/5 cursor-pointer transition-colors group" onClick={(e) => { e.preventDefault(); setVisibleRows(prev => ({ ...prev, [key]: !prev[key] })); }}>
-                        {visibleRows[key] ? (
-                          <div className="w-4 h-4 rounded bg-cyan-500/20 border border-cyan-500/50 flex items-center justify-center">
-                            <CheckSquare className="w-3.5 h-3.5 text-cyan-400" />
-                          </div>
-                        ) : (
-                          <div className="w-4 h-4 rounded bg-slate-800 border border-slate-600/50 group-hover:border-slate-500 transition-colors" />
-                        )}
-                        <span className="text-sm text-slate-300 capitalize select-none group-hover:text-white transition-colors">{ROW_LABELS[key]}</span>
-                      </label>
-                    ))}
+              <button 
+                onClick={() => setMode('shows')}
+                className={`relative z-10 flex-1 flex items-center justify-center gap-2 px-3 sm:px-6 py-2.5 rounded-lg text-sm font-semibold whitespace-nowrap transition-colors duration-200 ${mode === 'shows' ? 'text-purple-300' : 'text-slate-500 hover:text-slate-300'}`}
+              >
+                <Tv className="w-4 h-4 shrink-0" />
+                <span className="hidden sm:inline">TV Shows</span>
+              </button>
+            </div>
+            
+            {/* Row visibility options */}
+            {isDiscovering && !loading && (
+              <div ref={rowsMenuRef} className="relative">
+                <button
+                  onClick={() => setRowsMenuOpen(!rowsMenuOpen)}
+                  className={`p-2 rounded-xl transition-colors ${rowsMenuOpen ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
+                  title="Toggle rows"
+                >
+                  <ListFilter className="w-5 h-5" />
+                </button>
+                {rowsMenuOpen && (
+                  <div className="absolute right-0 top-full mt-3 w-48 bg-slate-800 border border-white/10 rounded-xl shadow-xl z-[60] overflow-hidden">
+                    <div className="px-4 py-2.5 border-b border-white/10 text-xs font-bold text-slate-400 uppercase tracking-wider">Visible Rows</div>
+                    <div className="p-1.5 flex flex-col gap-0.5">
+                      {ROW_KEYS.filter(k => k !== 'upcoming' || mode === 'movies').map(key => (
+                        <label key={key} className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-white/5 cursor-pointer transition-colors group" onClick={(e) => { e.preventDefault(); setVisibleRows(prev => ({ ...prev, [key]: !prev[key] })); }}>
+                          {visibleRows[key] ? (
+                            <div className="w-4 h-4 rounded bg-cyan-500/20 border border-cyan-500/50 flex items-center justify-center">
+                              <CheckSquare className="w-3.5 h-3.5 text-cyan-400" />
+                            </div>
+                          ) : (
+                            <div className="w-4 h-4 rounded bg-slate-800 border border-slate-600/50 group-hover:border-slate-500 transition-colors" />
+                          )}
+                          <span className="text-sm text-slate-300 capitalize select-none group-hover:text-white transition-colors">{ROW_LABELS[key]}</span>
+                        </label>
+                      ))}
+                    </div>
                   </div>
-                </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Desktop Search */}
+        <div className="glass-panel rounded-2xl p-4 sm:p-6 shadow-2xl hidden sm:block">
+          <div className="relative flex items-center">
+            <SearchIcon className="absolute left-3 sm:left-4 w-4 h-4 sm:w-5 sm:h-5 text-slate-400" />
+            <input
+              ref={searchInputRef}
+              type="text"
+              placeholder="Search by title, IMDb ID, or TMDB ID..."
+              className="glass-input w-full !pl-10 sm:!pl-12 !pr-12 sm:!pr-14 h-10 sm:h-12 text-base sm:text-lg shadow-inner"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+            />
+            <div className="absolute right-2 sm:right-3 flex items-center gap-2">
+              {query && (loading || isTyping) && (
+                <Loader2 className="w-4 h-4 sm:w-5 sm:h-5 text-slate-400 animate-spin" />
+              )}
+              {query && !(loading || isTyping) && (
+                <button
+                  type="button"
+                  onClick={() => setQuery('')}
+                  className="p-1 sm:p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"
+                  title="Clear search"
+                >
+                  <X className="w-4 h-4 sm:w-5 sm:h-5" />
+                </button>
               )}
             </div>
-          )}
-        </div>
-      </div>
-
-      {/* Desktop Search */}
-      <div className="glass-panel rounded-2xl p-4 sm:p-6 shadow-2xl hidden sm:block">
-        <div className="relative flex items-center">
-          <SearchIcon className="absolute left-3 sm:left-4 w-4 h-4 sm:w-5 sm:h-5 text-slate-400" />
-          <input
-            ref={searchInputRef}
-            type="text"
-            placeholder="Search by title, IMDb ID, or TMDB ID..."
-            className="glass-input w-full !pl-10 sm:!pl-12 !pr-12 sm:!pr-14 h-10 sm:h-12 text-base sm:text-lg shadow-inner"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-          />
-          <div className="absolute right-2 sm:right-3 flex items-center gap-2">
-            {query && (loading || isTyping) && (
-              <Loader2 className="w-4 h-4 sm:w-5 sm:h-5 text-slate-400 animate-spin" />
-            )}
-            {query && !(loading || isTyping) && (
-              <button
-                type="button"
-                onClick={() => setQuery('')}
-                className="p-1 sm:p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"
-                title="Clear search"
-              >
-                <X className="w-4 h-4 sm:w-5 sm:h-5" />
-              </button>
-            )}
           </div>
         </div>
       </div>
