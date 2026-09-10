@@ -290,8 +290,9 @@ router.get('/tracks/:mediaType/:mediaId', async (req, res, next) => {
 router.post('/verify-sync/:mediaType/:mediaId', async (req, res, next) => {
   try {
     const { mediaType, mediaId } = req.params;
-    const results = await subtitleSyncService.verifyAllSubtitlesForMedia(mediaType, parseInt(mediaId, 10));
-    res.json({ status: 'success', data: results });
+    const force = req.query.force !== 'false';
+    const results = await subtitleSyncService.verifyAllSubtitlesForMedia(mediaType, parseInt(mediaId, 10), { force });
+    res.json({ status: 'success', data: { results } });
   } catch (err) {
     next(err);
   }

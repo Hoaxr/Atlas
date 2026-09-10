@@ -352,7 +352,7 @@ const saveSyncResult = async (mediaType, mediaId, subFilename, subPath, syncResu
 /**
  * Verifies all subtitle files for a specific movie or episode
  */
-const verifyAllSubtitlesForMedia = async (mediaType, mediaId) => {
+const verifyAllSubtitlesForMedia = async (mediaType, mediaId, { force = false } = {}) => {
   let mediaRow = null;
   if (mediaType === 'movie') {
     mediaRow = db.prepare('SELECT id, title, file_path, folder_path FROM movies WHERE id = ?').get(mediaId);
@@ -374,6 +374,16 @@ const verifyAllSubtitlesForMedia = async (mediaType, mediaId) => {
   const subFiles = await getSubtitlesInDir(mediaDir, fsp, path);
   const results = [];
 
+  let existingMap = new Map();
+  try {
+    const existing = db.prepare(`
+      SELECT filename, sync_status, sync_offset, sync_details, file_size
+      FROM subtitle_tracks
+      WHERE media_type = ? AND media_id = ?
+    `).all(mediaType, mediaId);
+    existingMap = new Map(existing.map(e => [e.filename, e]));
+  } catch { /* ignore */ }
+
   for (const filename of subFiles) {
     // For episodes, only check subtitles matching this episode
     if (mediaType === 'episode') {
@@ -388,6 +398,28 @@ const verifyAllSubtitlesForMedia = async (mediaType, mediaId) => {
     }
 
     const subPath = path.join(mediaDir, filename);
+
+    // Incremental optimization: if already verified as in_sync, unchanged, and not forced, skip VAD re-check
+    const prev = existingMap.get(filename);
+    if (!force && prev && prev.sync_status === 'in_sync') {
+      try {
+        const stat = await fsp.stat(subPath);
+        if (stat.size === prev.file_size) {
+          results.push({
+            filename,
+            filePath: subPath,
+            status: 'in_sync',
+            synced: true,
+            offsetSeconds: prev.sync_offset || 0,
+            confidence: 1.0,
+            cached: true,
+            message: prev.sync_details || 'Already verified in sync'
+          });
+          continue;
+        }
+      } catch { /* proceed to normal check */ }
+    }
+
     const syncResult = await verifySingleSubtitleSync({
       filePath: mediaRow.file_path,
       subPath,
@@ -409,10 +441,12 @@ const verifyAllSubtitlesForMedia = async (mediaType, mediaId) => {
 
 /**
  * Full Library Subtitle Sync Check (Background Task)
+ * Uses incremental caching so already-synced tracks are skipped unless forced or changed
  */
-const runLibrarySubtitleSyncCheck = async () => {
-  console.log('[SubtitleSyncService] Starting Library Subtitle Sync Check...');
+const runLibrarySubtitleSyncCheck = async ({ force = false } = {}) => {
+  console.log(`[SubtitleSyncService] Starting Library Subtitle Sync Check (force: ${force})...`);
   let totalChecked = 0;
+  let cachedCount = 0;
   let issuesFound = 0;
 
   // 1. Check movies with downloaded status and subtitles
@@ -424,9 +458,13 @@ const runLibrarySubtitleSyncCheck = async () => {
   await runWithConcurrency(movies, 2, async (movie) => {
     try {
       if (!fs.existsSync(movie.file_path)) return;
-      const res = await verifyAllSubtitlesForMedia('movie', movie.id);
-      totalChecked += res.length;
+      const res = await verifyAllSubtitlesForMedia('movie', movie.id, { force });
       for (const r of res) {
+        if (r.cached) {
+          cachedCount++;
+        } else {
+          totalChecked++;
+        }
         if (!r.synced) {
           issuesFound++;
           console.warn(`[SubtitleSyncService] Sync issue in movie "${movie.title}" (${r.filename}): ${r.message}`);
@@ -446,9 +484,13 @@ const runLibrarySubtitleSyncCheck = async () => {
   await runWithConcurrency(episodes, 2, async (ep) => {
     try {
       if (!fs.existsSync(ep.file_path)) return;
-      const res = await verifyAllSubtitlesForMedia('episode', ep.id);
-      totalChecked += res.length;
+      const res = await verifyAllSubtitlesForMedia('episode', ep.id, { force });
       for (const r of res) {
+        if (r.cached) {
+          cachedCount++;
+        } else {
+          totalChecked++;
+        }
         if (!r.synced) {
           issuesFound++;
           const label = `${ep.show_title} S${String(ep.season_number).padStart(2, '0')}E${String(ep.episode_number).padStart(2, '0')}`;
@@ -458,7 +500,7 @@ const runLibrarySubtitleSyncCheck = async () => {
     } catch { /* ignore */ }
   });
 
-  const msg = `Subtitle sync check completed: checked ${totalChecked} subtitle track(s), ${issuesFound} issue(s) detected.`;
+  const msg = `Subtitle sync check completed: checked ${totalChecked} track(s), ${cachedCount} skipped (already in sync), ${issuesFound} issue(s) detected.`;
   console.log(`[SubtitleSyncService] ${msg}`);
 
   if (issuesFound > 0) {
