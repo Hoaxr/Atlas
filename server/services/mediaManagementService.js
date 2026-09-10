@@ -13,6 +13,7 @@ const { getSetting } = require('../utils/settings');
 const { isVideoFile, isSubtitleFile, findLargestVideoFile } = require('../utils/fileUtils');
 const { getMediaMetadata, parseAudioFromFileName } = require('../utils/videoUtils');
 const subtitleService = require('./subtitles');
+const subtitleSyncService = require('./subtitles/subtitleSyncService');
 const { syncMovieSubtitles, syncEpisodeSubtitles, invalidateStats } = require('./subtitles/sync');
 
 
@@ -569,7 +570,13 @@ const importMovie = async (torrent, movie) => {
     await fs.promises.mkdir(destFolder, { recursive: true });
     const destFile = path.join(destFolder, `${fileName}${ext}`);
 
-    // Clean up any existing video files in the destination folder (from previous imports)
+    // Check if this is a redownload / release upgrade replacing an existing movie file
+    const isRedownload = Boolean(
+      (movie.file_path && fs.existsSync(movie.file_path)) ||
+      fs.existsSync(destFile)
+    );
+
+    // Clean up any existing video files and old subtitle files if redownloading a new release
     if (fs.existsSync(destFolder)) {
       try {
         const existingFiles = await fs.promises.readdir(destFolder);
@@ -578,6 +585,11 @@ const importMovie = async (torrent, movie) => {
             const oldPath = path.join(destFolder, existing);
             console.log(`[MediaManagement] Removing old video file: ${oldPath}`);
             await fs.promises.unlink(oldPath).catch(() => {});
+          } else if (isRedownload && isSubtitleFile(existing)) {
+            // Remove old release's subtitle files so new release gets fresh, correctly synced subtitles
+            const oldSubPath = path.join(destFolder, existing);
+            console.log(`[MediaManagement] Purging obsolete subtitle from previous release: ${oldSubPath}`);
+            await fs.promises.unlink(oldSubPath).catch(() => {});
           }
         }
       } catch { /* ignore cleanup errors */ }
@@ -668,7 +680,7 @@ const importMovie = async (torrent, movie) => {
       })();
       const freshMovie = db.prepare('SELECT * FROM movies WHERE id = ?').get(movie.id);
       for (const langCode of providerLangs) {
-        subtitleService.downloadSubtitlesForMovie(freshMovie, langCode).catch(e =>
+        subtitleService.downloadSubtitlesForMovie(freshMovie, langCode, { force: isRedownload }).catch(e =>
           console.log(`[MediaManagement] Subtitle fetch (${langCode}) for ${movie.title}: ${e.message}`)
         );
       }
@@ -737,11 +749,13 @@ const importMovie = async (torrent, movie) => {
     try {
       await syncMovieSubtitles(movie.id, destFile);
       invalidateStats();
+      // Auto-verify subtitle sync on the newly imported release
+      subtitleSyncService.verifyAllSubtitlesForMedia('movie', movie.id).catch(() => {});
     } catch { /* ignore */ }
 
     // Auto-download missing subtitles if enabled in settings
     try {
-      subtitleService.downloadSubtitlesForMovie(movie).catch(() => {});
+      subtitleService.downloadSubtitlesForMovie(movie, null, { force: isRedownload }).catch(() => {});
     } catch { /* ignore */ }
 
     return true;
@@ -832,6 +846,11 @@ const importEpisode = async (torrent, episode) => {
     
     const destFile = path.join(destFolder, `${fileName}${ext}`);
     
+    const isRedownload = Boolean(
+      (episode.file_path && fs.existsSync(episode.file_path)) ||
+      fs.existsSync(destFile)
+    );
+    
     if (episode.file_path && episode.file_path !== destFile && fs.existsSync(episode.file_path)) {
       console.log(`[MediaManagement] Deleting old file at ${episode.file_path}.`);
       await fs.promises.unlink(episode.file_path).catch(() => {});
@@ -840,6 +859,25 @@ const importEpisode = async (torrent, episode) => {
     if (fs.existsSync(destFile)) {
       console.log(`[MediaManagement] File ${destFile} already exists. Overwriting with new import.`);
       await fs.promises.unlink(destFile);
+    }
+
+    // Purge old subtitles for this episode if redownloading another release
+    if (isRedownload && fs.existsSync(destFolder)) {
+      try {
+        const existingFiles = await fs.promises.readdir(destFolder);
+        const epMatch1 = `s${s}e${e}`.toLowerCase();
+        const epMatch2 = `${episode.season_number}x${e}`.toLowerCase();
+        for (const existing of existingFiles) {
+          if (isSubtitleFile(existing)) {
+            const lower = existing.toLowerCase();
+            if (lower.includes(epMatch1) || lower.includes(epMatch2)) {
+              const oldSubPath = path.join(destFolder, existing);
+              console.log(`[MediaManagement] Purging obsolete episode subtitle from previous release: ${oldSubPath}`);
+              await fs.promises.unlink(oldSubPath).catch(() => {});
+            }
+          }
+        }
+      } catch { /* ignore */ }
     }
 
     try {
@@ -869,7 +907,10 @@ const importEpisode = async (torrent, episode) => {
         if (isSubtitleFile(entry)) {
           const entryBase = path.basename(entry, subExt);
           if (entryBase === baseVideoName || entryBase.startsWith(`${baseVideoName}.`)) {
-            const subLangSuffix = entryBase.startsWith(`${baseVideoName}.`) ? entryBase.substring(baseVideoName.length) : '';
+            let subLangSuffix = entryBase.startsWith(`${baseVideoName}.`) ? entryBase.substring(baseVideoName.length) : '';
+            if (subLangSuffix.startsWith('.') && fileName.endsWith('.')) {
+              subLangSuffix = subLangSuffix.substring(1);
+            }
             const srcSubPath = path.join(videoDir, entry);
             const destSubPath = path.join(destFolder, `${fileName}${subLangSuffix}${subExt}`);
             try {
@@ -919,7 +960,7 @@ const importEpisode = async (torrent, episode) => {
       const freshEpisode = db.prepare('SELECT * FROM episodes WHERE id = ?').get(episode.id);
       const show = db.prepare('SELECT * FROM shows WHERE id = ?').get(episode.show_id);
       for (const langCode of providerLangs) {
-        subtitleService.downloadSubtitlesForEpisode(freshEpisode, show, langCode).catch(e =>
+        subtitleService.downloadSubtitlesForEpisode(freshEpisode, show, langCode, { force: isRedownload }).catch(e =>
           console.log(`[MediaManagement] Subtitle fetch (${langCode}) for ${episode.show_title} ${formattedSE}: ${e.message}`)
         );
       }
@@ -1013,6 +1054,8 @@ const importEpisode = async (torrent, episode) => {
     try {
       await syncEpisodeSubtitles(episode.id, destFile);
       invalidateStats();
+      // Auto-verify subtitle sync on the newly imported release
+      subtitleSyncService.verifyAllSubtitlesForMedia('episode', episode.id).catch(() => {});
     } catch { /* ignore */ }
 
     // Auto-download missing subtitles if enabled in settings
@@ -1020,7 +1063,7 @@ const importEpisode = async (torrent, episode) => {
       const fullEp = db.prepare('SELECT * FROM episodes WHERE id = ?').get(episode.id);
       const show = db.prepare('SELECT * FROM shows WHERE id = ?').get(episode.show_id);
       if (fullEp && show) {
-        subtitleService.downloadSubtitlesForEpisode(fullEp, show).catch(() => {});
+        subtitleService.downloadSubtitlesForEpisode(fullEp, show, null, { force: isRedownload }).catch(() => {});
       }
     } catch { /* ignore */ }
 

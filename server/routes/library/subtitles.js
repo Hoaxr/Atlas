@@ -17,6 +17,7 @@ const path = require('path');
 const db = require('../../config/database');
 const { parseSubtitles, serializeSubtitles, readSubtitleFile } = require('../../services/subtitles/parser');
 const translationQueue = require('../../services/subtitles/translationQueue');
+const subtitleSyncService = require('../../services/subtitles/subtitleSyncService');
 const { CODE_TO_LANG } = require('../../utils/constants');
 const { extractLang, getSubtitlesInDir } = require('./helpers');
 
@@ -261,6 +262,15 @@ router.get('/tracks/:mediaType/:mediaId', async (req, res, next) => {
         sourceLang: dbTrack?.source_lang || null,
         provider: dbTrack?.provider || null,
         manuallyEdited: Boolean(dbTrack?.manually_edited),
+        syncStatus: dbTrack?.sync_status || 'unknown',
+        syncOffset: dbTrack?.sync_offset || 0,
+        syncDetails: (() => {
+          try {
+            return dbTrack?.sync_details ? JSON.parse(dbTrack.sync_details) : null;
+          } catch {
+            return null;
+          }
+        })(),
         fileSize: stat?.size || dbTrack?.file_size || 0,
         cueCount: dbTrack?.cue_count || 0,
         modifiedAt: stat?.mtime || dbTrack?.updated_at || null
@@ -268,6 +278,46 @@ router.get('/tracks/:mediaType/:mediaId', async (req, res, next) => {
     }
 
     res.json({ status: 'success', data: tracks });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * POST /api/library/subtitles/verify-sync/:mediaType/:mediaId
+ * Trigger on-demand subtitle synchronization check for a movie or episode
+ */
+router.post('/verify-sync/:mediaType/:mediaId', async (req, res, next) => {
+  try {
+    const { mediaType, mediaId } = req.params;
+    const results = await subtitleSyncService.verifyAllSubtitlesForMedia(mediaType, parseInt(mediaId, 10));
+    res.json({ status: 'success', data: results });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * GET /api/library/subtitles/sync-issues
+ * List all detected subtitle sync anomalies across the library
+ */
+router.get('/sync-issues', (req, res, next) => {
+  try {
+    const issues = db.prepare(`
+      SELECT st.*, 
+        CASE 
+          WHEN st.media_type = 'movie' THEN m.title 
+          WHEN st.media_type = 'episode' THEN s.title || ' S' || printf('%02d', e.season_number) || 'E' || printf('%02d', e.episode_number)
+        END as media_title
+      FROM subtitle_tracks st
+      LEFT JOIN movies m ON st.media_type = 'movie' AND st.media_id = m.id
+      LEFT JOIN episodes e ON st.media_type = 'episode' AND st.media_id = e.id
+      LEFT JOIN shows s ON e.show_id = s.id
+      WHERE st.sync_status IN ('duration_mismatch', 'drift_detected', 'offset_detected', 'desynced', 'invalid_timing')
+      ORDER BY st.updated_at DESC
+      LIMIT 100
+    `).all();
+    res.json({ status: 'success', data: issues });
   } catch (err) {
     next(err);
   }

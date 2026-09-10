@@ -47,10 +47,13 @@ class GoogleTranslateProvider extends BaseTranslationProvider {
     const targetCode = LANG_TO_CODE[targetLang] || (typeof targetLang === 'string' && targetLang.length === 2 ? targetLang.toLowerCase() : 'nl');
     const sourceCode = LANG_TO_CODE[sourceLang] || (typeof sourceLang === 'string' && sourceLang.length === 2 ? sourceLang.toLowerCase() : 'en');
 
-    // Protect formatting tags in each cue
+    // Protect formatting tags and internal newlines in each cue
+    const NL_TOKEN = '❲NL❳';
     const protectedItems = cues.map(cue => {
       const { protectedText, tagMap } = protectTags(cue.text);
-      return { id: cue.id, originalText: cue.text, protectedText, tagMap };
+      // Replace internal newlines so each cue is strictly a single line when batched with \n
+      const singleLine = protectedText.replace(/\r?\n/g, ` ${NL_TOKEN} `);
+      return { id: cue.id, originalText: cue.text, protectedText: singleLine, tagMap };
     });
 
     const linesToTranslate = protectedItems.map(item => item.protectedText);
@@ -95,9 +98,11 @@ class GoogleTranslateProvider extends BaseTranslationProvider {
 
     const translatedLines = await gtxTranslate(linesToTranslate, targetCode, sourceCode);
 
-    // Restore tags for each cue
+    // Restore newlines and tags for each cue
     return protectedItems.map((item, idx) => {
-      const translatedProtected = translatedLines[idx] !== undefined ? translatedLines[idx] : item.protectedText;
+      let translatedProtected = translatedLines[idx] !== undefined ? translatedLines[idx] : item.protectedText;
+      // Restore internal newlines
+      translatedProtected = translatedProtected.replace(new RegExp(`\\s*[❲\\[\\(]\\s*NL\\s*[❳\\]\\)]\\s*`, 'gi'), '\n');
       const restoredText = restoreTags(translatedProtected, item.tagMap);
       return {
         id: item.id,

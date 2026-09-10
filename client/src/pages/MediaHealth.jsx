@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../lib/api';
-import { Activity, ShieldCheck, ChevronDown, ChevronUp, Search } from 'lucide-react';
+import { Activity, ShieldCheck, ChevronDown, ChevronUp, Search, Languages, CheckCircle2 } from 'lucide-react';
 import { useStickyBar } from '../lib/useStickyBar';
 import StickyBar from '../components/shared/StickyBar';
 
@@ -43,7 +43,8 @@ export default function MediaHealth() {
     );
   }
 
-  const { movies, episodes } = healthData || { movies: {}, episodes: {} };
+  const { movies, episodes, subtitles } = healthData || { movies: {}, episodes: {}, subtitles: {} };
+  const subtitleIssues = subtitles?.issues || [];
   
   const movieCounts = {
     missing: (movies.missing || []).length,
@@ -287,6 +288,95 @@ export default function MediaHealth() {
               )}
             </div>
           </div>
+        </div>
+
+        {/* Subtitle Synchronization Health */}
+        <div className="md:col-span-2 glass-panel rounded-2xl p-6 border border-pink-500/10">
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-pink-500/10 border border-pink-500/30 flex items-center justify-center text-pink-400">
+                <Languages className="w-5 h-5" />
+              </div>
+              <div>
+                <h2 className="text-xl font-bold text-slate-200">
+                  Subtitle Synchronization Health
+                </h2>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Automated audio speech VAD timing & cross-track drift verification
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <span className={`px-2.5 py-1 text-xs font-semibold rounded-full border ${
+                subtitleIssues.length === 0
+                  ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+                  : 'bg-amber-500/15 text-amber-400 border-amber-500/30'
+              }`}>
+                {subtitleIssues.length === 0 ? 'All Subtitles Synced' : `${subtitleIssues.length} Sync Issue${subtitleIssues.length > 1 ? 's' : ''}`}
+              </span>
+            </div>
+          </div>
+
+          {subtitleIssues.length === 0 ? (
+            <div className="p-5 text-center text-slate-400 text-sm bg-slate-900/30 rounded-xl border border-white/5 flex items-center justify-center gap-2.5">
+              <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+              <span>No subtitle synchronization anomalies detected across library</span>
+            </div>
+          ) : (
+            <div className="bg-slate-800/40 rounded-xl border border-white/5 overflow-hidden">
+              <ul className="divide-y divide-slate-800/50 max-h-96 overflow-y-auto">
+                {subtitleIssues.map((sub) => (
+                  <li key={sub.id || sub.filename} className="p-3 flex items-center justify-between hover:bg-slate-800/50 transition-colors">
+                    <div className="min-w-0 flex-1 pr-4">
+                      <button
+                        onClick={() => navigate(sub.media_type === 'movie' ? `/movies/${sub.show_or_movie_id}` : `/shows/${sub.show_or_movie_id}`)}
+                        className="font-medium text-slate-200 truncate hover:text-pink-400 hover:underline text-left block w-full transition-colors"
+                        title={sub.title}
+                      >
+                        {sub.title}
+                      </button>
+                      <div className="flex items-center gap-2 mt-1 text-xs flex-wrap">
+                        <span className="text-slate-400 truncate max-w-[280px]">
+                          {sub.filename}
+                        </span>
+                        <span className="px-1.5 py-0.5 rounded bg-pink-500/15 text-pink-300 border border-pink-500/30 uppercase font-bold text-[10px]">
+                          {sub.lang_code}
+                        </span>
+                        {sub.sync_status === 'offset_detected' && (
+                          <span className="px-2 py-0.5 rounded border bg-amber-500/10 text-amber-400 border-amber-500/20">
+                            Offset: {sub.sync_offset > 0 ? `+${sub.sync_offset}s` : `${sub.sync_offset}s`}
+                          </span>
+                        )}
+                        {sub.sync_status === 'drift_detected' && (
+                          <span className="px-2 py-0.5 rounded border bg-amber-500/10 text-amber-400 border-amber-500/20">
+                            Framerate Drift
+                          </span>
+                        )}
+                        {sub.sync_status === 'duration_mismatch' && (
+                          <span className="px-2 py-0.5 rounded border bg-rose-500/10 text-rose-400 border-rose-500/20">
+                            Runtime/Cut Mismatch
+                          </span>
+                        )}
+                        {sub.sync_status === 'desynced' && (
+                          <span className="px-2 py-0.5 rounded border bg-rose-500/10 text-rose-400 border-rose-500/20">
+                            Speech Desync
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => navigate(sub.media_type === 'movie' ? `/movies/${sub.show_or_movie_id}` : `/shows/${sub.show_or_movie_id}`)}
+                      className="p-2 text-slate-400 hover:text-white hover:bg-slate-700 rounded-lg transition-colors shrink-0"
+                      title="Inspect Subtitles"
+                    >
+                      <Search className="w-4 h-4" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
 
       </div>

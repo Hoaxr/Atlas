@@ -254,6 +254,9 @@ db.exec(`
     manually_edited INTEGER DEFAULT 0,
     file_size INTEGER DEFAULT 0,
     cue_count INTEGER DEFAULT 0,
+    sync_status TEXT DEFAULT 'unknown',
+    sync_offset REAL DEFAULT 0,
+    sync_details TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(media_type, media_id, filename)
@@ -1048,6 +1051,21 @@ const MIGRATIONS = [
           }
         } catch { /* ignore */ }
       }
+    }
+  },
+  {
+    id: 37,
+    name: 'add_subtitle_sync_columns',
+    run: (db) => {
+      try {
+        db.exec("ALTER TABLE subtitle_tracks ADD COLUMN sync_status TEXT DEFAULT 'unknown';");
+      } catch { /* column might exist */ }
+      try {
+        db.exec("ALTER TABLE subtitle_tracks ADD COLUMN sync_offset REAL DEFAULT 0;");
+      } catch { /* column might exist */ }
+      try {
+        db.exec("ALTER TABLE subtitle_tracks ADD COLUMN sync_details TEXT;");
+      } catch { /* column might exist */ }
     }
   }
 ];

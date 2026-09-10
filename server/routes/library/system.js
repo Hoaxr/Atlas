@@ -99,11 +99,46 @@ router.get('/health', (req, res, next) => {
       }
     }
 
+    let subtitleIssues = [];
+    try {
+      subtitleIssues = db.prepare(`
+        SELECT st.id, st.media_type, st.media_id, st.filename, st.lang_code, st.lang_name,
+               st.sync_status, st.sync_offset, st.sync_details,
+               CASE
+                 WHEN st.media_type = 'movie' THEN m.title
+                 WHEN st.media_type = 'episode' THEN s.title || ' - S' || printf('%02d', ep.season_number) || 'E' || printf('%02d', ep.episode_number)
+               END as title,
+               CASE
+                 WHEN st.media_type = 'movie' THEN m.id
+                 WHEN st.media_type = 'episode' THEN s.id
+               END as show_or_movie_id
+        FROM subtitle_tracks st
+        LEFT JOIN movies m ON st.media_type = 'movie' AND st.media_id = m.id
+        LEFT JOIN episodes ep ON st.media_type = 'episode' AND st.media_id = ep.id
+        LEFT JOIN shows s ON ep.show_id = s.id
+        WHERE st.sync_status IN ('desynced', 'offset_detected', 'drift_detected', 'duration_mismatch', 'invalid_timing')
+        ORDER BY st.updated_at DESC
+        LIMIT 50
+      `).all().map(row => {
+        let details = null;
+        try {
+          details = row.sync_details ? JSON.parse(row.sync_details) : null;
+        } catch { /* ignore */ }
+        return {
+          ...row,
+          sync_details: details
+        };
+      });
+    } catch {
+      subtitleIssues = [];
+    }
+
     res.json({
       status: 'success',
       data: {
         movies: { missing: missingMovies, cutoffMet: cutoffMetMovies, cutoffUnmet: cutoffUnmetMovies },
-        episodes: { missing: missingEps, cutoffMet: cutoffMetEps, cutoffUnmet: cutoffUnmetEps }
+        episodes: { missing: missingEps, cutoffMet: cutoffMetEps, cutoffUnmet: cutoffUnmetEps },
+        subtitles: { issues: subtitleIssues }
       }
     });
   } catch (err) {

@@ -10,6 +10,7 @@ const { translateWithProvider } = require('../aiTranslationWorker');
 const { LANG_TO_CODE } = require('../../utils/constants');
 const { decodeSubtitleBuffer } = require('./parser');
 const { syncMovieSubtitles, syncEpisodeSubtitles, autoHealMissingSubtitles } = require('./sync');
+const subtitleSyncService = require('./subtitleSyncService');
 
 const openSubtitles = require('./providers/openSubtitles');
 const subdl = require('./providers/subdl');
@@ -108,12 +109,12 @@ const tryDownloadNativeEpisode = async (show, episode, langCode) => {
   return srtContent;
 };
 
-const downloadSubtitlesForMovie = async (movie, langCode) => {
+const downloadSubtitlesForMovie = async (movie, langCode, options = {}) => {
   if (!movie.file_path || !fs.existsSync(movie.file_path)) throw new Error('Movie file not found on disk');
   const parsedPath = path.parse(movie.file_path);
   const subPath = path.join(parsedPath.dir, `${parsedPath.name}.${sanitizeLangCode(langCode)}.srt`);
 
-  if (langFileExists(parsedPath.dir, parsedPath.name, langCode)) return { alreadyExists: true, langCode };
+  if (!options.force && langFileExists(parsedPath.dir, parsedPath.name, langCode)) return { alreadyExists: true, langCode };
 
   const srtContent = await tryDownloadNativeMovie(movie, langCode);
   if (srtContent) {
@@ -136,7 +137,7 @@ const downloadSubtitlesForMovie = async (movie, langCode) => {
           const tCode = LANG_TO_CODE[lang];
           if (!tCode) continue;
           const targetSubPath = path.join(parsedPath.dir, `${parsedPath.name}.${sanitizeLangCode(tCode)}.srt`);
-          if (langFileExists(parsedPath.dir, parsedPath.name, tCode)) continue;
+          if (!options.force && langFileExists(parsedPath.dir, parsedPath.name, tCode)) continue;
 
           if (isPreferNative) {
             try {
@@ -161,17 +162,19 @@ const downloadSubtitlesForMovie = async (movie, langCode) => {
     } catch { /* ignore */ }
 
     await syncMovieSubtitles(movie.id, movie.file_path);
+    // Automatically verify sync for newly downloaded subtitle
+    subtitleSyncService.verifyAllSubtitlesForMedia('movie', movie.id).catch(() => {});
     return { success: true, langCode };
   }
   throw new Error(`No subtitle found for language "${langCode}" from any provider`);
 };
 
-const downloadSubtitlesForEpisode = async (episode, show, langCode) => {
+const downloadSubtitlesForEpisode = async (episode, show, langCode, options = {}) => {
   if (!episode.file_path || !fs.existsSync(episode.file_path)) throw new Error('Episode file not found on disk');
   const parsedPath = path.parse(episode.file_path);
   const subPath = path.join(parsedPath.dir, `${parsedPath.name}.${sanitizeLangCode(langCode)}.srt`);
 
-  if (langFileExists(parsedPath.dir, parsedPath.name, langCode)) return { alreadyExists: true, langCode };
+  if (!options.force && langFileExists(parsedPath.dir, parsedPath.name, langCode)) return { alreadyExists: true, langCode };
 
   const srtContent = await tryDownloadNativeEpisode(show, episode, langCode);
   if (srtContent) {
@@ -195,7 +198,7 @@ const downloadSubtitlesForEpisode = async (episode, show, langCode) => {
           const tCode = LANG_TO_CODE[lang];
           if (!tCode) continue;
           const targetSubPath = path.join(parsedPath.dir, `${parsedPath.name}.${sanitizeLangCode(tCode)}.srt`);
-          if (langFileExists(parsedPath.dir, parsedPath.name, tCode)) continue;
+          if (!options.force && langFileExists(parsedPath.dir, parsedPath.name, tCode)) continue;
 
           if (isPreferNative) {
             try {
@@ -220,6 +223,8 @@ const downloadSubtitlesForEpisode = async (episode, show, langCode) => {
     } catch { /* ignore */ }
 
     await syncEpisodeSubtitles(episode.id, episode.file_path);
+    // Automatically verify sync for newly downloaded subtitle
+    subtitleSyncService.verifyAllSubtitlesForMedia('episode', episode.id).catch(() => {});
     return { success: true, langCode };
   }
   throw new Error(`No subtitle found for language "${langCode}" from any provider`);
@@ -608,6 +613,9 @@ const init = () => {
   setTimeout(() => {
     autoHealMissingSubtitles().catch(() => {});
   }, 3000);
+
+  // Initialize subtitle sync verification scheduler and task
+  subtitleSyncService.init();
 };
 
 module.exports = {
@@ -619,5 +627,9 @@ module.exports = {
   searchSubtitlesForEpisode,
   syncMovieSubtitles,
   syncEpisodeSubtitles,
-  autoHealMissingSubtitles
+  autoHealMissingSubtitles,
+  subtitleSyncService,
+  verifySingleSubtitleSync: subtitleSyncService.verifySingleSubtitleSync,
+  verifyAllSubtitlesForMedia: subtitleSyncService.verifyAllSubtitlesForMedia,
+  runLibrarySubtitleSyncCheck: subtitleSyncService.runLibrarySubtitleSyncCheck
 };

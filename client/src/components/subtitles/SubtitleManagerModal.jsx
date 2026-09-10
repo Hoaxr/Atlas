@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { 
   Languages, Download, Trash2, Edit3, Sparkles, 
-  Search, X, Loader2 
+  Search, X, Loader2, CheckCircle2, AlertTriangle, XCircle 
 } from 'lucide-react';
 import ModalShell from '../shared/ModalShell';
 import api from '../../lib/api';
@@ -22,6 +22,7 @@ export default function SubtitleManagerModal({
   const [tracks, setTracks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [deletingFile, setDeletingFile] = useState(null);
+  const [verifyingSync, setVerifyingSync] = useState(false);
 
   // Modals state
   const [translateModalOpen, setTranslateModalOpen] = useState(false);
@@ -69,6 +70,87 @@ export default function SubtitleManagerModal({
     window.open(`/api/library/subtitles/download/${mediaType}/${mediaId}/${encodeURIComponent(filename)}`, '_blank');
   };
 
+  const handleVerifySync = async () => {
+    setVerifyingSync(true);
+    try {
+      const res = await api.post(`/library/subtitles/verify-sync/${mediaType}/${mediaId}`);
+      if (res.data?.status === 'success') {
+        const results = res.data.data?.results || [];
+        const desynced = results.filter(r => r.status && r.status !== 'in_sync');
+        if (desynced.length > 0) {
+          customAlert(`Sync check completed: ${desynced.length} timing issue(s) detected`, 'warning');
+        } else {
+          customAlert('All subtitles are in sync with speech dialogue!', 'success');
+        }
+        fetchTracks();
+        if (onRefresh) onRefresh();
+      }
+    } catch (err) {
+      customAlert(err.response?.data?.message || 'Failed to verify subtitle sync', 'error');
+    } finally {
+      setVerifyingSync(false);
+    }
+  };
+
+  const renderSyncBadge = (track) => {
+    if (!track.syncStatus || track.syncStatus === 'unknown') return null;
+
+    switch (track.syncStatus) {
+      case 'in_sync':
+        return (
+          <span
+            className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1"
+            title={`In sync with dialogue (${Math.round((track.syncDetails?.confidence ?? 1) * 100)}% match)`}
+          >
+            <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+            In Sync
+          </span>
+        );
+      case 'offset_detected':
+        return (
+          <span
+            className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 flex items-center gap-1"
+            title={track.syncDetails?.message || `Timing offset: ${track.syncOffset > 0 ? '+' : ''}${track.syncOffset}s`}
+          >
+            <AlertTriangle className="w-3 h-3 text-amber-400" />
+            Offset {track.syncOffset > 0 ? `+${track.syncOffset}s` : `${track.syncOffset}s`}
+          </span>
+        );
+      case 'drift_detected':
+        return (
+          <span
+            className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 flex items-center gap-1"
+            title={track.syncDetails?.message || 'Framerate drift (e.g. 23.976 vs 25fps)'}
+          >
+            <AlertTriangle className="w-3 h-3 text-amber-400" />
+            Framerate Drift
+          </span>
+        );
+      case 'duration_mismatch':
+        return (
+          <span
+            className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-300 border border-rose-500/30 flex items-center gap-1"
+            title={track.syncDetails?.message || 'Subtitle duration does not match video runtime'}
+          >
+            <XCircle className="w-3 h-3 text-rose-400" />
+            Cut Mismatch
+          </span>
+        );
+      case 'desynced':
+        return (
+          <span
+            className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-300 border border-rose-500/30 flex items-center gap-1"
+            title={track.syncDetails?.message || 'Subtitle out of sync with speech dialogue'}
+          >
+            <XCircle className="w-3 h-3 text-rose-400" />
+            Desynced
+          </span>
+        );
+      default:
+        return null;
+    }
+  };
+
   if (!open) return null;
 
   return (
@@ -92,6 +174,19 @@ export default function SubtitleManagerModal({
             </div>
 
             <div className="flex items-center gap-2">
+              <button
+                onClick={handleVerifySync}
+                disabled={verifyingSync || loading || tracks.length === 0}
+                className="px-3 py-1.5 text-xs font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 rounded-xl hover:bg-indigo-500/30 transition-colors flex items-center gap-1.5 shadow-md shadow-indigo-500/10 disabled:opacity-50"
+                title="Verify subtitle sync against speech"
+              >
+                {verifyingSync ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                )}
+                Verify Sync
+              </button>
               <button
                 onClick={() => setTranslateModalOpen(true)}
                 className="px-3.5 py-1.5 text-xs font-bold bg-pink-500/20 text-pink-300 border border-pink-500/40 rounded-xl hover:bg-pink-500/30 transition-colors flex items-center gap-1.5 shadow-md shadow-pink-500/10"
@@ -154,6 +249,7 @@ export default function SubtitleManagerModal({
                             </span>
 
                             {/* Status Badges */}
+                            {renderSyncBadge(track)}
                             {track.trackType === 'translated' && (
                               <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/30">
                                 AI Translated {track.sourceLang ? `from ${track.sourceLang}` : ''}
@@ -181,6 +277,14 @@ export default function SubtitleManagerModal({
                               <>
                                 <span>•</span>
                                 <span>{track.cueCount} cues</span>
+                              </>
+                            )}
+                            {track.syncDetails?.confidence != null && (
+                              <>
+                                <span>•</span>
+                                <span className={track.syncStatus === 'in_sync' ? 'text-emerald-400/80' : 'text-amber-400/80'}>
+                                  {Math.round(track.syncDetails.confidence * 100)}% match
+                                </span>
                               </>
                             )}
                           </div>
