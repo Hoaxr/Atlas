@@ -368,9 +368,11 @@ const importMusicDownload = async (downloadPath, downloadName) => {
   const config = musicLibraryService.getMusicNamingConfig();
   const deleteAfterImport = getSetting('musicDeleteAfterImport') === 'true';
 
-  // Determine artist folder — use existing folder_path or first music library mount
+  // Determine artist folder — reuse the stored folder_path only when it's a sane
+  // library location (never a recycle bin / trash path), else fall back to the
+  // configured music root + naming template.
   let artistFolder = artist.folder_path;
-  if (!artistFolder || !fs.existsSync(path.dirname(artistFolder))) {
+  if (!musicLibraryService.isUsableLibraryPath(artistFolder)) {
     const musicPaths = db.prepare("SELECT path FROM library_paths WHERE type = 'music'").all();
     const libraryRoot = musicPaths[0]?.path || null;
     if (!libraryRoot) {

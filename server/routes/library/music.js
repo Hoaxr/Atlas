@@ -381,6 +381,12 @@ router.get('/search', async (req, res, next) => {
 // ── Artists ───────────────────────────────────────────────────────────────────
 router.get('/artists', (req, res, next) => {
   try {
+    // Create any missing artist folders in the background (also covers artists added
+    // before their folder existed). Done off the request path — it's just mkdir calls.
+    setImmediate(() => {
+      try { musicLibraryService.ensureAllArtistFolders(); } catch { /* ignore */ }
+    });
+
     const { sort = 'name_asc', monitored, status, limit = 0, offset = 0 } = req.query;
     const filters = {};
     if (monitored !== undefined) filters.monitored = monitored === 'true' || monitored === '1';
@@ -431,6 +437,10 @@ router.get('/artists/:id', (req, res, next) => {
     const artist = musicLibraryService.getArtistById(parseInt(req.params.id));
     if (!artist) return res.status(404).json({ status: 'error', message: 'Artist not found' });
 
+    // Make sure the artist folder exists on disk
+    const ensuredFolder = musicLibraryService.ensureArtistFolder(artist);
+    if (ensuredFolder) artist.folder_path = ensuredFolder;
+
     // Annotate albums with cover URL
     const albums = (artist.albums || []).map(a => ({
       ...a,
@@ -471,43 +481,8 @@ router.delete('/artists/:id', async (req, res, next) => {
 
 router.post('/artists/:id/refresh', async (req, res, next) => {
   try {
-    const artist = db.prepare('SELECT * FROM music_artists WHERE id = ?').get(parseInt(req.params.id));
+    const artist = await musicLibraryService.refreshArtist(parseInt(req.params.id));
     if (!artist) return res.status(404).json({ status: 'error', message: 'Artist not found' });
-
-    if (!artist.mbid && artist.name) {
-      try {
-        const mbResults = await musicMetadataService.searchArtist(artist.name);
-        const match = mbResults.find(r => r.name.toLowerCase() === artist.name.toLowerCase());
-        if (match?.mbid) {
-          db.prepare('UPDATE music_artists SET mbid = ? WHERE id = ?').run(match.mbid, artist.id);
-          artist.mbid = match.mbid;
-        }
-      } catch { /* proceed */ }
-    }
-
-    if (!artist.mbid) {
-      return res.status(400).json({ status: 'error', message: 'Could not resolve MusicBrainz ID for artist' });
-    }
-
-    musicMetadataService.clearCache(artist.mbid);
-    const fresh = await musicMetadataService.getArtistById(artist.mbid);
-
-    db.prepare(`
-      UPDATE music_artists SET overview = ?, genres = ?, rating = ?, last_refreshed_at = CURRENT_TIMESTAMP WHERE id = ?
-    `).run(fresh.overview || '', JSON.stringify(fresh.genres || []), fresh.rating || 0, artist.id);
-
-    const cacheKey = artist.mbid || `artist_${artist.id}`;
-    if (!fs.existsSync(imageService.artistImagePath(cacheKey))) {
-      try {
-        const imageUrl = await musicMetadataService.getArtistImageUrl(artist.mbid, artist.name);
-        if (imageUrl) {
-          await imageService.ensureArtistImage(cacheKey, imageUrl);
-          db.prepare('UPDATE music_artists SET image_path = ? WHERE id = ?').run(imageUrl, artist.id);
-        }
-      } catch { /* ignore */ }
-    }
-
-    await musicLibraryService.syncArtistAlbums(artist.id, fresh.releaseGroups || []);
     res.json({ status: 'success', message: `Refreshed ${artist.name}` });
   } catch (err) { next(err); }
 });
@@ -636,7 +611,7 @@ router.delete('/albums/:id', async (req, res, next) => {
 });
 
 // Manual search — returns list of results for ManualSearchModal
-router.get('/albums/:id/search', async (req, res, next) => {
+router.get('/albums/:id/search', async (req, res, _next) => {
   try {
     const album = db.prepare(`
       SELECT al.*, a.name as artist_name FROM music_albums al
@@ -647,7 +622,13 @@ router.get('/albums/:id/search', async (req, res, next) => {
     const profile = db.prepare('SELECT * FROM music_quality_profiles WHERE id = ?').get(album.quality_profile_id);
     const results = await indexerService.searchMusic(album.artist_name, album.title, profile, true);
     res.json({ status: 'success', data: results });
-  } catch (err) { next(err); }
+  } catch (err) {
+    console.error(`[MusicSearch] Manual search failed for album ${req.params.id}:`, err.message);
+    res.status(502).json({
+      status: 'error',
+      message: err.message || 'Indexer search failed. Please check your indexer configuration.'
+    });
+  }
 });
 
 // Automated search — finds best release and sends to download client

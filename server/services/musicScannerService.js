@@ -12,7 +12,6 @@ const db = require('../config/database');
 const eventBus = require('./eventBus');
 const { parseMusicFormat } = require('../utils/mediaParsing');
 const { findAllAudioFiles, readAudioTags } = require('./musicImportService');
-const musicMetadataService = require('./musicMetadataService');
 const musicLibraryService = require('./musicLibraryService');
 const imageService = require('./imageService');
 
@@ -41,6 +40,15 @@ const scanMusicLibrary = async (onProgress = null, checkCancelled = null) => {
 
   if (!musicPaths || musicPaths.length === 0) {
     return results;
+  }
+
+  // Make sure every tracked artist has its folder on disk, so dropped-in files are
+  // picked up by this scan (and so artists added earlier get their folder created).
+  try {
+    const createdFolders = musicLibraryService.ensureAllArtistFolders();
+    if (createdFolders > 0) console.log(`[MusicScanner] Ensured ${createdFolders} artist folder(s) (created/relinked).`);
+  } catch (err) {
+    console.warn('[MusicScanner] Failed to ensure artist folders:', err.message);
   }
 
   const accessibleRoots = [];
@@ -322,7 +330,47 @@ const scanMusicLibrary = async (onProgress = null, checkCancelled = null) => {
   // 5. Consolidate any multi-disc split albums
   consolidateMultiDiscAlbums(db);
 
-  if (results.addedTracksCount > 0 || results.removedTracksCount > 0) {
+  // 6. Enrich touched artists with MusicBrainz metadata, release groups & missing albums
+  if (touchedArtistIds.size > 0) {
+    const artistList = Array.from(touchedArtistIds);
+    let idx = 0;
+    for (const artistId of artistList) {
+      if (checkCancelled && checkCancelled()) break;
+      idx++;
+
+      const art = db.prepare('SELECT id, name, mbid, last_refreshed_at FROM music_artists WHERE id = ?').get(artistId);
+      if (!art) continue;
+
+      const hasMonitoredAlbums = db.prepare("SELECT COUNT(*) as count FROM music_albums WHERE artist_id = ? AND status = 'monitored'").get(artistId)?.count > 0;
+
+      // If the artist already has an MBID and has their discography synced with monitored albums, skip re-syncing during file scan
+      if (art.mbid && art.last_refreshed_at && hasMonitoredAlbums) {
+        continue;
+      }
+
+      if (onProgress) {
+        onProgress({
+          currentPhase: `Syncing artist discography (${idx}/${artistList.length}): ${art.name}`,
+          currentFile: art.name,
+          processedFiles: idx,
+          totalFiles: artistList.length,
+        });
+      }
+
+      try {
+        const preCount = db.prepare('SELECT COUNT(*) as count FROM music_albums WHERE artist_id = ?').get(artistId)?.count || 0;
+        await musicLibraryService.refreshArtist(artistId);
+        const postCount = db.prepare('SELECT COUNT(*) as count FROM music_albums WHERE artist_id = ?').get(artistId)?.count || 0;
+        if (postCount > preCount) {
+          results.addedAlbumsCount += (postCount - preCount);
+        }
+      } catch (err) {
+        console.warn(`[MusicScanner] Could not refresh artist ${art.name}:`, err.message);
+      }
+    }
+  }
+
+  if (results.addedTracksCount > 0 || results.removedTracksCount > 0 || results.addedAlbumsCount > 0) {
     eventBus.emit({
       type: 'MUSIC_LIBRARY_SCANNED',
       addedTracks: results.addedTracksCount,
@@ -334,64 +382,6 @@ const scanMusicLibrary = async (onProgress = null, checkCancelled = null) => {
   try {
     require('../routes/library/system').invalidateStatsCache();
   } catch { /* ignore */ }
-
-  // Background: enrich touched artists with MusicBrainz metadata, release groups & missing albums
-  if (touchedArtistIds.size > 0) {
-    setImmediate(async () => {
-      for (const artistId of touchedArtistIds) {
-        try {
-          const art = db.prepare('SELECT * FROM music_artists WHERE id = ?').get(artistId);
-          if (!art) continue;
-
-          // Resolve MBID if missing
-          if (!art.mbid && art.name) {
-            try {
-              const mbResults = await musicMetadataService.searchArtist(art.name);
-              const match = mbResults.find(r => r.name.toLowerCase() === art.name.toLowerCase()) || mbResults[0];
-              if (match?.mbid) {
-                db.prepare('UPDATE music_artists SET mbid = ? WHERE id = ?').run(match.mbid, art.id);
-                art.mbid = match.mbid;
-              }
-            } catch { /* proceed */ }
-          }
-
-          if (art.mbid) {
-            const fresh = await musicMetadataService.getArtistById(art.mbid);
-            if (fresh) {
-              db.prepare(`
-                UPDATE music_artists SET
-                  overview = COALESCE(NULLIF(overview, ''), ?),
-                  genres = CASE WHEN genres IS NULL OR genres = '[]' THEN ? ELSE genres END,
-                  rating = COALESCE(NULLIF(rating, 0), ?),
-                  last_refreshed_at = CURRENT_TIMESTAMP
-                WHERE id = ?
-              `).run(fresh.overview || '', JSON.stringify(fresh.genres || []), fresh.rating || 0, art.id);
-
-              if (fresh.releaseGroups?.length > 0) {
-                await musicLibraryService.syncArtistAlbums(art.id, fresh.releaseGroups);
-              }
-
-              // Also ensure artist image
-              const cacheKey = art.mbid || `artist_${art.id}`;
-              if (!fs.existsSync(imageService.artistImagePath(cacheKey))) {
-                try {
-                  const imgUrl = await musicMetadataService.getArtistImageUrl(art.mbid, art.name);
-                  if (imgUrl) {
-                    await imageService.ensureArtistImage(cacheKey, imgUrl);
-                    db.prepare('UPDATE music_artists SET image_path = ? WHERE id = ?').run(imgUrl, art.id);
-                  }
-                } catch { /* ignore */ }
-              }
-
-              eventBus.emit({ type: 'MUSIC_ARTIST_UPDATED', artistId: art.id });
-            }
-          }
-        } catch (err) {
-          console.error(`[MusicScanner] Background sync error for artist ${artistId}:`, err.message);
-        }
-      }
-    });
-  }
 
   return results;
 };

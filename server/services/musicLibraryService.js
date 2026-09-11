@@ -8,6 +8,7 @@ const path = require('path');
 const fs = require('fs');
 const db = require('../config/database');
 const musicMetadataService = require('./musicMetadataService');
+const imageService = require('./imageService');
 const eventBus = require('./eventBus');
 const { getSetting } = require('../utils/settings');
 
@@ -37,6 +38,76 @@ const formatAlbumFolder = (album, config) =>
       .replace('{Album Title}', album.title)
       .replace('{Year}', album.year || 'Unknown')
   );
+
+/** Recycle-bin / trash / NAS-metadata folders that must never hold library files. */
+const RECYCLE_PATH_RE = /(^|[\\/])(#recycle|@recycle|@recycle\.bin|\$recycle\.bin|\.recycle|\.trash|\.trash-\d+|\.trashes|@eadir)([\\/]|$)/i;
+
+/**
+ * True when `p` is a plausible library location: not a recycle bin / trash / NAS
+ * metadata folder, and (when music roots are configured) inside one of them.
+ *
+ * Guards against stale `folder_path` values such as Synology's
+ * `/music/#recycle/<Artist>` that would otherwise capture imports.
+ * @param {string|null|undefined} p
+ * @param {string[]} [roots] music library roots (queried when omitted)
+ */
+const isUsableLibraryPath = (p, roots) => {
+  if (!p) return false;
+  if (RECYCLE_PATH_RE.test(p)) return false;
+  const list = roots || db.prepare("SELECT path FROM library_paths WHERE type = 'music'").all().map(r => r.path);
+  if (list.length === 0) return true;
+  return list.some(root => path.resolve(p).startsWith(path.resolve(root) + path.sep));
+};
+
+/**
+ * Ensure an artist has a folder on disk and that music_artists.folder_path points at it.
+ * Creates the folder (recursively) if missing, using the stored path or the configured
+ * music root + naming template. Safe to call repeatedly.
+ * @param {{id:number,name:string,folder_path?:string|null}} artist
+ * @returns {string|null} absolute folder path, or null when no music root is configured
+ */
+const ensureArtistFolder = (artist) => {
+  if (!artist) return null;
+
+  const musicRoots = db.prepare("SELECT path FROM library_paths WHERE type = 'music'").all().map(r => r.path);
+
+  const folderPath = isUsableLibraryPath(artist.folder_path, musicRoots)
+    ? artist.folder_path
+    : (musicRoots[0] ? path.join(musicRoots[0], formatArtistFolder(artist, getMusicNamingConfig())) : null);
+
+  if (!folderPath) return null;
+
+  // Fast path: path is valid and already on disk.
+  if (folderPath === artist.folder_path && fs.existsSync(folderPath)) return folderPath;
+
+  try {
+    fs.mkdirSync(folderPath, { recursive: true });
+  } catch {
+    if (!fs.existsSync(folderPath)) return null;
+  }
+
+  if (artist.folder_path !== folderPath) {
+    try { db.prepare('UPDATE music_artists SET folder_path = ? WHERE id = ?').run(folderPath, artist.id); } catch { /* ignore */ }
+  }
+  return folderPath;
+};
+
+/**
+ * Create any missing artist folders — covers artists added before their folder
+ * existed, or whose folder was deleted / never created (e.g. no music root at the
+ * time), or whose stored path is stale (e.g. pointing into a recycle bin).
+ * @returns {number} number of folders created or relinked
+ */
+const ensureAllArtistFolders = () => {
+  const artists = db.prepare('SELECT id, name, sort_name, folder_path FROM music_artists').all();
+  let changed = 0;
+  for (const artist of artists) {
+    const hadFolder = !!artist.folder_path && fs.existsSync(artist.folder_path);
+    const ensured = ensureArtistFolder(artist);
+    if (ensured && (!hadFolder || ensured !== artist.folder_path)) changed++;
+  }
+  return changed;
+};
 
 // ── Artist CRUD ───────────────────────────────────────────────────────────────
 
@@ -84,14 +155,12 @@ const addArtist = async (mbid, rootFolderPath = null, qualityProfileId = null) =
 
   const newArtist = db.prepare('SELECT * FROM music_artists WHERE id = ?').get(result.lastInsertRowid);
 
-  // Sync albums from MusicBrainz (non-blocking)
-  setImmediate(async () => {
-    try {
-      await syncArtistAlbums(newArtist.id, artist.releaseGroups || []);
-    } catch (err) {
-      console.error(`[Music] Failed to sync albums for artist ${artist.name}:`, err.message);
-    }
-  });
+  // Sync albums from MusicBrainz
+  try {
+    await syncArtistAlbums(newArtist.id, artist.releaseGroups || []);
+  } catch (err) {
+    console.error(`[Music] Failed to sync albums for artist ${artist.name}:`, err.message);
+  }
 
   eventBus.emit({ type: 'MUSIC_ARTIST_ADDED', artistId: newArtist.id, name: artist.name });
   return newArtist;
@@ -462,13 +531,77 @@ const getMissingAlbums = () =>
     ORDER BY a.name COLLATE NOCASE ASC, al.year ASC
   `).all();
 
+const refreshArtist = async (artistId) => {
+  const artist = db.prepare('SELECT * FROM music_artists WHERE id = ?').get(artistId);
+  if (!artist) return null;
+
+  if (!artist.mbid && artist.name) {
+    try {
+      const mbResults = await musicMetadataService.searchArtist(artist.name);
+      const match = mbResults.find(r => r.name.toLowerCase() === artist.name.toLowerCase()) || mbResults[0];
+      if (match?.mbid) {
+        db.prepare('UPDATE music_artists SET mbid = ? WHERE id = ?').run(match.mbid, artist.id);
+        artist.mbid = match.mbid;
+      }
+    } catch (err) {
+      console.warn(`[MusicMetadata] Could not resolve MBID for ${artist.name}:`, err.message);
+    }
+  }
+
+  if (!artist.mbid) {
+    throw new Error(`Could not resolve MusicBrainz ID for artist "${artist.name}"`);
+  }
+
+  musicMetadataService.clearCache(artist.mbid);
+  const fresh = await musicMetadataService.getArtistById(artist.mbid);
+  if (!fresh) return artist;
+
+  db.prepare(`
+    UPDATE music_artists SET
+      overview = COALESCE(NULLIF(overview, ''), ?),
+      genres = CASE WHEN genres IS NULL OR genres = '[]' THEN ? ELSE genres END,
+      rating = COALESCE(NULLIF(rating, 0), ?),
+      disambiguation = COALESCE(NULLIF(disambiguation, ''), ?),
+      last_refreshed_at = CURRENT_TIMESTAMP
+    WHERE id = ?
+  `).run(
+    fresh.overview || '',
+    JSON.stringify(fresh.genres || []),
+    fresh.rating || 0,
+    fresh.disambiguation || '',
+    artist.id
+  );
+
+  const cacheKey = artist.mbid || `artist_${artist.id}`;
+  if (!fs.existsSync(imageService.artistImagePath(cacheKey))) {
+    try {
+      const imageUrl = await musicMetadataService.getArtistImageUrl(artist.mbid, artist.name);
+      if (imageUrl) {
+        await imageService.ensureArtistImage(cacheKey, imageUrl);
+        db.prepare('UPDATE music_artists SET image_path = ? WHERE id = ?').run(imageUrl, artist.id);
+      }
+    } catch { /* ignore */ }
+  }
+
+  if (fresh.releaseGroups?.length > 0) {
+    await syncArtistAlbums(artist.id, fresh.releaseGroups);
+  }
+
+  eventBus.emit({ type: 'MUSIC_ARTIST_UPDATED', artistId: artist.id });
+  return db.prepare('SELECT * FROM music_artists WHERE id = ?').get(artist.id);
+};
+
 module.exports = {
   getMusicNamingConfig,
   sanitizeName,
   formatArtistFolder,
   formatAlbumFolder,
+  isUsableLibraryPath,
+  ensureArtistFolder,
+  ensureAllArtistFolders,
   addArtist,
   syncArtistAlbums,
+  refreshArtist,
   getArtists,
   getArtistById,
   updateArtist,
