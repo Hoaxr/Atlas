@@ -1,4 +1,4 @@
-import { Film, Tv, DownloadCloud, Activity, AlertCircle, Search, BarChart3 } from 'lucide-react';
+import { Film, Tv, DownloadCloud, Activity, AlertCircle, Search, BarChart3, Music2, Disc, Mic2, FileAudio } from 'lucide-react';
 import clsx from 'clsx';
 
 const iconMap = {
@@ -9,6 +9,10 @@ const iconMap = {
   issues: AlertCircle,
   search: Search,
   stats: BarChart3,
+  music: Music2,
+  album: Disc,
+  artist: Mic2,
+  tracks: FileAudio,
 };
 
 export default function EmptyState({

@@ -18,16 +18,19 @@ const { calculateNextSearchAt, calculatePriority } = require('./schedulerLogic')
 const { parseResolution, isCutoffMet } = require('../utils/mediaParsing');
 
 const DEFAULT_SCHEDULES = {
-  search_cycle:       '0 * * * *',
-  refresh_metadata:   '0 3 * * *',  // Daily at 3 AM
-  simkl_watched_sync: '0 */6 * * *',
-  missing_files_check:'0 * * * *',  // Hourly fast check for deleted files
-  database_backup:    '0 4 * * *',  // Daily at 4 AM
-  auto_delete_watched:'0 5 * * *',  // Daily at 5 AM
-  poster_cache_warmer:'0 2 * * *',  // Daily at 2 AM
-  orphaned_files:     '0 3 * * *',  // Daily at 3 AM
-  deep_metadata:      '0 4 * * 0',  // Weekly on Sunday at 4 AM
-  release_monitor:    '0 1 * * *',  // Daily at 1 AM
+  search_cycle:           '0 * * * *',
+  refresh_metadata:       '0 3 * * *',  // Daily at 3 AM
+  simkl_watched_sync:     '0 */6 * * *',
+  missing_files_check:    '0 * * * *',  // Hourly fast check for deleted files
+  database_backup:        '0 4 * * *',  // Daily at 4 AM
+  auto_delete_watched:    '0 5 * * *',  // Daily at 5 AM
+  poster_cache_warmer:    '0 2 * * *',  // Daily at 2 AM
+  orphaned_files:         '0 3 * * *',  // Daily at 3 AM
+  deep_metadata:          '0 4 * * 0',  // Weekly on Sunday at 4 AM
+  release_monitor:        '0 1 * * *',  // Daily at 1 AM
+  music_search_cycle:     '0 * * * *',  // Hourly — search for missing albums
+  music_metadata_refresh: '30 3 * * *', // Daily at 3:30 AM
+  music_new_release_check:'0 1 * * *',  // Daily at 1 AM
 };
 
 const getSchedule = (taskId) => {
@@ -945,18 +948,121 @@ const runReleaseMonitoring = async () => {
   console.log(`[Automation] Release Monitoring complete. Scheduled search for ${moviesRes.changes} movies and ${episodesRes.changes} episodes.`);
 };
 
+// ── Music: Search Cycle ───────────────────────────────────────────────────────
+
+const runMusicSearchCycle = async () => {
+  const missingAlbums = db.prepare(`
+    SELECT al.*, a.name as artist_name
+    FROM music_albums al
+    JOIN music_artists a ON a.id = al.artist_id
+    WHERE al.monitored = 1 AND al.status = 'monitored'
+    LIMIT 10
+  `).all();
+
+  if (missingAlbums.length === 0) return 'skipped';
+
+  console.log(`[MusicSearch] Searching for ${missingAlbums.length} missing albums...`);
+  const indexerService = require('./indexerService');
+  const downloadClientService = require('./downloadClientService');
+  let grabbed = 0;
+
+  for (const album of missingAlbums) {
+    try {
+      const profile = db.prepare('SELECT * FROM music_quality_profiles WHERE id = ?').get(album.quality_profile_id);
+      const results = await indexerService.searchMusic(album.artist_name, album.title, profile, false);
+      if (results.length > 0) {
+        const best = results[0];
+        await downloadClientService.addTorrent(best.downloadUrl || best.magnetUrl, {
+          label: 'music',
+          category: 'music',
+        });
+        db.prepare("UPDATE music_albums SET status = 'downloading' WHERE id = ?").run(album.id);
+        grabbed++;
+        console.log(`[MusicSearch] Grabbed: ${album.artist_name} - ${album.title} (${best.title})`);
+      }
+    } catch (err) {
+      console.warn(`[MusicSearch] Failed for album ${album.title}: ${err.message}`);
+    }
+  }
+
+  console.log(`[MusicSearch] Done — grabbed ${grabbed}/${missingAlbums.length} albums.`);
+};
+
+// ── Music: Metadata Refresh ───────────────────────────────────────────────────
+
+const runMusicMetadataRefresh = async () => {
+  const staleArtists = db.prepare(`
+    SELECT * FROM music_artists
+    WHERE last_refreshed_at IS NULL
+       OR last_refreshed_at < datetime('now', '-7 days')
+    ORDER BY last_refreshed_at ASC
+    LIMIT 5
+  `).all();
+
+  if (staleArtists.length === 0) return 'skipped';
+
+  const musicMetadataService = require('./musicMetadataService');
+  const musicLibraryService = require('./musicLibraryService');
+
+  console.log(`[MusicMetadata] Refreshing ${staleArtists.length} artists...`);
+
+  for (const artist of staleArtists) {
+    try {
+      const fresh = await musicMetadataService.getArtistById(artist.mbid);
+      if (!fresh) continue;
+
+      db.prepare(`
+        UPDATE music_artists SET
+          overview = ?, genres = ?, rating = ?,
+          last_refreshed_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `).run(fresh.overview || '', JSON.stringify(fresh.genres || []), fresh.rating || 0, artist.id);
+
+      // Sync any new release groups
+      await musicLibraryService.syncArtistAlbums(artist.id, fresh.releaseGroups || []);
+      console.log(`[MusicMetadata] Refreshed: ${artist.name}`);
+    } catch (err) {
+      console.warn(`[MusicMetadata] Failed for ${artist.name}: ${err.message}`);
+    }
+  }
+};
+
+// ── Music: New Release Check ──────────────────────────────────────────────────
+
+const runMusicNewReleaseCheck = async () => {
+  // Find monitored artists who have unmonitored albums released in the last 30 days
+  const recentNewAlbums = db.prepare(`
+    SELECT al.id, al.title, al.year, al.release_date, a.name as artist_name
+    FROM music_albums al
+    JOIN music_artists a ON a.id = al.artist_id
+    WHERE a.monitored = 1
+      AND al.monitored = 1
+      AND al.status = 'monitored'
+      AND al.release_date >= date('now', '-30 days')
+      AND al.release_date <= date('now')
+  `).all();
+
+  if (recentNewAlbums.length === 0) return 'skipped';
+
+  console.log(`[MusicRelease] Found ${recentNewAlbums.length} newly released monitored albums — scheduling search.`);
+  // These will be picked up by the next music_search_cycle run
+};
+
 const init = () => {
   const tasks = [
-    { id: 'search_cycle',       name: 'Torrent Search Cycle',      desc: 'Searches for missing monitored movies and episodes and sends them to the download client.', fn: runSearchCycle },
-    { id: 'refresh_metadata',   name: 'Refresh Metadata',          desc: 'Nightly trickle-refresh of metadata to keep posters, overviews, ratings and seasons up to date.', fn: runRefreshMetadata },
-    { id: 'simkl_watched_sync', name: 'Simkl Watched Sync',        desc: 'Syncs watched status from your Simkl account to your local library.',                     fn: runSimklWatchedSync },
-    { id: 'missing_files_check',name: 'Missing Files Check',       desc: 'Quickly checks library folders and removes items that have been deleted from disk.',       fn: runMissingFilesCheck },
-    { id: 'database_backup',    name: 'Database Backup',           desc: 'Creates a compressed backup of the SQLite database to prevent data loss.',                 fn: runDatabaseBackup },
-    { id: 'auto_delete_watched',name: 'Auto-Delete Watched',       desc: 'Automatically deletes media a configured number of days after watching.',                  fn: runAutoDeleteWatched },
-    { id: 'poster_cache_warmer',name: 'Poster Cache Warmer',       desc: 'Proactively downloads missing poster images for all media.',                                fn: runPosterCacheWarmer },
-    { id: 'orphaned_files',     name: 'Orphaned File Detector',    desc: 'Scans library folders for unmanaged video files not tracked in the database.',              fn: runOrphanedFileDetector },
-    { id: 'deep_metadata',      name: 'Stale Metadata Refresh',    desc: 'Periodically checks and updates TMDB metadata for items added more than 30 days ago.',      fn: runDeepMetadataRefresh },
-    { id: 'release_monitor',    name: 'Release Monitoring',        desc: 'Triggers an immediate search for monitored media that has just passed its release date.',   fn: runReleaseMonitoring },
+    { id: 'search_cycle',           name: 'Torrent Search Cycle',           desc: 'Searches for missing monitored movies and episodes and sends them to the download client.', fn: runSearchCycle },
+    { id: 'refresh_metadata',       name: 'Refresh Metadata',               desc: 'Nightly trickle-refresh of metadata to keep posters, overviews, ratings and seasons up to date.', fn: runRefreshMetadata },
+    { id: 'simkl_watched_sync',     name: 'Simkl Watched Sync',             desc: 'Syncs watched status from your Simkl account to your local library.',                     fn: runSimklWatchedSync },
+    { id: 'missing_files_check',    name: 'Missing Files Check',            desc: 'Quickly checks library folders and removes items that have been deleted from disk.',       fn: runMissingFilesCheck },
+    { id: 'database_backup',        name: 'Database Backup',                desc: 'Creates a compressed backup of the SQLite database to prevent data loss.',                 fn: runDatabaseBackup },
+    { id: 'auto_delete_watched',    name: 'Auto-Delete Watched',            desc: 'Automatically deletes media a configured number of days after watching.',                  fn: runAutoDeleteWatched },
+    { id: 'poster_cache_warmer',    name: 'Poster Cache Warmer',            desc: 'Proactively downloads missing poster images for all media.',                                fn: runPosterCacheWarmer },
+    { id: 'orphaned_files',         name: 'Orphaned File Detector',         desc: 'Scans library folders for unmanaged video files not tracked in the database.',              fn: runOrphanedFileDetector },
+    { id: 'deep_metadata',          name: 'Stale Metadata Refresh',         desc: 'Periodically checks and updates TMDB metadata for items added more than 30 days ago.',      fn: runDeepMetadataRefresh },
+    { id: 'release_monitor',        name: 'Release Monitoring',             desc: 'Triggers an immediate search for monitored media that has just passed its release date.',   fn: runReleaseMonitoring },
+    { id: 'music_search_cycle',     name: 'Music Search Cycle',             desc: 'Searches for missing monitored albums and sends them to the download client.',              fn: runMusicSearchCycle },
+    { id: 'music_metadata_refresh', name: 'Music Metadata Refresh',         desc: 'Refreshes artist and album metadata from MusicBrainz.',                                     fn: runMusicMetadataRefresh },
+    { id: 'music_new_release_check',name: 'Music New Release Check',        desc: 'Checks for new album releases from monitored artists.',                                      fn: runMusicNewReleaseCheck },
   ];
 
   for (const task of tasks) {

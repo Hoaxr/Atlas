@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Clock, CheckCircle2, XCircle, Loader2, Trash2, Heart, CalendarClock } from 'lucide-react';
+import { Clock, CheckCircle2, XCircle, Loader2, Trash2, Heart, CalendarClock, Music2 } from 'lucide-react';
 import api from '../lib/api';
 import { customAlert, customConfirm } from '../utils/alerts';
 import MediaDetailsModal from '../components/MediaDetailsModal';
@@ -32,8 +32,30 @@ export default function Requests() {
     fetchRequests();
   }, []);
 
-  const handleApproveInit = (req) => {
+  const handleApproveInit = async (req) => {
     setCurrentRequestId(req.id);
+    if (req.type === 'music' || req.type === 'artist') {
+      try {
+        await api.post('/library/music/artists', { mbid: req.tmdb_id });
+        await api.put(`/requests/${req.id}/approve`);
+        customAlert('Music artist approved and added to library');
+        fetchRequests();
+      } catch (err) {
+        customAlert(err.response?.data?.message || 'Failed to approve request');
+      }
+      return;
+    }
+    if (req.type === 'album') {
+      try {
+        await api.post('/library/music/albums', { mbid: req.tmdb_id });
+        await api.put(`/requests/${req.id}/approve`);
+        customAlert('Album approved and added to library');
+        fetchRequests();
+      } catch (err) {
+        customAlert(err.response?.data?.message || 'Failed to approve request');
+      }
+      return;
+    }
     setSelectedMedia({ id: req.tmdb_id, type: req.type });
   };
 
@@ -139,7 +161,12 @@ export default function Requests() {
                 <tr key={req.id} className="hover:bg-slate-800/30 transition-colors">
                   <td className="py-4 px-6 font-medium text-slate-200">
                     <button
-                      onClick={(e) => { e.stopPropagation(); navigate(`/${req.type === 'movie' ? 'movies' : 'shows'}/${req.tmdb_id}`); }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (req.type === 'album') navigate(`/music/albums/${req.tmdb_id}`);
+                        else if (req.type === 'music' || req.type === 'artist') navigate(`/music/artists/${req.tmdb_id}`);
+                        else navigate(`/${req.type === 'movie' ? 'movies' : 'shows'}/${req.tmdb_id}`);
+                      }}
                       className="text-left hover:text-cyan-400 transition-colors cursor-pointer"
                     >
                       {req.title}
@@ -153,7 +180,16 @@ export default function Requests() {
                       </div>
                     )}
                   </td>
-                  <td className="py-4 px-6 text-slate-400 uppercase text-xs tracking-wider">{req.type}</td>
+                  <td className="py-4 px-6 text-slate-400 uppercase text-xs tracking-wider">
+                    {['music', 'artist', 'album'].includes(req.type) ? (
+                      <span className="flex items-center gap-1 text-emerald-400 font-semibold">
+                        <Music2 className="w-3.5 h-3.5" />
+                        {req.type}
+                      </span>
+                    ) : (
+                      req.type
+                    )}
+                  </td>
                   <td className="py-4 px-6 text-slate-300">{req.requested_by}</td>
                   <td className="py-4 px-6">
                     <span className="flex items-center gap-2 capitalize text-slate-300">
@@ -217,13 +253,19 @@ export default function Requests() {
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">
                     <button
-                      onClick={(e) => { e.stopPropagation(); navigate(`/${req.type === 'movie' ? 'movies' : 'shows'}/${req.tmdb_id}`); }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (req.type === 'album') navigate(`/music/albums/${req.tmdb_id}`);
+                        else if (req.type === 'music' || req.type === 'artist') navigate(`/music/artists/${req.tmdb_id}`);
+                        else navigate(`/${req.type === 'movie' ? 'movies' : 'shows'}/${req.tmdb_id}`);
+                      }}
                       className="font-bold text-slate-200 text-sm truncate text-left hover:text-cyan-400 transition-colors cursor-pointer"
                     >
                       {req.title}
                     </button>
                     <div className="flex items-center gap-2 mt-1 flex-wrap">
-                      <span className="text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 border border-white/5">
+                      <span className="text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 border border-white/5 flex items-center gap-1">
+                        {['music', 'artist', 'album'].includes(req.type) && <Music2 className="w-3 h-3 text-emerald-400" />}
                         {req.type}
                       </span>
                       <span className="text-[10px] text-slate-500">

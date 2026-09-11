@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import api from '../lib/api';
-import { DownloadCloud, ArrowDown, ArrowUp, Activity, Film, Tv, Play, Pause, Trash2, Clock, HardDrive } from 'lucide-react';
+import { DownloadCloud, ArrowDown, ArrowUp, Activity, Film, Tv, Music2, Play, Pause, Trash2, Clock, HardDrive } from 'lucide-react';
 import { customAlert, customConfirm } from '../utils/alerts';
 import useWebSocket from '../lib/useWebSocket';
 import StickyBar from '../components/shared/StickyBar';
@@ -28,6 +28,33 @@ const parseReleaseInfo = (rawName) => {
   else if (/hdr10\+/i.test(name)) hdr = 'HDR10+';
   else if (/hdr/i.test(name)) hdr = 'HDR';
   else if (/dv|dovi|dolby\s*vision/i.test(name)) hdr = 'DV';
+
+  // Music format check
+  const isMusic = /\b(flac|mp3|320kbps|lossless|alac|opus|aac|v0|v2|web-flac|vinyl-flac|cd-flac)\b/i.test(name) || /\.(flac|mp3|m4a|aac|ogg|opus|wav|ape|wv)$/i.test(rawName);
+  if (isMusic && !name.match(/\b(1080p|720p|2160p|4k|bluray|hdtv)\b/i)) {
+    let musicFormat = 'FLAC';
+    if (/\bflac\b/i.test(name) || /\.flac$/i.test(rawName)) musicFormat = 'FLAC';
+    else if (/\b(320|mp3)\b/i.test(name) || /\.mp3$/i.test(rawName)) musicFormat = 'MP3';
+    else if (/\b(aac|m4a)\b/i.test(name) || /\.(aac|m4a)$/i.test(rawName)) musicFormat = 'AAC';
+    else if (/\bopus\b/i.test(name) || /\.opus$/i.test(rawName)) musicFormat = 'Opus';
+
+    const cleanMusicTitle = name
+      .replace(/\b(flac|mp3|320kbps|lossless|alac|opus|aac|v0|v2|web-flac|vinyl-flac|cd-flac|cdrip|webrip)\b.*/i, '')
+      .replace(/[._()[\]-]/g, ' ')
+      .trim();
+
+    return {
+      title: cleanMusicTitle || rawName,
+      resolution: musicFormat,
+      source: 'Audio',
+      codec: musicFormat,
+      audio: musicFormat,
+      hdr: null,
+      isTv: false,
+      isMusic: true,
+      raw: rawName
+    };
+  }
 
   // TV format check
   const tvMatch = name.match(/(.*?)\b(S\d{1,2}[._\s-]*E\d{1,3}(?:[-_E\s]+(?:S\d{1,2})?E?\d{1,3})*|Season\s*\d+|\d+x\d+)\b/i);
@@ -274,7 +301,9 @@ export default function Downloads() {
                   <div className="flex justify-between items-start gap-3">
                     <div className="min-w-0 flex-1 space-y-1.5">
                       <div className="flex items-center gap-2 flex-wrap">
-                        {info.isTv ? (
+                        {info.isMusic ? (
+                          <Music2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                        ) : info.isTv ? (
                           <Tv className="w-4 h-4 text-purple-400 shrink-0" />
                         ) : (
                           <Film className="w-4 h-4 text-cyan-400 shrink-0" />

@@ -9,14 +9,19 @@ import { customAlert } from '../utils/alerts';
 const qualityColor = (q) => {
   if (!q) return 'text-slate-400';
   const lower = q.toLowerCase();
-  if (lower.includes('2160') || lower.includes('4k')) return 'text-purple-400';
-  if (lower.includes('1080')) return 'text-cyan-400';
-  if (lower.includes('720')) return 'text-emerald-400';
+  if (lower.includes('flac') || lower.includes('lossless') || lower.includes('24bit') || lower.includes('2160') || lower.includes('4k')) return 'text-purple-400';
+  if (lower.includes('320') || lower.includes('1080')) return 'text-cyan-400';
+  if (lower.includes('v0') || lower.includes('256') || lower.includes('720')) return 'text-emerald-400';
   return 'text-amber-400';
 };
 
 const parseQuality = (title) => {
   const t = (title || '').toLowerCase();
+  if (t.includes('flac')) return 'FLAC';
+  if (t.includes('320k') || t.includes('320 kbps')) return 'MP3 320';
+  if (t.includes('v0')) return 'MP3 V0';
+  if (t.includes('mp3')) return 'MP3';
+  if (t.includes('aac')) return 'AAC';
   if (t.includes('2160p') || t.includes('4k')) return '4K';
   if (t.includes('1080p')) return '1080p';
   if (t.includes('720p')) return '720p';
@@ -36,6 +41,8 @@ export default function ManualSearchModal({ mediaId, mediaType, season, title, o
     ? `/library/shows/${mediaId}/seasons/${season}/search`
     : mediaType === 'show'
     ? `/library/shows/${mediaId}/search`
+    : mediaType === 'album'
+    ? `/library/music/albums/${mediaId}/search`
     : `/library/movies/${mediaId}/search`;
 
   const grabEndpoint = mediaType === 'episode'
@@ -44,6 +51,8 @@ export default function ManualSearchModal({ mediaId, mediaType, season, title, o
     ? `/library/shows/${mediaId}/seasons/${season}/download`
     : mediaType === 'show'
     ? `/library/shows/${mediaId}/download`
+    : mediaType === 'album'
+    ? `/library/music/albums/${mediaId}/grab`
     : `/library/movies/${mediaId}/grab`;
 
   useEffect(() => {

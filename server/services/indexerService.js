@@ -420,12 +420,99 @@ const searchGeneric = async (query) => {
   return results.sort((a, b) => b.seeders - a.seeders);
 };
 
+// ─── Music Search ─────────────────────────────────────────────────────────────
+
+const searchMusic = async (artistName, albumTitle = null, profile = null, isManualSearch = false) => {
+  const cleanArtist = cleanTitle(artistName || '');
+  const cleanAlbum = albumTitle ? cleanTitle(albumTitle) : null;
+
+  const searchTerm = cleanAlbum
+    ? `${cleanArtist} ${cleanAlbum}`
+    : cleanArtist;
+
+  let rawResults;
+  try {
+    rawResults = await searchProwlarr(searchTerm, 'musicsearch');
+  } catch {
+    // Fallback to generic search if musicsearch isn't supported
+    rawResults = await searchProwlarr(searchTerm, 'search');
+  }
+
+  if (!rawResults.length && cleanAlbum) {
+    // Retry with just artist name if album+artist yielded nothing
+    try {
+      rawResults = await searchProwlarr(cleanArtist, 'musicsearch');
+    } catch {
+      try {
+        rawResults = await searchProwlarr(cleanArtist, 'search');
+      } catch { /* ignore */ }
+    }
+  }
+
+  // Filter out malicious releases
+  let filtered = rawResults.filter(r => !isMaliciousOrFakeRelease(r.title));
+
+  // For automated searches, require seeders
+  if (!isManualSearch) {
+    filtered = filtered.filter(r => r.seeders && r.seeders >= 1);
+  }
+
+  // If we have an album title, filter to results that mention the artist or album
+  if (cleanAlbum && artistName) {
+    const artistWords = tokenizeTitle(artistName);
+    const albumWords = tokenizeTitle(albumTitle);
+    filtered = filtered.filter(r => {
+      const resultWords = tokenizeTitle(r.title);
+      const hasArtist = findTokenSequenceMatch(resultWords, artistWords) !== -1;
+      const hasAlbum = findTokenSequenceMatch(resultWords, albumWords) !== -1;
+      return hasArtist || hasAlbum;
+    });
+  }
+
+  // Apply music quality profile filtering
+  if (profile && profile.accepted_formats) {
+    let acceptedFormats;
+    try { acceptedFormats = JSON.parse(profile.accepted_formats); } catch { acceptedFormats = []; }
+    if (acceptedFormats.length > 0) {
+      const { parseMusicFormat } = require('../utils/mediaParsing');
+      filtered = filtered.filter(r => {
+        const fmt = parseMusicFormat(r.title);
+        return fmt === 'Unknown' || acceptedFormats.includes(fmt);
+      });
+    }
+  }
+
+  // Sort: prefer lossless (FLAC) then by seeders
+  const { parseMusicFormat, parseMusicQualityRank } = require('../utils/mediaParsing');
+  filtered.sort((a, b) => {
+    const rankA = parseMusicQualityRank(parseMusicFormat(a.title));
+    const rankB = parseMusicQualityRank(parseMusicFormat(b.title));
+    if (rankA !== rankB) return rankB - rankA;
+    return b.seeders - a.seeders;
+  });
+
+  // Deduplicate
+  const seen = new Set();
+  const deduped = [];
+  for (const r of filtered) {
+    const key = r.title.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+    if (!seen.has(key)) {
+      seen.add(key);
+      deduped.push(r);
+    }
+  }
+
+  return deduped;
+};
+
 module.exports = {
   searchMovie,
   searchEpisode,
   searchShowPack,
   searchSeasonPack,
   searchGeneric,
+  searchMusic,
   parseQuality,
   getCircuitStatus,
 };
+

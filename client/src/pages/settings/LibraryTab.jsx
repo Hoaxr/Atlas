@@ -288,6 +288,7 @@ export default function LibraryTab({
             options={[
               { label: 'Movies', value: 'movies' },
               { label: 'TV Shows', value: 'tv' },
+              { label: 'Music', value: 'music' },
               { label: 'Downloads', value: 'downloads' },
             ]}
             className="w-36 shrink-0"
@@ -303,9 +304,10 @@ export default function LibraryTab({
                 <span className={`text-xs font-bold px-2 py-0.5 rounded ${
                   p.type === 'movies' ? 'bg-cyan-500/20 text-cyan-400' :
                   p.type === 'tv' ? 'bg-purple-500/20 text-purple-400' :
+                  p.type === 'music' ? 'bg-indigo-500/20 text-indigo-400' :
                   'bg-amber-500/20 text-amber-400'
                 }`}>
-                  {p.type === 'movies' ? 'Movies' : p.type === 'tv' ? 'TV' : 'Downloads'}
+                  {p.type === 'movies' ? 'Movies' : p.type === 'tv' ? 'TV' : p.type === 'music' ? 'Music' : 'Downloads'}
                 </span>
                 <button onClick={() => api.delete(`/library/paths/${p.id}`).then(fetchPaths)} className="text-red-400 hover:text-red-300 p-2"><Trash2 className="w-5 h-5" /></button>
               </div>

@@ -129,4 +129,168 @@ const deletePoster = (type, tmdbId) => {
   } catch { /* ignore */ }
 };
 
-module.exports = { ensurePoster, deletePoster, posterPath, IMAGE_DIR };
+// ─── Music Cover Art ──────────────────────────────────────────────────────────
+
+/**
+ * Absolute path for a cached album cover.
+ * @param {string} mbid  MusicBrainz release group ID
+ */
+const albumCoverPath = (mbid) =>
+  path.join(IMAGE_DIR, 'music', 'albums', String(mbid), 'cover.jpg');
+
+/**
+ * Absolute path for a cached artist image.
+ * @param {string} mbid  MusicBrainz artist ID
+ */
+const artistImagePath = (mbid) =>
+  path.join(IMAGE_DIR, 'music', 'artists', String(mbid), 'image.jpg');
+
+// Common cover-art filenames used by scene/rip releases and taggers.
+const COVER_BASENAMES = ['cover', 'folder', 'front', 'album', 'albumart', 'artwork'];
+const COVER_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.webp'];
+
+/**
+ * Find a locally stored cover image inside an album's library folder.
+ * Matches common naming conventions (cover.jpg, folder.png, front.webp, ...).
+ * @param {string|null} folderPath  Absolute album folder path (music_albums.folder_path)
+ * @returns {string|null} Absolute path to the image, or null if none found
+ */
+const findAlbumFolderCover = (folderPath) => {
+  if (!folderPath) return null;
+  let entries;
+  try {
+    if (!fs.existsSync(folderPath)) return null;
+    entries = fs.readdirSync(folderPath, { withFileTypes: true });
+  } catch {
+    return null;
+  }
+
+  const images = entries
+    .filter(e => e.isFile() && COVER_EXTENSIONS.includes(path.extname(e.name).toLowerCase()))
+    .map(e => e.name);
+
+  // Prefer an exact, case-insensitive match (cover.jpg, Folder.PNG, ...)
+  for (const base of COVER_BASENAMES) {
+    for (const ext of COVER_EXTENSIONS) {
+      const match = images.find(n => n.toLowerCase() === `${base}${ext}`);
+      if (match) return path.join(folderPath, match);
+    }
+  }
+
+  // Fall back to a prefixed match (e.g. albumart1.jpg, cover_front.jpg)
+  for (const base of COVER_BASENAMES) {
+    const match = images.find(n => n.toLowerCase().startsWith(base));
+    if (match) return path.join(folderPath, match);
+  }
+
+  return null;
+};
+
+/**
+ * Download and cache an image from an arbitrary URL.
+ * Used for Cover Art Archive and fanart.tv images.
+ */
+const downloadExternalImage = async (url, destPath) => {
+  const dir = path.dirname(destPath);
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+
+  const response = await axios({ method: 'GET', url, responseType: 'stream', timeout: 20000 });
+
+  const contentLength = parseInt(response.headers['content-length'], 10);
+  if (!Number.isNaN(contentLength) && contentLength > MAX_IMAGE_BYTES) {
+    response.data.destroy();
+    throw new Error(`Image exceeds size limit (${contentLength} bytes)`);
+  }
+
+  const tmpPath = `${destPath}.${process.pid}.${Date.now()}.${Math.random().toString(36).slice(2)}.tmp`;
+  try {
+    const writer = fs.createWriteStream(tmpPath);
+    response.data.pipe(writer);
+    await new Promise((resolve, reject) => {
+      writer.on('finish', resolve);
+      writer.on('error', reject);
+      response.data.on('error', reject);
+    });
+    fs.renameSync(tmpPath, destPath);
+  } catch (err) {
+    try { fs.unlinkSync(tmpPath); } catch { /* ignore */ }
+    throw err;
+  }
+};
+
+const _musicInFlight = new Map();
+
+/**
+ * Ensure an album cover is cached locally, downloading from coverUrl if needed.
+ * Returns the absolute local path or null.
+ */
+const ensureAlbumCover = async (mbid, coverUrl) => {
+  if (!coverUrl) return null;
+
+  const dest = albumCoverPath(mbid);
+  if (fs.existsSync(dest)) return dest;
+
+  const key = `album:${mbid}`;
+  if (_musicInFlight.has(key)) return _musicInFlight.get(key);
+
+  const promise = (async () => {
+    try {
+      await downloadExternalImage(coverUrl, dest);
+      return dest;
+    } catch (err) {
+      console.error(`[ImageService] Failed to cache album cover for ${mbid}:`, err.message);
+      return null;
+    } finally {
+      _musicInFlight.delete(key);
+    }
+  })();
+
+  _musicInFlight.set(key, promise);
+  return promise;
+};
+
+/**
+ * Ensure an artist image is cached locally.
+ * Returns the absolute local path or null.
+ */
+const ensureArtistImage = async (mbid, imageUrl) => {
+  if (!imageUrl) return null;
+
+  const dest = artistImagePath(mbid);
+  if (fs.existsSync(dest)) return dest;
+
+  const key = `artist:${mbid}`;
+  if (_musicInFlight.has(key)) return _musicInFlight.get(key);
+
+  const promise = (async () => {
+    try {
+      await downloadExternalImage(imageUrl, dest);
+      return dest;
+    } catch (err) {
+      console.error(`[ImageService] Failed to cache artist image for ${mbid}:`, err.message);
+      return null;
+    } finally {
+      _musicInFlight.delete(key);
+    }
+  })();
+
+  _musicInFlight.set(key, promise);
+  return promise;
+};
+
+const deleteAlbumCover = (mbid) => {
+  const dest = albumCoverPath(mbid);
+  if (fs.existsSync(dest)) {
+    try { fs.unlinkSync(dest); } catch { /* ignore */ }
+  }
+  const dir = path.dirname(dest);
+  try {
+    if (fs.readdirSync(dir).length === 0) fs.rmdirSync(dir);
+  } catch { /* ignore */ }
+};
+
+module.exports = {
+  ensurePoster, deletePoster, posterPath, IMAGE_DIR,
+  albumCoverPath, artistImagePath, ensureAlbumCover, ensureArtistImage, deleteAlbumCover,
+  findAlbumFolderCover,
+};

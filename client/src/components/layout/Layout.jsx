@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Search, Settings as SettingsIcon, Film, Activity, Tv as TvIcon, DownloadCloud, Heart, Calendar as CalendarIcon, BarChart3, LogOut, Eye, X, TrendingUp } from 'lucide-react';
+import { Search, Settings as SettingsIcon, Film, Activity, Tv as TvIcon, DownloadCloud, Heart, Calendar as CalendarIcon, BarChart3, LogOut, Eye, X, TrendingUp, Music } from 'lucide-react';
 import Logo from './Logo';
 import clsx from 'clsx';
 import api from '../../lib/api';
@@ -10,6 +10,8 @@ import { setCachedMovies, setCachedShows } from '../../lib/libraryCache';
 import useKeyboardShortcuts from '../../lib/useKeyboardShortcuts';
 import ShortcutsModal from '../shared/ShortcutsModal';
 import SubtitleJobBanner from '../subtitles/SubtitleJobBanner';
+import MusicPlayerBar from '../music/MusicPlayerBar';
+import { useAudioPlayer } from '../../context/AudioPlayerContext';
 
 const navSections = [
   {
@@ -19,6 +21,7 @@ const navSections = [
       { name: 'Discover', path: '/discover', icon: Search },
       { name: 'Movies', path: '/movies', icon: Film },
       { name: 'Shows', path: '/shows', icon: TvIcon },
+      { name: 'Music', path: '/music', icon: Music },
       { name: 'Calendar', path: '/calendar', icon: CalendarIcon },
       { name: 'Statistics', path: '/stats', icon: BarChart3 },
     ]
@@ -43,7 +46,7 @@ const navSections = [
 export default function Layout() {
   const { onEvent } = useWebSocket(); // Connect to real-time event stream
   const navigate = useNavigate();
-  const [libStats, setLibStats] = useState({ movies: 0, shows: 0 });
+  const [libStats, setLibStats] = useState({ movies: 0, shows: 0, artists: 0 });
   const [downloads, setDownloads] = useState([]);
   const [, setClientStats] = useState({ dl_info_speed: 0, up_info_speed: 0 });
   const [, setClientConnected] = useState(null);
@@ -51,8 +54,8 @@ export default function Layout() {
   const [pendingRequests, setPendingRequests] = useState(0);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
-
   const [watcherCount, setWatcherCount] = useState(0);
+  const { currentTrack } = useAudioPlayer();
 
   const handleLogout = async () => {
     try {
@@ -116,7 +119,7 @@ export default function Layout() {
       }
       // Layout push from server — replaces 3s polling
       if (data.type === 'LAYOUT_UPDATE' && data.data) {
-        setLibStats({ movies: data.data.movies, shows: data.data.shows });
+        setLibStats({ movies: data.data.movies, shows: data.data.shows, artists: data.data.music ?? data.data.artists ?? 0 });
         setPendingRequests(data.data.pendingRequests || 0);
       }
       // Torrent push from server
@@ -183,6 +186,7 @@ export default function Layout() {
   useKeyboardShortcuts({
     'g m': () => navigate('/movies'),
     'g s': () => navigate('/shows'),
+    'g u': () => navigate('/music'),
     'g d': () => navigate('/discover'),
     'g c': () => navigate('/calendar'),
     'g t': () => navigate('/tasks'),
@@ -392,6 +396,16 @@ export default function Layout() {
                                 {libStats.shows.toLocaleString()}
                               </span>
                             )}
+                            {item.path === '/music' && libStats?.artists > 0 && (
+                              <span className={clsx(
+                                "text-[11px] font-semibold px-2 py-0.5 rounded-lg border transition-colors",
+                                isActive
+                                  ? "bg-cyan-500/15 text-cyan-300 border-cyan-500/30"
+                                  : "bg-slate-200/80 dark:bg-slate-800/80 text-slate-600 dark:text-slate-300 border-slate-300/40 dark:border-slate-700/50"
+                              )}>
+                                {libStats.artists.toLocaleString()}
+                              </span>
+                            )}
                             {item.name === 'Requests' && pendingRequests > 0 && (
                               <span className="bg-amber-500/20 text-amber-400 text-[10px] font-bold px-2 py-0.5 rounded-full border border-amber-500/30">
                                 {pendingRequests}
@@ -496,7 +510,7 @@ export default function Layout() {
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 min-w-0 w-full overflow-y-auto overflow-x-hidden relative z-10">
+      <main className={clsx("flex-1 min-w-0 w-full overflow-y-auto overflow-x-hidden relative z-10", currentTrack && "pb-24")}>
         <div className="p-3 sm:p-4 md:p-6 lg:p-8 w-full max-w-full overflow-x-clip">
           <Outlet />
         </div>
@@ -504,6 +518,9 @@ export default function Layout() {
 
       {/* Floating Background Subtitle Job Progress Banner */}
       <SubtitleJobBanner />
+
+      {/* Floating Audio Player for Music */}
+      <MusicPlayerBar />
     </div>
   );
 }

@@ -53,6 +53,7 @@ export const LANG_NAME = { en: 'English', nl: 'Dutch', fr: 'French', de: 'German
 export const mediaTheme = {
   movie: { accent: 'cyan', accentClass: 'text-cyan-400', accentBg: 'bg-cyan-500/10', accentBorder: 'border-cyan-500/30', accentHover: 'hover:bg-cyan-500/20', accentFill: 'fill-cyan-400', focusRing: 'focus:border-cyan-500/50', spinnerBorder: 'border-cyan-500', gradientFrom: 'from-cyan-500', gradientTo: 'to-blue-500', badgeClass: 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30' },
   tv:    { accent: 'purple', accentClass: 'text-purple-400', accentBg: 'bg-purple-500/10', accentBorder: 'border-purple-500/30', accentHover: 'hover:bg-purple-500/20', accentFill: 'fill-purple-400', focusRing: 'focus:border-purple-500/50', spinnerBorder: 'border-purple-500', gradientFrom: 'from-purple-500', gradientTo: 'to-pink-500', badgeClass: 'bg-purple-500/20 text-purple-400 border border-purple-500/30' },
+  music: { accent: 'emerald', accentClass: 'text-emerald-400', accentBg: 'bg-emerald-500/10', accentBorder: 'border-emerald-500/30', accentHover: 'hover:bg-emerald-500/20', accentFill: 'fill-emerald-400', focusRing: 'focus:border-emerald-500/50', spinnerBorder: 'border-emerald-500', gradientFrom: 'from-emerald-500', gradientTo: 'to-teal-500', badgeClass: 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' },
 };
 
 /**

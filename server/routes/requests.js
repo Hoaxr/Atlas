@@ -31,21 +31,25 @@ router.get('/', (req, res, next) => {
       requests = db.prepare(`
         SELECT r.*,
           u.username as requested_by,
-          COALESCE(r.poster_path, m.poster_path, s.poster_path) as poster_path
+          COALESCE(r.poster_path, m.poster_path, s.poster_path, alb.cover_url, a.image_url) as poster_path
         FROM requests r
         LEFT JOIN users u ON r.user_id = u.id
         LEFT JOIN movies m ON r.tmdb_id = m.tmdb_id AND r.type = 'movie'
         LEFT JOIN shows s ON r.tmdb_id = s.tmdb_id AND r.type = 'tv'
+        LEFT JOIN music_artists a ON r.tmdb_id = a.mbid AND (r.type = 'music' OR r.type = 'artist')
+        LEFT JOIN music_albums alb ON r.tmdb_id = alb.mbid AND r.type = 'album'
         ORDER BY r.created_at DESC
       `).all();
     } else {
       // Non-admins only see their own requests (no other user's username exposed)
       requests = db.prepare(`
         SELECT r.id, r.user_id, r.tmdb_id, r.type, r.title, r.status, r.created_at, r.release_date,
-          COALESCE(r.poster_path, m.poster_path, s.poster_path) as poster_path
+          COALESCE(r.poster_path, m.poster_path, s.poster_path, alb.cover_path, a.image_path) as poster_path
         FROM requests r
         LEFT JOIN movies m ON r.tmdb_id = m.tmdb_id AND r.type = 'movie'
         LEFT JOIN shows s ON r.tmdb_id = s.tmdb_id AND r.type = 'tv'
+        LEFT JOIN music_artists a ON r.tmdb_id = a.mbid AND (r.type = 'music' OR r.type = 'artist')
+        LEFT JOIN music_albums alb ON r.tmdb_id = alb.mbid AND r.type = 'album'
         WHERE r.user_id = ?
         ORDER BY r.created_at DESC
       `).all(req.user.id);
@@ -70,8 +74,8 @@ router.post('/', (req, res, next) => {
     if (!tmdb_id || !type || !title) {
       return res.status(400).json({ status: 'error', message: 'tmdb_id, type, and title are required' });
     }
-    if (!['movie', 'tv'].includes(type)) {
-      return res.status(400).json({ status: 'error', message: 'type must be "movie" or "tv"' });
+    if (!['movie', 'tv', 'music', 'album', 'artist'].includes(type)) {
+      return res.status(400).json({ status: 'error', message: 'type must be "movie", "tv", "music", "album", or "artist"' });
     }
 
     // Check if already requested globally
@@ -84,9 +88,16 @@ router.post('/', (req, res, next) => {
     }
 
     // Check if it's already in the library
-    const inLibrary = type === 'movie'
-      ? db.prepare('SELECT id FROM movies WHERE tmdb_id = ?').get(tmdb_id)
-      : db.prepare('SELECT id FROM shows WHERE tmdb_id = ?').get(tmdb_id);
+    let inLibrary = null;
+    if (type === 'movie') {
+      inLibrary = db.prepare('SELECT id FROM movies WHERE tmdb_id = ?').get(tmdb_id);
+    } else if (type === 'tv') {
+      inLibrary = db.prepare('SELECT id FROM shows WHERE tmdb_id = ?').get(tmdb_id);
+    } else if (type === 'music' || type === 'artist') {
+      inLibrary = db.prepare('SELECT id FROM music_artists WHERE mbid = ?').get(tmdb_id);
+    } else if (type === 'album') {
+      inLibrary = db.prepare('SELECT id FROM music_albums WHERE mbid = ?').get(tmdb_id);
+    }
     if (inLibrary) {
       return res.status(409).json({ status: 'error', message: 'This item is already in your library' });
     }

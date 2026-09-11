@@ -4,7 +4,8 @@ import api from '../lib/api';
 import { formatSize } from '../lib/format';
 import {
   BarChart3, Film, Tv, HardDrive, Star,
-  CheckCircle2, Hash, Zap, PlayCircle, Activity, Languages, Trash2, FolderOpen
+  CheckCircle2, Hash, Zap, PlayCircle, Activity, Languages, Trash2, FolderOpen,
+  Music2, Disc, Mic2, FileAudio, ChevronRight
 } from 'lucide-react';
 import { StatsSkeleton } from '../components/shared/Skeleton';
 import EmptyState from '../components/shared/EmptyState';
@@ -49,6 +50,7 @@ export default function Statistics() {
   const navigate = useNavigate();
   const { headerRef, stickyVisible } = useStickyBar();
   const [stats, setStats] = useState(null);
+  const [musicStats, setMusicStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [missingSubsModal, setMissingSubsModal] = useState(false);
   const [missingSubsData, setMissingSubsData] = useState(null);
@@ -93,13 +95,17 @@ export default function Statistics() {
 
   const fetchStats = async () => {
     try {
-      const [libRes] = await Promise.all([
+      const [libRes, musicRes] = await Promise.all([
         api.get('/library/stats'),
+        api.get('/library/music/stats').catch(() => ({ data: {} })),
         api.get('/simkl/stats').catch(() => ({ data: {} }))
       ]);
 
       if (libRes.data.status === 'success') {
         setStats(libRes.data.data);
+      }
+      if (musicRes.data?.status === 'success') {
+        setMusicStats(musicRes.data.data);
       }
 
     } catch (err) {
@@ -426,6 +432,58 @@ export default function Statistics() {
                 navigate(item.mediaType === 'movie' ? `/movies/${item.id}` : `/shows/${item.id}`)
               } />
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── Music Collection Statistics ── */}
+      {musicStats && (musicStats.artists > 0 || musicStats.albums > 0) && (
+        <div className="glass-panel rounded-2xl p-6">
+          <div className="flex items-center justify-between mb-5">
+            <h3 className="text-base font-bold text-slate-200 flex items-center gap-2">
+              <Music2 className="w-4 h-4 text-emerald-400" /> Music Collection
+            </h3>
+            <button
+              onClick={() => navigate('/music')}
+              className="text-xs text-cyan-400 hover:text-cyan-300 font-semibold flex items-center gap-1 transition-colors"
+            >
+              View Music Library <ChevronRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <div className="bg-slate-800/40 rounded-xl p-4 border border-white/5">
+              <div className="flex items-center gap-2 text-cyan-400 mb-1">
+                <Mic2 className="w-4 h-4" />
+                <span className="text-xs font-semibold text-slate-400">Artists</span>
+              </div>
+              <p className="text-2xl font-black text-slate-100">{musicStats.artists || 0}</p>
+            </div>
+
+            <div className="bg-slate-800/40 rounded-xl p-4 border border-white/5">
+              <div className="flex items-center gap-2 text-sky-400 mb-1">
+                <Disc className="w-4 h-4" />
+                <span className="text-xs font-semibold text-slate-400">Albums</span>
+              </div>
+              <p className="text-2xl font-black text-slate-100">{musicStats.albums || 0}</p>
+              <p className="text-[10px] text-emerald-400 mt-0.5">{musicStats.downloadedAlbums || 0} downloaded</p>
+            </div>
+
+            <div className="bg-slate-800/40 rounded-xl p-4 border border-white/5">
+              <div className="flex items-center gap-2 text-indigo-400 mb-1">
+                <FileAudio className="w-4 h-4" />
+                <span className="text-xs font-semibold text-slate-400">Tracks</span>
+              </div>
+              <p className="text-2xl font-black text-slate-100">{musicStats.tracks || 0}</p>
+            </div>
+
+            <div className="bg-slate-800/40 rounded-xl p-4 border border-white/5">
+              <div className="flex items-center gap-2 text-emerald-400 mb-1">
+                <HardDrive className="w-4 h-4" />
+                <span className="text-xs font-semibold text-slate-400">Storage</span>
+              </div>
+              <p className="text-2xl font-black text-slate-100">{formatSize(musicStats.totalSize || 0)}</p>
+            </div>
           </div>
         </div>
       )}

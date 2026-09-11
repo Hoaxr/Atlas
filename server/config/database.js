@@ -1067,6 +1067,142 @@ const MIGRATIONS = [
         db.exec("ALTER TABLE subtitle_tracks ADD COLUMN sync_details TEXT;");
       } catch { /* column might exist */ }
     }
+  },
+  {
+    id: 38,
+    name: 'add_music_tables',
+    run: (db) => {
+      db.exec(`
+        -- Music artists
+        CREATE TABLE IF NOT EXISTS music_artists (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          mbid TEXT UNIQUE,
+          name TEXT NOT NULL,
+          sort_name TEXT,
+          overview TEXT,
+          genres TEXT DEFAULT '[]',
+          image_path TEXT,
+          status TEXT DEFAULT 'monitored',
+          monitored INTEGER DEFAULT 1,
+          added_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          last_refreshed_at DATETIME,
+          folder_path TEXT,
+          quality_profile_id INTEGER,
+          rating REAL DEFAULT 0,
+          disambiguation TEXT
+        );
+
+        -- Music albums (release groups)
+        CREATE TABLE IF NOT EXISTS music_albums (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          mbid TEXT UNIQUE,
+          artist_id INTEGER NOT NULL,
+          title TEXT NOT NULL,
+          release_date TEXT,
+          year INTEGER,
+          album_type TEXT DEFAULT 'album',
+          cover_path TEXT,
+          overview TEXT,
+          genres TEXT DEFAULT '[]',
+          label TEXT,
+          status TEXT DEFAULT 'monitored',
+          monitored INTEGER DEFAULT 1,
+          added_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          last_refreshed_at DATETIME,
+          folder_path TEXT,
+          quality_profile_id INTEGER,
+          track_count INTEGER DEFAULT 0,
+          file_format TEXT,
+          file_bitdepth INTEGER,
+          file_samplerate INTEGER,
+          file_size INTEGER DEFAULT 0,
+          FOREIGN KEY (artist_id) REFERENCES music_artists(id) ON DELETE CASCADE
+        );
+
+        -- Music tracks
+        CREATE TABLE IF NOT EXISTS music_tracks (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          mbid TEXT,
+          album_id INTEGER NOT NULL,
+          artist_id INTEGER NOT NULL,
+          title TEXT NOT NULL,
+          track_number INTEGER,
+          disc_number INTEGER DEFAULT 1,
+          duration INTEGER,
+          file_path TEXT,
+          file_size INTEGER DEFAULT 0,
+          format TEXT,
+          bitrate INTEGER,
+          bitdepth INTEGER,
+          samplerate INTEGER,
+          status TEXT DEFAULT 'monitored',
+          monitored INTEGER DEFAULT 1,
+          isrc TEXT,
+          added_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE(album_id, disc_number, track_number),
+          FOREIGN KEY (album_id) REFERENCES music_albums(id) ON DELETE CASCADE,
+          FOREIGN KEY (artist_id) REFERENCES music_artists(id) ON DELETE CASCADE
+        );
+
+        -- Music quality profiles (separate from video profiles)
+        CREATE TABLE IF NOT EXISTS music_quality_profiles (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          name TEXT NOT NULL,
+          preferred_format TEXT DEFAULT 'FLAC',
+          accepted_formats TEXT DEFAULT '["FLAC","MP3"]',
+          min_bitrate INTEGER DEFAULT 0,
+          cutoff_format TEXT DEFAULT 'FLAC',
+          upgrade_allowed INTEGER DEFAULT 1
+        );
+
+        -- Music requests (separate to avoid UNIQUE constraint on existing requests table)
+        CREATE TABLE IF NOT EXISTS music_requests (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          user_id INTEGER,
+          mbid TEXT,
+          type TEXT NOT NULL,
+          title TEXT,
+          artist_name TEXT,
+          cover_path TEXT,
+          status TEXT DEFAULT 'pending',
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        );
+
+        -- Indexes
+        CREATE INDEX IF NOT EXISTS idx_music_artists_mbid ON music_artists(mbid);
+        CREATE INDEX IF NOT EXISTS idx_music_artists_name ON music_artists(name COLLATE NOCASE);
+        CREATE INDEX IF NOT EXISTS idx_music_artists_monitored ON music_artists(monitored);
+        CREATE INDEX IF NOT EXISTS idx_music_artists_status ON music_artists(status);
+
+        CREATE INDEX IF NOT EXISTS idx_music_albums_mbid ON music_albums(mbid);
+        CREATE INDEX IF NOT EXISTS idx_music_albums_artist ON music_albums(artist_id);
+        CREATE INDEX IF NOT EXISTS idx_music_albums_monitored ON music_albums(monitored);
+        CREATE INDEX IF NOT EXISTS idx_music_albums_status ON music_albums(status);
+        CREATE INDEX IF NOT EXISTS idx_music_albums_year ON music_albums(year);
+        CREATE INDEX IF NOT EXISTS idx_music_albums_added ON music_albums(added_at);
+
+        CREATE INDEX IF NOT EXISTS idx_music_tracks_album ON music_tracks(album_id);
+        CREATE INDEX IF NOT EXISTS idx_music_tracks_artist ON music_tracks(artist_id);
+        CREATE INDEX IF NOT EXISTS idx_music_tracks_file ON music_tracks(file_path);
+
+        CREATE INDEX IF NOT EXISTS idx_music_requests_user ON music_requests(user_id);
+        CREATE INDEX IF NOT EXISTS idx_music_requests_status ON music_requests(status);
+      `);
+
+      // Seed a default music quality profile
+      const existing = db.prepare('SELECT id FROM music_quality_profiles LIMIT 1').get();
+      if (!existing) {
+        db.prepare(`
+          INSERT INTO music_quality_profiles (name, preferred_format, accepted_formats, cutoff_format, upgrade_allowed)
+          VALUES (?, ?, ?, ?, ?)
+        `).run('Lossless (FLAC)', 'FLAC', JSON.stringify(['FLAC', 'MP3', 'AAC']), 'FLAC', 1);
+        db.prepare(`
+          INSERT INTO music_quality_profiles (name, preferred_format, accepted_formats, min_bitrate, cutoff_format, upgrade_allowed)
+          VALUES (?, ?, ?, ?, ?, ?)
+        `).run('Lossy (MP3 320)', 'MP3', JSON.stringify(['MP3', 'AAC']), 320, 'MP3', 0);
+      }
+    }
   }
 ];
 

@@ -4,6 +4,7 @@ import ModalShell from './ModalShell';
 const SHORTCUTS = [
   { keys: ['G', 'M'], desc: 'Go to Movies' },
   { keys: ['G', 'S'], desc: 'Go to TV Shows' },
+  { keys: ['G', 'U'], desc: 'Go to Music' },
   { keys: ['G', 'D'], desc: 'Go to Discover' },
   { keys: ['G', 'C'], desc: 'Go to Calendar' },
   { keys: ['G', 'T'], desc: 'Go to Tasks' },

@@ -5,6 +5,7 @@ const moviesRouter = require('./movies');
 const showsEpisodesRouter = require('./showsEpisodes');
 const systemRouter = require('./system');
 const subtitlesRouter = require('./subtitles');
+const musicRouter = require('./music');
 
 // Movie routes under /movies
 router.use('/movies', moviesRouter);
@@ -17,5 +18,8 @@ router.use('/', showsEpisodesRouter);
 
 // System routes: paths, scan, bulk, duplicates, calendar, downloads, stats
 router.use('/', systemRouter);
+
+// Music routes under /music
+router.use('/music', musicRouter);
 
 module.exports = router;

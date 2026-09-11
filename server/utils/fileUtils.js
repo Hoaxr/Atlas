@@ -9,6 +9,13 @@ const VIDEO_EXTENSIONS = new Set([
   '.mkv', '.mp4', '.avi', '.mov', '.wmv', '.webm', '.ts', '.m2ts', '.mpg', '.mpeg',
 ]);
 
+/**
+ * Unified set of recognised audio file extensions.
+ */
+const AUDIO_EXTENSIONS = new Set([
+  '.flac', '.mp3', '.m4a', '.aac', '.ogg', '.opus', '.wav', '.ape', '.wv', '.alac',
+]);
+
 
 /**
  * Unified set of recognised subtitle file extensions.
@@ -23,6 +30,13 @@ const SUBTITLE_EXTENSIONS = new Set([
  */
 const isVideoFile = (filename) =>
   VIDEO_EXTENSIONS.has(path.extname(filename).toLowerCase());
+
+/**
+ * Returns true when `filename` has a recognised audio extension.
+ * @param {string} filename  Basename or full path.
+ */
+const isAudioFile = (filename) =>
+  AUDIO_EXTENSIONS.has(path.extname(filename).toLowerCase());
 
 /**
  * Returns true when `filename` has a recognised subtitle extension.
@@ -131,4 +145,4 @@ const findLargestVideoFile = async (dirPath) => {
   return best;
 };
 
-module.exports = { VIDEO_EXTENSIONS, SUBTITLE_EXTENSIONS, isVideoFile, isSubtitleFile, deleteFolderRecursive, isRootLibraryPath, isPathContainedInLibrary, findLargestVideoFile };
+module.exports = { VIDEO_EXTENSIONS, AUDIO_EXTENSIONS, SUBTITLE_EXTENSIONS, isVideoFile, isAudioFile, isSubtitleFile, deleteFolderRecursive, isRootLibraryPath, isPathContainedInLibrary, findLargestVideoFile };

@@ -11,6 +11,7 @@ const imageService = require('./imageService');
 
 const { getSetting } = require('../utils/settings');
 const { isVideoFile, isSubtitleFile, findLargestVideoFile } = require('../utils/fileUtils');
+const { isAudioFile } = require('../utils/fileUtils');
 const { getMediaMetadata, parseAudioFromFileName } = require('../utils/videoUtils');
 const subtitleService = require('./subtitles');
 const subtitleSyncService = require('./subtitles/subtitleSyncService');
@@ -398,6 +399,50 @@ const resetDownloadsNotInClient = async (torrentList) => {
       console.log(`[MediaManagement] Show ID ${show.id} all downloads finished. Status updated to ${newStatus}.`);
     }
   }
+
+  // Recalculate status for music albums that were marked as downloading
+  const downloadingAlbums = db.prepare(`
+    SELECT al.*, a.name as artist_name 
+    FROM music_albums al 
+    JOIN music_artists a ON a.id = al.artist_id 
+    WHERE al.status = 'downloading'
+  `).all();
+  for (const album of downloadingAlbums) {
+    const isStillInQueue = list.some(t => {
+      const name = (t.name || '').toLowerCase();
+      return name.includes(album.title.toLowerCase()) && name.includes(album.artist_name.toLowerCase());
+    });
+    if (!isStillInQueue) {
+      if (album.folder_path && fs.existsSync(album.folder_path)) {
+        db.prepare("UPDATE music_albums SET status = 'downloaded' WHERE id = ?").run(album.id);
+      } else {
+        db.prepare("UPDATE music_albums SET status = 'monitored' WHERE id = ?").run(album.id);
+      }
+    }
+  }
+};
+
+const getMappedDownloadPath = (torrent) => {
+  let contentPath = torrent.content_path || torrent.contentPath || (torrent.save_path ? path.join(torrent.save_path, torrent.name) : null);
+  if (!contentPath) return null;
+
+  const pathMapping = db.prepare("SELECT value FROM settings WHERE key = 'downloadPathMapping'").get();
+  const applyMapping = (p) => {
+    if (!pathMapping?.value) return p;
+    try {
+      const [from, to] = JSON.parse(pathMapping.value);
+      return p.startsWith(from) ? p.replace(from, to) : p;
+    } catch { return p; }
+  };
+
+  contentPath = applyMapping(contentPath);
+
+  if (!fs.existsSync(contentPath) && torrent.save_path) {
+    const altPath = applyMapping(path.join(torrent.save_path, torrent.name));
+    if (fs.existsSync(altPath)) contentPath = altPath;
+  }
+
+  return contentPath;
 };
 
 const runMediaManagement = async () => {
@@ -407,10 +452,14 @@ const runMediaManagement = async () => {
     WHERE (status = 'downloading') 
        OR (status IN ('monitored', 'missing') AND (file_path IS NULL OR file_path = ''))
   `).get().count;
+  const pendingAlbumsCount = db.prepare(`
+    SELECT COUNT(*) as count FROM music_albums 
+    WHERE status IN ('downloading', 'monitored')
+  `).get()?.count || 0;
 
-  console.log(`[MediaManagement] Checking: ${pendingMoviesCount} pending movies, ${pendingEpisodesCount} pending episodes`);
+  console.log(`[MediaManagement] Checking: ${pendingMoviesCount} pending movies, ${pendingEpisodesCount} pending episodes, ${pendingAlbumsCount} pending albums`);
 
-  if (pendingMoviesCount === 0 && pendingEpisodesCount === 0) {
+  if (pendingMoviesCount === 0 && pendingEpisodesCount === 0 && pendingAlbumsCount === 0) {
     return 'skipped';
   }
 
@@ -485,6 +534,43 @@ const runMediaManagement = async () => {
               importedAnything = true;
               torrentHandled = true;
               break; // One import per torrent
+            }
+          }
+        }
+
+        // 3. Music import — check if the completed torrent contains audio files
+        // Only attempt if not already matched as a movie or TV release
+        if (!torrentHandled) {
+          const contentPath = getMappedDownloadPath(torrent);
+          if (contentPath && fs.existsSync(contentPath)) {
+            try {
+              const musicImportService = require('./musicImportService');
+              const { findAllAudioFiles } = musicImportService;
+              const audioFiles = await findAllAudioFiles(contentPath);
+              if (audioFiles.length > 0) {
+                const result = await musicImportService.importMusicDownload(contentPath, torrent.name);
+                if (result.imported > 0) {
+                  importedAnything = true;
+                  torrentHandled = true;
+                  console.log(`[MediaManagement] Music import: ${result.imported} tracks from "${torrent.name}"`);
+
+                  // Remove torrent from client if removeCompletedDownloads setting is enabled
+                  const removeSetting = db.prepare('SELECT value FROM settings WHERE key = ?').get('removeCompletedDownloads');
+                  const deleteFilesSetting = db.prepare('SELECT value FROM settings WHERE key = ?').get('deleteTorrentFiles');
+                  if (removeSetting && removeSetting.value === 'true') {
+                    const deleteFiles = deleteFilesSetting && deleteFilesSetting.value === 'true';
+                    console.log(`[MediaManagement] Removing music torrent ${torrent.name} from client (deleteFiles: ${deleteFiles})`);
+                    try {
+                      await downloadClientService.deleteTorrent(torrent.hash, deleteFiles);
+                      console.log(`[MediaManagement] Music torrent ${torrent.name} removed successfully.`);
+                    } catch (delErr) {
+                      console.error(`[MediaManagement] Failed to remove music torrent ${torrent.name}:`, delErr.message);
+                    }
+                  }
+                }
+              }
+            } catch (err) {
+              console.warn(`[MediaManagement] Music import check failed for "${torrent.name}": ${err.message}`);
             }
           }
         }

@@ -179,6 +179,10 @@ const broadcastLayoutUpdate = () => {
     // Lightweight stats (just counts, no heavy aggregation)
     const moviesCount = db.prepare('SELECT COUNT(*) as c FROM movies').get().c;
     const showsCount  = db.prepare('SELECT COUNT(*) as c FROM shows').get().c;
+    let musicCount = 0;
+    try {
+      musicCount = db.prepare('SELECT COUNT(*) as c FROM music_artists').get()?.c || 0;
+    } catch { /* tables might not exist yet */ }
     const pendingCount = db.prepare("SELECT COUNT(*) as c FROM requests WHERE status = 'pending'").get().c;
 
     const payload = {
@@ -186,6 +190,7 @@ const broadcastLayoutUpdate = () => {
       data: {
         movies: moviesCount,
         shows: showsCount,
+        music: musicCount,
         pendingRequests: pendingCount,
         // torrents + client stats + issues are async — only include if we have fresh data
       }

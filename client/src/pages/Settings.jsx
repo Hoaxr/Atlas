@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import api from '../lib/api';
-import { AlertCircle, CheckCircle2, Search, Download, Settings2, FolderTree, Languages, ShieldAlert, Network, Users } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Search, Download, Settings2, FolderTree, Languages, ShieldAlert, Network, Users, Music } from 'lucide-react';
 import { customAlert } from '../utils/alerts';
 import { invalidateSettingsCache } from '../lib/useSettings';
 import StickyBar from '../components/shared/StickyBar';
@@ -11,6 +11,7 @@ import ClientsTab from './settings/ClientsTab';
 import ProfilesTab from './settings/ProfilesTab';
 import SubtitlesTab from './settings/SubtitlesTab';
 import LibraryTab from './settings/LibraryTab';
+import MusicTab from './settings/MusicTab';
 import BackupTab from './settings/BackupTab';
 import NamingTab from './settings/NamingTab';
 import ReleaseProfilesTab from './settings/ReleaseProfilesTab';
@@ -517,6 +518,7 @@ export default function Settings() {
     { id: 'naming', label: "Media Naming", icon: <FolderTree className="w-4 h-4" /> },
     { id: 'subtitles', label: "Subtitles & AI Translation", icon: <Languages className="w-4 h-4" /> },
     { id: 'library', label: "Library Management", icon: <FolderTree className="w-4 h-4" /> },
+    { id: 'music', label: "Music", icon: <Music className="w-4 h-4" /> },
     { id: 'users', label: "Users", icon: <Users className="w-4 h-4" /> },
     { id: 'backup', label: "Backup & Restore", icon: <Download className="w-4 h-4" /> },
   ];
@@ -662,6 +664,14 @@ export default function Settings() {
               handleScan={handleScan} handleStopScan={handleStopScan} isScanning={isScanning} scanProgress={scanProgress}
               scanResults={scanResults} isStaleResults={isStaleResults} setScanResults={setScanResults} setIsStaleResults={setIsStaleResults}
               settings={settings} setSettings={setSettings}
+              handleSave={handleSave}
+            />
+          )}
+
+          {activeTab === 'music' && (
+            <MusicTab
+              settings={settings}
+              setSettings={setSettings}
               handleSave={handleSave}
             />
           )}

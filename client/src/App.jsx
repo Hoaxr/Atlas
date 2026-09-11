@@ -1,7 +1,8 @@
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { lazy, Suspense, useEffect } from 'react';
-import { Toaster } from 'react-hot-toast';
+import { Toaster, useToasterStore, toast } from 'react-hot-toast';
 import { ThemeProvider } from './lib/ThemeContext';
+import { AudioPlayerProvider } from './context/AudioPlayerContext';
 import ErrorBoundary from './components/shared/ErrorBoundary';
 import Layout from './components/layout/Layout';
 import Dashboard from './pages/dashboard/Dashboard';
@@ -24,6 +25,9 @@ const Login = lazy(() => import('./pages/Login'));
 const UserPortal = lazy(() => import('./pages/UserPortal'));
 const Requests = lazy(() => import('./pages/Requests'));
 const Watcher = lazy(() => import('./pages/Watcher'));
+const Music = lazy(() => import('./pages/Music'));
+const ArtistDetails = lazy(() => import('./pages/ArtistDetails'));
+const AlbumDetails = lazy(() => import('./pages/AlbumDetails'));
 
 import ProtectedRoute from './components/layout/ProtectedRoute';
 
@@ -33,6 +37,22 @@ function PageFallback() {
       <Spinner size="lg" />
     </div>
   );
+}
+
+/**
+ * Keeps at most `limit` transient toasts on screen so bursts of notifications
+ * (e.g. rapidly adding artists) don't stack into a wall of cards. Persistent
+ * toasts (duration: Infinity, used by confirm dialogs) are never dismissed.
+ */
+function ToastLimiter({ limit = 3 }) {
+  const { toasts } = useToasterStore();
+  useEffect(() => {
+    toasts
+      .filter((t) => t.visible && t.duration !== Infinity)
+      .filter((_, i) => i >= limit)
+      .forEach((t) => toast.dismiss(t.id));
+  }, [toasts, limit]);
+  return null;
 }
 
 function LazyPage({ children }) {
@@ -51,17 +71,61 @@ function App() {
   return (
     <ErrorBoundary>
         <ThemeProvider>
+          <AudioPlayerProvider>
           <Toaster
             position="bottom-right"
+            gutter={10}
             toastOptions={{
+              duration: 3000,
               style: {
                 background: 'transparent',
                 boxShadow: 'none',
                 padding: '0',
                 maxWidth: '100%',
               },
+              success: {
+                duration: 2500,
+                style: {
+                  background: 'rgba(15, 23, 42, 0.95)',
+                  color: '#e2e8f0',
+                  border: '1px solid rgba(16, 185, 129, 0.35)',
+                  borderRadius: '0.75rem',
+                  padding: '10px 14px',
+                  fontSize: '0.8125rem',
+                  maxWidth: '380px',
+                  boxShadow: '0 10px 30px -10px rgba(0, 0, 0, 0.6)',
+                },
+                iconTheme: { primary: '#10b981', secondary: '#0f172a' },
+              },
+              error: {
+                duration: 4500,
+                style: {
+                  background: 'rgba(15, 23, 42, 0.95)',
+                  color: '#e2e8f0',
+                  border: '1px solid rgba(239, 68, 68, 0.35)',
+                  borderRadius: '0.75rem',
+                  padding: '10px 14px',
+                  fontSize: '0.8125rem',
+                  maxWidth: '380px',
+                  boxShadow: '0 10px 30px -10px rgba(0, 0, 0, 0.6)',
+                },
+                iconTheme: { primary: '#ef4444', secondary: '#0f172a' },
+              },
+              loading: {
+                style: {
+                  background: 'rgba(15, 23, 42, 0.95)',
+                  color: '#e2e8f0',
+                  border: '1px solid rgba(6, 182, 212, 0.35)',
+                  borderRadius: '0.75rem',
+                  padding: '10px 14px',
+                  fontSize: '0.8125rem',
+                  maxWidth: '380px',
+                },
+                iconTheme: { primary: '#06b6d4', secondary: '#0f172a' },
+              },
             }}
           />
+          <ToastLimiter limit={3} />
           <BrowserRouter>
             <ScrollToTop />
             <Routes>
@@ -73,6 +137,9 @@ function App() {
                   <Route path="shows" element={<Dashboard key="shows-view" />} />
                   <Route path="movies/:id" element={<MovieDetails />} />
                   <Route path="shows/:id" element={<ShowDetails />} />
+                  <Route path="music" element={<LazyPage><Music /></LazyPage>} />
+                  <Route path="music/artists/:id" element={<LazyPage><ArtistDetails /></LazyPage>} />
+                  <Route path="music/albums/:id" element={<LazyPage><AlbumDetails /></LazyPage>} />
                   <Route path="downloads" element={<LazyPage><Downloads /></LazyPage>} />
                   <Route path="discover" element={<Discover />} />
                   <Route path="tasks" element={<LazyPage><SystemTasks /></LazyPage>} />
@@ -91,6 +158,7 @@ function App() {
               </Route>
             </Routes>
           </BrowserRouter>
+          </AudioPlayerProvider>
         </ThemeProvider>
     </ErrorBoundary>
   );

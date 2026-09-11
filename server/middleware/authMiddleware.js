@@ -53,9 +53,20 @@ const authMiddleware = (req, res, next) => {
   };
 
   const authHeader = req.headers.authorization;
-  
-  if (authHeader && authHeader.startsWith('Bearer ')) {
-    const token = authHeader.split(' ')[1];
+  const bearerToken = authHeader && authHeader.startsWith('Bearer ')
+    ? authHeader.split(' ')[1]
+    : null;
+
+  // <img>/<audio> tags cannot attach an Authorization header, so allow the JWT to
+  // be passed as a query parameter on safe (GET) requests — mirrors the /api/images
+  // poster route. Never accept query tokens for state-changing methods.
+  const queryToken = (req.method === 'GET' && typeof req.query?.token === 'string')
+    ? req.query.token
+    : null;
+
+  const token = bearerToken || queryToken;
+
+  if (token) {
     try {
       const decoded = jwt.verify(token, JWT_SECRET);
       req.user = decoded;

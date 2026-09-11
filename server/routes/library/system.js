@@ -348,15 +348,31 @@ router.get('/stats', (req, res, next) => {
     const showStatusObj = {};
     for (const s of showStatuses) showStatusObj[s.status] = s.count;
 
+    let artistsCount = 0;
+    let albumsCount = 0;
+    let tracksCount = 0;
+    let musicSize = 0;
+    try {
+      artistsCount = db.prepare('SELECT COUNT(*) as c FROM music_artists').get()?.c || 0;
+      albumsCount = db.prepare('SELECT COUNT(*) as c FROM music_albums').get()?.c || 0;
+      const trackAgg = db.prepare('SELECT COUNT(*) as c, COALESCE(SUM(file_size), 0) as s FROM music_tracks').get();
+      tracksCount = trackAgg?.c || 0;
+      musicSize = trackAgg?.s || 0;
+    } catch { /* tables might not exist yet */ }
+
     const moviesCount = movieAgg.total;
     const showsCount = showAgg.total;
-    const totalFileSize = movieAgg.totalSize + showAgg.totalSize + epAgg.totalSize;
+    const totalFileSize = movieAgg.totalSize + showAgg.totalSize + epAgg.totalSize + musicSize;
     const totalDownloaded = movieAgg.downloaded + showAgg.downloaded;
     const totalItems = moviesCount + showsCount;
 
     const data = {
       movies: moviesCount,
       shows: showsCount,
+      artists: artistsCount,
+      albums: albumsCount,
+      tracks: tracksCount,
+      musicSize,
       totalMovies: moviesCount,
       totalShows: showsCount,
       totalEpisodes: epAgg.total,
@@ -486,8 +502,8 @@ router.post('/paths', (req, res, next) => {
     if (!path) {
       return res.status(400).json({ status: 'error', message: 'path is required' });
     }
-    if (type && !['movies', 'tv', 'downloads'].includes(type)) {
-      return res.status(400).json({ status: 'error', message: 'type must be movies, tv, or downloads' });
+    if (type && !['movies', 'tv', 'downloads', 'music'].includes(type)) {
+      return res.status(400).json({ status: 'error', message: 'type must be movies, tv, downloads, or music' });
     }
     const result = libraryService.addPath(path, type || 'movies');
     res.json({ status: 'success', data: result });
@@ -505,6 +521,52 @@ router.delete('/paths/:id', (req, res, next) => {
     res.json({ status: 'success' });
   } catch (error) {
     next(error);
+  }
+});
+
+// Browse server directories for root folder configuration
+router.get('/filesystem/browse', async (req, res, next) => {
+  try {
+    let targetDir = req.query.path ? path.resolve(req.query.path) : null;
+
+    if (!targetDir) {
+      // Default to /mnt if it exists, otherwise /
+      try {
+        const mntStat = await fsp.stat('/mnt');
+        if (mntStat.isDirectory()) targetDir = '/mnt';
+        else targetDir = '/';
+      } catch {
+        targetDir = '/';
+      }
+    }
+
+    try {
+      await fsp.access(targetDir);
+    } catch {
+      return res.status(404).json({ status: 'error', message: `Directory not accessible: ${targetDir}` });
+    }
+
+    const dirents = await fsp.readdir(targetDir, { withFileTypes: true });
+    const directories = dirents
+      .filter(d => d.isDirectory() && !d.name.startsWith('.'))
+      .map(d => ({
+        name: d.name,
+        path: path.join(targetDir, d.name),
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
+
+    const parentPath = targetDir === '/' ? null : path.dirname(targetDir);
+
+    res.json({
+      status: 'success',
+      data: {
+        currentPath: targetDir,
+        parentPath,
+        directories,
+      }
+    });
+  } catch (err) {
+    next(err);
   }
 });
 

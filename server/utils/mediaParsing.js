@@ -116,4 +116,79 @@ const isCutoffMet = (currentQuality, cutoff, qualities = null) => {
   return false;
 };
 
-module.exports = { parseResolution, parseCodec, parseAudio, getResolutionRank, isCutoffMet };
+// ─── Music Quality Parsing ────────────────────────────────────────────────────
+
+/**
+ * Detect audio format from a release title or filename.
+ * Returns: 'FLAC', 'MP3', 'AAC', 'Ogg', 'Opus', 'WAV', 'APE', 'WV', or 'Unknown'
+ */
+const parseMusicFormat = (title) => {
+  if (!title) return 'Unknown';
+  const t = title.toLowerCase();
+  if (t.includes('.flac') || /\bflac\b/.test(t)) return 'FLAC';
+  if (t.includes('.mp3') || /\bmp3\b/.test(t)) return 'MP3';
+  if (t.includes('.m4a') || /\baac\b/.test(t) || /\bm4a\b/.test(t)) return 'AAC';
+  if (t.includes('.opus') || /\bopus\b/.test(t)) return 'Opus';
+  if (t.includes('.ogg') || /\bogg\b/.test(t) || /\bvorbis\b/.test(t)) return 'Ogg';
+  if (t.includes('.wav') || /\bwave?\b/.test(t)) return 'WAV';
+  if (t.includes('.ape') || /\bmonkey'?s audio\b/.test(t)) return 'APE';
+  if (t.includes('.wv') || /\bwavpack\b/.test(t)) return 'WV';
+  if (t.includes('.alac') || /\balac\b/.test(t)) return 'ALAC';
+  return 'Unknown';
+};
+
+/**
+ * Detect bitrate from a release title (e.g. "320kbps", "V0", "V2").
+ * Returns bitrate as integer kbps or null.
+ */
+const parseMusicBitrate = (title) => {
+  if (!title) return null;
+  const t = title.toLowerCase();
+  const kbpsMatch = t.match(/(\d{2,4})\s*kbps/);
+  if (kbpsMatch) return parseInt(kbpsMatch[1], 10);
+  if (/\bv0\b/.test(t)) return 245; // VBR V0 ~245kbps avg
+  if (/\bv2\b/.test(t)) return 190; // VBR V2 ~190kbps avg
+  if (/\b320\b/.test(t)) return 320;
+  if (/\b256\b/.test(t)) return 256;
+  if (/\b192\b/.test(t)) return 192;
+  if (/\b128\b/.test(t)) return 128;
+  return null;
+};
+
+/**
+ * Detect bit depth from a release title.
+ * Returns 16, 24, or null.
+ */
+const parseMusicBitdepth = (title) => {
+  if (!title) return null;
+  const t = title.toLowerCase();
+  if (t.includes('24bit') || t.includes('24-bit') || t.includes('24 bit')) return 24;
+  if (t.includes('16bit') || t.includes('16-bit') || t.includes('16 bit')) return 16;
+  return null;
+};
+
+/**
+ * Rank a music format for upgrade comparisons.
+ * Higher number = higher quality.
+ */
+const MUSIC_FORMAT_RANK = {
+  'FLAC': 100,
+  'ALAC': 95,
+  'WAV': 90,
+  'APE': 85,
+  'WV': 80,
+  'AAC': 60,
+  'Ogg': 55,
+  'Opus': 55,
+  'MP3': 50,
+  'Unknown': 0,
+};
+
+const parseMusicQualityRank = (format, bitrateKbps = 0, bitdepth = 16) => {
+  const formatRank = MUSIC_FORMAT_RANK[format] ?? 0;
+  const bitdepthBonus = bitdepth >= 24 ? 5 : 0;
+  const bitrateBonus = format === 'MP3' || format === 'AAC' ? Math.min(bitrateKbps / 100, 3) : 0;
+  return formatRank + bitdepthBonus + bitrateBonus;
+};
+
+module.exports = { parseResolution, parseCodec, parseAudio, getResolutionRank, isCutoffMet, parseMusicFormat, parseMusicBitrate, parseMusicBitdepth, parseMusicQualityRank };
