@@ -56,13 +56,19 @@ const processScannedFiles = async (allFiles, scanProgress, mode, nextStage) => {
       return;
     }
 
+    // Skip season 0 specials completely per user preference
+    if (isShow && seasonNumber === 0) {
+      scanProgress.processedFiles++;
+      return;
+    }
+
     if (isShow) {
       // ──────────────────────────────────────────────
       // TV Show logic
       // ──────────────────────────────────────────────
       let showFolderPath = fileDir;
       // Strip season/specials subfolder — walk up until we're at the actual show directory
-      while (path.basename(showFolderPath).match(/(?:season\s*\d+|specials)/i)) {
+      while (path.basename(showFolderPath).match(/(?:season\s*\d+|specials|staffel\s*\d+|series\s*\d+|^s\d+$)/i)) {
         showFolderPath = path.dirname(showFolderPath);
       }
 
@@ -112,6 +118,7 @@ const processScannedFiles = async (allFiles, scanProgress, mode, nextStage) => {
             `);
             
             for (const s of seasons) {
+              if (s.season_number === 0) continue;
               const eps = await tmdbService.getSeasonEpisodes(tmdbId, s.season_number);
               for (const ep of eps) {
                 insertEp.run(showId, ep.season_number, ep.episode_number, ep.name, ep.overview, ep.air_date, ep.runtime || null);
@@ -251,6 +258,7 @@ const processScannedFiles = async (allFiles, scanProgress, mode, nextStage) => {
                 `);
                 
                 for (const s of seasons) {
+                  if (s.season_number === 0) continue;
                   const eps = await tmdbService.getSeasonEpisodes(tmdbId, s.season_number);
                   for (const ep of eps) {
                     insertEp.run(showId, ep.season_number, ep.episode_number, ep.name, ep.overview, ep.air_date, ep.runtime || null);
@@ -393,6 +401,7 @@ const processScannedFiles = async (allFiles, scanProgress, mode, nextStage) => {
               .run(JSON.stringify(allSubtitles), showId, seasonNumber, ep);
           }
         }
+        db.prepare("UPDATE shows SET status = 'downloaded' WHERE id = ? AND status != 'downloaded'").run(showId);
       }
 
     } else {

@@ -66,7 +66,12 @@ export default function ManualSearchModal({ mediaId, mediaType, season, title, o
         }
         else setError('Search returned no results.');
       })
-      .catch((err) => setError(err.response?.data?.message || 'Search failed. Make sure your indexers are configured.'))
+      .catch((err) => {
+        // A missing response means the request never reached the backend (server down),
+        // which is very different from "no indexers configured" — say so accurately.
+        if (!err.response) setError('Cannot reach the server. Is Atlas running?');
+        else setError(err.response?.data?.message || 'Search failed. Make sure your indexers are configured.');
+      })
       .finally(() => setLoading(false));
   }, [endpoint]);
 

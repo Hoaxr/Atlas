@@ -52,6 +52,10 @@ export default function NamingTab({ settings, setSettings, handleSave }) {
     setModalType('episode');
   };
 
+  const showAudioHelp = () => {
+    setModalType('audio');
+  };
+
   const generateMovieExample = (format) => {
     if (!format) return 'Example: ';
     let result = format;
@@ -78,6 +82,56 @@ export default function NamingTab({ settings, setSettings, handleSave }) {
     result = result.replace(/{Season Number}/gi, '2');
     return `Example: ${result}`;
   };
+
+  const generateArtistFolderExample = (format) => {
+    const f = format || '{Artist Name}';
+    let result = f.replace(/{Artist Name}/gi, 'Daft Punk');
+    return `Example: ${result}`;
+  };
+
+  const generateAlbumFolderExample = (format) => {
+    const f = format || '{Album Title} ({Year})';
+    let result = f
+      .replace(/{Album Title}/gi, 'Random Access Memories')
+      .replace(/{Year}/gi, '2013');
+    return `Example: ${result}`;
+  };
+
+  const generateTrackFormatExample = (format) => {
+    const f = format || '{TrackNumber:00} - {Track Title}';
+    let result = f
+      .replace(/{TrackNumber:00}/gi, '01')
+      .replace(/{TrackNumber}/gi, '1')
+      .replace(/{Track Title}/gi, 'Give Life Back to Music');
+    return `Example: ${result}.flac`;
+  };
+
+  const previewMovieName = (settings?.standardMovieFormat || '{Movie Title} ({Release Year})')
+    .replace(/{Movie Title}/gi, 'Inception')
+    .replace(/{Release Year}/gi, '2010');
+  const previewMoviePath = `/media/movies/${previewMovieName}/${previewMovieName}.mkv`;
+
+  const previewShow = 'Breaking Bad';
+  const previewSeasonFolder = (settings?.seasonFolderFormat || 'Season {Season Number}')
+    .replace(/{Show Title}/gi, previewShow)
+    .replace(/{Season}/gi, '01')
+    .replace(/{Season Number}/gi, '1');
+  const previewEpisodeFile = (settings?.standardEpisodeFormat || '{Show Title} - S{Season}E{Episode} - {Episode Title}')
+    .replace(/{Show Title}/gi, previewShow)
+    .replace(/{Season}/gi, '01')
+    .replace(/{Season Number}/gi, '1')
+    .replace(/{Episode}/gi, '01')
+    .replace(/{Episode Title}/gi, 'Pilot');
+  const previewEpisodePath = `/media/tv/${previewShow}/${previewSeasonFolder}/${previewEpisodeFile}.mkv`;
+
+  const previewArtist = (settings?.musicArtistFolderFormat || '{Artist Name}').replace(/{Artist Name}/gi, 'Daft Punk');
+  const previewAlbum = (settings?.musicAlbumFolderFormat || '{Album Title} ({Year})')
+    .replace(/{Album Title}/gi, 'Random Access Memories')
+    .replace(/{Year}/gi, '2013');
+  const previewTrack = (settings?.musicTrackFileFormat || '{TrackNumber:00} - {Track Title}')
+    .replace(/{TrackNumber:00}/gi, '01')
+    .replace(/{TrackNumber}/gi, '1')
+    .replace(/{Track Title}/gi, 'Give Life Back to Music') + '.flac';
 
   return (
     <div className="max-w-5xl mx-auto space-y-6">
@@ -171,6 +225,14 @@ export default function NamingTab({ settings, setSettings, handleSave }) {
               <p className="text-xs text-slate-500 mt-2">{generateMovieExample(settings.standardMovieFormat)}</p>
             </div>
           </div>
+
+          {/* Live Preview Box */}
+          <div className="p-3.5 rounded-xl bg-slate-900/40 border border-white/5 space-y-1">
+            <span className="text-[10px] uppercase tracking-wider font-bold text-slate-400">Live Preview:</span>
+            <p className="font-mono text-xs text-cyan-300 break-all">
+              {previewMoviePath}
+            </p>
+          </div>
         </div>
       </div>
 
@@ -247,6 +309,103 @@ export default function NamingTab({ settings, setSettings, handleSave }) {
               <p className="text-xs text-slate-500 mt-2">{generateSeasonFolderExample(settings.seasonFolderFormat || 'Season {Season Number}')}</p>
             </div>
           </div>
+
+          {/* Live Preview Box */}
+          <div className="p-3.5 rounded-xl bg-slate-900/40 border border-white/5 space-y-1">
+            <span className="text-[10px] uppercase tracking-wider font-bold text-slate-400">Live Preview:</span>
+            <p className="font-mono text-xs text-cyan-300 break-all">
+              {previewEpisodePath}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Audio Naming Section */}
+      <div className="glass-panel p-6 rounded-2xl border border-white/10 space-y-6 shadow-xl relative overflow-hidden mt-8">
+        <h3 className="text-lg font-bold text-slate-200 flex items-center gap-2">
+          Audio Naming
+        </h3>
+        <p className="text-xs text-slate-500">Configure how Atlas formats and organizes your music library files.</p>
+        
+        <div className="space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-start gap-2 sm:gap-4">
+            <div className="sm:w-1/3">
+              <label className="text-sm font-medium text-slate-300">Artist Folder Format</label>
+            </div>
+            <div className="sm:w-2/3">
+              <div className="flex">
+                <input 
+                  type="text"
+                  className="flex-1 bg-slate-900/50 border border-slate-700 rounded-l-lg px-4 py-2 text-white font-mono text-sm focus:outline-none focus:border-cyan-500 transition-colors"
+                  value={settings.musicArtistFolderFormat || ''}
+                  placeholder="{Artist Name}"
+                  onChange={e => setSettings({...settings, musicArtistFolderFormat: e.target.value})}
+                />
+                <button 
+                  onClick={showAudioHelp}
+                  className="bg-cyan-500 hover:bg-cyan-600 text-white px-3 py-2 rounded-r-lg border border-cyan-500 transition-colors"
+                >
+                  <HelpCircle className="w-5 h-5" />
+                </button>
+              </div>
+              <p className="text-xs text-slate-500 mt-2">{generateArtistFolderExample(settings.musicArtistFolderFormat)}</p>
+            </div>
+          </div>
+
+          <div className="flex flex-col sm:flex-row sm:items-start gap-2 sm:gap-4">
+            <div className="sm:w-1/3">
+              <label className="text-sm font-medium text-slate-300">Album Folder Format</label>
+            </div>
+            <div className="sm:w-2/3">
+              <div className="flex">
+                <input 
+                  type="text"
+                  className="flex-1 bg-slate-900/50 border border-slate-700 rounded-l-lg px-4 py-2 text-white font-mono text-sm focus:outline-none focus:border-cyan-500 transition-colors"
+                  value={settings.musicAlbumFolderFormat || ''}
+                  placeholder="{Album Title} ({Year})"
+                  onChange={e => setSettings({...settings, musicAlbumFolderFormat: e.target.value})}
+                />
+                <button 
+                  onClick={showAudioHelp}
+                  className="bg-cyan-500 hover:bg-cyan-600 text-white px-3 py-2 rounded-r-lg border border-cyan-500 transition-colors"
+                >
+                  <HelpCircle className="w-5 h-5" />
+                </button>
+              </div>
+              <p className="text-xs text-slate-500 mt-2">{generateAlbumFolderExample(settings.musicAlbumFolderFormat)}</p>
+            </div>
+          </div>
+
+          <div className="flex flex-col sm:flex-row sm:items-start gap-2 sm:gap-4">
+            <div className="sm:w-1/3">
+              <label className="text-sm font-medium text-slate-300">Track Format</label>
+            </div>
+            <div className="sm:w-2/3">
+              <div className="flex">
+                <input 
+                  type="text"
+                  className="flex-1 bg-slate-900/50 border border-slate-700 rounded-l-lg px-4 py-2 text-white font-mono text-sm focus:outline-none focus:border-cyan-500 transition-colors"
+                  value={settings.musicTrackFileFormat || ''}
+                  placeholder="{TrackNumber:00} - {Track Title}"
+                  onChange={e => setSettings({...settings, musicTrackFileFormat: e.target.value})}
+                />
+                <button 
+                  onClick={showAudioHelp}
+                  className="bg-cyan-500 hover:bg-cyan-600 text-white px-3 py-2 rounded-r-lg border border-cyan-500 transition-colors"
+                >
+                  <HelpCircle className="w-5 h-5" />
+                </button>
+              </div>
+              <p className="text-xs text-slate-500 mt-2">{generateTrackFormatExample(settings.musicTrackFileFormat)}</p>
+            </div>
+          </div>
+
+          <div className="p-3.5 rounded-xl bg-slate-900/40 border border-white/5 space-y-1">
+            <span className="text-[10px] uppercase tracking-wider font-bold text-slate-400">Live Preview:</span>
+            <p className="font-mono text-xs text-cyan-300 break-all">
+              /media/music/{previewArtist}/{previewAlbum}/{previewTrack}
+            </p>
+          </div>
         </div>
       </div>
 
@@ -276,6 +435,21 @@ export default function NamingTab({ settings, setSettings, handleSave }) {
             { name: '{Season Number}', desc: 'Unpadded (e.g. 2)' },
             { name: '{Episode}', desc: 'Episode number' },
             { name: '{Episode Title}', desc: 'Title of the episode' }
+          ]}
+          onClose={() => setModalType(null)}
+        />
+      )}
+
+      {modalType === 'audio' && (
+        <TagsModal
+          title="Audio Naming Tags"
+          tags={[
+            { name: '{Artist Name}', desc: 'Artist or band name' },
+            { name: '{Album Title}', desc: 'Album release title' },
+            { name: '{Year}', desc: 'Album release year' },
+            { name: '{TrackNumber:00}', desc: 'Two-digit padded track number (e.g. 01)' },
+            { name: '{TrackNumber}', desc: 'Unpadded track number (e.g. 1)' },
+            { name: '{Track Title}', desc: 'Track / song title' }
           ]}
           onClose={() => setModalType(null)}
         />

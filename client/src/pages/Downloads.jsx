@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import api from '../lib/api';
-import { DownloadCloud, ArrowDown, ArrowUp, Activity, Film, Tv, Music2, Play, Pause, Trash2, Clock, HardDrive } from 'lucide-react';
+import { DownloadCloud, ArrowDown, ArrowUp, Activity, Film, Tv, Music2, Play, Pause, Trash2, Clock, HardDrive, CheckSquare, Square, X } from 'lucide-react';
 import { customAlert, customConfirm } from '../utils/alerts';
 import useWebSocket from '../lib/useWebSocket';
 import StickyBar from '../components/shared/StickyBar';
@@ -8,10 +8,12 @@ import InlineError from '../components/shared/InlineError';
 import { useStickyBar } from '../lib/useStickyBar';
 import { parseResolution, parseCodec, parseAudio } from '../lib/format';
 
-const parseReleaseInfo = (rawName) => {
-  if (!rawName) return { title: 'Unknown', resolution: null, source: null, codec: null, audio: null, hdr: null, isTv: false, raw: '' };
+const parseReleaseInfo = (rawName, torrent = {}) => {
+  if (!rawName) return { title: 'Unknown', mediaLabel: 'Movie', resolution: null, source: null, codec: null, audio: null, hdr: null, isTv: false, isMusic: false, raw: '' };
   
   const name = rawName.replace(/\.(mp4|mkv|avi|mov)$/i, '');
+  const totalBytes = torrent.total_size || torrent.size || 0;
+  const isSmallSize = totalBytes > 0 && totalBytes < 1200 * 1024 * 1024; // Music releases are < 1.2GB
 
   const resolution = parseResolution(name);
   const codec = parseCodec(name);
@@ -29,25 +31,78 @@ const parseReleaseInfo = (rawName) => {
   else if (/hdr/i.test(name)) hdr = 'HDR';
   else if (/dv|dovi|dolby\s*vision/i.test(name)) hdr = 'DV';
 
-  // Music format check
-  const isMusic = /\b(flac|mp3|320kbps|lossless|alac|opus|aac|v0|v2|web-flac|vinyl-flac|cd-flac)\b/i.test(name) || /\.(flac|mp3|m4a|aac|ogg|opus|wav|ape|wv)$/i.test(rawName);
-  if (isMusic && !name.match(/\b(1080p|720p|2160p|4k|bluray|hdtv)\b/i)) {
+  // Video and TV clues
+  const hasVideoClues = /\b(1080p|720p|2160p|4k|480p|576p|bluray|bdrip|brrip|hdtv|web-?dl|web-?rip|x264|x265|hevc|h264|h265|avc|xvid|divx|dvdrip)\b/i.test(name);
+  const hasTvClues = /\b(S\d{1,2}[._\s-]*E\d{1,3}|Season\s*\d+|\d+x\d+)\b/i.test(name);
+
+  // Explicit music indicators
+  const hasExplicitMusicClues = /\b(flac|mp3|320kbps|320k|lossless|alac|opus|aac|v0|v2|web-flac|vinyl-flac|cd-flac|cdrip|vinyl|remaster|remastered|anniversary|deluxe\s+edition|deluxe\s+version|boxset|discography|soundtrack|ost)\b/i.test(name) || /\.(flac|mp3|m4a|aac|ogg|opus|wav|ape|wv)$/i.test(rawName);
+
+  // Client category, tags, or save_path classification
+  const isClientMusic = 
+    torrent.mediaType === 'music' ||
+    torrent.category === 'music' ||
+    torrent.category === 'audio' ||
+    (typeof torrent.tags === 'string' && torrent.tags.toLowerCase().includes('music')) ||
+    (Array.isArray(torrent.tags) && torrent.tags.some(t => String(t).toLowerCase().includes('music'))) ||
+    (torrent.save_path || torrent.downloadDir || '').toLowerCase().includes('/music');
+
+  const isMusic = isClientMusic || (hasExplicitMusicClues && !hasVideoClues) || (!hasVideoClues && !hasTvClues && isSmallSize && (name.includes(' - ') || hasExplicitMusicClues));
+
+  if (isMusic && !hasVideoClues) {
     let musicFormat = 'FLAC';
-    if (/\bflac\b/i.test(name) || /\.flac$/i.test(rawName)) musicFormat = 'FLAC';
-    else if (/\b(320|mp3)\b/i.test(name) || /\.mp3$/i.test(rawName)) musicFormat = 'MP3';
+    if (/\b(mp3|320kbps|320k)\b/i.test(name) || /\.mp3$/i.test(rawName)) musicFormat = 'MP3';
     else if (/\b(aac|m4a)\b/i.test(name) || /\.(aac|m4a)$/i.test(rawName)) musicFormat = 'AAC';
     else if (/\bopus\b/i.test(name) || /\.opus$/i.test(rawName)) musicFormat = 'Opus';
+    else if (/\bflac\b/i.test(name) || /\.flac$/i.test(rawName)) musicFormat = 'FLAC';
 
-    const cleanMusicTitle = name
+    let musicSource = null;
+    if (/\bvinyl\b/i.test(name)) musicSource = 'Vinyl';
+    else if (/\b(cdrip|cd-flac|cd)\b/i.test(name)) musicSource = 'CD';
+    else if (/\b(web-flac|web-dl|webrip|web)\b/i.test(name)) musicSource = 'WEB';
+
+    let musicQuality = null;
+    if (/\b(24-?bit|24\/[0-9]+)\b/i.test(name)) musicQuality = '24-Bit';
+    else if (/\b(320kbps|320k)\b/i.test(name)) musicQuality = '320k';
+    else if (/\bv0\b/i.test(name)) musicQuality = 'V0';
+    else if (/\bv2\b/i.test(name)) musicQuality = 'V2';
+    else if (/\b(remaster|remastered)\b/i.test(name)) musicQuality = 'Remaster';
+    else if (/\blossless\b/i.test(name) && musicFormat !== 'FLAC') musicQuality = 'Lossless';
+
+    // Format clean music title: Artist — Album (Year)
+    let cleanMusicTitle = name
+      .replace(/\[(?:FLAC|MP3|320k?|WEB|CD|Vinyl|24bit|Lossless|Hi-Res)[^\]]*\]/gi, '')
       .replace(/\b(flac|mp3|320kbps|lossless|alac|opus|aac|v0|v2|web-flac|vinyl-flac|cd-flac|cdrip|webrip)\b.*/i, '')
-      .replace(/[._()[\]-]/g, ' ')
       .trim();
+
+    if (cleanMusicTitle.includes(' - ')) {
+      const parts = cleanMusicTitle.split(/\s+-\s+/).map(p => p.trim()).filter(Boolean);
+      if (parts.length >= 2) {
+        const artist = parts[0];
+        const album = parts[1];
+        let year = null;
+        if (parts.length >= 3 && /^(19\d{2}|20\d{2})(?:\s*\(\d{4}\))?$/.test(parts[2])) {
+          year = parts[2].match(/\b(19\d{2}|20\d{2})\b/)?.[1];
+        } else {
+          const ym = album.match(/\b(19\d{2}|20\d{2})\b/);
+          if (ym) year = ym[1];
+        }
+        if (year && !album.includes(year)) {
+          cleanMusicTitle = `${artist} — ${album} (${year})`;
+        } else {
+          cleanMusicTitle = `${artist} — ${album}`;
+        }
+      }
+    } else {
+      cleanMusicTitle = cleanMusicTitle.replace(/[._]/g, ' ').replace(/\s+/g, ' ').trim();
+    }
 
     return {
       title: cleanMusicTitle || rawName,
-      resolution: musicFormat,
-      source: 'Audio',
-      codec: musicFormat,
+      mediaLabel: 'Audio',
+      resolution: null,
+      source: musicSource,
+      codec: musicQuality,
       audio: musicFormat,
       hdr: null,
       isTv: false,
@@ -63,12 +118,14 @@ const parseReleaseInfo = (rawName) => {
     const epString = tvMatch[2].replace(/[._]/g, ' ').toUpperCase().trim();
     return {
       title: `${showTitle} — ${epString}`,
+      mediaLabel: 'Episode',
       resolution: resolution !== 'Unknown' ? resolution : null,
       source,
       codec: codec !== 'Unknown' ? codec : null,
       audio: audio !== 'Unknown' ? audio : null,
       hdr,
       isTv: true,
+      isMusic: false,
       raw: rawName
     };
   }
@@ -80,12 +137,14 @@ const parseReleaseInfo = (rawName) => {
     const year = movieMatch[2];
     return {
       title: `${movieTitle} (${year})`,
+      mediaLabel: 'Movie',
       resolution: resolution !== 'Unknown' ? resolution : null,
       source,
       codec: codec !== 'Unknown' ? codec : null,
       audio: audio !== 'Unknown' ? audio : null,
       hdr,
       isTv: false,
+      isMusic: false,
       raw: rawName
     };
   }
@@ -98,12 +157,14 @@ const parseReleaseInfo = (rawName) => {
 
   return {
     title: cleanTitle || rawName,
+    mediaLabel: 'Movie',
     resolution: resolution !== 'Unknown' ? resolution : null,
     source,
     codec: codec !== 'Unknown' ? codec : null,
     audio: audio !== 'Unknown' ? audio : null,
     hdr,
     isTv: false,
+    isMusic: false,
     raw: rawName
   };
 };
@@ -115,6 +176,8 @@ export default function Downloads() {
   const [stats, setStats] = useState({ dl_info_speed: 0, up_info_speed: 0 });
   const [initialLoading, setInitialLoading] = useState(true);
   const [clientError, setClientError] = useState(false);
+  const [selectedHashes, setSelectedHashes] = useState(new Set());
+  const [bulkLoading, setBulkLoading] = useState(false);
 
   useEffect(() => {
     // Initial fetch
@@ -123,7 +186,14 @@ export default function Downloads() {
     // Listen for WebSocket push updates (replaces 3s polling)
     const cleanup = onEvent((data) => {
       if (data.type === 'TORRENTS_UPDATE' && data.data) {
-        setDownloads(data.data.torrents || []);
+        const newTorrents = data.data.torrents || [];
+        setDownloads(newTorrents);
+        setSelectedHashes(prev => {
+          if (prev.size === 0) return prev;
+          const newHashes = new Set(newTorrents.map(t => t.hash));
+          const filtered = new Set([...prev].filter(h => newHashes.has(h)));
+          return filtered.size === prev.size ? prev : filtered;
+        });
         setStats(data.data.clientStats || { dl_info_speed: 0, up_info_speed: 0 });
         setInitialLoading(false);
         setClientError(data.clientConnected === false);
@@ -132,6 +202,87 @@ export default function Downloads() {
 
     return () => { if (cleanup) cleanup(); };
   }, [onEvent]);
+
+  const toggleSelect = (hash) => {
+    setSelectedHashes(prev => {
+      const next = new Set(prev);
+      if (next.has(hash)) {
+        next.delete(hash);
+      } else {
+        next.add(hash);
+      }
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedHashes.size === downloads.length && downloads.length > 0) {
+      setSelectedHashes(new Set());
+    } else {
+      setSelectedHashes(new Set(downloads.map(d => d.hash)));
+    }
+  };
+
+  const clearSelection = () => {
+    setSelectedHashes(new Set());
+  };
+
+  const handleBulkPause = async () => {
+    const hashes = Array.from(selectedHashes);
+    if (hashes.length === 0) return;
+    setBulkLoading(true);
+    try {
+      setDownloads(prev => prev.map(d => hashes.includes(d.hash) ? { ...d, state: 'paused', dlspeed: 0 } : d));
+      await api.post('/clients/torrents/bulk-pause', { hashes });
+      customAlert(`${hashes.length} download${hashes.length !== 1 ? 's' : ''} paused`);
+      clearSelection();
+    } catch (e) {
+      console.error('Failed to pause downloads', e);
+      customAlert('Failed to pause selected downloads', 'error');
+      fetchClientData();
+    } finally {
+      setBulkLoading(false);
+    }
+  };
+
+  const handleBulkResume = async () => {
+    const hashes = Array.from(selectedHashes);
+    if (hashes.length === 0) return;
+    setBulkLoading(true);
+    try {
+      setDownloads(prev => prev.map(d => hashes.includes(d.hash) ? { ...d, state: 'downloading' } : d));
+      await api.post('/clients/torrents/bulk-resume', { hashes });
+      customAlert(`${hashes.length} download${hashes.length !== 1 ? 's' : ''} resumed`);
+      clearSelection();
+    } catch (e) {
+      console.error('Failed to resume downloads', e);
+      customAlert('Failed to resume selected downloads', 'error');
+      fetchClientData();
+    } finally {
+      setBulkLoading(false);
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    const hashes = Array.from(selectedHashes);
+    if (hashes.length === 0) return;
+    const count = hashes.length;
+    if (await customConfirm(`Cancel and delete ${count} download${count !== 1 ? 's' : ''}?`)) {
+      setBulkLoading(true);
+      try {
+        setDownloads(prev => prev.filter(d => !hashes.includes(d.hash)));
+        await api.post('/clients/torrents/bulk-delete', { hashes, deleteFiles: true });
+        customAlert(`${count} download${count !== 1 ? 's' : ''} deleted`);
+        clearSelection();
+      } catch (e) {
+        console.error('Failed to delete downloads', e);
+        customAlert('Failed to delete selected downloads', 'error');
+        fetchClientData();
+      } finally {
+        setBulkLoading(false);
+      }
+    }
+  };
 
   const fetchClientData = async () => {
     try {
@@ -276,60 +427,180 @@ export default function Downloads() {
         </div>
       ) : downloads.length > 0 ? (
         <div className="glass-panel p-4 sm:p-6 rounded-2xl border border-white/5 shadow-xl">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-base sm:text-lg font-bold text-slate-100 flex items-center gap-2">
-              <DownloadCloud className="w-5 h-5 text-emerald-400" /> Live Queue
-            </h2>
-            <span className="text-xs font-semibold text-slate-400 bg-slate-800/80 px-2.5 py-1 rounded-lg border border-white/5">
-              {downloads.length} {downloads.length === 1 ? 'task' : 'tasks'} running
-            </span>
+          <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={toggleSelectAll}
+                className="p-1 -m-1 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-slate-200 transition-colors flex items-center gap-2"
+                title={selectedHashes.size === downloads.length && downloads.length > 0 ? "Deselect all" : "Select all"}
+                aria-label={selectedHashes.size === downloads.length && downloads.length > 0 ? "Deselect all" : "Select all"}
+              >
+                {selectedHashes.size === downloads.length && downloads.length > 0 ? (
+                  <CheckSquare className="w-5 h-5 text-emerald-400" />
+                ) : selectedHashes.size > 0 ? (
+                  <div className="w-5 h-5 rounded border-2 border-emerald-400/60 bg-emerald-400/20 flex items-center justify-center">
+                    <div className="w-2.5 h-0.5 bg-emerald-400 rounded" />
+                  </div>
+                ) : (
+                  <Square className="w-5 h-5 text-slate-500 hover:text-slate-400" />
+                )}
+              </button>
+              <h2 className="text-base sm:text-lg font-bold text-slate-100 flex items-center gap-2">
+                <DownloadCloud className="w-5 h-5 text-emerald-400" /> Live Queue
+              </h2>
+            </div>
+            <div className="flex items-center gap-2">
+              {selectedHashes.size > 0 && (
+                <span className="text-xs font-semibold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1 rounded-lg">
+                  {selectedHashes.size} selected
+                </span>
+              )}
+              <span className="text-xs font-semibold text-slate-400 bg-slate-800/80 px-2.5 py-1 rounded-lg border border-white/5">
+                {downloads.length} {downloads.length === 1 ? 'task' : 'tasks'} running
+              </span>
+            </div>
           </div>
+
+          {/* Bulk Action Bar */}
+          {selectedHashes.size > 0 && (
+            <div className="glass-panel rounded-xl p-3 sm:p-4 mb-4 border border-emerald-500/30 bg-emerald-500/5 flex items-center justify-between gap-3 flex-wrap animate-fade-in shadow-lg">
+              <div className="flex items-center gap-3">
+                <span className="text-xs sm:text-sm font-bold text-slate-200">
+                  <span className="text-emerald-400">{selectedHashes.size}</span> of {downloads.length} selected
+                </span>
+                <button
+                  type="button"
+                  onClick={clearSelection}
+                  className="text-xs text-slate-400 hover:text-white transition-colors underline"
+                >
+                  Clear
+                </button>
+              </div>
+
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  type="button"
+                  onClick={handleBulkPause}
+                  disabled={bulkLoading}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 text-xs font-bold transition-all border border-amber-500/20 hover:border-amber-500/40 disabled:opacity-50"
+                  title="Pause selected downloads"
+                >
+                  <Pause className="w-3.5 h-3.5" /> Pause
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleBulkResume}
+                  disabled={bulkLoading}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 text-xs font-bold transition-all border border-emerald-500/20 hover:border-emerald-500/40 disabled:opacity-50"
+                  title="Resume selected downloads"
+                >
+                  <Play className="w-3.5 h-3.5 fill-emerald-400/20" /> Resume
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleBulkDelete}
+                  disabled={bulkLoading}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 text-xs font-bold transition-all border border-rose-500/20 hover:border-rose-500/40 disabled:opacity-50"
+                  title="Cancel and delete selected downloads"
+                >
+                  <Trash2 className="w-3.5 h-3.5" /> Delete
+                </button>
+
+                <button
+                  type="button"
+                  onClick={clearSelection}
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors ml-1"
+                  title="Clear selection"
+                  aria-label="Clear selection"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          )}
 
           <div className="space-y-3">
             {downloads.map(t => {
+              const isSelected = selectedHashes.has(t.hash);
               const totalSize = t.total_size || t.size || 0;
               const progressPct = Math.min(100, Math.max(0, Math.round(t.progress || 0)));
               const eta = formatEta(totalSize, t.progress || 0, t.dlspeed || 0);
-              const info = parseReleaseInfo(t.name);
+              const info = parseReleaseInfo(t.name, t);
               const stateBadge = getStateBadge(t.state);
 
               return (
                 <div 
                   key={t.hash} 
-                  className="bg-slate-900/60 hover:bg-slate-900/85 transition-all p-4 sm:p-4.5 rounded-xl border border-white/5 hover:border-cyan-500/20 shadow-md space-y-3 group"
+                  className={`transition-all p-4 sm:p-4.5 rounded-xl border shadow-md space-y-3 group ${
+                    isSelected
+                      ? 'bg-slate-900/90 border-emerald-500/40 ring-1 ring-emerald-500/30'
+                      : 'bg-slate-900/60 hover:bg-slate-900/85 border-white/5 hover:border-cyan-500/20'
+                  }`}
                 >
                   <div className="flex justify-between items-start gap-3">
-                    <div className="min-w-0 flex-1 space-y-1.5">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        {info.isMusic ? (
-                          <Music2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                        ) : info.isTv ? (
-                          <Tv className="w-4 h-4 text-purple-400 shrink-0" />
+                    <div className="flex items-start gap-3 min-w-0 flex-1">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleSelect(t.hash);
+                        }}
+                        className="p-1 -m-1 mt-0.5 rounded hover:bg-slate-800 text-slate-400 hover:text-slate-200 transition-colors shrink-0"
+                        title={isSelected ? 'Deselect download' : 'Select download'}
+                        aria-label={isSelected ? `Deselect ${info.title}` : `Select ${info.title}`}
+                      >
+                        {isSelected ? (
+                          <CheckSquare className="w-4 h-4 text-emerald-400" />
                         ) : (
-                          <Film className="w-4 h-4 text-cyan-400 shrink-0" />
+                          <Square className="w-4 h-4 text-slate-600 group-hover:text-slate-400 transition-colors" />
                         )}
-                        <h3 className="text-sm sm:text-base font-bold text-slate-100 group-hover:text-cyan-300 transition-colors">
-                          {info.title}
-                        </h3>
+                      </button>
+
+                      <div className="min-w-0 flex-1 space-y-1.5">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          {info.isMusic ? (
+                            <Music2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                          ) : info.isTv ? (
+                            <Tv className="w-4 h-4 text-purple-400 shrink-0" />
+                          ) : (
+                            <Film className="w-4 h-4 text-cyan-400 shrink-0" />
+                          )}
+                          <h3 className="text-sm sm:text-base font-bold text-slate-100 group-hover:text-cyan-300 transition-colors">
+                            {info.title}
+                          </h3>
 
                         {/* Quality & Media Badges */}
                         <div className="flex items-center gap-1.5 flex-wrap">
+                          {/* Media Type Badge */}
+                          <span className={`text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded border ${
+                            info.isMusic
+                              ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/25'
+                              : info.isTv
+                              ? 'bg-purple-500/10 text-purple-300 border-purple-500/25'
+                              : 'bg-cyan-500/10 text-cyan-400 border-cyan-500/25'
+                          }`}>
+                            {info.mediaLabel || (info.isMusic ? 'Audio' : info.isTv ? 'Episode' : 'Movie')}
+                          </span>
+
                           {info.resolution && (
                             <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-cyan-500/10 text-cyan-400 border border-cyan-500/25">
                               {info.resolution}
                             </span>
                           )}
-                          {info.source && (
+                          {info.source && info.source !== info.mediaLabel && (
                             <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 border border-white/10">
                               {info.source}
                             </span>
                           )}
-                          {info.codec && (
+                          {info.codec && info.codec !== info.audio && info.codec !== info.resolution && (
                             <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-300 border border-purple-500/25">
                               {info.codec}
                             </span>
                           )}
-                          {info.audio && (
+                          {info.audio && info.audio !== info.resolution && (
                             <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/25">
                               {info.audio}
                             </span>
@@ -347,8 +618,9 @@ export default function Downloads() {
                         {t.name}
                       </p>
                     </div>
+                  </div>
 
-                    <div className="flex items-center gap-1.5 sm:gap-2 shrink-0 pt-0.5">
+                  <div className="flex items-center gap-1.5 sm:gap-2 shrink-0 pt-0.5">
                       {t.dlspeed > 0 && (
                         <span className="flex items-center gap-1 text-xs font-mono font-bold text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-lg border border-emerald-500/20 shadow-sm">
                           <ArrowDown className="w-3.5 h-3.5" />
@@ -400,6 +672,12 @@ export default function Downloads() {
                             try {
                               await api.delete(`/clients/torrents/${t.hash}?deleteFiles=true`);
                               setDownloads(prev => prev.filter(d => d.hash !== t.hash));
+                              setSelectedHashes(prev => {
+                                if (!prev.has(t.hash)) return prev;
+                                const next = new Set(prev);
+                                next.delete(t.hash);
+                                return next;
+                              });
                               customAlert('Download deleted');
                             } catch (e) {
                               console.error('Failed to delete download', e);

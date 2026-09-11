@@ -20,6 +20,7 @@ export default function AlbumDetails() {
   const [album, setAlbum] = useState(null);
   const [loading, setLoading] = useState(true);
   const [searching, setSearching] = useState(false);
+  const [fullTracklist, setFullTracklist] = useState(null);
   const { playTrack, playAlbum, currentTrack, isPlaying, togglePlay } = useAudioPlayer();
 
   // Modals
@@ -42,8 +43,20 @@ export default function AlbumDetails() {
     }
   };
 
+  const fetchFullTracklist = async () => {
+    try {
+      const res = await api.get(`/library/music/albums/${id}/tracklist`);
+      if (res.data.status === 'success') {
+        setFullTracklist(res.data.data);
+      }
+    } catch (err) {
+      console.warn('Could not load full tracklist:', err);
+    }
+  };
+
   useEffect(() => {
     fetchAlbum();
+    fetchFullTracklist();
   }, [id]);
 
   const handleToggleMonitor = async () => {
@@ -97,20 +110,21 @@ export default function AlbumDetails() {
   };
 
   // Group tracks by disc number if multi-disc
+  // Prefer fullTracklist (includes missing tracks from MusicBrainz) over local tracks only
   const discGroups = useMemo(() => {
-    if (!album || !album.tracks) return {};
+    const source = fullTracklist || album?.tracks || [];
+    if (!source.length) return {};
     const groups = {};
-    for (const track of album.tracks) {
+    for (const track of source) {
       const disc = track.disc_number || 1;
       if (!groups[disc]) groups[disc] = [];
       groups[disc].push(track);
     }
-    // Sort tracks by track_number within each disc
     for (const disc of Object.keys(groups)) {
       groups[disc].sort((a, b) => (a.track_number || 0) - (b.track_number || 0));
     }
     return groups;
-  }, [album]);
+  }, [album, fullTracklist]);
 
   if (loading) {
     return (
@@ -136,10 +150,11 @@ export default function AlbumDetails() {
     );
   }
 
-  const coverUrl = albumCoverUrl(album.mbid);
+  const coverUrl = album.cover_url || albumCoverUrl(album);
   const isDownloaded = album.status === 'downloaded';
-  const totalTracks = album.tracks?.length || album.track_count || 0;
-  const downloadedTracks = (album.tracks || []).filter((t) => t.status === 'downloaded').length;
+  const source = fullTracklist || album.tracks || [];
+  const totalTracks = source.length || album.track_count || 0;
+  const downloadedTracks = source.filter((t) => !t.missing && (t.status === 'downloaded' || t.file_path)).length;
 
   const genres = Array.isArray(album.genres)
     ? album.genres
@@ -221,10 +236,10 @@ export default function AlbumDetails() {
           <div className="w-48 h-48 md:w-56 md:h-56 rounded-2xl overflow-hidden flex-shrink-0 bg-slate-800 border-2 border-white/10 shadow-[0_4px_30px_rgba(0,0,0,0.5)]">
             <img
               src={coverUrl}
-              alt={album.title}
+              alt=""
               onError={(e) => {
                 e.target.onerror = null;
-                e.target.src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 24 24" fill="none" stroke="%23475569" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg>';
+                e.target.src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 24 24" fill="none" stroke="%2306b6d4" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg>';
               }}
               className="w-full h-full object-cover"
             />
@@ -244,6 +259,13 @@ export default function AlbumDetails() {
               ) : (
                 <span className="text-xs font-semibold px-2.5 py-0.5 rounded-md bg-rose-500/15 text-rose-400 border border-rose-500/30 flex items-center gap-1">
                   <AlertCircle className="w-3.5 h-3.5" /> Missing
+                </span>
+              )}
+
+              {(album.disc_count > 1 || Object.keys(discGroups).length > 1) && (
+                <span className="text-xs font-semibold px-2.5 py-0.5 rounded-md bg-cyan-500/10 text-cyan-300 border border-cyan-500/30 flex items-center gap-1.5 shadow-sm">
+                  <Disc className="w-3.5 h-3.5" />
+                  {album.disc_count || Object.keys(discGroups).length} Discs
                 </span>
               )}
 
@@ -335,8 +357,14 @@ export default function AlbumDetails() {
             Object.keys(discGroups).map((discNum) => (
               <div key={discNum} className="space-y-2">
                 {Object.keys(discGroups).length > 1 && (
-                  <div className="text-xs font-bold uppercase tracking-wider text-cyan-400 px-1">
-                    Disc {discNum}
+                  <div className="flex items-center gap-2 px-1 pt-1">
+                    <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 text-xs font-bold uppercase tracking-wider shadow-sm">
+                      <Disc className="w-3.5 h-3.5" />
+                      <span>Disc {discNum}</span>
+                    </div>
+                    <span className="text-xs text-slate-500 font-mono">
+                      {discGroups[discNum].length} track{discGroups[discNum].length !== 1 ? 's' : ''}
+                    </span>
                   </div>
                 )}
 
@@ -356,14 +384,19 @@ export default function AlbumDetails() {
                     </thead>
                     <tbody className="divide-y divide-white/5 text-slate-300">
                       {discGroups[discNum].map((track) => {
-                        const isTrackDownloaded = track.status === 'downloaded' || track.file_path;
+                        const isMissing = track.missing === true;
+                        const isTrackDownloaded = !isMissing && (track.status === 'downloaded' || track.file_path);
                         const isThisTrackPlaying = currentTrack?.id === track.id && isPlaying;
 
                         return (
                           <tr
-                            key={track.id || track.mbid || track.track_number}
-                            className={`hover:bg-white/[0.02] transition-colors ${
-                              isThisTrackPlaying ? 'bg-cyan-500/10' : ''
+                            key={track.id || track.mbid || `${track.disc_number}-${track.track_number}`}
+                            className={`transition-colors ${
+                              isMissing
+                                ? 'opacity-40'
+                                : isThisTrackPlaying
+                                  ? 'bg-cyan-500/10'
+                                  : 'hover:bg-white/[0.02]'
                             }`}
                           >
                             <td className="py-2.5 px-3 text-center">
@@ -380,7 +413,7 @@ export default function AlbumDetails() {
                                           album_title: track.album_title || album.title,
                                           album_mbid: track.album_mbid || album.mbid,
                                         },
-                                        album.tracks
+                                        (fullTracklist || album.tracks || []).filter(t => !t.missing)
                                       );
                                     }
                                   }}
@@ -408,7 +441,7 @@ export default function AlbumDetails() {
                             <td className="py-2.5 px-4 text-slate-500 font-mono">
                               {track.track_number ? String(track.track_number).padStart(2, '0') : '—'}
                             </td>
-                            <td className="py-2.5 px-4 font-semibold text-slate-100">
+                            <td className={`py-2.5 px-4 font-semibold ${ isMissing ? 'text-slate-400 italic' : 'text-slate-100' }`}>
                               {track.title}
                             </td>
                             <td className="py-2.5 px-4 font-mono text-slate-400">
@@ -421,10 +454,14 @@ export default function AlbumDetails() {
                               {track.bitrate ? `${track.bitrate} kbps` : '—'}
                             </td>
                             <td className="py-2.5 px-4 font-mono text-slate-400">
-                              {formatSize(track.file_size)}
+                              {track.file_size ? formatSize(track.file_size) : '—'}
                             </td>
                             <td className="py-2.5 px-4 text-right">
-                              {isTrackDownloaded ? (
+                              {isMissing ? (
+                                <span className="inline-flex items-center gap-1 text-rose-400 font-semibold text-[11px]">
+                                  <AlertCircle className="w-3.5 h-3.5" /> Missing
+                                </span>
+                              ) : isTrackDownloaded ? (
                                 <span className="inline-flex items-center gap-1 text-emerald-400 font-semibold text-[11px]">
                                   <CheckCircle2 className="w-3.5 h-3.5" /> Ready
                                 </span>

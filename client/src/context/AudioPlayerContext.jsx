@@ -102,7 +102,7 @@ export function AudioPlayerProvider({ children }) {
     // MediaSession lockscreen / notification controls
     if ('mediaSession' in navigator) {
       try {
-        const cover = track.album_mbid ? albumCoverUrl(track.album_mbid) : null;
+        const cover = albumCoverUrl(track.album_id || track.album_mbid);
         navigator.mediaSession.metadata = new window.MediaMetadata({
           title: track.title || 'Unknown Title',
           artist: track.artist_name || 'Unknown Artist',

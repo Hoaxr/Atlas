@@ -12,6 +12,9 @@
 const fs   = require('fs');
 const path = require('path');
 const axios = require('axios');
+const { promisify } = require('util');
+const { execFile } = require('child_process');
+const execFileAsync = promisify(execFile);
 
 // Root of the persistent data directory (same volume as database.sqlite)
 const DATA_DIR  = path.join(__dirname, '../data');
@@ -183,6 +186,92 @@ const findAlbumFolderCover = (folderPath) => {
     if (match) return path.join(folderPath, match);
   }
 
+  // Fall back to any image file in the directory that is not back/inlay/disc/screenshot
+  const candidateImages = images.filter(n =>
+    !/back|rear|inlay|tray|spine|cd\d*|disc\d*|matrix|booklet|proof|screenshot|\.log$/i.test(n)
+  );
+  if (candidateImages.length > 0) {
+    return path.join(folderPath, candidateImages[0]);
+  }
+
+  return null;
+};
+
+/**
+ * Save / copy a cover image directly into the album's library folder on disk
+ * as cover.jpg if not already present.
+ * Also cleans up arbitrary release image filenames (e.g. 1914.jpeg) by promoting them to cover.jpg.
+ * @param {string|null} folderPath  Absolute album folder path (music_albums.folder_path)
+ * @param {string} sourceImagePath  Path to local cover image file
+ * @returns {string|null} Absolute path to the saved cover.jpg in the folder, or null
+ */
+const saveCoverToAlbumFolder = (folderPath, sourceImagePath) => {
+  if (!folderPath || !sourceImagePath) return null;
+  try {
+    if (!fs.existsSync(folderPath) || !fs.existsSync(sourceImagePath)) return null;
+    const destPath = path.join(folderPath, 'cover.jpg');
+
+    // If source is already in this folder under an arbitrary name (e.g. 1914.jpeg),
+    // promote it to cover.jpg and remove the non-standard filename so there aren't duplicates
+    if (path.dirname(path.resolve(sourceImagePath)) === path.resolve(folderPath)) {
+      if (path.basename(sourceImagePath).toLowerCase() !== 'cover.jpg') {
+        fs.copyFileSync(sourceImagePath, destPath);
+        try { fs.unlinkSync(sourceImagePath); } catch { /* ignore */ }
+        return destPath;
+      }
+    }
+
+    if (!fs.existsSync(destPath)) {
+      // Check if folder has another image (e.g. 1914.jpeg) that might be higher quality
+      const existing = findAlbumFolderCover(folderPath);
+      if (existing && existing !== destPath && fs.existsSync(existing)) {
+        // Use the existing local image from the torrent to become cover.jpg and clean up duplicate
+        fs.copyFileSync(existing, destPath);
+        try { fs.unlinkSync(existing); } catch { /* ignore */ }
+        return destPath;
+      }
+
+      fs.copyFileSync(sourceImagePath, destPath);
+      return destPath;
+    }
+    return destPath;
+  } catch {
+    // Non-fatal if folder permissions prevent writing
+    return null;
+  }
+};
+
+/**
+ * Extract embedded cover art from an audio file using ffmpeg.
+ * @param {string} audioFilePath  Absolute path to audio file
+ * @param {string} destPath       Absolute path to save extracted JPEG
+ * @returns {Promise<string|null>} destPath if successful, or null
+ */
+const extractEmbeddedCover = async (audioFilePath, destPath) => {
+  if (!audioFilePath || !fs.existsSync(audioFilePath)) return null;
+  const dir = path.dirname(destPath);
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+
+  const tmpPath = `${destPath}.${process.pid}.${Date.now()}.${Math.random().toString(36).slice(2)}.tmp.jpg`;
+  try {
+    await execFileAsync('ffmpeg', [
+      '-y',
+      '-i', audioFilePath,
+      '-an',
+      '-frames:v', '1',
+      '-update', '1',
+      tmpPath
+    ], { timeout: 15000 });
+
+    if (fs.existsSync(tmpPath) && fs.statSync(tmpPath).size > 500) {
+      fs.renameSync(tmpPath, destPath);
+      return destPath;
+    }
+  } catch {
+    // No attached picture stream or extraction failed
+  } finally {
+    try { if (fs.existsSync(tmpPath)) fs.unlinkSync(tmpPath); } catch { /* ignore */ }
+  }
   return null;
 };
 
@@ -278,6 +367,25 @@ const ensureArtistImage = async (mbid, imageUrl) => {
   return promise;
 };
 
+/**
+ * Copy a local image file into a cache destination (creating parent dirs).
+ * Used to reuse an album cover as an artist image when no artist photo exists.
+ * @param {string} sourcePath  Existing local image file
+ * @param {string} destPath    Cache destination (e.g. artistImagePath(mbid))
+ * @returns {string|null} destPath on success, else null
+ */
+const copyImageToCache = (sourcePath, destPath) => {
+  if (!sourcePath || !destPath || !fs.existsSync(sourcePath)) return null;
+  try {
+    const dir = path.dirname(destPath);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.copyFileSync(sourcePath, destPath);
+    return destPath;
+  } catch {
+    return null;
+  }
+};
+
 const deleteAlbumCover = (mbid) => {
   const dest = albumCoverPath(mbid);
   if (fs.existsSync(dest)) {
@@ -292,5 +400,5 @@ const deleteAlbumCover = (mbid) => {
 module.exports = {
   ensurePoster, deletePoster, posterPath, IMAGE_DIR,
   albumCoverPath, artistImagePath, ensureAlbumCover, ensureArtistImage, deleteAlbumCover,
-  findAlbumFolderCover,
+  findAlbumFolderCover, extractEmbeddedCover, saveCoverToAlbumFolder, copyImageToCache,
 };

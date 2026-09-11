@@ -22,8 +22,32 @@ const { isAudioFile } = require('../utils/fileUtils');
 const { parseMusicFormat, parseMusicBitrate, parseMusicBitdepth } = require('../utils/mediaParsing');
 const { getSetting } = require('../utils/settings');
 const musicLibraryService = require('./musicLibraryService');
+const imageService = require('./imageService');
 
 // ── Find all audio files recursively ─────────────────────────────────────────
+
+const IGNORED_MUSIC_DIRS = new Set([
+  '$recycle.bin',
+  '.recycle',
+  '#recycle',
+  '@recycle',
+  '@recycle.bin',
+  '@eadir',
+  '.trash-1000',
+  '.trash-0',
+  '.trashes',
+  '.thumbnails',
+  '.cache',
+  '.git',
+]);
+
+const isIgnoredMusicDir = (dirName) => {
+  if (!dirName) return true;
+  const lower = dirName.toLowerCase();
+  if (IGNORED_MUSIC_DIRS.has(lower)) return true;
+  if (dirName.startsWith('.')) return true;
+  return false;
+};
 
 const findAllAudioFiles = async (dirPath) => {
   const results = [];
@@ -35,6 +59,7 @@ const findAllAudioFiles = async (dirPath) => {
     }
     const items = await fsp.readdir(dirPath);
     for (const item of items) {
+      if (isIgnoredMusicDir(item)) continue;
       const full = path.join(dirPath, item);
       try {
         const s = await fsp.stat(full);
@@ -77,9 +102,42 @@ const readAudioTags = async (filePath) => {
     const trackVal = tags.track || tags.tracknumber;
     const trackNum = trackVal ? parseInt(String(trackVal).split('/')[0], 10) : null;
     const discVal = tags.disc || tags.discnumber;
-    const discNum = discVal ? parseInt(String(discVal).split('/')[0], 10) : 1;
+    let discNum = discVal ? parseInt(String(discVal).split('/')[0], 10) : null;
     const yearVal = tags.date || tags.year || tags.originaldate;
     const year = yearVal ? parseInt(String(yearVal).substring(0, 4), 10) : null;
+
+    let albumName = tags.album || null;
+
+    // Check if album name contains CD/Disc indicator (e.g. "All Eyez On Me (Disc 2)" or "The Wall (CD1)")
+    if (albumName) {
+      const discMatch = albumName.match(/\s*(?:[([{-]|\b)(?:cd|disc|disk)\s*(\d+)(?:[)\]}]|\b|$)/i);
+      if (discMatch) {
+        if (!discNum || isNaN(discNum) || discNum === 1) {
+          discNum = parseInt(discMatch[1], 10);
+        }
+        albumName = albumName.replace(discMatch[0], '').replace(/\s{2,}/g, ' ').trim();
+        albumName = albumName.replace(/\s*[-–—]\s*$/, '').trim();
+      }
+    }
+
+    // Also check if containing directory is a CD/Disc directory (e.g. "CD1", "Disc 2", "Disk 1")
+    if (filePath) {
+      const parentDir = path.basename(path.dirname(filePath));
+      const folderDiscMatch = parentDir.match(/^(?:cd|disc|disk)\s*(\d+)$/i);
+      if (folderDiscMatch) {
+        if (!discNum || isNaN(discNum) || discNum === 1) {
+          discNum = parseInt(folderDiscMatch[1], 10);
+        }
+        if (!albumName || albumName.toLowerCase() === parentDir.toLowerCase()) {
+          albumName = path.basename(path.dirname(path.dirname(filePath)));
+        }
+      }
+    }
+
+    if (albumName) {
+      // Strip trailing year from album name if present like "All Eyez on Me (1996)"
+      albumName = albumName.replace(/\s*\(\d{4}\)$/, '').trim();
+    }
 
     const codec = (audioStream.codec_name || format.format_name || '').toLowerCase();
     const isLossless = codec.includes('flac') || codec.includes('alac') || codec.includes('wav');
@@ -93,9 +151,9 @@ const readAudioTags = async (filePath) => {
       title: tags.title || path.basename(filePath, path.extname(filePath)),
       artist: tags.artist || tags.album_artist || tags.albumartist || null,
       albumArtist: tags.album_artist || tags.albumartist || tags.artist || null,
-      album: tags.album || null,
+      album: albumName,
       trackNumber: isNaN(trackNum) ? null : trackNum,
-      discNumber: isNaN(discNum) ? 1 : discNum,
+      discNumber: isNaN(discNum) || !discNum ? 1 : discNum,
       year: isNaN(year) ? null : year,
       genre: tags.genre || null,
       duration: format.duration ? Math.round(parseFloat(format.duration)) : null,
@@ -112,13 +170,18 @@ const readAudioTags = async (filePath) => {
     // Fallback: parse from filename
     const basename = path.basename(filePath, path.extname(filePath));
     const trackMatch = basename.match(/^(\d+)[.\s-]+(.+)$/);
+    const parentDir = path.basename(path.dirname(filePath));
+    const folderDiscMatch = parentDir.match(/^(?:cd|disc|disk)\s*(\d+)$/i);
+    const fallbackDisc = folderDiscMatch ? parseInt(folderDiscMatch[1], 10) : 1;
+    let fallbackAlbum = folderDiscMatch ? path.basename(path.dirname(path.dirname(filePath))) : parentDir;
+    fallbackAlbum = fallbackAlbum.replace(/\s*\(\d{4}\)$/, '').trim();
     return {
       title: trackMatch ? trackMatch[2].trim() : basename,
       trackNumber: trackMatch ? parseInt(trackMatch[1], 10) : null,
-      discNumber: 1,
+      discNumber: fallbackDisc,
       artist: null,
       albumArtist: null,
-      album: null,
+      album: fallbackAlbum,
       year: null,
       duration: null,
       bitrate: null,
@@ -134,6 +197,20 @@ const readAudioTags = async (filePath) => {
 };
 
 // ── Match download to a DB album ──────────────────────────────────────────────
+
+// Normalise text for fuzzy matching: lower-case, strip diacritics and all punctuation/
+// typography (curly vs straight apostrophes/quotes, dashes, etc.) so MusicBrainz titles
+// such as "Don’t Be Dumb" or "Dial ‘M’ for Monkey" match tag titles like "Don't Be Dumb".
+const normalizeMatchText = (str) => (str || '')
+  .toLowerCase()
+  .normalize('NFKD')
+  .replace(/[\u0300-\u036f]/g, '')
+  .replace(/[’‘`´]/g, "'")
+  .replace(/[“”]/g, '"')
+  .replace(/&/g, ' and ')
+  .replace(/[^a-z0-9]+/g, ' ')
+  .replace(/\s+/g, ' ')
+  .trim();
 
 const matchAlbumFromFolder = (folderName, tags, downloadName = '') => {
   // 1. Try by MusicBrainz release group ID from tags first
@@ -164,15 +241,43 @@ const matchAlbumFromFolder = (folderName, tags, downloadName = '') => {
     if (album) return album;
   }
 
+  // 2b. Normalised tag match — tolerates typographic quotes/dashes/extra punctuation.
+  // The SQL LIKE above is punctuation-sensitive, so e.g. DB "Don’t Be Dumb" never matches
+  // a tag album of "Don't Be Dumb". Compare normalised strings instead.
+  if (albumTitle) {
+    const normAlbum = normalizeMatchText(albumTitle);
+    const normArtist = normalizeMatchText(artistName);
+    const candidates = db.prepare(`
+      SELECT al.*, a.name as artist_name, a.sort_name as artist_sort_name
+      FROM music_albums al
+      JOIN music_artists a ON a.id = al.artist_id
+    `).all();
+    const artistOk = (r) => !normArtist
+      || normalizeMatchText(r.artist_name) === normArtist
+      || normalizeMatchText(r.artist_sort_name) === normArtist;
+
+    // Exact normalised title (plus artist when known)
+    const exact = candidates.find((r) => normalizeMatchText(r.title) === normAlbum && artistOk(r));
+    if (exact) return exact;
+
+    // Containment, to absorb suffixes like (Deluxe), (Remastered), feat. credits, etc.
+    const contained = candidates.find((r) => {
+      if (!artistOk(r)) return false;
+      const t = normalizeMatchText(r.title);
+      return t.includes(normAlbum) || normAlbum.includes(t);
+    });
+    if (contained) return contained;
+  }
+
   // 3. Match against downloading albums in DB
-  const combined = `${folderName || ''} ${downloadName || ''}`.toLowerCase();
+  const combined = normalizeMatchText(`${folderName || ''} ${downloadName || ''}`);
   const downloadingAlbums = db.prepare(`
     SELECT al.*, a.name as artist_name FROM music_albums al
     JOIN music_artists a ON a.id = al.artist_id
     WHERE al.status = 'downloading'
   `).all();
   for (const dal of downloadingAlbums) {
-    if (combined.includes(dal.title.toLowerCase()) && combined.includes(dal.artist_name.toLowerCase())) {
+    if (combined.includes(normalizeMatchText(dal.title)) && combined.includes(normalizeMatchText(dal.artist_name))) {
       return dal;
     }
   }
@@ -184,7 +289,7 @@ const matchAlbumFromFolder = (folderName, tags, downloadName = '') => {
     WHERE al.monitored = 1
   `).all();
   for (const al of allAlbums) {
-    if (combined.includes(al.title.toLowerCase()) && combined.includes(al.artist_name.toLowerCase())) {
+    if (combined.includes(normalizeMatchText(al.title)) && combined.includes(normalizeMatchText(al.artist_name))) {
       return al;
     }
   }
@@ -193,6 +298,7 @@ const matchAlbumFromFolder = (folderName, tags, downloadName = '') => {
   const cleanFolder = (folderName || '')
     .replace(/\s*\(\d{4}\)\s*/g, '')
     .replace(/\[.*?\]/g, '')
+    .replace(/\s*(?:[([{-]|\b)(?:cd|disc|disk)\s*\d+(?:[)\]}]|\b|$)/gi, '')
     .replace(/FLAC|MP3|320|24bit|16bit/gi, '')
     .trim();
 
@@ -287,6 +393,9 @@ const importMusicDownload = async (downloadPath, downloadName) => {
   const ext = path.extname(audioFiles[0]).toLowerCase();
   const format = parseMusicFormat(audioFiles[0]);
 
+  // Destination paths of successfully imported tracks (used later to extract embedded cover art)
+  const importedPaths = [];
+
   for (const srcPath of audioFiles) {
     try {
       const tags = await readAudioTags(srcPath);
@@ -360,6 +469,7 @@ const importMusicDownload = async (downloadPath, downloadName) => {
         );
       }
 
+      importedPaths.push(destPath);
       result.imported++;
     } catch (err) {
       result.errors.push(`Failed to import ${path.basename(srcPath)}: ${err.message}`);
@@ -384,6 +494,28 @@ const importMusicDownload = async (downloadPath, downloadName) => {
       }
     }
   } catch { /* ignore companion copy error */ }
+
+  // Ensure the album folder has cover.jpg immediately after import, so the UI (and
+  // external tools like Plex/Jellyfin) show art without waiting for a later library scan.
+  // Prefer embedded art from an imported track, then a cached cover by MBID.
+  if (result.imported > 0 && !imageService.findAlbumFolderCover(albumFolder)) {
+    try {
+      const folderCover = path.join(albumFolder, 'cover.jpg');
+      let extracted = null;
+      for (const trackPath of importedPaths) {
+        extracted = await imageService.extractEmbeddedCover(trackPath, folderCover);
+        if (extracted) break;
+      }
+      if (!extracted && album.mbid) {
+        const cachedCover = imageService.albumCoverPath(album.mbid);
+        if (fs.existsSync(cachedCover)) {
+          imageService.saveCoverToAlbumFolder(albumFolder, cachedCover);
+        }
+      }
+    } catch (err) {
+      console.warn(`[MusicImport] Cover art setup failed for ${album.title}:`, err.message);
+    }
+  }
 
   // Update album quality info and status
   if (result.imported > 0) {

@@ -38,16 +38,18 @@ const statusLabels = {
 
 const statusColors = {
   connected: { bg: 'bg-emerald-500/10', text: 'text-emerald-400', border: 'border-emerald-500/20', dot: 'bg-emerald-400' },
+  warning: { bg: 'bg-amber-500/10', text: 'text-amber-400', border: 'border-amber-500/20', dot: 'bg-amber-400' },
   error: { bg: 'bg-rose-500/10', text: 'text-rose-400', border: 'border-rose-500/20', dot: 'bg-rose-400' },
   unconfigured: { bg: 'bg-slate-500/10', text: 'text-slate-400', border: 'border-slate-500/20', dot: 'bg-slate-400' },
 };
 
 function StatusBadge({ status, label }) {
   const c = statusColors[status] || statusColors.unconfigured;
+  const displayLabel = label || (status === 'warning' ? 'Quota' : status);
   return (
     <span className={`inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${c.bg} ${c.text} ${c.border} border`}>
       <span className={`w-1.5 h-1.5 rounded-full ${c.dot}`} />
-      {label || status}
+      {displayLabel}
     </span>
   );
 }
@@ -56,6 +58,21 @@ function ServiceCard({ name, service }) {
   const Icon = statusIcons[name] || Server;
   const c = statusColors[service.status] || statusColors.unconfigured;
 
+  let displayMessage = 'Not configured';
+  if (service.status === 'connected') {
+    displayMessage = service.message || 'Connected';
+  } else if (service.status === 'warning') {
+    displayMessage = service.message || 'Quota limit reached (Connected)';
+  } else if (service.status === 'error') {
+    if (service.message && (service.message.includes('429') || service.message.toLowerCase().includes('quota'))) {
+      displayMessage = 'Quota limit reached (Connected)';
+    } else {
+      displayMessage = service.message && service.message.length > 80
+        ? service.message.slice(0, 80) + '...'
+        : (service.message || 'Error');
+    }
+  }
+
   return (
     <div className={`glass-panel rounded-2xl p-5 border ${c.border} flex items-center gap-4 transition-all hover:scale-[1.02]`}>
       <div className={`p-3 rounded-2xl ${c.bg}`}>
@@ -63,11 +80,11 @@ function ServiceCard({ name, service }) {
       </div>
       <div className="flex-1 min-w-0">
         <p className="font-bold text-slate-200">{statusLabels[name] || name}</p>
-        <p className={`text-xs mt-0.5 ${c.text}`}>
-          {service.status === 'connected' ? 'Connected' : service.status === 'error' ? service.message || 'Error' : 'Not configured'}
+        <p className={`text-xs mt-0.5 truncate ${c.text}`} title={service.message || displayMessage}>
+          {displayMessage}
         </p>
       </div>
-      <StatusBadge status={service.status} />
+      <StatusBadge status={service.status} label={service.status === 'warning' ? 'Quota' : undefined} />
     </div>
   );
 }

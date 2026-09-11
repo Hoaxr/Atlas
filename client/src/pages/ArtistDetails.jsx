@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import {
   ArrowLeft, Mic2, Disc, RefreshCw, Search, Trash2, Bookmark, BookmarkMinus,
-  CheckCircle2, AlertCircle, Calendar, ShieldCheck, Loader2, Sparkles, ExternalLink,
+  CheckCircle2, AlertCircle, Calendar, ShieldCheck, Loader2, Sparkles, ExternalLink, FileAudio,
   ChevronDown, ChevronUp, LayoutGrid, List, Play, Pause
 } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -11,6 +11,7 @@ import { albumCoverUrl, artistImageUrl } from '../lib/posterUrl';
 import { useAudioPlayer } from '../context/AudioPlayerContext';
 import ModalShell from '../components/shared/ModalShell';
 import ManualSearchModal from '../components/ManualSearchModal';
+import AlbumCard from '../components/music/AlbumCard';
 
 export default function ArtistDetails() {
   const { id } = useParams();
@@ -143,7 +144,7 @@ export default function ArtistDetails() {
     );
   }
 
-  const artistImg = artistImageUrl(artist.mbid);
+  const artistImg = artist.image_url || artistImageUrl(artist);
   const genres = Array.isArray(artist.genres)
     ? artist.genres
     : (() => {
@@ -238,17 +239,20 @@ export default function ArtistDetails() {
       <div className="relative px-6 py-8 border-b border-slate-200/60 dark:border-white/5 overflow-hidden bg-gradient-to-b from-cyan-950/20 via-slate-900/40 to-slate-950">
         <div className="relative z-10 flex flex-col md:flex-row items-center md:items-start gap-6 max-w-6xl">
           {/* Artist Photo */}
-          <div className="w-36 h-36 md:w-44 md:h-44 rounded-full overflow-hidden flex-shrink-0 bg-gradient-to-tr from-cyan-950 via-slate-900 to-indigo-950 border-4 border-cyan-500/20 shadow-[0_0_35px_rgba(6,182,212,0.2)] flex items-center justify-center">
-            <img
-              src={artistImg}
-              alt={artist.name}
-              onError={(e) => {
-                e.target.style.display = 'none';
-                e.target.nextSibling.style.display = 'flex';
-              }}
-              className="w-full h-full object-cover"
-            />
-            <div className="hidden w-full h-full items-center justify-center text-cyan-400/50">
+          <div className="w-36 h-36 md:w-44 md:h-44 rounded-full overflow-hidden flex-shrink-0 bg-gradient-to-tr from-cyan-950 via-slate-900 to-indigo-950 border-4 border-cyan-500/20 shadow-[0_0_35px_rgba(6,182,212,0.2)] flex items-center justify-center relative">
+            {artistImg ? (
+              <img
+                src={artistImg}
+                alt=""
+                onError={(e) => {
+                  e.currentTarget.style.display = 'none';
+                  const fallback = e.currentTarget.parentElement?.querySelector('.artist-fallback');
+                  if (fallback) fallback.style.display = 'flex';
+                }}
+                className="w-full h-full object-cover"
+              />
+            ) : null}
+            <div className={`artist-fallback ${artistImg ? 'hidden' : 'flex'} w-full h-full items-center justify-center text-cyan-400/50`}>
               <Mic2 className="w-16 h-16" />
             </div>
           </div>
@@ -403,116 +407,14 @@ export default function ArtistDetails() {
           </div>
         ) : layoutMode === 'grid' ? (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
-            {filteredAlbums.map((album) => {
-              const isDownloaded = album.status === 'downloaded' || (album.downloaded_tracks && album.downloaded_tracks > 0);
-              const isCurrentAlbumPlaying =
-                isPlaying &&
-                ((currentTrack?.album_mbid && currentTrack.album_mbid === album.mbid) ||
-                  currentTrack?.album_id === album.id);
-              const coverUrl = albumCoverUrl(album.mbid);
-
-              return (
-                <div
-                  key={album.id}
-                  className="group relative bg-slate-900/50 hover:bg-slate-900/90 border border-white/5 hover:border-cyan-500/40 rounded-2xl overflow-hidden shadow-lg transition-all duration-300 hover:shadow-[0_4px_25px_rgba(6,182,212,0.15)] hover:-translate-y-1 flex flex-col"
-                >
-                  <div
-                    onClick={() => navigate(`/music/albums/${album.id}`)}
-                    className="aspect-square relative overflow-hidden cursor-pointer bg-slate-800"
-                  >
-                    <img
-                      src={coverUrl}
-                      alt={album.title}
-                      onError={(e) => {
-                        e.target.onerror = null;
-                        e.target.src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 24 24" fill="none" stroke="%23475569" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg>';
-                      }}
-                      className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-                    />
-
-                    {/* Hover/Active Play Button for Downloaded Albums */}
-                    {isDownloaded && (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (isCurrentAlbumPlaying) {
-                            togglePlay();
-                          } else {
-                            playAlbum(album);
-                          }
-                        }}
-                        className={`absolute inset-0 m-auto w-12 h-12 rounded-full bg-cyan-500 hover:bg-cyan-400 text-slate-950 flex items-center justify-center shadow-[0_0_25px_rgba(6,182,212,0.6)] transition-all hover:scale-110 active:scale-95 z-10 ${
-                          isCurrentAlbumPlaying
-                            ? 'opacity-100 ring-4 ring-cyan-300/50'
-                            : 'opacity-0 group-hover:opacity-100'
-                        }`}
-                        title={isCurrentAlbumPlaying ? 'Pause Album' : `Play ${album.title}`}
-                      >
-                        {isCurrentAlbumPlaying ? (
-                          <Pause className="w-5 h-5 fill-slate-950" />
-                        ) : (
-                          <Play className="w-5 h-5 fill-slate-950 ml-0.5" />
-                        )}
-                      </button>
-                    )}
-
-                    {/* Status Badge */}
-                    <div className="absolute top-2 left-2 flex flex-col gap-1">
-                      {isDownloaded ? (
-                        <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-500/90 text-slate-950 backdrop-blur-md flex items-center gap-1 shadow">
-                          <CheckCircle2 className="w-3 h-3" />
-                          Ready
-                        </span>
-                      ) : (
-                        <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-rose-500/90 text-white backdrop-blur-md flex items-center gap-1 shadow">
-                          Missing
-                        </span>
-                      )}
-                    </div>
-
-                    {album.file_format && (
-                      <div className="absolute bottom-2 right-2">
-                        <span className="px-2 py-0.5 rounded-md text-[10px] font-mono font-bold bg-slate-950/80 text-cyan-300 border border-cyan-500/30 backdrop-blur-md">
-                          {album.file_format}
-                        </span>
-                      </div>
-                    )}
-
-                    {/* Search button */}
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setManualSearchAlbum(album);
-                      }}
-                      className="absolute top-2 right-2 p-1.5 rounded-lg bg-slate-950/80 text-slate-300 hover:text-cyan-400 border border-white/10 opacity-0 group-hover:opacity-100 transition-opacity"
-                      title="Manual search for releases"
-                    >
-                      <Search className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-
-                  <div className="p-3 flex-1 flex flex-col justify-between">
-                    <div>
-                      <h3
-                        onClick={() => navigate(`/music/albums/${album.id}`)}
-                        title={album.title}
-                        className="font-bold text-sm text-slate-100 group-hover:text-cyan-400 transition-colors truncate cursor-pointer"
-                      >
-                        {album.title}
-                      </h3>
-                      <p className="text-[11px] text-slate-400 truncate mt-0.5">
-                        {album.album_type || 'Album'}
-                      </p>
-                    </div>
-
-                    <div className="flex items-center justify-between mt-2 pt-2 border-t border-white/5 text-[11px] text-slate-400">
-                      <span>{album.year || 'Unknown'}</span>
-                      <span>{album.track_count || 0} tracks</span>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
+            {filteredAlbums.map((album) => (
+              <AlbumCard
+                key={album.id}
+                album={album}
+                subtitleMode="type"
+                onManualSearch={setManualSearchAlbum}
+              />
+            ))}
           </div>
         ) : (
           /* List View */
@@ -533,7 +435,7 @@ export default function ArtistDetails() {
               </thead>
               <tbody className="divide-y divide-white/5 text-slate-300">
                 {filteredAlbums.map((album) => {
-                  const isDownloaded = album.status === 'downloaded' || (album.downloaded_tracks && album.downloaded_tracks > 0);
+                  const isDownloaded = album.status === 'downloaded' || Number(album.downloaded_tracks) > 0;
                   const isCurrentAlbumPlaying =
                     isPlaying &&
                     ((currentTrack?.album_mbid && currentTrack.album_mbid === album.mbid) ||
@@ -580,7 +482,7 @@ export default function ArtistDetails() {
                       </td>
                       <td className="py-2 px-4">
                         <img
-                          src={albumCoverUrl(album.mbid)}
+                          src={album.cover_url || albumCoverUrl(album)}
                           alt=""
                           className="w-9 h-9 rounded-lg object-cover bg-slate-800"
                           onError={(e) => { e.target.style.display = 'none'; }}
@@ -591,7 +493,14 @@ export default function ArtistDetails() {
                       </td>
                       <td className="py-3 px-4 text-slate-400 capitalize">{album.album_type || 'Album'}</td>
                       <td className="py-3 px-4 text-slate-400">{album.year || '—'}</td>
-                      <td className="py-3 px-4 text-slate-400">{album.track_count || 0}</td>
+                      <td className="py-3 px-4 text-slate-400">
+                        {Math.max(album.expected_track_count || 0, album.track_count || 0)}
+                        {album.disc_count > 1 && (
+                          <span className="ml-1.5 text-[10px] px-1.5 py-0.5 rounded bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 font-medium whitespace-nowrap">
+                            {album.disc_count} Discs
+                          </span>
+                        )}
+                      </td>
                       <td className="py-3 px-4 font-mono text-[11px] text-cyan-300">
                         {album.file_format || '—'}
                       </td>

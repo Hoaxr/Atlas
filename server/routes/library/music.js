@@ -12,63 +12,274 @@ const musicLibraryService = require('../../services/musicLibraryService');
 const musicMetadataService = require('../../services/musicMetadataService');
 const indexerService = require('../../services/indexerService');
 const imageService = require('../../services/imageService');
-const { getSetting } = require('../../utils/settings');
 
-// ── Helper: serve local image or 404 ────────────────────────────────────────
+// Bump this whenever the music image pipeline/placeholder behaviour changes, so clients
+// stop reusing previously cached art or placeholder images at the same URL.
+const MUSIC_IMAGE_VERSION = '2';
+
+// ── Helper: serve local image or SVG fallback ────────────────────────────────
+const FALLBACK_DISC_SVG = Buffer.from(
+  '<svg xmlns="http://www.w3.org/2000/svg" width="300" height="300" viewBox="0 0 24 24" fill="none" stroke="#06b6d4" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="background:#0f172a"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/><line x1="12" y1="2" x2="12" y2="4"/><line x1="12" y1="20" x2="12" y2="22"/></svg>',
+  'utf-8'
+);
+
 const serveImage = (res, filePath) => {
   if (filePath && fs.existsSync(filePath)) {
-    return res.sendFile(path.resolve(filePath));
+    // Real art: allow a short cache window; ETag/Last-Modified still enable revalidation.
+    return res.sendFile(path.resolve(filePath), { maxAge: '1h' });
   }
-  res.status(404).json({ status: 'error', message: 'Image not found' });
+  // The placeholder must never be cached. If it is, a temporarily-missing cover stays
+  // "broken" in the browser for the whole max-age window even after real art appears.
+  res.setHeader('Content-Type', 'image/svg+xml');
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  return res.send(FALLBACK_DISC_SVG);
+};
+
+// ── Helper: fall back to an album cover when an artist has no photo ──────────
+const resolveArtistImageFromAlbum = async (artist, cacheKey) => {
+  const dest = imageService.artistImagePath(cacheKey);
+  const albums = db.prepare(`
+    SELECT id, mbid, folder_path, cover_path
+    FROM music_albums
+    WHERE artist_id = ?
+    ORDER BY (status = 'downloaded') DESC, year DESC
+    LIMIT 12
+  `).all(artist.id);
+
+  for (const album of albums) {
+    try {
+      // 1. Album cover already cached under the album's MBID
+      if (album.mbid) {
+        const cached = imageService.albumCoverPath(album.mbid);
+        if (fs.existsSync(cached)) {
+          const copied = imageService.copyImageToCache(cached, dest);
+          if (copied) return copied;
+        }
+      }
+
+      // 2. Cover art file sitting in the album's library folder
+      const folderCover = imageService.findAlbumFolderCover(album.folder_path);
+      if (folderCover) {
+        const copied = imageService.copyImageToCache(folderCover, dest);
+        if (copied) return copied;
+      }
+
+      // 3. Download the album's known cover URL, if it points at one
+      if (album.cover_path && album.cover_path.startsWith('http')) {
+        const downloaded = await imageService.ensureAlbumCover(album.mbid || `album_${album.id}`, album.cover_path);
+        if (downloaded && fs.existsSync(downloaded)) {
+          const copied = imageService.copyImageToCache(downloaded, dest);
+          if (copied) return copied;
+        }
+      }
+
+      // 4. Extract embedded art from one of the album's tracks
+      const track = db.prepare('SELECT file_path FROM music_tracks WHERE album_id = ? AND file_path IS NOT NULL LIMIT 1').get(album.id);
+      if (track?.file_path) {
+        const extracted = await imageService.extractEmbeddedCover(track.file_path, dest);
+        if (extracted) return extracted;
+      }
+    } catch { /* try the next album */ }
+  }
+
+  return null;
+};
+
+// ── Music auto-search helpers ─────────────────────────────────────────────────
+
+// Search indexers for an album and send the best release to the download client.
+// Mirrors the album-level "Auto Search": picks the top result (lossless first,
+// then most seeders) and marks the album as downloading. Returns it, or null.
+const grabBestReleaseForAlbum = async (album, profile) => {
+  const results = await indexerService.searchMusic(album.artist_name, album.title, profile, false);
+  const best = results && results[0];
+  if (!best || !best.link) return null;
+
+  const downloadClientService = require('../../services/downloadClientService');
+  await downloadClientService.addTorrent(best.link, 'music');
+  db.prepare("UPDATE music_albums SET status = 'downloading' WHERE id = ?").run(album.id);
+  return best;
+};
+
+// Queue background auto-search + grab for a list of albums, rate-limited to be
+// gentle on indexers. Each album must include artist_name and quality_profile_id.
+const queueAlbumSearches = (albums) => {
+  if (!Array.isArray(albums) || albums.length === 0) return;
+  setImmediate(async () => {
+    try {
+      // music_quality_profiles has no is_default column — the default is the first profile by id
+      // (matches musicLibraryService/musicScannerService).
+      const defaultProfile = db.prepare('SELECT * FROM music_quality_profiles ORDER BY id ASC LIMIT 1').get();
+
+      for (const album of albums) {
+        try {
+          const profile = album.quality_profile_id
+            ? db.prepare('SELECT * FROM music_quality_profiles WHERE id = ?').get(album.quality_profile_id)
+            : defaultProfile;
+          const best = await grabBestReleaseForAlbum(album, profile);
+          if (best) console.log(`[MusicSearch] Grabbed "${album.artist_name} - ${album.title}" (${best.title})`);
+          else console.log(`[MusicSearch] No release found for "${album.artist_name} - ${album.title}"`);
+        } catch (e) {
+          console.error(`[MusicSearch] Failed for "${album.artist_name} - ${album.title}":`, e.message);
+        }
+        await new Promise(r => setTimeout(r, 1500));
+      }
+    } catch (e) {
+      console.error('[MusicSearch] Search queue failed:', e.message);
+    }
+  });
+};
+
+// ── Expected track counts ────────────────────────────────────────────────────
+
+const _expectedCountBackfill = new Set();
+
+// Fill in music_albums.expected_track_count from MusicBrainz in the background so
+// album cards can show downloaded/expected (including missing tracks). MusicBrainz
+// calls are throttled to ≤1 req/s by musicMetadataService and de-duplicated here.
+const backfillExpectedTrackCounts = (albums, limit = 30) => {
+  const stale = (albums || [])
+    .filter(a => a && a.mbid && !a.expected_track_count && !_expectedCountBackfill.has(a.id))
+    .slice(0, limit);
+  if (stale.length === 0) return;
+
+  setImmediate(async () => {
+    for (const a of stale) {
+      if (_expectedCountBackfill.has(a.id)) continue;
+      _expectedCountBackfill.add(a.id);
+      try {
+        const tracks = await musicMetadataService.getReleaseGroupTracks(a.mbid);
+        if (tracks.length > 0) {
+          db.prepare('UPDATE music_albums SET expected_track_count = ? WHERE id = ?').run(tracks.length, a.id);
+        }
+      } catch { /* ignore */ }
+      finally { _expectedCountBackfill.delete(a.id); }
+    }
+  });
 };
 
 // ── Artist & Album Images ───────────────────────────────────────────────────
-router.get('/artists/:mbid/image', async (req, res) => {
-  const { mbid } = req.params;
-  let filePath = imageService.artistImagePath(mbid);
-  if (!fs.existsSync(filePath)) {
+router.get(['/artists/:idOrMbid/image', '/artists/:idOrMbid/poster'], async (req, res) => {
+  const { idOrMbid } = req.params;
+  const isNumeric = /^\d+$/.test(idOrMbid);
+
+  let artist = isNumeric
+    ? db.prepare('SELECT * FROM music_artists WHERE id = ?').get(parseInt(idOrMbid, 10))
+    : db.prepare('SELECT * FROM music_artists WHERE mbid = ?').get(idOrMbid);
+
+  if (!artist && !isNumeric) {
+    artist = db.prepare('SELECT * FROM music_artists WHERE id = ?').get(idOrMbid);
+  }
+
+  const cacheKey = artist?.mbid || (artist ? `artist_${artist.id}` : idOrMbid);
+  let filePath = imageService.artistImagePath(cacheKey);
+
+  if (!fs.existsSync(filePath) && artist) {
     try {
-      const artist = db.prepare('SELECT name, image_path FROM music_artists WHERE mbid = ?').get(mbid);
-      if (artist?.image_path && artist.image_path.startsWith('http')) {
-        filePath = await imageService.ensureArtistImage(mbid, artist.image_path);
+      // 1. If artist lacks MBID, attempt to resolve via MusicBrainz by exact name
+      if (!artist.mbid && artist.name) {
+        try {
+          const mbResults = await musicMetadataService.searchArtist(artist.name);
+          const exact = mbResults.find(r => r.name.toLowerCase() === artist.name.toLowerCase());
+          if (exact?.mbid) {
+            db.prepare('UPDATE music_artists SET mbid = ? WHERE id = ?').run(exact.mbid, artist.id);
+            artist.mbid = exact.mbid;
+          }
+        } catch { /* proceed without MBID */ }
+      }
+
+      // 2. Fetch image from known URL or TheAudioDB / Deezer
+      let imageUrl = null;
+      if (artist.image_path && artist.image_path.startsWith('http')) {
+        imageUrl = artist.image_path;
       } else {
-        // No image known yet — resolve one from an external provider and persist it.
-        const imageUrl = await musicMetadataService.getArtistImageUrl(mbid, artist?.name);
-        if (imageUrl) {
-          filePath = await imageService.ensureArtistImage(mbid, imageUrl);
-          db.prepare('UPDATE music_artists SET image_path = ? WHERE mbid = ?').run(imageUrl, mbid);
-        }
+        imageUrl = await musicMetadataService.getArtistImageUrl(artist.mbid, artist.name);
+      }
+
+      if (imageUrl) {
+        filePath = await imageService.ensureArtistImage(cacheKey, imageUrl);
+        db.prepare('UPDATE music_artists SET image_path = ? WHERE id = ?').run(imageUrl, artist.id);
       }
     } catch { /* ignore */ }
   }
+
+  // No artist photo available — reuse one of the artist's album covers instead.
+  if (artist && !fs.existsSync(filePath)) {
+    try {
+      filePath = (await resolveArtistImageFromAlbum(artist, cacheKey)) || filePath;
+    } catch { /* ignore */ }
+  }
+
   serveImage(res, filePath);
 });
 
-router.get('/albums/:mbid/cover', async (req, res) => {
-  const { mbid } = req.params;
-  let filePath = imageService.albumCoverPath(mbid);
-  if (!fs.existsSync(filePath)) {
-    try {
-      const album = db.prepare('SELECT cover_path, folder_path FROM music_albums WHERE mbid = ?').get(mbid);
+router.get('/albums/:idOrMbid/cover', async (req, res) => {
+  const { idOrMbid } = req.params;
+  const isNumeric = /^\d+$/.test(idOrMbid);
 
-      // 1. Prefer cover art that was imported into the album's library folder
-      const localCover = imageService.findAlbumFolderCover(album?.folder_path);
+  let album = isNumeric
+    ? db.prepare('SELECT * FROM music_albums WHERE id = ?').get(parseInt(idOrMbid, 10))
+    : db.prepare('SELECT * FROM music_albums WHERE mbid = ?').get(idOrMbid);
+
+  if (!album && !isNumeric) {
+    album = db.prepare('SELECT * FROM music_albums WHERE id = ?').get(idOrMbid);
+  }
+
+  const cacheKey = album?.mbid || (album ? `album_${album.id}` : idOrMbid);
+  let filePath = imageService.albumCoverPath(cacheKey);
+
+  if (!fs.existsSync(filePath) && album) {
+    try {
+      // 1. Prefer cover art file from the album's folder on disk
+      const localCover = imageService.findAlbumFolderCover(album.folder_path);
       if (localCover) {
         filePath = localCover;
       } else {
-        // 2. Fall back to a known URL on the album row, else Cover Art Archive
-        let coverUrl = null;
-        if (album?.cover_path && album.cover_path.startsWith('http')) {
-          coverUrl = album.cover_path;
-        } else {
-          coverUrl = await musicMetadataService.getAlbumCoverUrl(mbid);
+        // 2. Extract embedded cover art from audio files if present
+        const tracks = db.prepare('SELECT file_path FROM music_tracks WHERE album_id = ? AND file_path IS NOT NULL LIMIT 5').all(album.id);
+        let extracted = null;
+        for (const trk of tracks) {
+          extracted = await imageService.extractEmbeddedCover(trk.file_path, filePath);
+          if (extracted) {
+            filePath = extracted;
+            break;
+          }
         }
-        if (coverUrl) {
-          filePath = await imageService.ensureAlbumCover(mbid, coverUrl);
+
+        // 3. Fall back to known URL or Cover Art Archive by MBID
+        if (!extracted) {
+          let coverUrl = null;
+          if (album.cover_path && album.cover_path.startsWith('http')) {
+            coverUrl = album.cover_path;
+          } else if (album.mbid) {
+            coverUrl = await musicMetadataService.getAlbumCoverUrl(album.mbid);
+          }
+
+          // 4. Fall back to iTunes / Deezer search by Artist Name + Album Title
+          if (!coverUrl) {
+            const artist = db.prepare('SELECT name FROM music_artists WHERE id = ?').get(album.artist_id);
+            if (artist?.name && album.title) {
+              coverUrl = await musicMetadataService.searchExternalAlbumCover(artist.name, album.title);
+            }
+          }
+
+          if (coverUrl) {
+            filePath = await imageService.ensureAlbumCover(cacheKey, coverUrl);
+            db.prepare('UPDATE music_albums SET cover_path = ? WHERE id = ?').run(coverUrl, album.id);
+          }
         }
       }
     } catch { /* ignore */ }
   }
+
+  // Save/copy cover.jpg directly into the album's library folder on disk so external tools
+  // (Plex, Jellyfin, Navidrome, etc.) can use it and future scans read it locally without hitting APIs
+  if (album?.folder_path && filePath && fs.existsSync(filePath)) {
+    imageService.saveCoverToAlbumFolder(album.folder_path, filePath);
+  }
+
   serveImage(res, filePath);
 });
 
@@ -175,7 +386,10 @@ router.get('/artists', (req, res, next) => {
     if (monitored !== undefined) filters.monitored = monitored === 'true' || monitored === '1';
     if (status) filters.status = status;
 
-    const artists = musicLibraryService.getArtists(parseInt(limit), parseInt(offset), sort, filters);
+    const artists = musicLibraryService.getArtists(parseInt(limit), parseInt(offset), sort, filters).map(a => ({
+      ...a,
+      image_url: `/api/library/music/artists/${a.id || a.mbid}/image?v=${MUSIC_IMAGE_VERSION}`,
+    }));
     res.json({ status: 'success', data: artists });
   } catch (err) { next(err); }
 });
@@ -196,11 +410,11 @@ router.post('/artists', async (req, res, next) => {
         }
       } catch { /* ignore */ }
 
-      const albums = db.prepare('SELECT mbid FROM music_albums WHERE artist_id = ? LIMIT 10').all(artist.id);
+      const albums = db.prepare('SELECT id, mbid FROM music_albums WHERE artist_id = ? LIMIT 10').all(artist.id);
       for (const album of albums) {
         try {
           const coverUrl = await musicMetadataService.getAlbumCoverUrl(album.mbid);
-          if (coverUrl) await imageService.ensureAlbumCover(album.mbid, coverUrl);
+          if (coverUrl) await imageService.ensureAlbumCover(album.mbid || `album_${album.id}`, coverUrl);
         } catch { /* ignore */ }
       }
     });
@@ -220,11 +434,22 @@ router.get('/artists/:id', (req, res, next) => {
     // Annotate albums with cover URL
     const albums = (artist.albums || []).map(a => ({
       ...a,
-      cover_url: a.mbid ? `/api/library/music/albums/${a.mbid}/cover` : null,
+      cover_url: `/api/library/music/albums/${a.id || a.mbid}/cover?v=${MUSIC_IMAGE_VERSION}`,
       genres: (() => { try { return JSON.parse(a.genres); } catch { return []; } })(),
     }));
 
-    res.json({ status: 'success', data: { ...artist, albums } });
+    // Fill in expected track counts in the background so the album cards can show
+    // downloaded / expected (including missing tracks).
+    backfillExpectedTrackCounts(artist.albums);
+
+    res.json({
+      status: 'success',
+      data: {
+        ...artist,
+        image_url: `/api/library/music/artists/${artist.id || artist.mbid}/image?v=${MUSIC_IMAGE_VERSION}`,
+        albums,
+      }
+    });
   } catch (err) { next(err); }
 });
 
@@ -249,6 +474,21 @@ router.post('/artists/:id/refresh', async (req, res, next) => {
     const artist = db.prepare('SELECT * FROM music_artists WHERE id = ?').get(parseInt(req.params.id));
     if (!artist) return res.status(404).json({ status: 'error', message: 'Artist not found' });
 
+    if (!artist.mbid && artist.name) {
+      try {
+        const mbResults = await musicMetadataService.searchArtist(artist.name);
+        const match = mbResults.find(r => r.name.toLowerCase() === artist.name.toLowerCase());
+        if (match?.mbid) {
+          db.prepare('UPDATE music_artists SET mbid = ? WHERE id = ?').run(match.mbid, artist.id);
+          artist.mbid = match.mbid;
+        }
+      } catch { /* proceed */ }
+    }
+
+    if (!artist.mbid) {
+      return res.status(400).json({ status: 'error', message: 'Could not resolve MusicBrainz ID for artist' });
+    }
+
     musicMetadataService.clearCache(artist.mbid);
     const fresh = await musicMetadataService.getArtistById(artist.mbid);
 
@@ -256,12 +496,12 @@ router.post('/artists/:id/refresh', async (req, res, next) => {
       UPDATE music_artists SET overview = ?, genres = ?, rating = ?, last_refreshed_at = CURRENT_TIMESTAMP WHERE id = ?
     `).run(fresh.overview || '', JSON.stringify(fresh.genres || []), fresh.rating || 0, artist.id);
 
-    // (Re)resolve the artist photo if we don't already have one cached
-    if (!fs.existsSync(imageService.artistImagePath(artist.mbid))) {
+    const cacheKey = artist.mbid || `artist_${artist.id}`;
+    if (!fs.existsSync(imageService.artistImagePath(cacheKey))) {
       try {
         const imageUrl = await musicMetadataService.getArtistImageUrl(artist.mbid, artist.name);
         if (imageUrl) {
-          await imageService.ensureArtistImage(artist.mbid, imageUrl);
+          await imageService.ensureArtistImage(cacheKey, imageUrl);
           db.prepare('UPDATE music_artists SET image_path = ? WHERE id = ?').run(imageUrl, artist.id);
         }
       } catch { /* ignore */ }
@@ -278,17 +518,15 @@ router.post('/artists/:id/search', async (req, res, next) => {
     if (!artist) return res.status(404).json({ status: 'error', message: 'Artist not found' });
 
     const missingAlbums = db.prepare(`
-      SELECT * FROM music_albums WHERE artist_id = ? AND monitored = 1 AND status = 'monitored'
-    `).all(artist.id);
+      SELECT * FROM music_albums WHERE artist_id = ? AND monitored = 1 AND status != 'downloaded'
+    `).all(artist.id).map(a => ({ ...a, artist_name: artist.name }));
 
-    let searched = 0;
-    for (const album of missingAlbums) {
-      const profile = db.prepare('SELECT * FROM music_quality_profiles WHERE id = ?').get(album.quality_profile_id);
-      await indexerService.searchMusic(artist.name, album.title, profile, false);
-      searched++;
+    if (missingAlbums.length === 0) {
+      return res.json({ status: 'success', message: 'No missing albums to search for this artist' });
     }
 
-    res.json({ status: 'success', message: `Triggered search for ${searched} missing albums` });
+    queueAlbumSearches(missingAlbums);
+    res.json({ status: 'success', message: `Queued automatic search for ${missingAlbums.length} missing album(s)` });
   } catch (err) { next(err); }
 });
 
@@ -306,9 +544,14 @@ router.get('/albums', (req, res, next) => {
     const albums = musicLibraryService.getAlbums(parseInt(limit), parseInt(offset), sort, filters);
     const annotated = albums.map(a => ({
       ...a,
-      cover_url: a.mbid ? `/api/library/music/albums/${a.mbid}/cover` : null,
+      cover_url: `/api/library/music/albums/${a.id || a.mbid}/cover?v=${MUSIC_IMAGE_VERSION}`,
       genres: (() => { try { return JSON.parse(a.genres); } catch { return []; } })(),
     }));
+
+    // Backfill expected track counts for downloaded albums (bounded) so their cards
+    // can show downloaded / expected including missing tracks.
+    backfillExpectedTrackCounts(albums.filter(a => a.status === 'downloaded'), 40);
+
     res.json({ status: 'success', data: annotated });
   } catch (err) { next(err); }
 });
@@ -344,9 +587,9 @@ router.post('/albums', async (req, res, next) => {
     if (!album && artist) {
       const profileId = qualityProfileId || artist.quality_profile_id;
       const resInsert = db.prepare(`
-        INSERT INTO music_albums (mbid, artist_id, title, release_date, year, album_type, status, monitored, quality_profile_id)
-        VALUES (?, ?, ?, ?, ?, ?, 'monitored', 1, ?)
-      `).run(mbid, artist.id, albumData.title, albumData.releaseDate, albumData.year, albumData.albumType, profileId);
+        INSERT INTO music_albums (mbid, artist_id, title, release_date, year, album_type, status, monitored, quality_profile_id, expected_track_count)
+        VALUES (?, ?, ?, ?, ?, ?, 'monitored', 1, ?, ?)
+      `).run(mbid, artist.id, albumData.title, albumData.releaseDate, albumData.year, albumData.albumType, profileId, albumData.trackCount || 0);
       album = db.prepare('SELECT * FROM music_albums WHERE id = ?').get(resInsert.lastInsertRowid);
     } else if (album) {
       db.prepare("UPDATE music_albums SET monitored = 1 WHERE id = ?").run(album.id);
@@ -370,7 +613,7 @@ router.get('/albums/:id', (req, res, next) => {
     if (!album) return res.status(404).json({ status: 'error', message: 'Album not found' });
     res.json({ status: 'success', data: {
       ...album,
-      cover_url: album.mbid ? `/api/library/music/albums/${album.mbid}/cover` : null,
+      cover_url: `/api/library/music/albums/${album.id || album.mbid}/cover?v=${MUSIC_IMAGE_VERSION}`,
       genres: (() => { try { return JSON.parse(album.genres); } catch { return []; } })(),
     }});
   } catch (err) { next(err); }
@@ -417,21 +660,16 @@ router.post('/albums/:id/search', async (req, res, next) => {
     if (!album) return res.status(404).json({ status: 'error', message: 'Album not found' });
 
     const profile = db.prepare('SELECT * FROM music_quality_profiles WHERE id = ?').get(album.quality_profile_id);
-    const results = await indexerService.searchMusic(album.artist_name, album.title, profile, false);
-    if (!results || results.length === 0) {
+    const best = await grabBestReleaseForAlbum(album, profile);
+    if (!best) {
       return res.status(404).json({ status: 'error', message: 'No releases found on indexers' });
     }
-
-    const best = results[0];
-    const downloadClientService = require('../../services/downloadClientService');
-    await downloadClientService.addTorrent(best.link, 'music');
-    db.prepare("UPDATE music_albums SET status = 'downloading' WHERE id = ?").run(album.id);
 
     res.json({ status: 'success', message: `Found and queued: ${best.title}`, data: best });
   } catch (err) { next(err); }
 });
 
-router.post('/albums/:id/grab', async (req, res, next) => {
+router.post('/albums/:id/grab', async (req, res) => {
   try {
     const { downloadUrl, magnetUrl, title, link, torrentUrl } = req.body;
     const torrentUri = link || torrentUrl || downloadUrl || magnetUrl;
@@ -441,7 +679,10 @@ router.post('/albums/:id/grab', async (req, res, next) => {
     const albumId = parseInt(req.params.id);
     db.prepare("UPDATE music_albums SET status = 'downloading' WHERE id = ?").run(albumId);
     res.json({ status: 'success', message: `Queued: ${title || 'Album release'}` });
-  } catch (err) { next(err); }
+  } catch (err) {
+    console.error(`[MusicGrab] Failed to grab release for album ${req.params.id}:`, err.message);
+    res.status(400).json({ status: 'error', message: err.message || 'Failed to send torrent to download client' });
+  }
 });
 
 // ── Tracks ────────────────────────────────────────────────────────────────────
@@ -538,6 +779,63 @@ router.get('/albums/:id/tracks', (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// ── Album Full Tracklist (local + missing from MusicBrainz) ───────────────────
+router.get('/albums/:id/tracklist', async (req, res, next) => {
+  try {
+    const album = db.prepare('SELECT * FROM music_albums WHERE id = ?').get(req.params.id);
+    if (!album) return res.status(404).json({ status: 'error', message: 'Album not found' });
+
+    // Local tracks we already have
+    const localTracks = db.prepare(`
+      SELECT * FROM music_tracks WHERE album_id = ?
+      ORDER BY disc_number ASC, track_number ASC
+    `).all(album.id);
+
+    // If no MBID, just return local tracks
+    if (!album.mbid) {
+      return res.json({ status: 'success', data: localTracks.map(t => ({ ...t, missing: false })) });
+    }
+
+    // Expected tracklist from MusicBrainz — throttled (≤1 req/s) and cached, so rapid
+    // parallel requests can't get rate-limited into an empty (local-only) result.
+    const mbTracks = await musicMetadataService.getReleaseGroupTracks(album.mbid);
+
+    if (mbTracks.length === 0) {
+      // MusicBrainz unavailable – fall back to local only
+      return res.json({ status: 'success', data: localTracks.map(t => ({ ...t, missing: false })) });
+    }
+
+    // Merge: match local tracks by track_number+disc, or by mbid
+    const merged = mbTracks.map(mb => {
+      const local = localTracks.find(l =>
+        (mb.mbid && l.mbid === mb.mbid) ||
+        (l.track_number === mb.track_number && (l.disc_number || 1) === mb.disc_number)
+      );
+      if (local) return { ...local, missing: false };
+      return {
+        id: null,
+        mbid: mb.mbid,
+        title: mb.title,
+        track_number: mb.track_number,
+        disc_number: mb.disc_number,
+        duration: mb.duration,
+        file_path: null,
+        file_size: 0,
+        format: null,
+        bitrate: null,
+        missing: true,
+      };
+    });
+
+    // Remember the expected size so album cards can show downloaded/expected
+    try {
+      db.prepare('UPDATE music_albums SET expected_track_count = ? WHERE id = ?').run(merged.length, album.id);
+    } catch { /* ignore */ }
+
+    res.json({ status: 'success', data: merged });
+  } catch (err) { next(err); }
+});
+
 // ── Artist Downloaded Tracks for Playback ─────────────────────────────────────
 router.get('/artists/:id/tracks', (req, res, next) => {
   try {
@@ -569,22 +867,7 @@ router.post('/search-missing', async (req, res, next) => {
       return res.json({ status: 'success', message: 'No missing monitored albums found' });
     }
 
-    setImmediate(async () => {
-      const defaultProfile = db.prepare('SELECT * FROM music_quality_profiles WHERE is_default = 1').get()
-        || db.prepare('SELECT * FROM music_quality_profiles LIMIT 1').get();
-
-      for (const album of missingAlbums) {
-        try {
-          const profile = album.quality_profile_id
-            ? db.prepare('SELECT * FROM music_quality_profiles WHERE id = ?').get(album.quality_profile_id)
-            : defaultProfile;
-          await indexerService.searchMusic(album.artist_name, album.title, profile, false);
-          await new Promise(r => setTimeout(r, 1500));
-        } catch (e) {
-          console.error(`[SearchMissing] Failed search for ${album.artist_name} - ${album.title}:`, e.message);
-        }
-      }
-    });
+    queueAlbumSearches(missingAlbums);
 
     res.json({
       status: 'success',
@@ -632,18 +915,7 @@ router.post('/albums/bulk', async (req, res, next) => {
         WHERE al.id IN (${placeholders})
       `).all(...albumIds);
 
-      setImmediate(async () => {
-        const defaultProfile = db.prepare('SELECT * FROM music_quality_profiles WHERE is_default = 1').get()
-          || db.prepare('SELECT * FROM music_quality_profiles LIMIT 1').get();
-        for (const album of selected) {
-          try {
-            await indexerService.searchMusic(album.artist_name, album.title, defaultProfile, false);
-            await new Promise(r => setTimeout(r, 1500));
-          } catch (e) {
-            console.error(`[BulkSearch] Error searching ${album.artist_name} - ${album.title}:`, e.message);
-          }
-        }
-      });
+      queueAlbumSearches(selected);
       return res.json({ status: 'success', message: `Triggered release search for ${selected.length} albums` });
     }
 
@@ -658,22 +930,14 @@ router.post('/scan', async (req, res, next) => {
     if (musicPaths.length === 0) {
       return res.json({ status: 'success', message: 'No music library paths configured' });
     }
-    // Queue a non-blocking scan
-    setImmediate(async () => {
-      const { isAudioFile } = require('../../utils/fileUtils');
-      for (const { path: musicRoot } of musicPaths) {
-        console.log(`[MusicScan] Scanning: ${musicRoot}`);
-        // Scan logic: find files already imported but maybe moved
-        const tracks = db.prepare('SELECT * FROM music_tracks WHERE file_path IS NOT NULL').all();
-        for (const track of tracks) {
-          if (track.file_path && !require('fs').existsSync(track.file_path)) {
-            db.prepare("UPDATE music_tracks SET file_path = NULL, file_size = 0, status = 'monitored' WHERE id = ?").run(track.id);
-            db.prepare("UPDATE music_albums SET status = 'monitored' WHERE id = ? AND (SELECT COUNT(*) FROM music_tracks WHERE album_id = ? AND file_path IS NOT NULL) = 0").run(track.album_id, track.album_id);
-          }
-        }
-      }
+    const { scanMusicLibrary } = require('../../services/musicScannerService');
+    // Run scan in background and return immediate response or await completion
+    const result = await scanMusicLibrary();
+    res.json({
+      status: 'success',
+      message: `Music scan complete. ${result.addedTracksCount} tracks added, ${result.removedTracksCount} missing files reset.`,
+      data: result
     });
-    res.json({ status: 'success', message: 'Music library scan started' });
   } catch (err) { next(err); }
 });
 

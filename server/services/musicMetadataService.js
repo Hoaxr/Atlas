@@ -321,6 +321,57 @@ const getArtistImageUrl = async (mbid, artistName) => {
   return url;
 };
 
+// ── Fallback External Album Cover Search (iTunes / Deezer) ───────────────────
+const searchExternalAlbumCover = async (artistName, albumTitle) => {
+  if (!artistName || !albumTitle) return null;
+  const cleanTitle = albumTitle.replace(/\s*\(.*?\)\s*/g, ' ').replace(/\[.*?\]/g, ' ').trim();
+  const cacheKey = `extcover:${artistName}:${albumTitle}`;
+  const cached = getCached(cacheKey);
+  if (cached !== null) return cached === NO_IMAGE ? null : cached;
+
+  // 1. iTunes search (fast, high-quality 600x600, keyless)
+  try {
+    const res = await axios.get('https://itunes.apple.com/search', {
+      params: {
+        term: `${artistName} ${cleanTitle || albumTitle}`,
+        entity: 'album',
+        limit: 5,
+      },
+      timeout: 8000,
+    });
+    const normArtist = normalizeName(artistName);
+    const results = res.data?.results || [];
+    const match = results.find(r => {
+      const a = normalizeName(r.artistName);
+      return a.includes(normArtist) || normArtist.includes(a);
+    }) || results[0];
+    if (match?.artworkUrl100) {
+      const highRes = match.artworkUrl100.replace('100x100bb', '600x600bb');
+      setCached(cacheKey, highRes);
+      return highRes;
+    }
+  } catch { /* fall through to Deezer */ }
+
+  // 2. Deezer search fallback
+  try {
+    const res = await axios.get('https://api.deezer.com/search/album', {
+      params: { q: `${artistName} ${cleanTitle || albumTitle}`, limit: 5 },
+      timeout: 8000,
+    });
+    const results = res.data?.data || [];
+    const normArtist = normalizeName(artistName);
+    const match = results.find(r => normalizeName(r.artist?.name || '').includes(normArtist)) || results[0];
+    if (match?.cover_xl || match?.cover_big) {
+      const url = match.cover_xl || match.cover_big;
+      setCached(cacheKey, url);
+      return url;
+    }
+  } catch { /* ignore */ }
+
+  setCached(cacheKey, NO_IMAGE);
+  return null;
+};
+
 const clearCache = (mbid) => {
   if (mbid) {
     for (const key of cache.keys()) {
@@ -331,12 +382,52 @@ const clearCache = (mbid) => {
   }
 };
 
+/**
+ * Expected track list for a release group (first release), throttled + cached.
+ * Lets us know how many tracks an album *should* have so cards can show
+ * "downloaded / total (including missing)" without hitting MusicBrainz per request.
+ * @param {string} mbid Release-group MBID
+ * @returns {Promise<Array<{mbid:string|null,title:string,track_number:number,disc_number:number,duration:number|null}>>}
+ */
+const getReleaseGroupTracks = async (mbid) => {
+  if (!mbid) return [];
+  const cacheKey = `rgtracks:${mbid}`;
+  const cached = getCached(cacheKey);
+  if (cached) return cached;
+
+  try {
+    const data = await throttledGet(`${MB_BASE}/release`, { 'release-group': mbid, inc: 'recordings' });
+    const release = (data.releases || [])[0];
+    const tracks = [];
+    if (release) {
+      for (const media of (release.media || [])) {
+        for (const t of (media.tracks || [])) {
+          tracks.push({
+            mbid: t.recording?.id || null,
+            title: t.title || t.recording?.title || '',
+            track_number: t.position,
+            disc_number: media.position || 1,
+            duration: t.length ? Math.round(t.length / 1000) : null,
+          });
+        }
+      }
+    }
+    setCached(cacheKey, tracks);
+    return tracks;
+  } catch (err) {
+    console.warn(`[MusicMetadata] Failed to fetch release-group tracks for ${mbid}:`, err.message);
+    return [];
+  }
+};
+
 module.exports = {
   searchArtist,
   getArtistById,
   searchAlbum,
   getAlbumById,
+  getReleaseGroupTracks,
   getAlbumCoverUrl,
   getArtistImageUrl,
+  searchExternalAlbumCover,
   clearCache,
 };

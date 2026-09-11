@@ -62,6 +62,7 @@ export default [
       'react/react-in-jsx-scope': 'off',   // Not needed with React 17+ JSX transform
       'react/jsx-uses-vars': 'error',
       'react/jsx-key': 'error',
+      'react/jsx-no-undef': 'error',       // Catches undefined components/icons (core no-undef ignores JSX)
       'react/no-unknown-property': 'error',
       'react/display-name': 'off',         // Crashes in eslint-plugin-react 7.37.x + ESLint 10
       'react/prop-types': 'off',           // No TypeScript, skip prop-types enforcement

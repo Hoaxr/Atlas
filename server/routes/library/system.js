@@ -65,7 +65,7 @@ router.get('/health', (req, res, next) => {
       FROM episodes e
       JOIN shows s ON e.show_id = s.id
       LEFT JOIN quality_profiles qp ON s.quality_profile_id = qp.id
-      WHERE e.status IN ('monitored', 'downloaded') AND e.monitored = 1 AND s.monitored = 1
+      WHERE e.season_number > 0 AND e.status IN ('monitored', 'downloaded') AND e.monitored = 1 AND s.monitored = 1
       AND e.air_date IS NOT NULL AND e.air_date <= ${getAiredCutoffSql()}
     `).all();
 
@@ -584,7 +584,7 @@ router.get('/watched-tmdb', (req, res, next) => {
 router.post('/scan', async (req, res, next) => {
   try {
     const mode = req.body?.mode || 'full';
-    const validModes = ['full', 'movies', 'shows', 'new', 'refresh', 'rematch', 'subtitles'];
+    const validModes = ['full', 'movies', 'shows', 'music', 'new', 'refresh', 'rematch', 'subtitles'];
     if (!validModes.includes(mode)) {
       return res.status(400).json({ status: 'error', message: `Invalid scan mode. Must be one of: ${validModes.join(', ')}` });
     }

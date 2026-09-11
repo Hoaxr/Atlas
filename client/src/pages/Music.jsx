@@ -1,10 +1,11 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Music2, Search, Plus, LayoutGrid, List, Disc, Mic2, FileAudio,
-  CheckCircle2, AlertCircle, RefreshCw, Loader2, ChevronRight, X,
-  FolderTree, HardDrive, Play, Pause, ZoomIn, ZoomOut, Sparkles,
-  CheckSquare, Square, Trash2, Eye, EyeOff
+  CheckCircle2, AlertCircle, Loader2, ChevronRight, X,
+  Play, Pause, Sparkles, Filter, RotateCcw,
+  CheckSquare, Square, Trash2, Eye, EyeOff,
+  Bookmark, ArrowRight
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../lib/api';
@@ -13,14 +14,16 @@ import { albumCoverUrl, artistImageUrl } from '../lib/posterUrl';
 import { useAudioPlayer } from '../context/AudioPlayerContext';
 import AddArtistModal from '../components/music/AddArtistModal';
 import ManualSearchModal from '../components/ManualSearchModal';
-import MusicPathsModal from '../components/music/MusicPathsModal';
+import AlbumCard from '../components/music/AlbumCard';
 import StickyBar from '../components/shared/StickyBar';
 import EmptyState from '../components/shared/EmptyState';
 import { useStickyBar } from '../lib/useStickyBar';
+import { FilterSelect } from '../components/shared/FilterSelect';
 
 export default function Music() {
   const navigate = useNavigate();
   const { headerRef, stickyVisible } = useStickyBar();
+  const searchInputRef = useRef(null);
   const [searchParams, setSearchParams] = useSearchParams();
 
   // Audio player hook
@@ -37,9 +40,6 @@ export default function Music() {
   const [musicPaths, setMusicPaths] = useState([]);
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [scanning, setScanning] = useState(false);
-  const [searchingMissing, setSearchingMissing] = useState(false);
-  const [pathsModalOpen, setPathsModalOpen] = useState(false);
 
   // Filters & search
   const [query, setQuery] = useState('');
@@ -47,7 +47,23 @@ export default function Music() {
   const [typeFilter, setTypeFilter] = useState('all'); // all, album, single_ep, compilation
   const [formatFilter, setFormatFilter] = useState('all'); // all, flac, mp3
   const [sortKey, setSortKey] = useState('added_desc');
+  const [showFilters, setShowFilters] = useState(false);
   const [layoutMode, setLayoutMode] = useState(() => localStorage.getItem('atlas_music_layout') || 'grid');
+
+  // Active filter count
+  const activeFilterCount = useMemo(() => {
+    let count = 0;
+    if (statusFilter !== 'all') count++;
+    if (activeTab === 'albums' && typeFilter !== 'all') count++;
+    if (activeTab === 'albums' && formatFilter !== 'all') count++;
+    return count;
+  }, [statusFilter, typeFilter, formatFilter, activeTab]);
+
+  const clearAllFilters = () => {
+    setStatusFilter('all');
+    setTypeFilter('all');
+    setFormatFilter('all');
+  };
 
   // Poster card sizing
   const [posterSize, setPosterSize] = useState(() => {
@@ -63,6 +79,7 @@ export default function Music() {
   // Modals
   const [addArtistOpen, setAddArtistOpen] = useState(false);
   const [manualSearchAlbum, setManualSearchAlbum] = useState(null);
+  const [artistActionId, setArtistActionId] = useState(null); // artist currently running a search action
 
   const setLayout = (mode) => {
     setLayoutMode(mode);
@@ -70,7 +87,7 @@ export default function Music() {
   };
 
   const updatePosterSize = (val) => {
-    const clamped = Math.max(130, Math.min(260, val));
+    const clamped = Math.max(120, Math.min(260, val));
     setPosterSize(clamped);
     localStorage.setItem('atlas_music_poster_size', String(clamped));
   };
@@ -115,37 +132,11 @@ export default function Music() {
     fetchData();
   }, []);
 
-  // Trigger library scan
-  const handleScan = async () => {
-    setScanning(true);
-    try {
-      const res = await api.post('/library/music/scan');
-      if (res.data.status === 'success') {
-        toast.success(res.data.message || 'Music library scan complete');
-        fetchData();
-      }
-    } catch (err) {
-      console.error('Music scan failed:', err);
-      toast.error(err.response?.data?.message || 'Music library scan failed');
-    } finally {
-      setScanning(false);
+  useEffect(() => {
+    if (!stickyVisible && query) {
+      searchInputRef.current?.focus();
     }
-  };
-
-  // Trigger Search for All Missing Albums
-  const handleSearchMissingAll = async () => {
-    setSearchingMissing(true);
-    try {
-      const res = await api.post('/library/music/search-missing');
-      if (res.data.status === 'success') {
-        toast.success(res.data.message || 'Searching releases for missing albums');
-      }
-    } catch (err) {
-      toast.error(err.response?.data?.message || 'Failed to trigger search');
-    } finally {
-      setSearchingMissing(false);
-    }
-  };
+  }, [stickyVisible, query]);
 
   // Batch actions
   const toggleSelectAlbum = (id) => {
@@ -173,6 +164,31 @@ export default function Music() {
       toast.error(err.response?.data?.message || `Failed to perform ${action}`);
     } finally {
       setBatchProcessing(false);
+    }
+  };
+
+  // ── Artist card actions ────────────────────────────────────────────────────
+
+  const handleArtistSearch = async (artist) => {
+    setArtistActionId(artist.id);
+    try {
+      const res = await api.post(`/library/music/artists/${artist.id}/search`);
+      if (res.data.status === 'success') toast.success(res.data.message || 'Searching missing albums');
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to trigger search');
+    } finally {
+      setArtistActionId(null);
+    }
+  };
+
+  const handleArtistMonitorToggle = async (artist) => {
+    try {
+      const newMonitored = artist.monitored ? 0 : 1;
+      await api.put(`/library/music/artists/${artist.id}`, { monitored: newMonitored });
+      setArtists((prev) => prev.map((a) => (a.id === artist.id ? { ...a, monitored: newMonitored } : a)));
+      toast.success(newMonitored ? 'Artist monitored' : 'Artist unmonitored');
+    } catch {
+      toast.error('Failed to update monitoring status');
     }
   };
 
@@ -259,76 +275,80 @@ export default function Music() {
     return `${m}:${s.toString().padStart(2, '0')}`;
   };
 
-  const missingCount = useMemo(() => {
-    return albums.filter((a) => a.monitored && a.status !== 'downloaded').length;
-  }, [albums]);
-
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       {/* ── Header ──────────────────────────────────────────────────────────── */}
-      <div ref={headerRef} className="flex items-start justify-between gap-3 flex-wrap">
+      <div ref={headerRef} className="flex items-start sm:items-center justify-between gap-3">
         <div className="min-w-0">
           <h1 className="text-xl sm:text-3xl font-black text-slate-800 dark:text-slate-100 flex items-center gap-2 sm:gap-3 !mb-0">
             <Music2 className="w-6 h-6 sm:w-8 sm:h-8 text-cyan-400 shrink-0" /> <span className="truncate">Music</span>
           </h1>
-          <p className="text-xs sm:text-base text-slate-400 mt-0.5 sm:mt-1 hidden sm:block">
-            Manage your artists, discographies, and audio downloads.
+          <p className="text-xs sm:text-base text-slate-400 mt-0.5 sm:mt-1 hidden sm:block !mb-0">
+            Your tracked and imported media collection.
           </p>
         </div>
 
-        {/* Top Actions */}
-        <div className="flex items-center gap-2 flex-wrap">
-          <button
-            onClick={() => setPathsModalOpen(true)}
-            className="px-3.5 py-2 rounded-xl text-xs font-semibold bg-slate-200/80 dark:bg-slate-800/80 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-300/40 dark:border-white/5 flex items-center gap-1.5 transition-colors"
-            title="Configure Music Mounts & Root Folders"
-          >
-            <FolderTree className="w-3.5 h-3.5 text-cyan-400" />
-            <span>Mounts ({musicPaths.length})</span>
-          </button>
+        {/* View Toggle + Search + Add Actions */}
+        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+          <div className="relative w-full max-w-xs hidden sm:block">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none" />
+            <input
+              ref={searchInputRef}
+              type="text"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder={`Search ${activeTab}...`}
+              className="w-full bg-slate-900 border border-white/10 text-slate-200 text-sm rounded-lg pl-9 pr-8 py-2 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500/50 placeholder-slate-500 transition-all"
+            />
+            {query && (
+              <button
+                onClick={() => setQuery('')}
+                className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 text-slate-500 hover:text-slate-300 transition-colors"
+                aria-label="Clear search"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
+          </div>
 
-          <button
-            onClick={handleScan}
-            disabled={scanning}
-            className="px-3.5 py-2 rounded-xl text-xs font-semibold bg-slate-200/80 dark:bg-slate-800/80 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-300/40 dark:border-white/5 flex items-center gap-1.5 transition-colors disabled:opacity-50"
-            title="Scan music library folders on disk"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${scanning ? 'animate-spin text-cyan-400' : ''}`} />
-            {scanning ? 'Scanning...' : 'Scan Library'}
-          </button>
-
-          {missingCount > 0 && (
+          <div className="flex bg-slate-900 rounded-lg p-1 border border-white/10 shrink-0">
             <button
-              onClick={handleSearchMissingAll}
-              disabled={searchingMissing}
-              className="px-3.5 py-2 rounded-xl text-xs font-bold bg-cyan-500/15 hover:bg-cyan-500/25 text-cyan-300 border border-cyan-500/30 flex items-center gap-1.5 transition-all disabled:opacity-50"
-              title="Trigger automated indexer search for all missing monitored albums"
+              onClick={() => setLayout('grid')}
+              className={`p-1.5 rounded-md transition-colors ${
+                layoutMode === 'grid' ? 'bg-slate-700 text-white shadow-sm' : 'text-slate-400 hover:text-white'
+              }`}
+              title="Grid View"
             >
-              <Sparkles className={`w-3.5 h-3.5 ${searchingMissing ? 'animate-spin text-cyan-400' : 'text-cyan-400'}`} />
-              <span>Search Missing</span>
-              <span className="px-1.5 py-0.2 rounded-full text-[10px] font-extrabold bg-cyan-500 text-slate-950">
-                {missingCount}
-              </span>
+              <LayoutGrid className="w-4 h-4" />
             </button>
-          )}
+            <button
+              onClick={() => setLayout('list')}
+              className={`p-1.5 rounded-md transition-colors ${
+                layoutMode === 'list' ? 'bg-slate-700 text-white shadow-sm' : 'text-slate-400 hover:text-white'
+              }`}
+              title="List View"
+            >
+              <List className="w-4 h-4" />
+            </button>
+          </div>
 
           <button
             onClick={() => setAddArtistOpen(true)}
-            className="px-4 py-2 rounded-xl text-xs font-bold bg-cyan-500 hover:bg-cyan-400 text-slate-950 flex items-center gap-1.5 shadow-[0_0_20px_rgba(6,182,212,0.35)] transition-all hover:scale-105 active:scale-95"
+            className="flex items-center gap-1.5 px-3 py-2 bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 rounded-xl text-xs sm:text-sm font-bold transition-all shrink-0"
+            title="Add Music"
           >
-            <Plus className="w-4 h-4" />
-            Add Artist / Album
+            <Plus className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> <span className="hidden sm:inline">Add Music</span>
           </button>
         </div>
       </div>
 
-      <StickyBar visible={stickyVisible}>
-        <div className="flex items-center gap-3 ml-auto sm:hidden text-[11px] text-slate-400">
-          <span className="text-slate-300">{artists.length} artists</span>
-          <span>{albums.length} albums</span>
-          <span>{tracks.length} tracks</span>
-        </div>
-      </StickyBar>
+      <StickyBar
+        visible={stickyVisible}
+        searchQuery={query}
+        onSearchChange={setQuery}
+        searchPlaceholder={`Search ${activeTab}...`}
+        showSearch
+      />
 
       {/* Banner if no music mounts configured */}
       {!loading && musicPaths.length === 0 && (
@@ -340,276 +360,18 @@ export default function Music() {
             <div>
               <p className="text-xs font-bold text-amber-300">No Music Mount Configured</p>
               <p className="text-[11px] text-slate-400">
-                Configure your music mount (e.g. <span className="font-mono text-cyan-300 font-semibold">/mnt/oblivion/music</span>) so Atlas knows where your audio files live.
+                Configure your music root folder under Settings &rarr; Library Management so Atlas knows where your audio files live.
               </p>
             </div>
           </div>
           <button
-            onClick={() => setPathsModalOpen(true)}
+            onClick={() => navigate('/settings?tab=library')}
             className="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-amber-500 hover:bg-amber-400 text-slate-950 transition-colors shrink-0 shadow-lg shadow-amber-500/20"
           >
-            Configure Mount
+            Configure in Settings
           </button>
         </div>
       )}
-
-      {/* Interactive Stat Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-        <StatCard
-          icon={Mic2}
-          label="Artists"
-          value={stats?.artists || artists.length}
-          accent="text-cyan-400"
-          bg="bg-cyan-500/15"
-          onClick={() => setTab('artists')}
-          active={activeTab === 'artists'}
-        />
-        <StatCard
-          icon={Disc}
-          label="Albums"
-          value={stats?.albums || albums.length}
-          sub={`${stats?.downloadedAlbums || albums.filter((a) => a.status === 'downloaded').length} ready`}
-          accent="text-sky-400"
-          bg="bg-sky-500/15"
-          onClick={() => {
-            setTab('albums');
-            setStatusFilter('all');
-          }}
-          onSubClick={() => {
-            setTab('albums');
-            setStatusFilter('downloaded');
-          }}
-          active={activeTab === 'albums'}
-        />
-        <StatCard
-          icon={FileAudio}
-          label="Tracks"
-          value={stats?.tracks || tracks.length}
-          accent="text-indigo-400"
-          bg="bg-indigo-500/15"
-          onClick={() => setTab('tracks')}
-          active={activeTab === 'tracks'}
-        />
-        <StatCard
-          icon={HardDrive}
-          label="Storage"
-          value={formatSize(stats?.totalSize || 0)}
-          sub={missingCount > 0 ? `${missingCount} missing` : 'All ready'}
-          accent="text-emerald-400"
-          bg="bg-emerald-500/15"
-          onClick={() => {
-            if (missingCount > 0) {
-              setTab('albums');
-              setStatusFilter('missing');
-            }
-          }}
-        />
-      </div>
-
-      {/* ── Toolbar: Tabs + Filters + Slider ─────────────────────────────────── */}
-      <div className="glass-panel rounded-2xl p-3 sm:p-4 flex flex-wrap items-center justify-between gap-3">
-        {/* Navigation Tabs */}
-        <div className="flex items-center p-1 rounded-xl bg-slate-200/60 dark:bg-slate-800/60 border border-slate-300/40 dark:border-white/5">
-          <button
-            onClick={() => setTab('artists')}
-            className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
-              activeTab === 'artists'
-                ? 'bg-cyan-500 text-slate-950 shadow-md font-bold'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
-            }`}
-          >
-            <Mic2 className="w-3.5 h-3.5" />
-            Artists ({artists.length})
-          </button>
-          <button
-            onClick={() => setTab('albums')}
-            className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
-              activeTab === 'albums'
-                ? 'bg-cyan-500 text-slate-950 shadow-md font-bold'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
-            }`}
-          >
-            <Disc className="w-3.5 h-3.5" />
-            Albums ({albums.length})
-          </button>
-          <button
-            onClick={() => setTab('tracks')}
-            className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
-              activeTab === 'tracks'
-                ? 'bg-cyan-500 text-slate-950 shadow-md font-bold'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
-            }`}
-          >
-            <FileAudio className="w-3.5 h-3.5" />
-            Tracks ({tracks.length})
-          </button>
-        </div>
-
-        {/* Filter Controls */}
-        <div className="flex items-center gap-2.5 flex-1 max-w-2xl justify-end flex-wrap">
-          {/* Search bar */}
-          <div className="relative flex-1 min-w-[140px] max-w-xs">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
-            <input
-              type="text"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder={`Search ${activeTab}...`}
-              className="w-full pl-8 pr-7 py-1.5 bg-slate-200/50 dark:bg-slate-800/50 border border-slate-300/40 dark:border-white/5 rounded-xl text-xs text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:border-cyan-500/70"
-            />
-            {query && (
-              <button
-                onClick={() => setQuery('')}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200"
-              >
-                <X className="w-3 h-3" />
-              </button>
-            )}
-          </div>
-
-          {/* Status Filter */}
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            className="px-2.5 py-1.5 bg-slate-200/50 dark:bg-slate-800/50 border border-slate-300/40 dark:border-white/5 rounded-xl text-xs text-slate-700 dark:text-slate-200 focus:outline-none focus:border-cyan-500/70"
-          >
-            <option value="all">All Statuses</option>
-            <option value="downloaded">Downloaded</option>
-            <option value="missing">Missing</option>
-            <option value="monitored">Monitored</option>
-          </select>
-
-          {/* Album Type Filter (Albums Tab) */}
-          {activeTab === 'albums' && (
-            <select
-              value={typeFilter}
-              onChange={(e) => setTypeFilter(e.target.value)}
-              className="px-2.5 py-1.5 bg-slate-200/50 dark:bg-slate-800/50 border border-slate-300/40 dark:border-white/5 rounded-xl text-xs text-slate-700 dark:text-slate-200 focus:outline-none focus:border-cyan-500/70"
-            >
-              <option value="all">All Types</option>
-              <option value="album">Studio Albums</option>
-              <option value="single_ep">Singles & EPs</option>
-              <option value="compilation">Compilations</option>
-            </select>
-          )}
-
-          {/* Format Filter (Albums Tab) */}
-          {activeTab === 'albums' && (
-            <select
-              value={formatFilter}
-              onChange={(e) => setFormatFilter(e.target.value)}
-              className="px-2.5 py-1.5 bg-slate-200/50 dark:bg-slate-800/50 border border-slate-300/40 dark:border-white/5 rounded-xl text-xs text-slate-700 dark:text-slate-200 focus:outline-none focus:border-cyan-500/70"
-            >
-              <option value="all">All Formats</option>
-              <option value="flac">FLAC / Lossless</option>
-              <option value="mp3">MP3 / Compressed</option>
-            </select>
-          )}
-
-          {/* Sort Filter */}
-          <select
-            value={sortKey}
-            onChange={(e) => setSortKey(e.target.value)}
-            className="px-2.5 py-1.5 bg-slate-200/50 dark:bg-slate-800/50 border border-slate-300/40 dark:border-white/5 rounded-xl text-xs text-slate-700 dark:text-slate-200 focus:outline-none focus:border-cyan-500/70"
-          >
-            {activeTab === 'albums' ? (
-              <>
-                <option value="added_desc">Recently Added</option>
-                <option value="title_asc">Title (A-Z)</option>
-                <option value="artist_asc">Artist (A-Z)</option>
-                <option value="year_desc">Year (Newest)</option>
-                <option value="year_asc">Year (Oldest)</option>
-                <option value="tracks_desc">Most Tracks</option>
-              </>
-            ) : (
-              <>
-                <option value="name_asc">Name (A-Z)</option>
-                <option value="added_desc">Recently Added</option>
-                <option value="albums_desc">Most Albums</option>
-              </>
-            )}
-          </select>
-
-          {/* Poster Size Slider (Grid View) */}
-          {activeTab !== 'tracks' && layoutMode === 'grid' && (
-            <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 bg-slate-200/50 dark:bg-slate-800/50 border border-slate-300/40 dark:border-white/5 rounded-xl">
-              <button
-                onClick={() => updatePosterSize(posterSize - 20)}
-                className="text-slate-400 hover:text-slate-200"
-                title="Smaller posters"
-              >
-                <ZoomOut className="w-3 h-3" />
-              </button>
-              <input
-                type="range"
-                min="130"
-                max="260"
-                value={posterSize}
-                onChange={(e) => updatePosterSize(Number(e.target.value))}
-                onDoubleClick={() => updatePosterSize(180)}
-                className="w-16 h-1 bg-slate-300 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer accent-cyan-400"
-                title={`Poster size: ${posterSize}px (double-click to reset)`}
-              />
-              <button
-                onClick={() => updatePosterSize(posterSize + 20)}
-                className="text-slate-400 hover:text-slate-200"
-                title="Larger posters"
-              >
-                <ZoomIn className="w-3 h-3" />
-              </button>
-            </div>
-          )}
-
-          {/* Batch Select Mode Toggle (Albums Tab) */}
-          {activeTab === 'albums' && (
-            <button
-              onClick={() => {
-                if (selectMode) {
-                  setSelectedAlbumIds(new Set());
-                }
-                setSelectMode(!selectMode);
-              }}
-              className={`p-1.5 rounded-xl border text-xs font-semibold flex items-center gap-1.5 transition-colors ${
-                selectMode
-                  ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40'
-                  : 'bg-slate-200/50 dark:bg-slate-800/50 border-slate-300/40 dark:border-white/5 text-slate-400 hover:text-slate-200'
-              }`}
-              title="Toggle Select Mode"
-            >
-              {selectMode ? <CheckSquare className="w-3.5 h-3.5 text-cyan-400" /> : <Square className="w-3.5 h-3.5" />}
-              <span className="hidden md:inline">Select</span>
-            </button>
-          )}
-
-          {/* Grid / List view toggle */}
-          {activeTab !== 'tracks' && (
-            <div className="flex items-center p-0.5 rounded-xl bg-slate-200/60 dark:bg-slate-800/60 border border-slate-300/40 dark:border-white/5">
-              <button
-                onClick={() => setLayout('grid')}
-                className={`p-1.5 rounded-lg transition-colors ${
-                  layoutMode === 'grid'
-                    ? 'bg-cyan-500 text-slate-950'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-                title="Grid view"
-              >
-                <LayoutGrid className="w-3.5 h-3.5" />
-              </button>
-              <button
-                onClick={() => setLayout('list')}
-                className={`p-1.5 rounded-lg transition-colors ${
-                  layoutMode === 'list'
-                    ? 'bg-cyan-500 text-slate-950'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-                title="List view"
-              >
-                <List className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          )}
-        </div>
-      </div>
 
       {/* ── Floating Batch Action Bar ────────────────────────────────────────── */}
       {selectMode && selectedAlbumIds.size > 0 && (
@@ -669,14 +431,260 @@ export default function Music() {
         </div>
       )}
 
-      {/* ── Main Content ────────────────────────────────────────────────────── */}
-      {loading ? (
-        <div className="glass-panel flex flex-col items-center justify-center h-[320px] rounded-2xl border border-white/5 shadow-xl">
-          <Loader2 className="w-8 h-8 animate-spin text-cyan-400" />
-          <p className="text-sm text-slate-400 mt-4">Loading music library...</p>
+      {/* ── Main Content Container ────────────────────────────────────────── */}
+      <div className="glass-panel rounded-2xl min-h-[100vh]">
+        {/* Filter Bar Header */}
+        <div className="border-b border-cyan-500/30 bg-slate-900/50 rounded-t-2xl">
+          {/* Main Controls Row */}
+          <div className="flex items-center gap-1.5 sm:gap-2 p-2.5 sm:p-4 pb-2 sm:pb-3 justify-between flex-wrap sm:flex-nowrap">
+            {/* Left side: Sub-tabs, Sort & Filters */}
+            <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 flex-1 flex-wrap">
+              {/* Sub-tabs */}
+              <div className="flex items-center p-1 rounded-xl bg-slate-900/80 border border-white/5 shrink-0">
+                <button
+                  onClick={() => setTab('artists')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
+                    activeTab === 'artists'
+                      ? 'bg-cyan-500 text-slate-950 shadow-md font-bold'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <Mic2 className="w-3.5 h-3.5" />
+                  <span>Artists</span>
+                  <span className="text-[10px] opacity-75">({artists.length})</span>
+                </button>
+                <button
+                  onClick={() => setTab('albums')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
+                    activeTab === 'albums'
+                      ? 'bg-cyan-500 text-slate-950 shadow-md font-bold'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <Disc className="w-3.5 h-3.5" />
+                  <span>Albums</span>
+                  <span className="text-[10px] opacity-75">({albums.length})</span>
+                </button>
+                <button
+                  onClick={() => setTab('tracks')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
+                    activeTab === 'tracks'
+                      ? 'bg-cyan-500 text-slate-950 shadow-md font-bold'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <FileAudio className="w-3.5 h-3.5" />
+                  <span>Tracks</span>
+                  <span className="text-[10px] opacity-75">({tracks.length})</span>
+                </button>
+              </div>
+
+              {/* Sort Select */}
+              <FilterSelect
+                value={sortKey}
+                onChange={(e) => setSortKey(e.target.value)}
+                label="Sort: Recently Added"
+                hideAll
+                className="max-w-[140px] sm:max-w-none shrink-0"
+              >
+                {activeTab === 'albums' ? (
+                  <>
+                    <option value="added_desc">Recently Added</option>
+                    <option value="title_asc">Title (A-Z)</option>
+                    <option value="artist_asc">Artist (A-Z)</option>
+                    <option value="year_desc">Year (Newest)</option>
+                    <option value="year_asc">Year (Oldest)</option>
+                    <option value="tracks_desc">Most Tracks</option>
+                  </>
+                ) : (
+                  <>
+                    <option value="added_desc">Recently Added</option>
+                    <option value="name_asc">Name (A-Z)</option>
+                    <option value="name_desc">Name (Z-A)</option>
+                    <option value="albums_desc">Most Albums</option>
+                  </>
+                )}
+              </FilterSelect>
+
+              {/* Filters Toggle Button */}
+              <button
+                onClick={() => setShowFilters(!showFilters)}
+                className={`flex items-center gap-1 sm:gap-1.5 text-xs font-medium px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl border transition-colors shrink-0 ${
+                  showFilters || activeFilterCount > 0
+                    ? 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30'
+                    : 'bg-slate-900/50 text-slate-400 border-white/5 hover:bg-slate-800/50 hover:text-slate-200'
+                }`}
+              >
+                <Filter className="w-3.5 h-3.5 shrink-0" />
+                <span>Filters</span>
+                {activeFilterCount > 0 && (
+                  <span className="bg-cyan-500 text-slate-900 rounded-full px-1.5 py-0.5 text-[10px] font-bold ml-0.5">
+                    {activeFilterCount}
+                  </span>
+                )}
+              </button>
+            </div>
+
+            {/* Right side: Batch Select (Albums) + Slider */}
+            <div className="flex items-center gap-2 shrink-0">
+              {activeTab === 'albums' && (
+                <button
+                  onClick={() => {
+                    if (selectMode) setSelectedAlbumIds(new Set());
+                    setSelectMode(!selectMode);
+                  }}
+                  className={`p-2 rounded-xl border text-xs font-medium flex items-center gap-1.5 transition-colors shrink-0 ${
+                    selectMode
+                      ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40'
+                      : 'bg-slate-900/50 text-slate-400 border-white/5 hover:bg-slate-800/50 hover:text-slate-200'
+                  }`}
+                  title="Toggle Select Mode"
+                >
+                  {selectMode ? <CheckSquare className="w-3.5 h-3.5 text-cyan-400" /> : <Square className="w-3.5 h-3.5" />}
+                  <span className="hidden md:inline">Select</span>
+                </button>
+              )}
+
+              {layoutMode === 'grid' && activeTab !== 'tracks' && (
+                <div className="flex items-center gap-1 sm:gap-2 bg-slate-900/60 border border-white/5 px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-xl shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => updatePosterSize(Math.max(120, posterSize - 20))}
+                    className={`p-0.5 transition-colors rounded ${
+                      posterSize <= 140 ? 'text-cyan-400' : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                    title="Smaller cards"
+                    aria-label="Smaller cards"
+                  >
+                    <LayoutGrid className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+                  </button>
+                  <input
+                    type="range"
+                    min="120"
+                    max="260"
+                    step="10"
+                    value={posterSize}
+                    onChange={(e) => updatePosterSize(Number(e.target.value))}
+                    onDoubleClick={() => updatePosterSize(180)}
+                    title={`Card size: ${posterSize}px (double-click to reset)`}
+                    aria-label="Card size"
+                    className="w-14 sm:w-24 md:w-28 h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-cyan-400"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => updatePosterSize(Math.min(260, posterSize + 20))}
+                    className={`p-0.5 transition-colors rounded ${
+                      posterSize >= 240 ? 'text-cyan-400' : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                    title="Larger cards"
+                    aria-label="Larger cards"
+                  >
+                    <LayoutGrid className="w-3.5 h-3.5 sm:w-4.5 sm:h-4.5" />
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Expandable Advanced Filters Drawer */}
+          {showFilters && (
+            <div className="px-3 sm:px-4 pb-3 sm:pb-4 border-t border-white/5 pt-3 mt-1 bg-slate-900/30">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:flex lg:flex-wrap items-center gap-2 mb-1">
+                <FilterSelect
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                  label="All Statuses"
+                >
+                  <option value="monitored">Monitored</option>
+                  <option value="downloaded">Downloaded</option>
+                  <option value="missing">Missing</option>
+                </FilterSelect>
+
+                {activeTab === 'albums' && (
+                  <FilterSelect
+                    value={typeFilter}
+                    onChange={(e) => setTypeFilter(e.target.value)}
+                    label="All Types"
+                  >
+                    <option value="album">Studio Albums</option>
+                    <option value="single_ep">Singles & EPs</option>
+                    <option value="compilation">Compilations</option>
+                  </FilterSelect>
+                )}
+
+                {activeTab === 'albums' && (
+                  <FilterSelect
+                    value={formatFilter}
+                    onChange={(e) => setFormatFilter(e.target.value)}
+                    label="All Formats"
+                  >
+                    <option value="flac">FLAC / Lossless</option>
+                    <option value="mp3">MP3 / Compressed</option>
+                  </FilterSelect>
+                )}
+
+                {activeFilterCount > 0 && (
+                  <button
+                    onClick={clearAllFilters}
+                    className="inline-flex items-center gap-1 text-xs font-semibold text-slate-400 hover:text-rose-400 bg-slate-800/60 hover:bg-rose-500/10 px-2 py-1 rounded-full border border-white/5 hover:border-rose-500/20 transition-all ml-1"
+                  >
+                    <RotateCcw className="w-3 h-3" /> Clear filters
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Active Filter Pills Bar */}
+          {activeFilterCount > 0 && (
+            <div className="flex items-center flex-wrap gap-1.5 px-3 sm:px-4 py-2 border-t border-white/5 bg-slate-900/40">
+              <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider mr-1">Active:</span>
+              {statusFilter !== 'all' && (
+                <span className="inline-flex items-center gap-1 text-xs bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 px-2 py-0.5 rounded-full">
+                  Status: {statusFilter}
+                  <button onClick={() => setStatusFilter('all')} className="hover:text-white transition-colors">
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
+              )}
+              {activeTab === 'albums' && typeFilter !== 'all' && (
+                <span className="inline-flex items-center gap-1 text-xs bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 px-2 py-0.5 rounded-full">
+                  Type: {typeFilter}
+                  <button onClick={() => setTypeFilter('all')} className="hover:text-white transition-colors">
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
+              )}
+              {activeTab === 'albums' && formatFilter !== 'all' && (
+                <span className="inline-flex items-center gap-1 text-xs bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 px-2 py-0.5 rounded-full">
+                  Format: {formatFilter}
+                  <button onClick={() => setFormatFilter('all')} className="hover:text-white transition-colors">
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
+              )}
+              <button
+                onClick={clearAllFilters}
+                className="inline-flex items-center gap-1 text-xs font-semibold text-slate-400 hover:text-rose-400 bg-slate-800/60 hover:bg-rose-500/10 px-2 py-0.5 rounded-full border border-white/5 hover:border-rose-500/20 transition-all ml-1"
+              >
+                <RotateCcw className="w-3 h-3" /> Clear all
+              </button>
+              <span className="text-xs text-slate-500 ml-auto">
+                {activeTab === 'artists' ? filteredArtists.length : activeTab === 'albums' ? filteredAlbums.length : filteredTracks.length} items
+              </span>
+            </div>
+          )}
         </div>
-      ) : (
-        <>
+
+        {/* Content Area Inside Glass Panel */}
+        <div className="p-3 sm:p-5 relative min-h-[calc(100vh-200px)]">
+          {loading ? (
+            <div className="flex flex-col items-center justify-center h-[320px]">
+              <Loader2 className="w-8 h-8 animate-spin text-cyan-400" />
+              <p className="text-sm text-slate-400 mt-4">Loading music library...</p>
+            </div>
+          ) : (
+            <>
           {/* ── ALBUMS TAB ──────────────────────────────────────────────── */}
           {activeTab === 'albums' && (
             <>
@@ -686,7 +694,7 @@ export default function Music() {
                   title="No albums found"
                   description={
                     albums.length === 0
-                      ? 'Click "+ Add Artist / Album" above to import your favorite music.'
+                      ? 'Click "+ Add Music" above to import your favorite music.'
                       : 'Try adjusting your search or filters.'
                   }
                 />
@@ -697,147 +705,17 @@ export default function Music() {
                     gridTemplateColumns: `repeat(auto-fill, minmax(${posterSize}px, 1fr))`
                   }}
                 >
-                  {filteredAlbums.map((album) => {
-                    const isDownloaded = album.status === 'downloaded';
-                    const coverUrl = albumCoverUrl(album.mbid);
-                    const isSelected = selectedAlbumIds.has(album.id);
-                    const isCurrentAlbumPlaying = currentTrack?.album_id === album.id && isPlaying;
-
-                    return (
-                      <div
-                        key={album.id}
-                        className={`group relative glass-panel interactive-glow-card rounded-2xl overflow-hidden flex flex-col transition-all duration-300 ${
-                          isSelected ? 'ring-2 ring-cyan-400 shadow-[0_0_20px_rgba(6,182,212,0.3)]' : ''
-                        }`}
-                      >
-                        {/* Album Cover Art */}
-                        <div
-                          onClick={() => {
-                            if (selectMode) {
-                              toggleSelectAlbum(album.id);
-                            } else {
-                              navigate(`/music/albums/${album.id}`);
-                            }
-                          }}
-                          className="aspect-square relative overflow-hidden cursor-pointer bg-slate-800"
-                        >
-                          <img
-                            src={coverUrl}
-                            alt={album.title}
-                            onError={(e) => {
-                              e.target.onerror = null;
-                              e.target.src =
-                                'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 24 24" fill="none" stroke="%23475569" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg>';
-                            }}
-                            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-                          />
-
-                          {/* Hover/Active Play Button for Downloaded Albums */}
-                          {isDownloaded && !selectMode && (
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                if (isCurrentAlbumPlaying) {
-                                  togglePlay();
-                                } else {
-                                  playAlbum(album);
-                                }
-                              }}
-                              className={`absolute inset-0 m-auto w-12 h-12 rounded-full bg-cyan-500 hover:bg-cyan-400 text-slate-950 flex items-center justify-center shadow-[0_0_25px_rgba(6,182,212,0.6)] transition-all hover:scale-110 active:scale-95 z-10 ${
-                                isCurrentAlbumPlaying
-                                  ? 'opacity-100 ring-4 ring-cyan-300/50'
-                                  : 'opacity-0 group-hover:opacity-100'
-                              }`}
-                              title={isCurrentAlbumPlaying ? 'Pause Album' : `Play ${album.title}`}
-                            >
-                              {isCurrentAlbumPlaying ? (
-                                <Pause className="w-5 h-5 fill-slate-950" />
-                              ) : (
-                                <Play className="w-5 h-5 fill-slate-950 ml-0.5" />
-                              )}
-                            </button>
-                          )}
-
-                          {/* Checkbox overlay in select mode */}
-                          {selectMode && (
-                            <div className="absolute top-2 left-2 z-20">
-                              <input
-                                type="checkbox"
-                                checked={isSelected}
-                                onChange={() => toggleSelectAlbum(album.id)}
-                                className="w-4 h-4 rounded text-cyan-500 accent-cyan-500 cursor-pointer"
-                              />
-                            </div>
-                          )}
-
-                          {/* Status Badge overlay */}
-                          {!selectMode && (
-                            <div className="absolute top-2 left-2 flex flex-col gap-1">
-                              {isDownloaded ? (
-                                <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-500/90 text-slate-950 backdrop-blur-md flex items-center gap-1 shadow">
-                                  <CheckCircle2 className="w-3 h-3" />
-                                  Ready
-                                </span>
-                              ) : (
-                                <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-rose-500/90 text-white backdrop-blur-md flex items-center gap-1 shadow">
-                                  Missing
-                                </span>
-                              )}
-                            </div>
-                          )}
-
-                          {/* Format badge overlay */}
-                          {album.file_format && (
-                            <div className="absolute bottom-2 right-2">
-                              <span className="px-2 py-0.5 rounded-md text-[10px] font-mono font-bold bg-slate-950/80 text-cyan-300 border border-cyan-500/30 backdrop-blur-md">
-                                {album.file_format}
-                                {album.file_bitdepth ? ` ${album.file_bitdepth}b` : ''}
-                              </span>
-                            </div>
-                          )}
-
-                          {/* Hover Quick Search Action */}
-                          {!selectMode && (
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setManualSearchAlbum(album);
-                              }}
-                              className="absolute top-2 right-2 p-1.5 rounded-lg bg-slate-950/80 text-slate-300 hover:text-cyan-400 border border-white/10 opacity-0 group-hover:opacity-100 transition-opacity z-10"
-                              title="Manual search for releases"
-                            >
-                              <Search className="w-3.5 h-3.5" />
-                            </button>
-                          )}
-                        </div>
-
-                        {/* Album Meta */}
-                        <div className="p-3 flex-1 flex flex-col justify-between">
-                          <div>
-                            <h3
-                              onClick={() => navigate(`/music/albums/${album.id}`)}
-                              title={album.title}
-                              className="font-bold text-sm text-slate-800 dark:text-slate-100 group-hover:text-cyan-400 transition-colors truncate cursor-pointer"
-                            >
-                              {album.title}
-                            </h3>
-                            <p
-                              onClick={() => navigate(`/music/artists/${album.artist_id}`)}
-                              title={album.artist_name}
-                              className="text-xs text-slate-400 hover:text-slate-200 transition-colors truncate cursor-pointer mt-0.5"
-                            >
-                              {album.artist_name}
-                            </p>
-                          </div>
-
-                          <div className="flex items-center justify-between mt-2 pt-2 border-t border-slate-200 dark:border-white/5 text-[11px] text-slate-400">
-                            <span>{album.year || 'Unknown'}</span>
-                            <span>{album.track_count || 0} tracks</span>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
+                  {filteredAlbums.map((album) => (
+                    <AlbumCard
+                      key={album.id}
+                      album={album}
+                      subtitleMode="artist"
+                      selectMode={selectMode}
+                      isSelected={selectedAlbumIds.has(album.id)}
+                      onToggleSelect={toggleSelectAlbum}
+                      onManualSearch={setManualSearchAlbum}
+                    />
+                  ))}
                 </div>
               ) : (
                 /* Albums List View */
@@ -889,7 +767,7 @@ export default function Music() {
                             <td className="py-2 px-4">
                               <div className="relative w-9 h-9 rounded-lg overflow-hidden bg-slate-800 group/rowcover">
                                 <img
-                                  src={albumCoverUrl(album.mbid)}
+                                  src={album.cover_url || albumCoverUrl(album)}
                                   alt=""
                                   className="w-full h-full object-cover"
                                   onError={(e) => {
@@ -930,7 +808,14 @@ export default function Music() {
                               {album.artist_name}
                             </td>
                             <td className="py-3 px-4 text-slate-400">{album.year || '—'}</td>
-                            <td className="py-3 px-4 text-slate-400">{album.track_count || 0}</td>
+                            <td className="py-3 px-4 text-slate-400">
+                              {Math.max(album.expected_track_count || 0, album.track_count || 0)}
+                              {album.disc_count > 1 && (
+                                <span className="ml-1.5 text-[10px] px-1.5 py-0.5 rounded bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 font-medium whitespace-nowrap">
+                                  {album.disc_count} Discs
+                                </span>
+                              )}
+                            </td>
                             <td className="py-3 px-4 font-mono text-[11px] text-cyan-300">
                               {album.file_format || '—'}
                             </td>
@@ -982,7 +867,7 @@ export default function Music() {
                 <EmptyState
                   icon="artist"
                   title="No artists found"
-                  description='Click "+ Add Artist / Album" in the top bar to track artists from MusicBrainz.'
+                  description='Click "+ Add Music" in the top bar to track artists from MusicBrainz.'
                 />
               ) : layoutMode === 'grid' ? (
                 <div
@@ -992,44 +877,127 @@ export default function Music() {
                   }}
                 >
                   {filteredArtists.map((artist) => {
-                    const imgUrl = artistImageUrl(artist.mbid);
+                    const imgUrl = artist.image_url || artistImageUrl(artist);
+                    const downloadedAlbums = artist.downloaded_albums || 0;
+                    const totalAlbums = artist.album_count || 0;
+                    const isComplete = totalAlbums > 0 && downloadedAlbums >= totalAlbums;
+                    const isBusy = artistActionId === artist.id;
 
                     return (
                       <div
                         key={artist.id}
+                        role="button"
+                        tabIndex={0}
+                        aria-label={`View ${artist.name}`}
                         onClick={() => navigate(`/music/artists/${artist.id}`)}
-                        className="group relative glass-panel interactive-glow-card rounded-2xl p-4 flex flex-col items-center text-center cursor-pointer"
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            navigate(`/music/artists/${artist.id}`);
+                          }
+                        }}
+                        className="group relative glass-panel interactive-glow-card rounded-xl overflow-hidden cursor-pointer flex flex-col hover:scale-[1.02] transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 hover:shadow-[0_0_30px_-5px_rgba(6,182,212,0.25)] hover:border-cyan-500/40"
                       >
-                        {/* Circular Artist Photo / Icon */}
-                        <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-full overflow-hidden mb-3 bg-gradient-to-tr from-cyan-950 via-slate-900 to-indigo-950 border-2 border-white/10 group-hover:border-cyan-400/60 transition-colors flex items-center justify-center shadow-inner">
-                          <img
-                            src={imgUrl}
-                            alt={artist.name}
-                            onError={(e) => {
-                              e.target.style.display = 'none';
-                              e.target.nextSibling.style.display = 'flex';
-                            }}
-                            className="w-full h-full object-cover"
-                          />
-                          <div className="hidden w-full h-full items-center justify-center text-cyan-400/60">
-                            <Mic2 className="w-10 h-10" />
+                        {/* Artist photo (square) */}
+                        <div className="w-full aspect-square relative bg-slate-800 flex-shrink-0 overflow-hidden">
+                          {/* Placeholder icon shown behind the image / when it fails */}
+                          <div className="absolute inset-0 flex items-center justify-center text-slate-700/60 pointer-events-none">
+                            <Mic2 className="w-10 h-10 stroke-[1.5]" />
                           </div>
+
+                          {/* Top-left: monitor toggle */}
+                          <div className="absolute top-1.5 sm:top-2 left-1.5 sm:left-2 z-20">
+                            <button
+                              onClick={(e) => { e.stopPropagation(); e.preventDefault(); handleArtistMonitorToggle(artist); }}
+                              className="w-6 h-6 sm:w-8 sm:h-8 rounded-full bg-slate-900/80 hover:bg-slate-800 transition-colors shadow-lg flex items-center justify-center group/mon"
+                              title={artist.monitored ? 'Unmonitor' : 'Monitor'}
+                              aria-label={artist.monitored ? 'Unmonitor artist' : 'Monitor artist'}
+                            >
+                              {artist.monitored ? (
+                                <Bookmark className="w-3.5 h-3.5 sm:w-5 sm:h-5 text-emerald-500 fill-emerald-500 group-hover/mon:text-rose-400 group-hover/mon:fill-transparent" />
+                              ) : (
+                                <Bookmark className="w-3.5 h-3.5 sm:w-5 sm:h-5 text-rose-400 group-hover/mon:text-emerald-400" />
+                              )}
+                            </button>
+                          </div>
+
+                          {/* Top-right: manual search */}
+                          <div className="absolute top-1.5 sm:top-2 right-1.5 sm:right-2 z-20">
+                            <button
+                              onClick={(e) => { e.stopPropagation(); e.preventDefault(); handleArtistSearch(artist); }}
+                              disabled={isBusy}
+                              className="w-6 h-6 sm:w-8 sm:h-8 rounded-full bg-slate-900/80 hover:bg-cyan-500/20 transition-colors shadow-lg flex items-center justify-center text-cyan-400 disabled:opacity-60"
+                              title="Search missing albums"
+                              aria-label="Search missing albums"
+                            >
+                              {isBusy ? <Loader2 className="w-3.5 h-3.5 sm:w-5 sm:h-5 animate-spin" /> : <Search className="w-3.5 h-3.5 sm:w-5 sm:h-5" />}
+                            </button>
+                          </div>
+
+                          {/* Bottom-left status badge */}
+                          <div className={`absolute bottom-1.5 sm:bottom-2 left-1.5 sm:left-2 z-20 flex items-center gap-1 px-1.5 sm:px-2 py-0.5 sm:py-1 bg-slate-950/80 backdrop-blur rounded-md border shadow-lg ${
+                            isComplete ? 'border-emerald-500/30' : downloadedAlbums > 0 ? 'border-amber-500/30' : 'border-rose-500/30'
+                          }`}>
+                            {isComplete ? (
+                              <>
+                                <CheckCircle2 className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-emerald-400" />
+                                <span className="text-[9px] sm:text-[10px] font-bold text-emerald-400">Complete</span>
+                              </>
+                            ) : (
+                              <>
+                                <AlertCircle className={`w-2.5 h-2.5 sm:w-3 sm:h-3 ${downloadedAlbums > 0 ? 'text-amber-400' : 'text-rose-400'}`} />
+                                <span className={`text-[9px] sm:text-[10px] font-bold ${downloadedAlbums > 0 ? 'text-amber-400' : 'text-rose-400'}`}>
+                                  {downloadedAlbums > 0 ? 'Partial' : 'Missing'}
+                                </span>
+                              </>
+                            )}
+                          </div>
+
+                          {/* Bottom-right track count badge (hidden when there are no tracks) */}
+                          {(artist.track_count || 0) > 0 && (
+                            <div className="absolute bottom-1.5 sm:bottom-2 right-1.5 sm:right-2 z-20 flex items-center gap-1 px-1.5 sm:px-2 py-0.5 sm:py-1 bg-slate-950/80 backdrop-blur rounded-md border border-purple-500/30 shadow-lg">
+                              <FileAudio className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-purple-400" />
+                              <span className="text-[9px] sm:text-[10px] font-bold text-purple-400">{artist.track_count}</span>
+                            </div>
+                          )}
+
+                          {imgUrl ? (
+                            <img
+                              src={imgUrl}
+                              alt=""
+                              onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                              className="w-full h-full object-cover relative z-10"
+                            />
+                          ) : null}
                         </div>
 
-                        <h3 className="font-bold text-sm text-slate-800 dark:text-slate-100 group-hover:text-cyan-400 transition-colors truncate w-full">
-                          {artist.name}
-                        </h3>
-                        {artist.disambiguation ? (
-                          <p className="text-[11px] text-slate-400 truncate w-full mt-0.5">
-                            {artist.disambiguation}
-                          </p>
-                        ) : (
-                          <p className="text-[11px] text-slate-500 italic mt-0.5">Artist</p>
-                        )}
-
-                        <div className="mt-3 pt-2 border-t border-slate-200 dark:border-white/5 w-full flex items-center justify-between text-[11px] text-slate-400">
-                          <span>{artist.album_count || 0} Albums</span>
-                          <span>{artist.track_count || 0} Tracks</span>
+                        {/* Info bar */}
+                        <div className="p-2 sm:p-3 w-full flex-1 flex flex-col justify-between bg-gradient-to-b from-slate-800/95 to-slate-900/95 border-t border-white/10 group-hover:border-cyan-500/30 transition-colors">
+                          <div className="flex items-center justify-between gap-1">
+                            <h3 className="font-semibold text-xs sm:text-sm text-slate-100 group-hover:text-cyan-400 transition-colors truncate tracking-wide flex-1" title={artist.name}>
+                              {artist.name}
+                            </h3>
+                            <ArrowRight className="w-3.5 h-3.5 text-cyan-400 opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-200 flex-shrink-0 hidden sm:block" />
+                          </div>
+                          {totalAlbums > 0 && (
+                            <div className="flex items-center justify-end mt-1 sm:mt-2 gap-2">
+                              <span
+                                className={`flex items-center gap-1 px-1.5 sm:px-2 py-0.5 rounded-md border flex-shrink-0 ${
+                                  downloadedAlbums === 0
+                                    ? 'bg-slate-500/10 border-slate-500/20 text-slate-400'
+                                    : isComplete
+                                      ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-300'
+                                      : 'bg-amber-500/10 border-amber-500/20 text-amber-300'
+                                }`}
+                                title={downloadedAlbums > 0 ? `${downloadedAlbums} of ${totalAlbums} albums downloaded` : `${totalAlbums} albums`}
+                              >
+                                <Disc className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
+                                <span className="text-[10px] sm:text-[11px] font-bold">
+                                  {downloadedAlbums > 0 ? `${downloadedAlbums}/${totalAlbums}` : totalAlbums}
+                                </span>
+                              </span>
+                            </div>
+                          )}
                         </div>
                       </div>
                     );
@@ -1063,7 +1031,17 @@ export default function Music() {
                             {artist.name}
                           </td>
                           <td className="py-3 px-4 text-slate-400">{artist.disambiguation || '—'}</td>
-                          <td className="py-3 px-4 text-slate-300 font-semibold">{artist.album_count || 0}</td>
+                          <td className="py-3 px-4">
+                            <span className={
+                              (artist.downloaded_albums || 0) === 0
+                                ? 'text-slate-500 font-semibold'
+                                : (artist.downloaded_albums || 0) >= (artist.album_count || 0)
+                                  ? 'text-green-400 font-semibold'
+                                  : 'text-amber-400 font-semibold'
+                            }>
+                              {artist.downloaded_albums || 0}/{artist.album_count || 0}
+                            </span>
+                          </td>
                           <td className="py-3 px-4 text-slate-400">{artist.track_count || 0}</td>
                           <td className="py-3 px-4">
                             <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
@@ -1197,6 +1175,8 @@ export default function Music() {
           )}
         </>
       )}
+        </div>
+      </div>
 
       {/* ── Modals ─────────────────────────────────────────────────────────── */}
       <AddArtistModal
@@ -1217,46 +1197,6 @@ export default function Music() {
           }}
         />
       )}
-
-      <MusicPathsModal
-        open={pathsModalOpen}
-        onClose={() => setPathsModalOpen(false)}
-        onUpdated={() => fetchData()}
-      />
-    </div>
-  );
-}
-
-function StatCard({ icon: Icon, label, value, sub, accent = 'text-cyan-400', bg = 'bg-cyan-500/15', onClick, onSubClick, active = false }) {
-  return (
-    <div
-      onClick={onClick}
-      className={`glass-panel rounded-2xl p-4 sm:p-5 flex items-center gap-3 transition-all ${
-        onClick ? 'cursor-pointer hover:border-cyan-500/40 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-cyan-500/10 active:scale-[0.99]' : ''
-      } ${active ? 'border-cyan-500/50 bg-cyan-500/5' : ''}`}
-    >
-      <div className={`p-2.5 rounded-xl ${bg} shrink-0`}>
-        <Icon className={`w-5 h-5 ${accent}`} />
-      </div>
-      <div className="min-w-0 flex-1">
-        <p className="text-lg sm:text-2xl font-black text-slate-800 dark:text-slate-100 leading-none truncate">{value}</p>
-        <p className="text-[11px] sm:text-xs font-medium text-slate-400 mt-1 truncate">
-          {label}
-          {sub && (
-            <span
-              onClick={(e) => {
-                if (onSubClick) {
-                  e.stopPropagation();
-                  onSubClick();
-                }
-              }}
-              className={`text-emerald-400 ml-1 ${onSubClick ? 'hover:underline cursor-pointer' : ''}`}
-            >
-              · {sub}
-            </span>
-          )}
-        </p>
-      </div>
     </div>
   );
 }

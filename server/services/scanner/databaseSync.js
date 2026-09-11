@@ -24,7 +24,7 @@ const updateLibraryMetadata = async (scanProgress, nextStage, mode = 'full') => 
   }
 
   if (mode !== 'movies') {
-    existingShows = db.prepare("SELECT id, title, folder_path FROM shows WHERE status = 'downloaded' AND folder_path IS NOT NULL").all();
+    existingShows = db.prepare("SELECT id, title, folder_path FROM shows WHERE folder_path IS NOT NULL").all();
     existingEpisodes = db.prepare("SELECT id, show_id, file_path, scene_name, file_size, resolution, codec, audio, runtime FROM episodes WHERE status = 'downloaded' AND file_path IS NOT NULL").all();
     if (mode === 'refresh') {
       allShows = db.prepare("SELECT id, title, tmdb_id FROM shows WHERE tmdb_id IS NOT NULL").all();
@@ -206,12 +206,28 @@ const updateLibraryMetadata = async (scanProgress, nextStage, mode = 'full') => 
   scanProgress.currentPhase = 'Calculating folder sizes...';
   if (existingShows.length > 0) {
     db.transaction(() => {
-      const stmt = db.prepare("UPDATE shows SET folder_size = (SELECT SUM(file_size) FROM episodes WHERE show_id = shows.id AND status = 'downloaded') WHERE id = ?");
+      const stmt = db.prepare(`
+        UPDATE shows 
+        SET folder_size = COALESCE((SELECT SUM(file_size) FROM episodes WHERE show_id = shows.id AND status = 'downloaded'), 0),
+            status = CASE 
+              WHEN (SELECT COUNT(*) FROM episodes WHERE show_id = shows.id AND status = 'downloaded') > 0 THEN 'downloaded'
+              WHEN status = 'downloaded' THEN 'missing'
+              ELSE status
+            END
+        WHERE id = ?
+      `);
       for (const s of existingShows) {
         stmt.run(s.id);
       }
     })();
     scanProgress.processedFiles += existingShows.length;
+  }
+
+  // Purge un-downloaded Season 0 specials so they don't linger as missing
+  if (mode !== 'movies') {
+    try {
+      db.prepare("DELETE FROM episodes WHERE season_number = 0 AND (status != 'downloaded' OR file_path IS NULL OR file_path = '')").run();
+    } catch { /* ignore */ }
   }
 
   scanProgress.currentPhase = 'Refreshing ratings...';

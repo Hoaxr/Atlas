@@ -404,7 +404,8 @@ const getShows = (limit = 0, offset = 0, sort = 'added_desc', filters = {}) => {
         COUNT(CASE WHEN e.status = 'downloaded' THEN 1 END)             AS downloaded_episodes,
         COUNT(CASE WHEN e.status = 'downloading' THEN 1 END)            AS downloading_episodes,
         COUNT(CASE
-          WHEN e.monitored = 1
+          WHEN e.season_number > 0
+            AND e.monitored = 1
             AND (e.file_path IS NULL OR e.file_path = '')
             AND e.status != 'downloaded'
             AND e.air_date IS NOT NULL

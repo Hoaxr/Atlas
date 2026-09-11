@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import api from '../lib/api';
-import { AlertCircle, CheckCircle2, Search, Download, Settings2, FolderTree, Languages, ShieldAlert, Network, Users, Music } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Search, Download, Settings2, FolderTree, Languages, ShieldAlert, Network, Users } from 'lucide-react';
 import { customAlert } from '../utils/alerts';
 import { invalidateSettingsCache } from '../lib/useSettings';
 import StickyBar from '../components/shared/StickyBar';
@@ -11,7 +11,6 @@ import ClientsTab from './settings/ClientsTab';
 import ProfilesTab from './settings/ProfilesTab';
 import SubtitlesTab from './settings/SubtitlesTab';
 import LibraryTab from './settings/LibraryTab';
-import MusicTab from './settings/MusicTab';
 import BackupTab from './settings/BackupTab';
 import NamingTab from './settings/NamingTab';
 import ReleaseProfilesTab from './settings/ReleaseProfilesTab';
@@ -43,6 +42,11 @@ export default function Settings() {
     renameEpisodes: true,
     standardEpisodeFormat: '{Show Title} - S{Season}E{Episode} - {Episode Title}',
     seasonFolderFormat: 'Season {Season Number}',
+    musicArtistFolderFormat: '{Artist Name}',
+    musicAlbumFolderFormat: '{Album Title} ({Year})',
+    musicTrackFileFormat: '{TrackNumber:00} - {Track Title}',
+    writeMusicMetadata: 'true',
+    musicMonitorNewReleases: 'true',
     separatorStyle: 'space',
     removeCompletedDownloads: false,
     deleteTorrentFiles: false,
@@ -157,19 +161,16 @@ export default function Settings() {
             if (empty.length > 0) warnings.push(`${empty.length} path(s) empty/no files`);
             const addedMovies = res.data.addedMoviesCount || 0;
             const addedShows = res.data.addedShowsCount || 0;
+            const addedTracks = res.data.addedTracksCount || 0;
+            const addedMusicAlbums = res.data.addedMusicAlbumsCount || 0;
             const failedMovies = res.data.failedMovies?.length || 0;
             const failedShows = res.data.failedShows?.length || 0;
             const skipped = res.data.skippedCount || 0;
-            let addedSummary = '';
-            if (addedMovies > 0 && addedShows > 0) {
-              addedSummary = `${addedMovies} movie${addedMovies !== 1 ? 's' : ''} & ${addedShows} TV show${addedShows !== 1 ? 's' : ''} (${res.data.addedEpisodesCount || 0} total episode${res.data.addedEpisodesCount !== 1 ? 's' : ''})`;
-            } else if (addedMovies > 0) {
-              addedSummary = `${addedMovies} movie${addedMovies !== 1 ? 's' : ''}`;
-            } else if (addedShows > 0) {
-              addedSummary = `${addedShows} TV show${addedShows !== 1 ? 's' : ''} (${res.data.addedEpisodesCount || 0} total episode${res.data.addedEpisodesCount !== 1 ? 's' : ''})`;
-            } else {
-              addedSummary = '0 items';
-            }
+            const parts = [];
+            if (addedMovies > 0) parts.push(`${addedMovies} movie${addedMovies !== 1 ? 's' : ''}`);
+            if (addedShows > 0) parts.push(`${addedShows} TV show${addedShows !== 1 ? 's' : ''} (${res.data.addedEpisodesCount || 0} total episode${res.data.addedEpisodesCount !== 1 ? 's' : ''})`);
+            if (addedTracks > 0) parts.push(`${addedTracks} music track${addedTracks !== 1 ? 's' : ''}${addedMusicAlbums > 0 ? ` (${addedMusicAlbums} album${addedMusicAlbums !== 1 ? 's' : ''})` : ''}`);
+            const addedSummary = parts.length > 0 ? parts.join(', ') : '0 items';
             const failedTotal = failedMovies + failedShows;
             if (failedTotal > 0) warnings.push(`${failedTotal} could not be imported`);
             if (skipped > 0) warnings.push(`${skipped} skipped`);
@@ -251,6 +252,11 @@ export default function Settings() {
           renameEpisodes: res.data.data.renameEpisodes ?? true,
           standardEpisodeFormat: res.data.data.standardEpisodeFormat || '{Show Title} - S{Season}E{Episode} - {Episode Title}',
           seasonFolderFormat: res.data.data.seasonFolderFormat || 'Season {Season Number}',
+          musicArtistFolderFormat: res.data.data.musicArtistFolderFormat || '{Artist Name}',
+          musicAlbumFolderFormat: res.data.data.musicAlbumFolderFormat || '{Album Title} ({Year})',
+          musicTrackFileFormat: res.data.data.musicTrackFileFormat || '{TrackNumber:00} - {Track Title}',
+          writeMusicMetadata: String(res.data.data.writeMusicMetadata ?? true),
+          musicMonitorNewReleases: String(res.data.data.musicMonitorNewReleases ?? true),
           removeCompletedDownloads: res.data.data.removeCompletedDownloads ?? false,
           deleteTorrentFiles: res.data.data.deleteTorrentFiles ?? false,
           hideCompletedDownloads: res.data.data.hideCompletedDownloads ?? true,
@@ -328,7 +334,10 @@ export default function Settings() {
         standardMovieFormat: settings.standardMovieFormat,
         renameEpisodes: settings.renameEpisodes,
         standardEpisodeFormat: settings.standardEpisodeFormat,
-        seasonFolderFormat: settings.seasonFolderFormat
+        seasonFolderFormat: settings.seasonFolderFormat,
+        musicArtistFolderFormat: settings.musicArtistFolderFormat,
+        musicAlbumFolderFormat: settings.musicAlbumFolderFormat,
+        musicTrackFileFormat: settings.musicTrackFileFormat
       });
       invalidateSettingsCache();
       customAlert('Naming settings saved!', 'success');
@@ -518,7 +527,6 @@ export default function Settings() {
     { id: 'naming', label: "Media Naming", icon: <FolderTree className="w-4 h-4" /> },
     { id: 'subtitles', label: "Subtitles & AI Translation", icon: <Languages className="w-4 h-4" /> },
     { id: 'library', label: "Library Management", icon: <FolderTree className="w-4 h-4" /> },
-    { id: 'music', label: "Music", icon: <Music className="w-4 h-4" /> },
     { id: 'users', label: "Users", icon: <Users className="w-4 h-4" /> },
     { id: 'backup', label: "Backup & Restore", icon: <Download className="w-4 h-4" /> },
   ];
@@ -664,14 +672,6 @@ export default function Settings() {
               handleScan={handleScan} handleStopScan={handleStopScan} isScanning={isScanning} scanProgress={scanProgress}
               scanResults={scanResults} isStaleResults={isStaleResults} setScanResults={setScanResults} setIsStaleResults={setIsStaleResults}
               settings={settings} setSettings={setSettings}
-              handleSave={handleSave}
-            />
-          )}
-
-          {activeTab === 'music' && (
-            <MusicTab
-              settings={settings}
-              setSettings={setSettings}
               handleSave={handleSave}
             />
           )}

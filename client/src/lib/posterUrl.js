@@ -1,3 +1,7 @@
+// Keep in sync with MUSIC_IMAGE_VERSION in server/routes/library/music.js.
+// Bumping this changes the image URL so browsers drop any previously cached art/placeholder.
+const MUSIC_IMAGE_VERSION = '2';
+
 /**
  * posterUrl — returns the URL for a cached poster served by Atlas.
  *
@@ -36,30 +40,42 @@ export const tmdbImgUrl = (tmdbPath, size = 'w500') =>
 
 /**
  * albumCoverUrl — URL for a music album's cover served by Atlas.
+ * Accepts album object, numeric id, or MBID string.
  *
- * The cover route lives under /api/library (auth-protected), so the JWT is
- * attached as a query param — <img> tags cannot send Authorization headers.
- *
- * @param {string|null} mbid  MusicBrainz release-group id
+ * @param {object|number|string|null} albumOrIdOrMbid
  * @returns {string|null}
  */
-export const albumCoverUrl = (mbid) => {
-  if (!mbid) return null;
+export const albumCoverUrl = (albumOrIdOrMbid) => {
+  if (!albumOrIdOrMbid) return null;
+  const key = typeof albumOrIdOrMbid === 'object'
+    ? (albumOrIdOrMbid.id || albumOrIdOrMbid.mbid)
+    : albumOrIdOrMbid;
+  if (!key) return null;
   const token = localStorage.getItem('atlas_token');
-  const base = `/api/library/music/albums/${mbid}/cover`;
-  return token ? `${base}?token=${encodeURIComponent(token)}` : base;
+  const base = `/api/library/music/albums/${key}/cover`;
+  return token
+    ? `${base}?token=${encodeURIComponent(token)}&v=${MUSIC_IMAGE_VERSION}`
+    : `${base}?v=${MUSIC_IMAGE_VERSION}`;
 };
 
 /**
  * artistImageUrl — URL for a music artist's image served by Atlas.
- * @param {string|null} mbid  MusicBrainz artist id
+ * Accepts artist object, numeric id, or MBID string.
+ *
+ * @param {object|number|string|null} artistOrIdOrMbid
  * @returns {string|null}
  */
-export const artistImageUrl = (mbid) => {
-  if (!mbid) return null;
+export const artistImageUrl = (artistOrIdOrMbid) => {
+  if (!artistOrIdOrMbid) return null;
+  const key = typeof artistOrIdOrMbid === 'object'
+    ? (artistOrIdOrMbid.id || artistOrIdOrMbid.mbid)
+    : artistOrIdOrMbid;
+  if (!key) return null;
   const token = localStorage.getItem('atlas_token');
-  const base = `/api/library/music/artists/${mbid}/image`;
-  return token ? `${base}?token=${encodeURIComponent(token)}` : base;
+  const base = `/api/library/music/artists/${key}/image`;
+  return token
+    ? `${base}?token=${encodeURIComponent(token)}&v=${MUSIC_IMAGE_VERSION}`
+    : `${base}?v=${MUSIC_IMAGE_VERSION}`;
 };
 
 /**

@@ -16,7 +16,7 @@ const RECYCLE_DIRS = new Set([
 const shouldSkipDir = (dirName) => {
   if (RECYCLE_DIRS.has(dirName)) return true;
   if (/^\.Trash-\d+$/.test(dirName)) return true;
-  if (/^(samples|extras|featurettes|trailers)$/i.test(dirName)) return true;
+  if (/^(samples|extras|featurettes|trailers|specials|season\s*0+)$/i.test(dirName)) return true;
   return false;
 };
 
@@ -144,13 +144,14 @@ const parseMediaTitle = (filename, folderPath, showContext = false) => {
     .trim();
 
   // Check for S01E01 / S01E01E02 / S01E01-E02 / S01E01-02
-  const sxxExxMatch = strippedName.match(/\bS(\d{1,2})[._\s-]*E(\d{1,3})(?:[-_E\s]+(?:S\d{1,2})?E?(\d{1,3}))*\b/i);
+  const sxxExxMatch = strippedName.match(/(?<=[^a-z0-9]|^|[a-z])S(\d{1,2})[._\s-]*E(\d{1,3})(?:[-_E\s]+(?:S\d{1,2})?E?(\d{1,3}))*/i)
+    || strippedName.match(/[sS](\d{1,2})[._\s-]*[eE](\d{1,3})/i);
   // Check for classic scene format 1x01 / 01x02 / 1x01-02
   const sceneMatch = !sxxExxMatch ? strippedName.match(/\b(\d{1,2})x(\d{1,3})(?:[-_x]+(\d{1,3}))*\b/i) : null;
   // Check for Season folder or Specials / Season 0
-  const seasonWordMatch = !sxxExxMatch && !sceneMatch ? strippedName.match(/(Season\s*\d+|Specials|Season\s*0+)/i) : null;
+  const seasonWordMatch = !sxxExxMatch && !sceneMatch ? strippedName.match(/(Season\s*\d+|Specials|Season\s*0+|Staffel\s*\d+|Series\s*\d+)/i) : null;
 
-  const isSeasonFolder = Boolean(folderPath && /(?:Season\s*\d+|Specials)/i.test(folderPath));
+  const isSeasonFolder = Boolean(folderPath && /(?:Season\s*\d+|Specials|Staffel\s*\d+|Series\s*\d+)/i.test(folderPath));
   let isTvShow = Boolean(sxxExxMatch || sceneMatch || seasonWordMatch || isSeasonFolder);
 
   // Anime/absolute numbering: only when folder context suggests a show

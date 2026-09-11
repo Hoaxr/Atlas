@@ -1,15 +1,16 @@
 import { useState } from 'react';
 import api from '../../lib/api';
-import { Plus, Trash2, RefreshCw, CheckCircle2, AlertCircle, FolderTree, ChevronDown } from 'lucide-react';
+import { Plus, Trash2, RefreshCw, CheckCircle2, AlertCircle, FolderTree, ChevronDown, Disc } from 'lucide-react';
 import { customAlert } from '../../utils/alerts';
 import { useOutsideClick } from '../../lib/useOutsideClick';
 import DuplicateSection from './DuplicateSection';
 import CustomSelect from '../../components/shared/CustomSelect';
 
 const SCAN_MODES = [
-  { value: 'full',      label: 'Full Scan',       desc: 'Everything — new files, metadata, subtitles' },
+  { value: 'full',      label: 'Full Scan',       desc: 'Everything — movies, TV shows, music, metadata' },
   { value: 'movies',    label: 'Movies Only',     desc: 'Scan only the movies root folders' },
   { value: 'shows',     label: 'TV Shows Only',   desc: 'Scan only the TV shows root folders' },
+  { value: 'music',     label: 'Music Only',      desc: 'Scan only the music root folders' },
   { value: 'new',       label: 'New Files Only',   desc: 'Only detect and add new media files' },
   { value: 'refresh',   label: 'Refresh Metadata', desc: 'Re-scan resolutions, codecs, ratings & sizes' },
   { value: 'rematch',   label: 'Re-match Files',   desc: 'Re-match existing files to TMDB (fix bad matches)' },
@@ -145,6 +146,31 @@ export default function LibraryTab({
                     ))}
                     {data.addedShows?.map((s, i) => (
                       <p key={`lib-${i}`} className="text-[10px] text-emerald-400/80 font-mono">📺 {s.title}</p>
+                    ))}
+                  </div>
+                </details>
+              )}
+            </div>
+          )}
+
+          {/* Music Items found */}
+          {(data?.addedTracksCount > 0 || data?.addedMusicAlbumsCount > 0) && (
+            <div>
+              <p className="text-xs text-emerald-400 mt-2 flex items-center gap-1">
+                <CheckCircle2 className="w-3 h-3" />{' '}
+                {data.addedTracksCount > 0 && `${data.addedTracksCount} new music track${data.addedTracksCount !== 1 ? 's' : ''}`}
+                {data.addedTracksCount > 0 && data.addedMusicAlbumsCount > 0 && ' & '}
+                {data.addedMusicAlbumsCount > 0 && `${data.addedMusicAlbumsCount} album${data.addedMusicAlbumsCount !== 1 ? 's' : ''}`}
+                {' found'}
+              </p>
+              {data.addedTracks?.length > 0 && (
+                <details className="mt-1.5">
+                  <summary className="text-[10px] text-emerald-400/60 cursor-pointer hover:text-emerald-400 transition-colors">
+                    View tracks
+                  </summary>
+                  <div className="mt-1 space-y-0.5 max-h-24 overflow-y-auto">
+                    {data.addedTracks.map((t, i) => (
+                      <p key={`lib-track-${i}`} className="text-[10px] text-emerald-400/80 font-mono">🎵 {t.artist} — {t.title}{t.album ? ` (${t.album})` : ''}</p>
                     ))}
                   </div>
                 </details>
@@ -356,6 +382,49 @@ export default function LibraryTab({
                 <p className="text-[11px] text-slate-500 mt-2">Wait this many days after the media is watched before deleting it.</p>
               </div>
             )}
+
+            {/* Music Import & Tagging Options */}
+            <div className="pt-4 border-t border-white/5 space-y-3">
+              <h4 className="text-sm font-bold text-slate-300 flex items-center gap-2">
+                <Disc className="w-4 h-4 text-cyan-400" /> Music Import & Tagging
+              </h4>
+
+              <label className="flex items-start gap-3 cursor-pointer p-4 rounded-xl bg-slate-900/50 border border-white/5 hover:border-cyan-500/30 transition-colors group">
+                <div className="mt-0.5">
+                  <input
+                    type="checkbox"
+                    className="sr-only"
+                    checked={settings?.writeMusicMetadata !== 'false' && settings?.writeMusicMetadata !== false}
+                    onChange={e => setSettings({ ...settings, writeMusicMetadata: String(e.target.checked) })}
+                  />
+                  <div className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out ${(settings?.writeMusicMetadata !== 'false' && settings?.writeMusicMetadata !== false) ? 'bg-cyan-500' : 'bg-slate-700'}`}>
+                    <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${(settings?.writeMusicMetadata !== 'false' && settings?.writeMusicMetadata !== false) ? 'translate-x-5' : 'translate-x-0'}`} />
+                  </div>
+                </div>
+                <div>
+                  <p className="text-sm font-bold text-slate-200 group-hover:text-cyan-400 transition-colors">Embed metadata tags into audio files</p>
+                  <p className="text-xs text-slate-400 mt-1">Write artist, album, track, year, and cover art tags directly into FLAC / MP3 files during import.</p>
+                </div>
+              </label>
+
+              <label className="flex items-start gap-3 cursor-pointer p-4 rounded-xl bg-slate-900/50 border border-white/5 hover:border-cyan-500/30 transition-colors group">
+                <div className="mt-0.5">
+                  <input
+                    type="checkbox"
+                    className="sr-only"
+                    checked={settings?.musicMonitorNewReleases !== 'false' && settings?.musicMonitorNewReleases !== false}
+                    onChange={e => setSettings({ ...settings, musicMonitorNewReleases: String(e.target.checked) })}
+                  />
+                  <div className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out ${(settings?.musicMonitorNewReleases !== 'false' && settings?.musicMonitorNewReleases !== false) ? 'bg-cyan-500' : 'bg-slate-700'}`}>
+                    <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${(settings?.musicMonitorNewReleases !== 'false' && settings?.musicMonitorNewReleases !== false) ? 'translate-x-5' : 'translate-x-0'}`} />
+                  </div>
+                </div>
+                <div>
+                  <p className="text-sm font-bold text-slate-200 group-hover:text-cyan-400 transition-colors">Automatically monitor new releases</p>
+                  <p className="text-xs text-slate-400 mt-1">When MusicBrainz detects newly released albums from your tracked artists, automatically flag them for search.</p>
+                </div>
+              </label>
+            </div>
           </div>
         </div>
       )}

@@ -6,7 +6,6 @@ const fs = require('fs');
 const fsp = require('fs/promises');
 const path = require('path');
 const axios = require('axios');
-const { GoogleGenerativeAI } = require('@google/generative-ai');
 const db = require('../config/database');
 const { getSetting, setSetting, invalidateSettingsCache } = require('../utils/settings');
 const { getVersionInfo } = require('../utils/version');
@@ -93,6 +92,12 @@ router.get('/', (req, res, next) => {
         renameEpisodes,
         standardEpisodeFormat,
         seasonFolderFormat,
+        musicArtistFolderFormat: getSetting('musicArtistFolderFormat') || '{Artist Name}',
+        musicAlbumFolderFormat: getSetting('musicAlbumFolderFormat') || '{Album Title} ({Year})',
+        musicTrackFileFormat: getSetting('musicTrackFileFormat') || '{TrackNumber:00} - {Track Title}',
+        writeMusicMetadata: getSetting('writeMusicMetadata') !== 'false',
+        musicImportMode: getSetting('musicImportMode') || 'copy',
+        musicMonitorNewReleases: getSetting('musicMonitorNewReleases') !== 'false',
         removeCompletedDownloads,
         deleteTorrentFiles,
         hideCompletedDownloads,
@@ -157,6 +162,12 @@ const SETTING_SCHEMA = {
   renameEpisodes:           { type: 'boolean' },
   standardEpisodeFormat:    { type: 'string' },
   seasonFolderFormat:       { type: 'string' },
+  musicArtistFolderFormat:  { type: 'string' },
+  musicAlbumFolderFormat:   { type: 'string' },
+  musicTrackFileFormat:     { type: 'string' },
+  writeMusicMetadata:       { type: 'string' },
+  musicImportMode:          { type: 'string' },
+  musicMonitorNewReleases:  { type: 'string' },
   removeCompletedDownloads: { type: 'boolean' },
   deleteTorrentFiles:       { type: 'boolean' },
   hideCompletedDownloads:   { type: 'boolean' },
@@ -862,8 +873,16 @@ router.get('/status', async (req, res) => {
       const result = await testFn();
       services[name] = result;
     } catch (e) {
-      services[name] = { status: 'error', message: e.message };
-      errors.push({ name: label, message: e.message });
+      const isQuota = e.response?.status === 429 ||
+                      e.message?.includes('429') ||
+                      e.message?.toLowerCase().includes('quota') ||
+                      e.message?.toLowerCase().includes('rate limit');
+      if (isQuota) {
+        services[name] = { status: 'warning', message: 'Quota limit reached (Connected)' };
+      } else {
+        services[name] = { status: 'error', message: e.message };
+        errors.push({ name: label, message: e.message });
+      }
     }
   };
 
@@ -959,25 +978,25 @@ router.get('/status', async (req, res) => {
   const geminiKey = getSetting('geminiApiKey');
   if (geminiKey) {
     await test('gemini', 'Gemini', async () => {
-      const genAI = new GoogleGenerativeAI(geminiKey);
-      const configuredModel = getSetting('geminiModel');
-      const candidateModels = [...new Set([
-        configuredModel,
-        'gemini-2.5-flash',
-        'gemini-2.5-pro',
-        'gemini-flash-latest'
-      ].filter(Boolean))];
-      let lastErr = null;
-      for (const m of candidateModels) {
-        try {
-          const model = genAI.getGenerativeModel({ model: m });
-          await model.generateContent('Reply with OK');
-          return { status: 'connected' };
-        } catch (err) {
-          lastErr = err;
+      // Validate key using Google's models metadata endpoint.
+      // This costs 0 generation quota, avoids rate limits, and directly tests API key validity.
+      try {
+        const r = await axios.get(`https://generativelanguage.googleapis.com/v1beta/models?key=${geminiKey}`, {
+          timeout: 5000
+        });
+        if (r.status === 200 && Array.isArray(r.data?.models)) {
+          return { status: 'connected', message: 'Connected' };
         }
+      } catch (err) {
+        if (err.response?.status === 429 || err.message?.includes('429') || err.message?.toLowerCase().includes('quota')) {
+          return { status: 'warning', message: 'Quota limit reached (Connected)' };
+        }
+        if (err.response?.status === 400 || err.response?.status === 403) {
+          throw new Error('Invalid API key', { cause: err });
+        }
+        throw new Error(err.response?.data?.error?.message || err.message || 'Gemini API test failed', { cause: err });
       }
-      throw lastErr || new Error('Gemini API test failed');
+      return { status: 'connected', message: 'Connected' };
     });
   } else {
     services.gemini = { status: 'unconfigured' };

@@ -46,7 +46,7 @@ const authedRequest = async (client, requestFn) => {
   }
 };
 
-const addTorrent = async (client, torrentUrl) => {
+const addTorrent = async (client, torrentUrl, type = 'movie') => {
   await authedRequest(client, async (cookie) => {
     const formData = new FormData();
     let finalUrl = torrentUrl;
@@ -88,10 +88,22 @@ const addTorrent = async (client, torrentUrl) => {
     }
     if (finalUrl) formData.append('urls', finalUrl);
     formData.append('savepath', '/downloads');
+    const category = type === 'music' ? 'music' : type === 'tv' ? 'tv' : 'movies';
+    formData.append('category', category);
+    formData.append('tags', category);
 
-    await http.post(`${client.host}:${client.port}/api/v2/torrents/add`, formData, {
-      headers: { ...formData.getHeaders(), 'Cookie': cookie }
-    });
+    try {
+      await http.post(`${client.host}:${client.port}/api/v2/torrents/add`, formData, {
+        headers: { ...formData.getHeaders(), 'Cookie': cookie }
+      });
+    } catch (err) {
+      // 409 Conflict means the torrent is already present in qBittorrent's download queue
+      if (err.response?.status === 409 || err.response?.data === 'Conflict' || /already/i.test(err.response?.data || '')) {
+        console.log(`[qBittorrent] Torrent is already present in download client: ${finalUrl || torrentUrl}`);
+        return true;
+      }
+      throw err;
+    }
   });
   return true;
 };

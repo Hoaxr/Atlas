@@ -77,10 +77,10 @@ router.get('/shows/:id', async (req, res, next) => {
       SELECT s.*,
         CASE
           WHEN s.status = 'downloading' OR (SELECT COUNT(*) FROM episodes WHERE show_id = s.id AND status = 'downloading') > 0 THEN 'downloading'
-          WHEN (SELECT COUNT(*) FROM episodes WHERE show_id = s.id AND status = 'downloaded') > 0 THEN
-            CASE WHEN s.monitored = 1 AND (SELECT COUNT(*) FROM episodes WHERE show_id = s.id AND monitored = 1 AND (file_path IS NULL OR file_path = '') AND status != 'downloaded' AND air_date IS NOT NULL AND air_date <= ${getAiredCutoffSql()}) > 0 THEN 'monitored' ELSE 'downloaded' END
+          WHEN (SELECT COUNT(*) FROM episodes WHERE show_id = s.id AND status = 'downloaded' AND season_number > 0) > 0 THEN
+            CASE WHEN s.monitored = 1 AND (SELECT COUNT(*) FROM episodes WHERE show_id = s.id AND season_number > 0 AND monitored = 1 AND (file_path IS NULL OR file_path = '') AND status != 'downloaded' AND air_date IS NOT NULL AND air_date <= ${getAiredCutoffSql()}) > 0 THEN 'monitored' ELSE 'downloaded' END
           WHEN s.monitored = 0 THEN 'unmonitored'
-          WHEN (SELECT COUNT(*) FROM episodes WHERE show_id = s.id AND monitored = 1 AND (file_path IS NULL OR file_path = '') AND status != 'downloaded' AND air_date IS NOT NULL AND air_date <= ${getAiredCutoffSql()}) > 0 THEN 'monitored'
+          WHEN (SELECT COUNT(*) FROM episodes WHERE show_id = s.id AND season_number > 0 AND monitored = 1 AND (file_path IS NULL OR file_path = '') AND status != 'downloaded' AND air_date IS NOT NULL AND air_date <= ${getAiredCutoffSql()}) > 0 THEN 'monitored'
           ELSE s.status
         END as status,
         qp.name as quality_profile_name 
@@ -126,6 +126,7 @@ const refreshShowData = async (id) => {
               const match = item.name.match(/[sS](\d+)[eE](\d+)/) || item.name.match(/(?:^|[ .-])(\d{1,2})x(\d{2})(?:[ .-]|$)/);
               if (match) {
                 const s = parseInt(match[1], 10);
+                if (s === 0) continue; // Skip specials
                 const firstE = parseInt(match[2], 10);
                 // Extract all numbers after the season prefix for multi-episode support
                 // Only match the contiguous episode block (stops at whitespace)
@@ -295,7 +296,7 @@ const refreshShowData = async (id) => {
           let removedCount = 0;
           for (const ep of allDbEpisodes) {
             const key = `${ep.season_number}|${ep.episode_number}`;
-            if (!tmdbEpisodeKeys.has(key) && ep.status !== 'downloaded') {
+            if (ep.season_number === 0 || (!tmdbEpisodeKeys.has(key) && ep.status !== 'downloaded')) {
               deleteStale.run(ep.id);
               removedCount++;
             }
@@ -326,7 +327,7 @@ router.post('/shows/:id/refresh', async (req, res, next) => {
 
 router.get('/shows/:id/episodes', async (req, res, next) => {
   try {
-    const episodes = db.prepare('SELECT * FROM episodes WHERE show_id = ? ORDER BY season_number ASC, episode_number ASC').all(req.params.id);
+    const episodes = db.prepare('SELECT * FROM episodes WHERE show_id = ? AND season_number > 0 ORDER BY season_number ASC, episode_number ASC').all(req.params.id);
 
     // Group episodes by directory to avoid scanning the same directory multiple times
     const dirMap = {};

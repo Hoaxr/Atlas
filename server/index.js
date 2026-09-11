@@ -328,7 +328,14 @@ app.use(express.json({ limit: '500kb' }));
 // Routes
 // Apply auth middleware to all /api routes except /api/auth
 app.use('/api', (req, res, next) => {
-  if (req.path.startsWith('/auth') || req.path.startsWith('/watcher/image') || req.path.startsWith('/images') || req.path === '/webhooks/download-client') {
+  if (
+    req.path.startsWith('/auth') ||
+    req.path.startsWith('/watcher/image') ||
+    req.path.startsWith('/images') ||
+    (req.method === 'GET' && req.path.startsWith('/library/music/artists/') && req.path.endsWith('/image')) ||
+    (req.method === 'GET' && req.path.startsWith('/library/music/albums/') && req.path.endsWith('/cover')) ||
+    req.path === '/webhooks/download-client'
+  ) {
     return next();
   }
   return authMiddleware(req, res, next);
@@ -512,6 +519,18 @@ const shutdown = (signal) => {
 };
 process.on('SIGTERM', () => shutdown('SIGTERM'));
 process.on('SIGINT', () => shutdown('SIGINT'));
+
+// Process-level safety nets. Node terminates the process on unhandled promise
+// rejections by default, so a stray background error (e.g. an indexer search or a
+// websocket callback) makes the whole app look like it "stopped working". Log
+// instead of dying silently so the server stays up and the cause is visible.
+process.on('unhandledRejection', (reason) => {
+  const detail = reason instanceof Error ? (reason.stack || reason.message) : String(reason);
+  console.error('[Backend] Unhandled promise rejection:', detail);
+});
+process.on('uncaughtException', (err) => {
+  console.error('[Backend] Uncaught exception:', err?.stack || err);
+});
 
 server.listen(PORT, () => {
   console.log(`[Backend] Server op poort ${PORT}`);

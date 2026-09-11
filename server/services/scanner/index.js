@@ -44,16 +44,33 @@ const stopScan = () => {
 
 const doScan = async (mode = 'full') => {
   const allPaths = db.prepare('SELECT * FROM library_paths').all();
-  // Only scan movies and tv paths — skip downloads
-  let paths = allPaths.filter(p => p.type !== 'downloads');
+  const musicPaths = allPaths.filter(p => p.type === 'music');
+  
+  // Only scan movies and tv paths for video modes — skip downloads and music
+  let paths = allPaths.filter(p => p.type === 'movies' || p.type === 'tv');
   
   if (mode === 'movies') {
     paths = paths.filter(p => p.type === 'movies');
   } else if (mode === 'shows') {
     paths = paths.filter(p => p.type === 'tv');
+  } else if (mode === 'music') {
+    paths = [];
   }
 
-  if (!paths || paths.length === 0) {
+  const hasVideoPaths = paths.length > 0;
+  const hasMusicPaths = musicPaths.length > 0;
+
+  if (mode === 'music' && !hasMusicPaths) {
+    scanProgress.isScanning = false;
+    scanProgress.currentFile = 'Finished';
+    scanProgress.currentPhase = 'Finished';
+    const eventBus = require('../eventBus');
+    eventBus.info('Scan complete: no music library paths configured');
+    try { require('../../routes/library/system').invalidateStatsCache(); } catch { /* ignore */ }
+    return;
+  }
+
+  if (mode !== 'music' && !hasVideoPaths && !hasMusicPaths) {
     scanProgress.isScanning = false;
     scanProgress.currentFile = 'Finished';
     scanProgress.currentPhase = 'Finished';
@@ -64,9 +81,10 @@ const doScan = async (mode = 'full') => {
   }
 
   const MODE_STAGES = {
-    full:      5,
+    full:      hasMusicPaths ? (hasVideoPaths ? 6 : 1) : 5,
     movies:    5,
     shows:     5,
+    music:     1,
     new:       3,
     refresh:   1,
     rematch:   3,
@@ -84,11 +102,11 @@ const doScan = async (mode = 'full') => {
   };
 
   try {
-    const gatherFiles = ['full', 'movies', 'shows', 'new', 'rematch'].includes(mode);
-    const processFiles = ['full', 'movies', 'shows', 'new', 'rematch'].includes(mode);
-    const updateMetadata = ['full', 'movies', 'shows', 'new', 'rematch', 'refresh'].includes(mode);
-    const syncWatched = ['full', 'movies', 'shows'].includes(mode);
-    const scanSubtitles = ['full', 'movies', 'shows', 'subtitles'].includes(mode);
+    const gatherFiles = ['full', 'movies', 'shows', 'new', 'rematch'].includes(mode) && hasVideoPaths;
+    const processFiles = ['full', 'movies', 'shows', 'new', 'rematch'].includes(mode) && hasVideoPaths;
+    const updateMetadata = ['full', 'movies', 'shows', 'new', 'rematch', 'refresh'].includes(mode) && hasVideoPaths;
+    const syncWatched = ['full', 'movies', 'shows'].includes(mode) && hasVideoPaths;
+    const scanSubtitles = ['full', 'movies', 'shows', 'subtitles'].includes(mode) && hasVideoPaths;
 
     let allFiles = []; // Scoped outside the if-blocks so processFiles can access it
 
@@ -144,7 +162,7 @@ const doScan = async (mode = 'full') => {
       }
     }
 
-    if (mode !== 'movies') {
+    if (mode !== 'movies' && mode !== 'music') {
       const existingShows = db.prepare("SELECT id, title, folder_path FROM shows WHERE folder_path IS NOT NULL").all();
       const showsToDelete = [];
       for (const s of existingShows) {
@@ -156,6 +174,12 @@ const doScan = async (mode = 'full') => {
         removedCount++;
       }
       
+      // Circuit breaker: do not delete shows en masse if drive is unreachable
+      if (existingShows.length > 0 && showsToDelete.length > 5 && showsToDelete.length >= existingShows.length * 0.2) {
+        console.error(`[Scanner] Circuit breaker triggered! ${showsToDelete.length}/${existingShows.length} shows appear missing. Aborting show deletion to protect library.`);
+        showsToDelete.length = 0;
+      }
+
       if (showsToDelete.length > 0) {
         db.transaction(() => {
           const delEpStmt = db.prepare('DELETE FROM episodes WHERE show_id = ?');
@@ -186,6 +210,11 @@ const doScan = async (mode = 'full') => {
         })();
         console.log(`[Scanner] Reset ${orphanEpisodes.length} episode(s) with missing files to monitored`);
       }
+
+      // Purge any Season 0 specials per user preference
+      try {
+        db.prepare("DELETE FROM episodes WHERE season_number = 0").run();
+      } catch { /* ignore */ }
     }
 
     if (removedCount > 0) {
@@ -231,6 +260,38 @@ const doScan = async (mode = 'full') => {
     if (scanSubtitles) {
       await scanLibrarySubtitles(scanProgress, nextStage, mode);
     }
+
+    // ════════════════════════════════════════════
+    // Stage: Scan music library
+    // ════════════════════════════════════════════
+    const scanMusic = ['full', 'music'].includes(mode);
+    if (scanMusic) {
+      if (hasMusicPaths) {
+        nextStage('Scanning music library...');
+        const { scanMusicLibrary } = require('../musicScannerService');
+        const musicResult = await scanMusicLibrary(
+          (p) => {
+            if (p.currentPhase) scanProgress.currentPhase = p.currentPhase;
+            if (p.currentFile) scanProgress.currentFile = p.currentFile;
+            if (p.processedFiles !== undefined) scanProgress.processedFiles = p.processedFiles;
+            if (p.totalFiles !== undefined) scanProgress.totalFiles = p.totalFiles;
+          },
+          () => scanProgress.cancelled
+        );
+
+        scanProgress.addedTracksCount = (scanProgress.addedTracksCount || 0) + (musicResult.addedTracksCount || 0);
+        scanProgress.addedMusicAlbumsCount = (scanProgress.addedMusicAlbumsCount || 0) + (musicResult.addedAlbumsCount || 0);
+        scanProgress.addedTracks = (scanProgress.addedTracks || []).concat(musicResult.addedTracks || []);
+        if (musicResult.unreachablePaths?.length) {
+          scanProgress.unreachablePaths.push(...musicResult.unreachablePaths);
+        }
+        if (musicResult.emptyPaths?.length) {
+          scanProgress.emptyPaths.push(...musicResult.emptyPaths);
+        }
+      } else if (mode === 'music') {
+        scanProgress.emptyPaths.push({ path: 'Music', error: 'No music root folders configured' });
+      }
+    }
   } catch (error) {
     const isCancelled = error?.message === 'Scan cancelled by user';
     if (isCancelled) {
@@ -259,24 +320,20 @@ async function completeScan() {
     eventBus.info('Library scan cancelled');
   } else {
     scanProgress.currentPhase = 'Finished';
-    const added = scanProgress.addedMoviesCount + scanProgress.addedShowsCount;
+    const added = scanProgress.addedMoviesCount + scanProgress.addedShowsCount + (scanProgress.addedTracksCount || 0);
     const failed = (scanProgress.failedMovies?.length || 0) + (scanProgress.failedShows?.length || 0);
     if (added > 0 || failed > 0) {
-      eventBus.success(`Scan complete: ${added} added${failed > 0 ? `, ${failed} failed` : ''}`);
+      const parts = [];
+      if (scanProgress.addedMoviesCount > 0) parts.push(`${scanProgress.addedMoviesCount} movie${scanProgress.addedMoviesCount !== 1 ? 's' : ''}`);
+      if (scanProgress.addedShowsCount > 0) parts.push(`${scanProgress.addedShowsCount} show${scanProgress.addedShowsCount !== 1 ? 's' : ''}`);
+      if (scanProgress.addedTracksCount > 0) parts.push(`${scanProgress.addedTracksCount} music track${scanProgress.addedTracksCount !== 1 ? 's' : ''}`);
+      eventBus.success(`Scan complete: ${parts.join(', ')} added${failed > 0 ? `, ${failed} failed` : ''}`);
     } else {
       eventBus.info('Scan complete: no new items found');
     }
   }
   // Invalidate stats cache
   try { require('../../routes/library/system').invalidateStatsCache(); } catch { /* ignore */ }
-  // Clear accumulated arrays to free memory
-  scanProgress.addedMovies = [];
-  scanProgress.addedShows = [];
-  scanProgress.failedMovies = [];
-  scanProgress.failedShows = [];
-  scanProgress.skippedFiles = [];
-  scanProgress.unreachablePaths = [];
-  scanProgress.emptyPaths = [];
   _scanMutex = false;
 }
 
@@ -298,8 +355,11 @@ const scanLibrary = async (mode = 'full') => {
     addedMoviesCount: 0,
     addedShowsCount: 0,
     addedEpisodesCount: 0,
+    addedTracksCount: 0,
+    addedMusicAlbumsCount: 0,
     addedMovies: [],
     addedShows: [],
+    addedTracks: [],
     failedMovies: [],
     failedShows: [],
     skippedCount: 0,

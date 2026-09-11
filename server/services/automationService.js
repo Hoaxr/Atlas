@@ -9,6 +9,7 @@ const downloadClientService = require('./downloadClientService');
 const taskRegistry = require('./taskRegistry');
 const tmdbService = require('./tmdbService');
 const imageService = require('./imageService');
+const musicScannerService = require('./musicScannerService');
 const eventBus = require('./eventBus');
 const { runWithConcurrency } = require('../utils/concurrency');
 const { registerJob } = require('../utils/cronRegistry');
@@ -31,6 +32,7 @@ const DEFAULT_SCHEDULES = {
   music_search_cycle:     '0 * * * *',  // Hourly — search for missing albums
   music_metadata_refresh: '30 3 * * *', // Daily at 3:30 AM
   music_new_release_check:'0 1 * * *',  // Daily at 1 AM
+  music_library_scan:     '0 */6 * * *',// Every 6 hours — scan music root folders
 };
 
 const getSchedule = (taskId) => {
@@ -443,12 +445,21 @@ const runMissingFilesCheck = async () => {
   const pathsResult = db.prepare('SELECT path FROM library_paths').all();
   const validRootPaths = [];
   
-  // Disconnected drive protection: only proceed for roots that exist
+  // Disconnected drive protection: only proceed for roots that exist and are not empty
   for (const row of pathsResult) {
-    if (fs.existsSync(row.path)) {
-      validRootPaths.push(row.path);
-    } else {
-      console.warn(`[Automation] Skipping missing files check for ${row.path} (path not accessible).`);
+    try {
+      if (fs.existsSync(row.path)) {
+        const entries = fs.readdirSync(row.path);
+        if (entries.length > 0) {
+          validRootPaths.push(row.path);
+        } else {
+          console.warn(`[Automation] Skipping missing files check for ${row.path} (root directory is empty, possible unmounted share).`);
+        }
+      } else {
+        console.warn(`[Automation] Skipping missing files check for ${row.path} (path not accessible).`);
+      }
+    } catch (err) {
+      console.warn(`[Automation] Skipping missing files check for ${row.path}: ${err.message}`);
     }
   }
 
@@ -480,6 +491,13 @@ const runMissingFilesCheck = async () => {
   }
   
   const chunkArray = (arr, size) => Array.from({ length: Math.ceil(arr.length / size) }, (v, i) => arr.slice(i * size, i * size + size));
+
+  // Circuit breaker: prevent wiping movies if drive experienced temporary hiccup
+  if (movies.length > 0 && moviesToDelete.length > 5 && moviesToDelete.length >= movies.length * 0.2) {
+    console.error(`[Automation] Circuit breaker triggered! ${moviesToDelete.length}/${movies.length} movies appear missing. Aborting deletion to prevent data loss.`);
+    eventBus.warn('Missing files check aborted: excessive missing movies detected (drive may be unmounted)', { missingCount: moviesToDelete.length });
+    return;
+  }
 
   if (moviesToDelete.length > 0) {
     const chunks = chunkArray(moviesToDelete, 100);
@@ -520,6 +538,13 @@ const runMissingFilesCheck = async () => {
     }
   }
   
+  // Circuit breaker: prevent wiping shows if network drive experienced temporary unmount/disconnection
+  if (shows.length > 0 && showsToDelete.length > 5 && showsToDelete.length >= shows.length * 0.2) {
+    console.error(`[Automation] Circuit breaker triggered! ${showsToDelete.length}/${shows.length} shows appear missing. Aborting deletion to prevent data loss.`);
+    eventBus.warn('Missing files check aborted: excessive missing shows detected (drive may be unmounted)', { missingCount: showsToDelete.length });
+    return;
+  }
+
   if (showsToDelete.length > 0) {
     const chunks = chunkArray(showsToDelete, 100);
     for (const chunk of chunks) {
@@ -560,7 +585,7 @@ const runMissingFilesCheck = async () => {
   }
 
 
-  if (episodesToReset.length > 0) {
+    if (episodesToReset.length > 0) {
     const chunks = chunkArray(episodesToReset, 100);
     for (const chunk of chunks) {
       db.transaction((ids) => {
@@ -571,11 +596,54 @@ const runMissingFilesCheck = async () => {
     }
   }
 
-  if (moviesRemoved > 0 || showsRemoved > 0) {
-    eventBus.success('Scan complete: Removed missing files from DB', { moviesRemoved, showsRemoved });
+  // Check Music Tracks specifically
+  let tracksReset = 0;
+  const tracks = db.prepare("SELECT t.id, t.title, t.file_path, t.album_id, a.folder_path as album_folder FROM music_tracks t LEFT JOIN music_albums a ON a.id = t.album_id WHERE t.file_path IS NOT NULL").all();
+  const tracksToReset = [];
+  const affectedAlbumIds = new Set();
+  for (const tr of tracks) {
+    const albumFolder = tr.album_folder;
+    if (albumFolder) {
+      const isOnAccessibleRoot = validRootPaths.some(root => isInsideRoot(root, albumFolder));
+      if (!isOnAccessibleRoot) continue;
+    } else {
+      const isOnAccessibleRoot = validRootPaths.some(root => isInsideRoot(root, tr.file_path));
+      if (!isOnAccessibleRoot) continue;
+    }
+
+    if (!fs.existsSync(tr.file_path)) {
+      console.log(`[Automation] Music track file missing, reverting to monitored: ${tr.title}`);
+      tracksToReset.push(tr.id);
+      if (tr.album_id) affectedAlbumIds.add(tr.album_id);
+      tracksReset++;
+    }
   }
 
-  console.log(`[Automation] Missing files check complete. Removed ${moviesRemoved} movies and ${showsRemoved} shows.`);
+  if (tracksToReset.length > 0) {
+    const chunks = chunkArray(tracksToReset, 100);
+    for (const chunk of chunks) {
+      db.transaction((ids) => {
+        const resetStmt = db.prepare("UPDATE music_tracks SET file_path = NULL, file_size = 0, status = 'monitored' WHERE id = ?");
+        for (const id of ids) resetStmt.run(id);
+      })(chunk);
+      await new Promise(r => setImmediate(r));
+    }
+
+    for (const albumId of affectedAlbumIds) {
+      const remainingDownloaded = db.prepare(
+        "SELECT COUNT(*) as cnt FROM music_tracks WHERE album_id = ? AND file_path IS NOT NULL AND status = 'downloaded'"
+      ).get(albumId);
+      if (!remainingDownloaded || remainingDownloaded.cnt === 0) {
+        db.prepare("UPDATE music_albums SET status = 'monitored' WHERE id = ? AND status = 'downloaded'").run(albumId);
+      }
+    }
+  }
+
+  if (moviesRemoved > 0 || showsRemoved > 0 || tracksReset > 0) {
+    eventBus.success('Scan complete: Removed missing files from DB', { moviesRemoved, showsRemoved, tracksReset });
+  }
+
+  console.log(`[Automation] Missing files check complete. Removed ${moviesRemoved} movies, ${showsRemoved} shows, reset ${tracksReset} music tracks.`);
 };
 
 // Holds references to active node-cron jobs so we can stop/restart them
@@ -970,15 +1038,14 @@ const runMusicSearchCycle = async () => {
     try {
       const profile = db.prepare('SELECT * FROM music_quality_profiles WHERE id = ?').get(album.quality_profile_id);
       const results = await indexerService.searchMusic(album.artist_name, album.title, profile, false);
-      if (results.length > 0) {
-        const best = results[0];
-        await downloadClientService.addTorrent(best.downloadUrl || best.magnetUrl, {
-          label: 'music',
-          category: 'music',
-        });
+      const best = results && results[0];
+      if (best && best.link) {
+        await downloadClientService.addTorrent(best.link, 'music');
         db.prepare("UPDATE music_albums SET status = 'downloading' WHERE id = ?").run(album.id);
         grabbed++;
         console.log(`[MusicSearch] Grabbed: ${album.artist_name} - ${album.title} (${best.title})`);
+      } else {
+        console.log(`[MusicSearch] No release found: ${album.artist_name} - ${album.title}`);
       }
     } catch (err) {
       console.warn(`[MusicSearch] Failed for album ${album.title}: ${err.message}`);
@@ -1048,6 +1115,13 @@ const runMusicNewReleaseCheck = async () => {
   // These will be picked up by the next music_search_cycle run
 };
 
+// ── Music: Library Scan ───────────────────────────────────────────────────────
+
+const runMusicLibraryScan = async () => {
+  console.log('[Automation] Running music library scan...');
+  return await musicScannerService.scanMusicLibrary();
+};
+
 const init = () => {
   const tasks = [
     { id: 'search_cycle',           name: 'Torrent Search Cycle',           desc: 'Searches for missing monitored movies and episodes and sends them to the download client.', fn: runSearchCycle },
@@ -1063,6 +1137,7 @@ const init = () => {
     { id: 'music_search_cycle',     name: 'Music Search Cycle',             desc: 'Searches for missing monitored albums and sends them to the download client.',              fn: runMusicSearchCycle },
     { id: 'music_metadata_refresh', name: 'Music Metadata Refresh',         desc: 'Refreshes artist and album metadata from MusicBrainz.',                                     fn: runMusicMetadataRefresh },
     { id: 'music_new_release_check',name: 'Music New Release Check',        desc: 'Checks for new album releases from monitored artists.',                                      fn: runMusicNewReleaseCheck },
+    { id: 'music_library_scan',     name: 'Music Library Scan',             desc: 'Scans configured music library folders, imports new audio tracks, and updates tags.',       fn: runMusicLibraryScan },
   ];
 
   for (const task of tasks) {
@@ -1070,6 +1145,10 @@ const init = () => {
     taskRegistry.registerTask(task.id, task.name, task.desc, cronExp, task.fn);
     scheduleTask(task.id, cronExp);
   }
+
+  try {
+    musicScannerService.consolidateMultiDiscAlbums(db);
+  } catch { /* ignore */ }
 
   console.log('[Automation] Background tasks initialized.');
 };
@@ -1088,5 +1167,6 @@ module.exports = {
   init,
   runSearchCycle,
   runMissingFilesCheck,
+  runMusicLibraryScan,
   rescheduleAll,
 };

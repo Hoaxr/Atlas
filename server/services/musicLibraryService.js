@@ -8,7 +8,6 @@ const path = require('path');
 const fs = require('fs');
 const db = require('../config/database');
 const musicMetadataService = require('./musicMetadataService');
-const imageService = require('./imageService');
 const eventBus = require('./eventBus');
 const { getSetting } = require('../utils/settings');
 
@@ -98,18 +97,82 @@ const addArtist = async (mbid, rootFolderPath = null, qualityProfileId = null) =
   return newArtist;
 };
 
+const cleanAlbumTitle = (title) => {
+  return (title || '')
+    .toLowerCase()
+    .replace(/\s*\(.*?(edition|version|remaster|deluxe|bonus|expanded).*?\)/gi, '')
+    .replace(/\[.*?\]/g, '')
+    .replace(/\s*(?:[([{-]|\b)(?:cd|disc|disk)\s*\d+(?:[)\]}]|\b|$)/gi, '')
+    .replace(/[^a-z0-9]/g, '')
+    .trim();
+};
+
 const syncArtistAlbums = async (artistId, releaseGroups) => {
   const artist = db.prepare('SELECT * FROM music_artists WHERE id = ?').get(artistId);
-  if (!artist) return;
+  if (!artist || !Array.isArray(releaseGroups)) return;
+
+  const existingAlbums = db.prepare('SELECT id, mbid, title, status FROM music_albums WHERE artist_id = ?').all(artistId);
 
   for (const rg of releaseGroups) {
-    const existing = db.prepare('SELECT id FROM music_albums WHERE mbid = ?').get(rg.mbid);
-    if (existing) continue;
+    if (!rg.title) continue;
 
-    db.prepare(`
-      INSERT OR IGNORE INTO music_albums (mbid, artist_id, title, release_date, year, album_type, status, monitored, quality_profile_id)
-      VALUES (?, ?, ?, ?, ?, ?, 'monitored', 1, ?)
-    `).run(rg.mbid, artistId, rg.title, rg.releaseDate, rg.year, rg.albumType, artist.quality_profile_id);
+    // 1. Check if already matched by MBID
+    let match = existingAlbums.find(a => a.mbid && a.mbid === rg.mbid);
+
+    // 2. If not matched by MBID, match by title
+    if (!match) {
+      const isRgRemix = rg.title.toLowerCase().includes('remix');
+      const rgClean = cleanAlbumTitle(rg.title);
+      const rgParts = rg.title.includes('/') ? rg.title.split('/').map(cleanAlbumTitle) : [rgClean];
+      match = existingAlbums.find(a => {
+        if (!a.title) return false;
+        const isARemix = a.title.toLowerCase().includes('remix');
+        if (isRgRemix !== isARemix) return false;
+        const aClean = cleanAlbumTitle(a.title);
+        return aClean === rgClean || rgParts.includes(aClean);
+      });
+    }
+
+    if (match) {
+      // Update existing album with MBID, release date, and album type if missing
+      db.prepare(`
+        UPDATE music_albums SET
+          mbid = COALESCE(mbid, ?),
+          release_date = COALESCE(release_date, ?),
+          year = COALESCE(year, ?),
+          album_type = COALESCE(NULLIF(album_type, 'Album'), ?)
+        WHERE id = ?
+      `).run(rg.mbid, rg.releaseDate, rg.year, rg.albumType || 'Album', match.id);
+
+      match.mbid = match.mbid || rg.mbid;
+    } else {
+      // 3. Insert new missing release from artist's discography
+      try {
+        const profileId = artist.quality_profile_id || 1;
+        const insertRes = db.prepare(`
+          INSERT INTO music_albums (
+            mbid, artist_id, title, release_date, year, album_type, status, monitored, quality_profile_id
+          ) VALUES (?, ?, ?, ?, ?, ?, 'monitored', 1, ?)
+        `).run(
+          rg.mbid,
+          artistId,
+          rg.title,
+          rg.releaseDate,
+          rg.year,
+          rg.albumType || 'Album',
+          profileId
+        );
+
+        existingAlbums.push({
+          id: insertRes.lastInsertRowid,
+          mbid: rg.mbid,
+          title: rg.title,
+          status: 'monitored'
+        });
+      } catch {
+        // Unique constraint or duplicate
+      }
+    }
   }
 };
 
@@ -140,11 +203,15 @@ const getArtists = (limit = 0, offset = 0, sort = 'name_asc', filters = {}) => {
   let query = `
     SELECT a.*,
       COUNT(DISTINCT al.id) as album_count,
+      COUNT(DISTINCT dt.album_id) as downloaded_albums,
       COUNT(DISTINCT t.id) as track_count,
       COALESCE(SUM(t.file_size), 0) as total_size
     FROM music_artists a
     LEFT JOIN music_albums al ON al.artist_id = a.id
     LEFT JOIN music_tracks t ON t.artist_id = a.id
+    LEFT JOIN (
+      SELECT DISTINCT album_id FROM music_tracks WHERE file_path IS NOT NULL
+    ) dt ON dt.album_id = al.id
     ${whereClause}
     GROUP BY a.id
     ORDER BY ${orderBy}
@@ -164,10 +231,14 @@ const getArtistById = (id) => {
 
   const albums = db.prepare(`
     SELECT al.*,
-      COUNT(t.id) as downloaded_tracks,
+      qp.preferred_format as quality_profile_format,
+      COUNT(CASE WHEN t.file_path IS NOT NULL THEN 1 END) as downloaded_tracks,
+      COALESCE(NULLIF(al.track_count, 0), COUNT(t.id)) as track_count,
+      COUNT(DISTINCT CASE WHEN t.id IS NOT NULL THEN COALESCE(t.disc_number, 1) END) as disc_count,
       COALESCE(SUM(t.file_size), 0) as total_size
     FROM music_albums al
-    LEFT JOIN music_tracks t ON t.album_id = al.id AND t.file_path IS NOT NULL
+    LEFT JOIN music_tracks t ON t.album_id = al.id
+    LEFT JOIN music_quality_profiles qp ON qp.id = al.quality_profile_id
     WHERE al.artist_id = ?
     GROUP BY al.id
     ORDER BY al.year ASC, al.title COLLATE NOCASE ASC
@@ -204,9 +275,16 @@ const deleteArtist = async (id, deleteFiles = false) => {
     }
   }
 
+  // Cascade delete all albums and tracks for this artist
+  const artistAlbums = db.prepare('SELECT id FROM music_albums WHERE artist_id = ?').all(id);
+  for (const album of artistAlbums) {
+    db.prepare('DELETE FROM music_tracks WHERE album_id = ?').run(album.id);
+  }
+  db.prepare('DELETE FROM music_albums WHERE artist_id = ?').run(id);
   db.prepare('DELETE FROM music_artists WHERE id = ?').run(id);
   eventBus.emit({ type: 'MUSIC_ARTIST_REMOVED', artistId: id, name: artist.name });
 };
+
 
 // ── Album CRUD ────────────────────────────────────────────────────────────────
 
@@ -251,12 +329,16 @@ const getAlbums = (limit = 0, offset = 0, sort = 'added_desc', filters = {}) => 
   let query = `
     SELECT al.*,
       a.name as artist_name, a.mbid as artist_mbid,
+      qp.preferred_format as quality_profile_format,
       COUNT(CASE WHEN t.file_path IS NOT NULL THEN 1 END) as downloaded_tracks,
       COUNT(t.id) as total_tracks,
+      COALESCE(NULLIF(al.track_count, 0), COUNT(t.id)) as track_count,
+      COUNT(DISTINCT CASE WHEN t.id IS NOT NULL THEN COALESCE(t.disc_number, 1) END) as disc_count,
       COALESCE(SUM(t.file_size), 0) as total_size
     FROM music_albums al
     JOIN music_artists a ON a.id = al.artist_id
     LEFT JOIN music_tracks t ON t.album_id = al.id
+    LEFT JOIN music_quality_profiles qp ON qp.id = al.quality_profile_id
     ${whereClause}
     GROUP BY al.id
     ORDER BY ${orderBy}
@@ -284,7 +366,9 @@ const getAlbumById = (id) => {
     ORDER BY disc_number ASC, track_number ASC
   `).all(id);
 
-  return { ...album, tracks };
+  const discCount = new Set(tracks.map(t => t.disc_number || 1)).size;
+  const trackCount = tracks.length || album.track_count || 0;
+  return { ...album, track_count: trackCount, disc_count: discCount, tracks };
 };
 
 const updateAlbum = (id, updates) => {
@@ -315,8 +399,10 @@ const deleteAlbum = async (id, deleteFiles = false) => {
     }
   }
 
+  db.prepare('DELETE FROM music_tracks WHERE album_id = ?').run(id);
   db.prepare('DELETE FROM music_albums WHERE id = ?').run(id);
 };
+
 
 // ── Track CRUD ────────────────────────────────────────────────────────────────
 

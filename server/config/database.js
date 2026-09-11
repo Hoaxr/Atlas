@@ -1203,6 +1203,23 @@ const MIGRATIONS = [
         `).run('Lossy (MP3 320)', 'MP3', JSON.stringify(['MP3', 'AAC']), 320, 'MP3', 0);
       }
     }
+  },
+  {
+    id: 39,
+    name: 'add_album_expected_track_count',
+    run: (db) => {
+      if (!hasColumn('music_albums', 'expected_track_count')) {
+        db.exec("ALTER TABLE music_albums ADD COLUMN expected_track_count INTEGER DEFAULT 0;");
+      }
+    }
+  },
+  {
+    id: 40,
+    name: 'remove_all_season_0_specials',
+    run: (db) => {
+      const res = db.prepare('DELETE FROM episodes WHERE season_number = 0').run();
+      console.log(`[DB Migration 40] Removed ${res.changes} season 0 special episodes`);
+    }
   }
 ];
 

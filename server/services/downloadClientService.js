@@ -59,7 +59,7 @@ const addTorrent = async (torrentUrl, type = 'movie') => {
   const client = getClient();
   if (!client) throw new Error('No download client configured');
   console.log(`[DownloadClient] Adding ${type} torrent via ${client.type}: ${String(torrentUrl).substring(0, 80)}...`);
-  return getAdapter(client).addTorrent(client, torrentUrl);
+  return getAdapter(client).addTorrent(client, torrentUrl, type);
 };
 
 const getTorrents = async () => {
@@ -92,6 +92,27 @@ const deleteTorrent = async (hash, deleteFiles = false) => {
   return getAdapter(client).deleteTorrent(client, hash, deleteFiles);
 };
 
+const pauseTorrents = async (hashes) => {
+  const client = getClient();
+  if (!client) throw new Error('No download client configured');
+  const adapter = getAdapter(client);
+  return Promise.allSettled(hashes.map(h => adapter.pauseTorrent(client, h)));
+};
+
+const resumeTorrents = async (hashes) => {
+  const client = getClient();
+  if (!client) throw new Error('No download client configured');
+  const adapter = getAdapter(client);
+  return Promise.allSettled(hashes.map(h => adapter.resumeTorrent(client, h)));
+};
+
+const deleteTorrents = async (hashes, deleteFiles = false) => {
+  const client = getClient();
+  if (!client) throw new Error('No download client configured');
+  const adapter = getAdapter(client);
+  return Promise.allSettled(hashes.map(h => adapter.deleteTorrent(client, h, deleteFiles)));
+};
+
 const testClientConnection = async (client) => {
   if (!client.host.startsWith('http')) client.host = `http://${client.host}`;
   client.type = client.type || 'qbittorrent';
@@ -99,5 +120,6 @@ const testClientConnection = async (client) => {
 };
 
 module.exports = {
-  addTorrent, getTorrents, getTransferInfo, pauseTorrent, resumeTorrent, deleteTorrent, testClientConnection
+  addTorrent, getTorrents, getTransferInfo, pauseTorrent, resumeTorrent, deleteTorrent,
+  pauseTorrents, resumeTorrents, deleteTorrents, testClientConnection
 };
