@@ -191,10 +191,10 @@ router.get(['/artists/:idOrMbid/image', '/artists/:idOrMbid/poster'], async (req
       if (!artist.mbid && artist.name) {
         try {
           const mbResults = await musicMetadataService.searchArtist(artist.name);
-          const exact = mbResults.find(r => r.name.toLowerCase() === artist.name.toLowerCase());
-          if (exact?.mbid) {
-            db.prepare('UPDATE music_artists SET mbid = ? WHERE id = ?').run(exact.mbid, artist.id);
-            artist.mbid = exact.mbid;
+          const match = musicMetadataService.findBestArtistMatch(artist.name, mbResults);
+          if (match?.mbid) {
+            db.prepare('UPDATE music_artists SET mbid = ? WHERE id = ?').run(match.mbid, artist.id);
+            artist.mbid = match.mbid;
           }
         } catch { /* proceed without MBID */ }
       }
@@ -441,10 +441,22 @@ router.post('/artists', async (req, res, next) => {
   }
 });
 
-router.get('/artists/:id', (req, res, next) => {
+router.get('/artists/:id', async (req, res, next) => {
   try {
-    const artist = musicLibraryService.getArtistById(parseInt(req.params.id));
+    let artist = musicLibraryService.getArtistById(parseInt(req.params.id));
     if (!artist) return res.status(404).json({ status: 'error', message: 'Artist not found' });
+
+    // If monitored artist currently has 0 albums, automatically refresh from MusicBrainz
+    // so discography immediately populates without manual intervention
+    if (artist.monitored && (!artist.albums || artist.albums.length === 0)) {
+      try {
+        await musicLibraryService.refreshArtist(artist.id);
+        const refreshed = musicLibraryService.getArtistById(artist.id);
+        if (refreshed) artist = refreshed;
+      } catch (err) {
+        console.warn(`[Music] Auto-refresh on artist view failed for ${artist.name}:`, err.message);
+      }
+    }
 
     // Make sure the artist folder exists on disk
     const ensuredFolder = musicLibraryService.ensureArtistFolder(artist);

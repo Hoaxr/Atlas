@@ -542,9 +542,10 @@ const refreshArtist = async (artistId) => {
   if (!artist.mbid && artist.name) {
     try {
       const mbResults = await musicMetadataService.searchArtist(artist.name);
-      const match = mbResults.find(r => r.name.toLowerCase() === artist.name.toLowerCase()) || mbResults[0];
+      const match = musicMetadataService.findBestArtistMatch(artist.name, mbResults);
       if (match?.mbid) {
-        db.prepare('UPDATE music_artists SET mbid = ? WHERE id = ?').run(match.mbid, artist.id);
+        db.prepare('UPDATE music_artists SET mbid = ?, sort_name = COALESCE(NULLIF(?, ""), sort_name), disambiguation = ? WHERE id = ?')
+          .run(match.mbid, match.sortName || match.name, match.disambiguation || '', artist.id);
         artist.mbid = match.mbid;
       }
     } catch (err) {
@@ -557,7 +558,30 @@ const refreshArtist = async (artistId) => {
   }
 
   musicMetadataService.clearCache(artist.mbid);
-  const fresh = await musicMetadataService.getArtistById(artist.mbid);
+  let fresh = await musicMetadataService.getArtistById(artist.mbid);
+
+  // If the resolved MBID returned 0 release groups, check if there is a better candidate
+  // on MusicBrainz (e.g. Shawn Carter vs Jeremy Jackson for "Jay Z")
+  if ((!fresh || !fresh.releaseGroups || fresh.releaseGroups.length === 0) && artist.name) {
+    try {
+      const mbResults = await musicMetadataService.searchArtist(artist.name);
+      const betterMatch = musicMetadataService.findBestArtistMatch(artist.name, mbResults);
+      if (betterMatch?.mbid && betterMatch.mbid !== artist.mbid) {
+        console.log(`[MusicMetadata] Re-matching artist "${artist.name}" (previous MBID ${artist.mbid} had 0 releases) -> ${betterMatch.name} (${betterMatch.mbid})`);
+        musicMetadataService.clearCache(betterMatch.mbid);
+        const betterFresh = await musicMetadataService.getArtistById(betterMatch.mbid);
+        if (betterFresh && (betterFresh.releaseGroups?.length > 0 || !fresh)) {
+          db.prepare('UPDATE music_artists SET mbid = ?, sort_name = COALESCE(NULLIF(?, ""), sort_name), disambiguation = ? WHERE id = ?')
+            .run(betterMatch.mbid, betterFresh.sortName || betterMatch.name, betterFresh.disambiguation || '', artist.id);
+          artist.mbid = betterMatch.mbid;
+          fresh = betterFresh;
+        }
+      }
+    } catch (err) {
+      console.warn(`[MusicMetadata] Error attempting artist rematch for ${artist.name}:`, err.message);
+    }
+  }
+
   if (!fresh) return artist;
 
   db.prepare(`
@@ -566,6 +590,7 @@ const refreshArtist = async (artistId) => {
       genres = CASE WHEN genres IS NULL OR genres = '[]' THEN ? ELSE genres END,
       rating = COALESCE(NULLIF(rating, 0), ?),
       disambiguation = COALESCE(NULLIF(disambiguation, ''), ?),
+      sort_name = COALESCE(NULLIF(sort_name, ''), ?),
       last_refreshed_at = CURRENT_TIMESTAMP
     WHERE id = ?
   `).run(
@@ -573,6 +598,7 @@ const refreshArtist = async (artistId) => {
     JSON.stringify(fresh.genres || []),
     fresh.rating || 0,
     fresh.disambiguation || '',
+    fresh.sortName || artist.name,
     artist.id
   );
 

@@ -67,6 +67,69 @@ const throttledGet = async (url, params = {}, maxRetries = 3) => {
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+/**
+ * Normalizes an artist name for robust comparison by:
+ * - Decomposing unicode and stripping diacritics / accents (e.g. Ÿ -> Y, é -> e, ö -> o)
+ * - Lowercasing
+ * - Replacing various dashes / hyphens with space
+ * - Stripping non-alphanumeric characters
+ * - Collapsing multiple spaces
+ */
+const normalizeArtistName = (str) => {
+  if (!str) return '';
+  return str
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[\u2010-\u2015\u2212\-]/g, ' ')
+    .replace(/[^a-z0-9\s]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+};
+
+/**
+ * Finds the best matching artist from a MusicBrainz search result list.
+ * Prioritizes:
+ * 1. Exact normalized matches on name or sortName, sorted by highest MB score.
+ * 2. Partial / word boundary matches, sorted by highest MB score.
+ * 3. Fallback to the top MusicBrainz search result.
+ */
+const findBestArtistMatch = (query, mbResults = []) => {
+  if (!mbResults || mbResults.length === 0) return null;
+  const qNorm = normalizeArtistName(query);
+  const qCompact = qNorm.replace(/\s+/g, '');
+  if (!qNorm) return mbResults[0];
+
+  // 1. Exact normalized match on name or sortName (e.g. 'JAŸ-Z' -> 'jay z' matches 'Jay Z' -> 'jay z')
+  const exactMatches = mbResults.filter(r => {
+    const nameNorm = normalizeArtistName(r.name);
+    const sortNorm = normalizeArtistName(r.sortName);
+    return nameNorm === qNorm ||
+           (qCompact && nameNorm.replace(/\s+/g, '') === qCompact) ||
+           sortNorm === qNorm ||
+           (qCompact && sortNorm.replace(/\s+/g, '') === qCompact);
+  });
+
+  if (exactMatches.length > 0) {
+    exactMatches.sort((a, b) => (b.score || 0) - (a.score || 0));
+    return exactMatches[0];
+  }
+
+  // 2. Partial match
+  const partialMatches = mbResults.filter(r => {
+    const nameNorm = normalizeArtistName(r.name);
+    return nameNorm.startsWith(qNorm) || qNorm.startsWith(nameNorm);
+  });
+
+  if (partialMatches.length > 0) {
+    partialMatches.sort((a, b) => (b.score || 0) - (a.score || 0));
+    return partialMatches[0];
+  }
+
+  // 3. Fallback: top MusicBrainz result
+  return mbResults[0];
+};
+
 const searchArtist = async (query) => {
   if (!query || !query.trim()) return [];
   const trimmed = query.trim();
@@ -443,6 +506,8 @@ const getReleaseGroupTracks = async (mbid) => {
 };
 
 module.exports = {
+  normalizeArtistName,
+  findBestArtistMatch,
   searchArtist,
   getArtistById,
   searchAlbum,

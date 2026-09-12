@@ -1347,6 +1347,31 @@ const MIGRATIONS = [
         }
       }
     }
+  },
+  {
+    id: 44,
+    name: 'fix_mismatched_artist_mbids',
+    run: (db) => {
+      // Fix known mismatched MBID for Jay Z (Jeremy Jackson -> Shawn Carter)
+      db.prepare(`
+        UPDATE music_artists
+        SET mbid = 'f82bcf78-5b69-4622-a5ef-73800768d9ac',
+            sort_name = 'Jay‐Z',
+            disambiguation = 'US rapper',
+            last_refreshed_at = NULL
+        WHERE (name LIKE 'Jay Z' OR name LIKE 'Jay-Z' OR name LIKE 'JAŸ-Z')
+          AND (mbid = 'e1a54a6f-608f-461f-875e-3f55eb1d1144' OR mbid IS NULL);
+      `).run();
+
+      // Reset last_refreshed_at for any monitored artist with 0 albums so that
+      // on-demand loading or library scan pulls their complete discography from MusicBrainz
+      db.prepare(`
+        UPDATE music_artists
+        SET last_refreshed_at = NULL
+        WHERE monitored = 1
+          AND (SELECT COUNT(*) FROM music_albums WHERE artist_id = music_artists.id) = 0;
+      `).run();
+    }
   }
 ];
 
