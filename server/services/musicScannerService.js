@@ -11,7 +11,7 @@ const fsp = require('fs/promises');
 const db = require('../config/database');
 const eventBus = require('./eventBus');
 const { parseMusicFormat } = require('../utils/mediaParsing');
-const { findAllAudioFiles, readAudioTags } = require('./musicImportService');
+const { findAllAudioFiles, readAudioTags, isIgnoredMusicDir } = require('./musicImportService');
 const musicLibraryService = require('./musicLibraryService');
 const musicMetadataService = require('./musicMetadataService');
 const imageService = require('./imageService');
@@ -101,10 +101,13 @@ const scanMusicLibrary = async (onProgress = null, checkCancelled = null) => {
     console.warn('[MusicScanner] Failed to consolidate duplicate artists:', err.message);
   }
 
+  const defaultProfile = db.prepare('SELECT id FROM music_quality_profiles ORDER BY id ASC LIMIT 1').get();
+  const defaultProfileId = defaultProfile?.id || null;
+
   const accessibleRoots = [];
   const allAudioFiles = [];
 
-  // 1. Check reachability and discover audio files in all music root folders
+  // 1. Check reachability, discover artist folders (even if empty), and gather audio files
   for (const libPath of musicPaths) {
     if (checkCancelled && checkCancelled()) break;
 
@@ -117,7 +120,54 @@ const scanMusicLibrary = async (onProgress = null, checkCancelled = null) => {
       accessibleRoots.push(libPath.path);
 
       if (onProgress) {
-        onProgress({ currentPhase: `Discovering audio files in ${path.basename(libPath.path)}...`, processedFiles: 0, totalFiles: 0 });
+        onProgress({ currentPhase: `Discovering artist folders and audio files in ${path.basename(libPath.path)}...`, processedFiles: 0, totalFiles: 0 });
+      }
+
+      // Discover all top-level artist directories under this music root (even if completely empty)
+      try {
+        const dirEntries = await fsp.readdir(libPath.path, { withFileTypes: true });
+        for (const entry of dirEntries) {
+          if (!entry.isDirectory()) continue;
+          const folderName = entry.name.trim();
+          if (!folderName) continue;
+          if (isIgnoredMusicDir(folderName)) continue;
+          if (folderName.startsWith('@') || folderName.startsWith('$') || /^lost\+found$/i.test(folderName)) continue;
+
+          const artistFolder = path.join(libPath.path, folderName);
+
+          // Check if artist already exists in DB
+          let existingArtist = db.prepare('SELECT id, name, folder_path, mbid FROM music_artists WHERE folder_path = ? LIMIT 1').get(artistFolder);
+          if (!existingArtist) {
+            existingArtist = db.prepare(`
+              SELECT id, name, folder_path, mbid FROM music_artists
+              WHERE name LIKE ? COLLATE NOCASE OR sort_name LIKE ? COLLATE NOCASE
+              LIMIT 1
+            `).get(folderName, folderName);
+            if (existingArtist && (!existingArtist.folder_path || !fs.existsSync(existingArtist.folder_path))) {
+              try {
+                db.prepare('UPDATE music_artists SET folder_path = ? WHERE id = ?').run(artistFolder, existingArtist.id);
+                existingArtist.folder_path = artistFolder;
+              } catch { /* ignore */ }
+            }
+          }
+
+          if (!existingArtist) {
+            try {
+              const insertArtist = db.prepare(`
+                INSERT INTO music_artists (name, sort_name, genres, status, monitored, folder_path, quality_profile_id)
+                VALUES (?, ?, '[]', 'monitored', 1, ?, ?)
+              `).run(folderName, folderName, artistFolder, defaultProfileId);
+              const newId = insertArtist.lastInsertRowid;
+              touchedArtistIds.add(newId);
+              results.addedArtistsCount++;
+              console.log(`[MusicScanner] Discovered new artist folder (including empty): "${folderName}" (${artistFolder})`);
+            } catch (err) {
+              console.warn(`[MusicScanner] Failed to insert artist folder ${folderName}:`, err.message);
+            }
+          }
+        }
+      } catch (err) {
+        console.warn(`[MusicScanner] Failed to read top-level directories in ${libPath.path}:`, err.message);
       }
 
       const files = await findAllAudioFiles(libPath.path);
@@ -140,9 +190,6 @@ const scanMusicLibrary = async (onProgress = null, checkCancelled = null) => {
   for (const t of dbTracks) {
     existingTracks.set(t.file_path, t);
   }
-
-  const defaultProfile = db.prepare('SELECT id FROM music_quality_profiles ORDER BY id ASC LIMIT 1').get();
-  const defaultProfileId = defaultProfile?.id || null;
 
   // 3. Process each audio file
   let processed = 0;

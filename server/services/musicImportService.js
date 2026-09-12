@@ -573,4 +573,5 @@ module.exports = {
   findAllAudioFiles,
   readAudioTags,
   matchAlbumFromFolder,
+  isIgnoredMusicDir,
 };
