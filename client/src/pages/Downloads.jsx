@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import api from '../lib/api';
-import { DownloadCloud, ArrowDown, ArrowUp, Activity, Film, Tv, Music2, Play, Pause, Trash2, Clock, HardDrive, CheckSquare, Square, X, Loader2 } from 'lucide-react';
+import { DownloadCloud, Download, ArrowDown, ArrowUp, Activity, Film, Tv, Music2, Play, Pause, Trash2, Clock, HardDrive, CheckSquare, Square, X, Loader2, Folder, MoreHorizontal } from 'lucide-react';
 import { customAlert, customConfirm } from '../utils/alerts';
 import useWebSocket from '../lib/useWebSocket';
 import StickyBar from '../components/shared/StickyBar';
@@ -35,7 +35,7 @@ const parseReleaseInfo = (rawName, torrent = {}) => {
     const isMusicClient = torrent.mediaType === 'music' || torrent.category === 'music' || torrent.category === 'audio';
     return {
       title: 'Retrieving metadata...',
-      mediaLabel: isMusicClient ? 'Audio' : 'Download',
+      mediaLabel: isMusicClient ? 'Music' : 'Download',
       resolution: null,
       source: null,
       codec: null,
@@ -146,7 +146,7 @@ const parseReleaseInfo = (rawName, torrent = {}) => {
 
     return {
       title: cleanMusicTitle || rawName,
-      mediaLabel: 'Audio',
+      mediaLabel: 'Music',
       resolution: null,
       source: musicSource,
       codec: musicQuality,
@@ -161,11 +161,17 @@ const parseReleaseInfo = (rawName, torrent = {}) => {
   // TV format check
   const tvMatch = name.match(/(.*?)\b(S\d{1,2}[._\s-]*E\d{1,3}(?:[-_E\s]+(?:S\d{1,2})?E?\d{1,3})*|Season\s*\d+|\d+x\d+)\b/i);
   if (tvMatch) {
-    const showTitle = tvMatch[1].replace(/[._()[\]-]/g, ' ').trim();
-    const epString = tvMatch[2].replace(/[._]/g, ' ').toUpperCase().trim();
+    let showTitle = tvMatch[1].replace(/[._()[\]-]/g, ' ').trim();
+    const yearMatch = tvMatch[1].match(/\b(19\d{2}|20\d{2})\b/);
+    if (yearMatch) {
+      const year = yearMatch[1];
+      const baseShow = tvMatch[1].replace(new RegExp(`\\b${year}\\b.*`), '').replace(/[._()[\]-]/g, ' ').trim();
+      if (baseShow) showTitle = `${baseShow} (${year})`;
+    }
+    const epString = tvMatch[2].replace(/[._]/g, '').toUpperCase().trim();
     return {
-      title: `${showTitle} — ${epString}`,
-      mediaLabel: 'Episode',
+      title: `${showTitle} ${epString}`,
+      mediaLabel: 'TV Show',
       resolution: resolution !== 'Unknown' ? resolution : null,
       source,
       codec: codec !== 'Unknown' ? codec : null,
@@ -225,6 +231,13 @@ export default function Downloads() {
   const [clientError, setClientError] = useState(false);
   const [selectedHashes, setSelectedHashes] = useState(new Set());
   const [bulkLoading, setBulkLoading] = useState(false);
+  const [openMenuHash, setOpenMenuHash] = useState(null);
+
+  useEffect(() => {
+    const handleOutsideClick = () => setOpenMenuHash(null);
+    window.addEventListener('click', handleOutsideClick);
+    return () => window.removeEventListener('click', handleOutsideClick);
+  }, []);
 
   useEffect(() => {
     // Initial fetch
@@ -331,6 +344,48 @@ export default function Downloads() {
     }
   };
 
+  const handlePause = async (hash) => {
+    try {
+      await api.post(`/clients/torrents/${hash}/pause`);
+      setDownloads(prev => prev.map(d => d.hash === hash ? { ...d, state: 'paused', dlspeed: 0 } : d));
+      customAlert('Download paused');
+    } catch (e) {
+      console.error('Failed to pause download', e);
+      customAlert('Failed to pause download', 'error');
+    }
+  };
+
+  const handleResume = async (hash) => {
+    try {
+      await api.post(`/clients/torrents/${hash}/resume`);
+      setDownloads(prev => prev.map(d => d.hash === hash ? { ...d, state: 'downloading' } : d));
+      customAlert('Download resumed');
+    } catch (e) {
+      console.error('Failed to resume download', e);
+      customAlert('Failed to resume download', 'error');
+    }
+  };
+
+  const handleDelete = async (hash, deleteFiles = true) => {
+    const msg = deleteFiles ? 'Cancel and delete this download and files?' : 'Remove this download from client?';
+    if (await customConfirm(msg)) {
+      try {
+        await api.delete(`/clients/torrents/${hash}?deleteFiles=${deleteFiles}`);
+        setDownloads(prev => prev.filter(d => d.hash !== hash));
+        setSelectedHashes(prev => {
+          if (!prev.has(hash)) return prev;
+          const next = new Set(prev);
+          next.delete(hash);
+          return next;
+        });
+        customAlert(deleteFiles ? 'Download deleted' : 'Download removed from client');
+      } catch (e) {
+        console.error('Failed to delete download', e);
+        customAlert('Failed to cancel download', 'error');
+      }
+    }
+  };
+
   const fetchClientData = async () => {
     try {
       const [statsResult, torrentsResult] = await Promise.allSettled([
@@ -380,11 +435,10 @@ export default function Downloads() {
     if (seconds <= 0) return 'Few seconds remaining';
     if (seconds < 60) return `${seconds}s remaining`;
     const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    if (mins < 60) return `${mins}m ${secs}s remaining`;
+    if (mins < 60) return `${mins}m remaining`;
     const hours = Math.floor(mins / 60);
     const remMins = mins % 60;
-    return `${hours}h ${remMins}m remaining`;
+    return remMins > 0 ? `${hours}h ${remMins}m remaining` : `${hours}h remaining`;
   };
 
   const getStateBadge = (state) => {
@@ -574,213 +628,230 @@ export default function Downloads() {
             </div>
           )}
 
-          <div className="space-y-3">
+          <div className="space-y-4">
             {downloads.map(t => {
               const isSelected = selectedHashes.has(t.hash);
               const totalSize = t.total_size || t.size || 0;
               const progressPct = Math.min(100, Math.max(0, Math.round(t.progress || 0)));
+              const completedBytes = t.completed || (totalSize > 0 ? (totalSize * progressPct / 100) : 0);
               const eta = formatEta(totalSize, t.progress || 0, t.dlspeed || 0);
               const info = parseReleaseInfo(t.name, t);
-              const stateBadge = getStateBadge(t.state);
+              const isPaused = (t.state || '').toLowerCase().includes('pause') || (t.state || '').toLowerCase().includes('stop');
+              const isComplete = progressPct >= 100 || (t.state || '').toLowerCase().includes('seed') || (t.state || '').toLowerCase().includes('complete');
+              const folderPath = t.save_path || t.downloadDir || (info.isMusic ? '/downloads/music' : info.isTv ? '/downloads/tvshows' : '/downloads/movies');
+
+              let speedText = '0 B/s';
+              if (t.dlspeed > 0) speedText = formatSpeed(t.dlspeed);
+              else if (t.upspeed > 0) speedText = formatSpeed(t.upspeed);
+              else if (isPaused) speedText = '0 B/s';
+
+              let etaText = 'Calculating...';
+              if (isPaused) etaText = 'Paused';
+              else if (isComplete && !eta) etaText = 'Completed';
+              else if (eta) etaText = eta;
+              else if (t.dlspeed === 0) etaText = 'Stalled';
 
               return (
                 <div 
                   key={t.hash} 
-                  className={`transition-all p-4 sm:p-4.5 rounded-xl border shadow-md space-y-3 group ${
+                  className={`transition-all p-5 sm:p-6 rounded-2xl border shadow-lg group relative ${
                     isSelected
                       ? 'bg-slate-900/90 border-emerald-500/40 ring-1 ring-emerald-500/30'
-                      : 'bg-slate-900/60 hover:bg-slate-900/85 border-white/5 hover:border-cyan-500/20'
+                      : 'bg-slate-900/60 hover:bg-slate-900/80 border-slate-800/80 hover:border-cyan-500/30'
                   }`}
                 >
-                  <div className="flex justify-between items-start gap-3">
-                    <div className="flex items-start gap-3 min-w-0 flex-1">
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          toggleSelect(t.hash);
-                        }}
-                        className="p-1 -m-1 mt-0.5 rounded hover:bg-slate-800 text-slate-400 hover:text-slate-200 transition-colors shrink-0"
-                        title={isSelected ? 'Deselect download' : 'Select download'}
-                        aria-label={isSelected ? `Deselect ${info.title}` : `Select ${info.title}`}
-                      >
-                        {isSelected ? (
-                          <CheckSquare className="w-4 h-4 text-emerald-400" />
-                        ) : (
-                          <Square className="w-4 h-4 text-slate-600 group-hover:text-slate-400 transition-colors" />
-                        )}
-                      </button>
-
-                      <div className="min-w-0 flex-1 space-y-1.5">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          {info.isMusic ? (
-                            <Music2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                          ) : info.isTv ? (
-                            <Tv className="w-4 h-4 text-purple-400 shrink-0" />
+                  <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5">
+                    {/* Left Column: Title + Badges, Client • Speed • ETA, Progress Bar */}
+                    <div className="flex-1 min-w-0 space-y-2.5">
+                      {/* Row 1: Checkbox + Title + Badges */}
+                      <div className="flex items-center gap-3 flex-wrap">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleSelect(t.hash);
+                          }}
+                          className="p-1 -ml-1 rounded hover:bg-slate-800 text-slate-500 hover:text-slate-300 transition-colors shrink-0"
+                          title={isSelected ? 'Deselect download' : 'Select download'}
+                          aria-label={isSelected ? `Deselect ${info.title}` : `Select ${info.title}`}
+                        >
+                          {isSelected ? (
+                            <CheckSquare className="w-4 h-4 text-emerald-400" />
                           ) : (
-                            <Film className="w-4 h-4 text-cyan-400 shrink-0" />
+                            <Square className="w-4 h-4 text-slate-600 group-hover:text-slate-400 transition-colors" />
                           )}
-                          <h3 
-                            className="text-sm sm:text-base font-bold text-slate-100 group-hover:text-cyan-300 transition-colors flex items-center gap-2"
-                            title={t.name}
-                          >
-                            {info.isPendingMetadata && <Loader2 className="w-4 h-4 text-indigo-400 animate-spin shrink-0" />}
-                            {info.title}
-                          </h3>
+                        </button>
 
-                        {/* Quality & Media Badges */}
-                        <div className="flex items-center gap-1.5 flex-wrap">
+                        <h3 
+                          className="text-base sm:text-lg font-bold text-white tracking-wide truncate flex items-center gap-2"
+                          title={t.name}
+                        >
+                          {info.isPendingMetadata && <Loader2 className="w-4 h-4 text-indigo-400 animate-spin shrink-0" />}
+                          {info.title}
+                        </h3>
+
+                        {/* Badges */}
+                        <div className="flex items-center gap-2 flex-wrap">
                           {/* Media Type Badge */}
-                          <span className={`text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded border ${
+                          <span className={`text-xs font-semibold px-3 py-0.5 rounded-full border ${
                             info.isMusic
-                              ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/25'
+                              ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
                               : info.isTv
-                              ? 'bg-purple-500/10 text-purple-300 border-purple-500/25'
-                              : 'bg-cyan-500/10 text-cyan-400 border-cyan-500/25'
+                              ? 'bg-purple-500/20 text-purple-300 border-purple-500/30'
+                              : 'bg-sky-500/20 text-sky-400 border-sky-500/30'
                           }`}>
-                            {info.mediaLabel || (info.isMusic ? 'Audio' : info.isTv ? 'Episode' : 'Movie')}
+                            {info.mediaLabel || (info.isMusic ? 'Music' : info.isTv ? 'TV Show' : 'Movie')}
                           </span>
 
                           {info.resolution && (
-                            <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-cyan-500/10 text-cyan-400 border border-cyan-500/25">
+                            <span className="text-xs font-medium px-2.5 py-0.5 rounded-md bg-slate-800/90 text-slate-300 border border-slate-700/60">
                               {info.resolution}
                             </span>
                           )}
-                          {info.source && info.source !== info.mediaLabel && (
-                            <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 border border-white/10">
-                              {info.source}
-                            </span>
-                          )}
-                          {info.codec && info.codec !== info.audio && info.codec !== info.resolution && (
-                            <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-300 border border-purple-500/25">
+
+                          {info.codec && info.codec !== info.resolution && info.codec !== info.audio && (
+                            <span className="text-xs font-medium px-2.5 py-0.5 rounded-md bg-purple-950/40 text-purple-300 border border-purple-800/50">
                               {info.codec}
                             </span>
                           )}
+
+                          {info.source && info.source !== info.mediaLabel && (
+                            <span className="text-xs font-medium px-2.5 py-0.5 rounded-md bg-blue-950/40 text-blue-300 border border-blue-800/50">
+                              {info.source}
+                            </span>
+                          )}
+
                           {info.audio && info.audio !== info.resolution && (
-                            <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/25">
+                            <span className="text-xs font-medium px-2.5 py-0.5 rounded-md bg-cyan-950/40 text-cyan-300 border border-cyan-800/50">
                               {info.audio}
                             </span>
                           )}
+
                           {info.hdr && (
-                            <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/25">
+                            <span className="text-xs font-medium px-2.5 py-0.5 rounded-md bg-amber-500/15 text-amber-300 border border-amber-500/30">
                               {info.hdr}
                             </span>
                           )}
                         </div>
                       </div>
 
-                      {/* Raw Release Title Subtext - only for TV/movies when it provides distinct scene details */}
-                      {!info.isMusic && !info.isPendingMetadata && t.name && (info.title || '').toLowerCase().replace(/[^a-z0-9]/g, '') !== t.name.toLowerCase().replace(/[^a-z0-9]/g, '') && (
-                        <p className="text-[11px] font-mono text-slate-500 truncate select-all" title={t.name}>
-                          {t.name}
-                        </p>
-                      )}
-                    </div>
-                  </div>
+                      {/* Row 2: Client • Speed • ETA */}
+                      <div className="flex items-center text-xs sm:text-sm text-slate-400 gap-1.5 flex-wrap pl-6">
+                        <span className="text-sky-400 font-semibold">{t.clientName || 'qBittorrent'}</span>
+                        <span className="text-slate-500">•</span>
+                        <span className="text-slate-300">{speedText}</span>
+                        <span className="text-slate-500">•</span>
+                        <span className="text-slate-400">{etaText}</span>
+                      </div>
 
-                  <div className="flex items-center gap-1.5 sm:gap-2 shrink-0 pt-0.5">
-                      {t.dlspeed > 0 && (
-                        <span className="flex items-center gap-1 text-xs font-mono font-bold text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-lg border border-emerald-500/20 shadow-sm">
-                          <ArrowDown className="w-3.5 h-3.5" />
-                          {formatSpeed(t.dlspeed)}
+                      {/* Row 3: Progress Bar + Percentage */}
+                      <div className="flex items-center gap-4 w-full pl-6 pt-0.5">
+                        <div className="flex-1 h-2 bg-slate-800/90 rounded-full overflow-hidden relative">
+                          <div 
+                            className="h-full rounded-full bg-emerald-400 transition-all duration-300 shadow-[0_0_12px_rgba(52,211,153,0.35)]" 
+                            style={{ width: `${progressPct}%` }}
+                          />
+                        </div>
+                        <span className="text-xs sm:text-sm font-semibold text-slate-300 font-mono shrink-0 w-12 text-right">
+                          {progressPct}%
                         </span>
-                      )}
-
-                      {/* Pause / Resume Button */}
-                      {(t.state || '').toLowerCase().includes('pause') || (t.state || '').toLowerCase().includes('stop') ? (
-                        <button
-                          onClick={async () => {
-                            try {
-                              await api.post(`/clients/torrents/${t.hash}/resume`);
-                              setDownloads(prev => prev.map(d => d.hash === t.hash ? { ...d, state: 'downloading' } : d));
-                              customAlert('Download resumed');
-                            } catch (e) {
-                              console.error('Failed to resume download', e);
-                              customAlert('Failed to resume download', 'error');
-                            }
-                          }}
-                          className="p-1.5 rounded-lg text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10 transition-all border border-emerald-500/20 hover:border-emerald-500/40"
-                          title="Resume Download"
-                        >
-                          <Play className="w-4 h-4 fill-emerald-400/20" />
-                        </button>
-                      ) : (
-                        <button
-                          onClick={async () => {
-                            try {
-                              await api.post(`/clients/torrents/${t.hash}/pause`);
-                              setDownloads(prev => prev.map(d => d.hash === t.hash ? { ...d, state: 'paused', dlspeed: 0 } : d));
-                              customAlert('Download paused');
-                            } catch (e) {
-                              console.error('Failed to pause download', e);
-                              customAlert('Failed to pause download', 'error');
-                            }
-                          }}
-                          className="p-1.5 rounded-lg text-amber-400 hover:text-amber-300 hover:bg-amber-500/10 transition-all border border-amber-500/20 hover:border-amber-500/40"
-                          title="Pause Download"
-                        >
-                          <Pause className="w-4 h-4" />
-                        </button>
-                      )}
-
-                      {/* Delete Button */}
-                      <button 
-                        onClick={async () => {
-                          if (await customConfirm('Cancel and delete this download?')) {
-                            try {
-                              await api.delete(`/clients/torrents/${t.hash}?deleteFiles=true`);
-                              setDownloads(prev => prev.filter(d => d.hash !== t.hash));
-                              setSelectedHashes(prev => {
-                                if (!prev.has(t.hash)) return prev;
-                                const next = new Set(prev);
-                                next.delete(t.hash);
-                                return next;
-                              });
-                              customAlert('Download deleted');
-                            } catch (e) {
-                              console.error('Failed to delete download', e);
-                              customAlert('Failed to cancel download', 'error');
-                            }
-                          }
-                        }}
-                        className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-all border border-transparent hover:border-rose-500/20"
-                        title="Delete Download"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      </div>
                     </div>
-                  </div>
 
-                  {/* Progress Bar with Gradient & Shimmer */}
-                  <div className="w-full bg-slate-800/80 rounded-full h-2 overflow-hidden ring-1 ring-white/5 relative">
-                    <div 
-                      className="bg-gradient-to-r from-emerald-500 via-teal-400 to-cyan-400 h-2 rounded-full transition-all duration-500 relative" 
-                      style={{ width: `${progressPct}%` }}
-                    >
-                      {t.dlspeed > 0 && (
-                        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/25 to-transparent animate-pulse" />
-                      )}
-                    </div>
-                  </div>
+                    {/* Right Column: Size/Path metadata + Circular Action Buttons */}
+                    <div className="flex items-center justify-between lg:justify-end gap-6 shrink-0 pt-3 lg:pt-0 border-t lg:border-t-0 border-white/5 pl-6 lg:pl-0">
+                      {/* Size & Path */}
+                      <div className="space-y-1.5 text-left">
+                        <div className="flex items-center gap-2 text-xs sm:text-sm font-medium text-slate-300 font-mono">
+                          <Download className="w-4 h-4 text-cyan-400 shrink-0" />
+                          <span>{formatBytes(completedBytes)} / {formatBytes(totalSize)}</span>
+                        </div>
+                        <div className="flex items-center gap-2 text-xs sm:text-sm text-slate-400 font-mono">
+                          <Folder className="w-4 h-4 text-cyan-400 shrink-0" />
+                          <span className="truncate max-w-[170px] sm:max-w-[220px]" title={folderPath}>
+                            {folderPath}
+                          </span>
+                        </div>
+                      </div>
 
-                  {/* Bottom Stats Meta Row */}
-                  <div className="flex flex-wrap items-center justify-between text-xs text-slate-400 gap-2">
-                    <div className="flex items-center gap-2.5 flex-wrap">
-                      <span className={`inline-flex items-center gap-1.5 text-[10px] font-bold uppercase px-2 py-0.5 rounded-md border ${stateBadge.class}`}>
-                        <span className={`w-1.5 h-1.5 rounded-full ${stateBadge.dot} ${t.dlspeed > 0 ? 'animate-ping' : ''}`} />
-                        {stateBadge.label || t.state || 'Active'}
-                      </span>
-                      <span className="flex items-center gap-1 text-slate-400">
-                        <HardDrive className="w-3 h-3 text-slate-500" />
-                        Size: <strong className="text-slate-200 font-mono">{totalSize > 0 ? formatBytes(totalSize) : 'Retrieving...'}</strong>
-                      </span>
-                      {eta && (
-                        <span className="text-cyan-400 font-medium flex items-center gap-1">
-                          <Clock className="w-3 h-3 text-cyan-500/70" /> {eta}
-                        </span>
-                      )}
+                      {/* Circular Action Buttons */}
+                      <div className="flex items-center gap-2.5 shrink-0">
+                        {/* Play / Pause Circular Button */}
+                        {isPaused || isComplete ? (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              isPaused ? handleResume(t.hash) : handlePause(t.hash);
+                            }}
+                            className="w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-emerald-950/40 text-emerald-400 border-2 border-emerald-500 shadow-[0_0_18px_rgba(16,185,129,0.35)] hover:bg-emerald-900/50 hover:scale-105 active:scale-95 flex items-center justify-center transition-all shrink-0"
+                            title={isPaused ? "Resume Download" : "Download Complete / Seeding"}
+                          >
+                            <Play className="w-4 h-4 fill-emerald-400 ml-0.5" />
+                          </button>
+                        ) : (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handlePause(t.hash);
+                            }}
+                            className="w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-slate-800/80 hover:bg-slate-700 text-slate-200 border border-white/10 flex items-center justify-center transition-all hover:scale-105 active:scale-95 shadow-md shrink-0"
+                            title="Pause Download"
+                          >
+                            <Pause className="w-4 h-4 fill-slate-200" />
+                          </button>
+                        )}
+
+                        {/* More Options (...) Circular Button */}
+                        <div className="relative" onClick={(e) => e.stopPropagation()}>
+                          <button
+                            onClick={() => setOpenMenuHash(openMenuHash === t.hash ? null : t.hash)}
+                            className="w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white border border-white/10 flex items-center justify-center transition-all hover:scale-105 active:scale-95 shadow-md shrink-0"
+                            title="More Options"
+                          >
+                            <MoreHorizontal className="w-4 h-4 sm:w-5 sm:h-5" />
+                          </button>
+
+                          {openMenuHash === t.hash && (
+                            <div 
+                              className="absolute right-0 top-full mt-2 w-52 bg-slate-900 border border-slate-700/80 rounded-xl shadow-2xl z-50 py-1.5 backdrop-blur-xl animate-scale-in"
+                            >
+                              <button
+                                onClick={() => {
+                                  isPaused ? handleResume(t.hash) : handlePause(t.hash);
+                                  setOpenMenuHash(null);
+                                }}
+                                className="w-full px-3.5 py-2 text-left text-xs font-semibold text-slate-200 hover:bg-slate-800/80 flex items-center gap-2.5 transition-colors"
+                              >
+                                {isPaused ? <Play className="w-4 h-4 text-emerald-400" /> : <Pause className="w-4 h-4 text-amber-400" />}
+                                <span>{isPaused ? 'Resume Download' : 'Pause Download'}</span>
+                              </button>
+
+                              <button
+                                onClick={async () => {
+                                  setOpenMenuHash(null);
+                                  await handleDelete(t.hash, false);
+                                }}
+                                className="w-full px-3.5 py-2 text-left text-xs font-semibold text-slate-200 hover:bg-slate-800/80 flex items-center gap-2.5 transition-colors"
+                              >
+                                <Trash2 className="w-4 h-4 text-slate-400" />
+                                <span>Remove from Client</span>
+                              </button>
+
+                              <button
+                                onClick={async () => {
+                                  setOpenMenuHash(null);
+                                  await handleDelete(t.hash, true);
+                                }}
+                                className="w-full px-3.5 py-2 text-left text-xs font-semibold text-rose-400 hover:bg-rose-500/10 flex items-center gap-2.5 transition-colors border-t border-white/5"
+                              >
+                                <Trash2 className="w-4 h-4 text-rose-400" />
+                                <span>Cancel & Delete Files</span>
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
                     </div>
-                    <span className="font-mono font-bold text-slate-100">{progressPct}%</span>
                   </div>
                 </div>
               );

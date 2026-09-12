@@ -65,7 +65,9 @@ const addTorrent = async (torrentUrl, type = 'movie') => {
 const getTorrents = async () => {
   const client = getClient();
   if (!client) return [];
-  return getAdapter(client).getTorrents(client);
+  const torrents = await getAdapter(client).getTorrents(client);
+  const clientName = client.name || (client.type === 'qbittorrent' ? 'qBittorrent' : client.type === 'deluge' ? 'Deluge' : client.type === 'transmission' ? 'Transmission' : client.type || 'qBittorrent');
+  return torrents.map(t => ({ ...t, clientName: t.clientName || clientName }));
 };
 
 const getTransferInfo = async () => {
