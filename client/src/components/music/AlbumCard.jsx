@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Play, Pause, Search, AlertCircle, Disc,
+  Play, Pause, Search, AlertCircle, Disc, FileAudio,
   Check, X
 } from 'lucide-react';
 import { useAudioPlayer } from '../../context/AudioPlayerContext';
