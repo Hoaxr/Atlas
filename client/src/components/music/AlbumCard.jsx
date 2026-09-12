@@ -221,7 +221,7 @@ export default function AlbumCard({
             ) : totalTracks > 0 ? (
               <span className="inline-flex items-center gap-1 text-[11px] text-slate-400">
                 <FileAudio className="w-3 h-3 text-slate-400" />
-                {downloadedTracks > 0 ? `${downloadedTracks}/${totalTracks}` : `${totalTracks} tracks`}
+                {`${downloadedTracks}/${totalTracks}`}
               </span>
             ) : null}
           </div>

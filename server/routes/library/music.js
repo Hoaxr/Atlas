@@ -813,8 +813,10 @@ router.get('/albums/:id/tracklist', async (req, res, next) => {
       const local = localTracks.find(l => {
         if (matchedLocalIds.has(l.id)) return false;
         if (mb.mbid && l.mbid === mb.mbid) return true;
+        const lNorm = normalizeTitle(l.title);
+        if (mbNorm && lNorm === mbNorm) return true;
+        if (mbNorm && lNorm && (lNorm.includes(mbNorm) || mbNorm.includes(lNorm))) return true;
         if (l.track_number === mb.track_number && (l.disc_number || 1) === mb.disc_number) return true;
-        if (mbNorm && normalizeTitle(l.title) === mbNorm) return true;
         return false;
       });
 

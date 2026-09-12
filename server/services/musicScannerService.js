@@ -13,7 +13,50 @@ const eventBus = require('./eventBus');
 const { parseMusicFormat } = require('../utils/mediaParsing');
 const { findAllAudioFiles, readAudioTags } = require('./musicImportService');
 const musicLibraryService = require('./musicLibraryService');
+const musicMetadataService = require('./musicMetadataService');
 const imageService = require('./imageService');
+
+const cueFolderCache = new Map();
+
+const parseCueSheetForFolder = async (folderPath) => {
+  if (cueFolderCache.has(folderPath)) return cueFolderCache.get(folderPath);
+
+  try {
+    const files = await fsp.readdir(folderPath);
+    const cueFile = files.find(f => f.toLowerCase().endsWith('.cue'));
+    if (!cueFile) {
+      cueFolderCache.set(folderPath, null);
+      return null;
+    }
+
+    const content = await fsp.readFile(path.join(folderPath, cueFile), 'utf8');
+    const tracks = [];
+    let currentTrack = null;
+    let currentFile = null;
+
+    for (const line of content.split(/\r?\n/)) {
+      const fileMatch = line.match(/^\s*FILE\s+"([^"]+)"/i);
+      if (fileMatch) currentFile = fileMatch[1].trim();
+
+      const trackMatch = line.match(/^\s*TRACK\s+(\d+)\s+AUDIO/i);
+      if (trackMatch) {
+        currentTrack = { trackNumber: parseInt(trackMatch[1], 10), title: '', file: currentFile };
+        tracks.push(currentTrack);
+        continue;
+      }
+      const titleMatch = line.match(/^\s*TITLE\s+"([^"]+)"/i);
+      if (titleMatch && currentTrack && !currentTrack.title) {
+        currentTrack.title = titleMatch[1].trim();
+      }
+    }
+
+    cueFolderCache.set(folderPath, tracks);
+    return tracks;
+  } catch {
+    cueFolderCache.set(folderPath, null);
+    return null;
+  }
+};
 
 const isInsideRoot = (root, p) => {
   const rel = path.relative(path.resolve(root), path.resolve(p));
@@ -49,6 +92,13 @@ const scanMusicLibrary = async (onProgress = null, checkCancelled = null) => {
     if (createdFolders > 0) console.log(`[MusicScanner] Ensured ${createdFolders} artist folder(s) (created/relinked).`);
   } catch (err) {
     console.warn('[MusicScanner] Failed to ensure artist folders:', err.message);
+  }
+
+  // Automatically merge and clean up any duplicate or featuring artists sharing a folder path
+  try {
+    consolidateDuplicateArtists(db);
+  } catch (err) {
+    console.warn('[MusicScanner] Failed to consolidate duplicate artists:', err.message);
   }
 
   const accessibleRoots = [];
@@ -153,38 +203,76 @@ const scanMusicLibrary = async (onProgress = null, checkCancelled = null) => {
       albumTitle = albumTitle.replace(/\s*\(\d{4}\)$/, '').trim();
 
       const trackTitle = (tags.title || path.basename(filePath, path.extname(filePath))).trim();
-      const trackNumber = tags.trackNumber || 1;
+      let trackNumber = tags.trackNumber || null;
       const format = tags.codec || parseMusicFormat(filePath) || path.extname(filePath).replace('.', '').toUpperCase();
+
+      // Determine top-level artist directory under the music root
+      let topArtistFolder = null;
+      let topFolderArtist = null;
+      const containingRoot = accessibleRoots.find(r => isInsideRoot(r, filePath));
+      if (containingRoot) {
+        const rel = path.relative(path.resolve(containingRoot), path.resolve(filePath));
+        const segs = rel.split(path.sep);
+        if (segs.length >= 2) {
+          topFolderArtist = segs[0].trim();
+          topArtistFolder = path.join(containingRoot, segs[0]);
+        }
+      }
+      if (!topArtistFolder) {
+        topArtistFolder = path.dirname(albumFolder);
+        topFolderArtist = path.basename(topArtistFolder).trim();
+      }
 
       // Find or create artist
       let artist = null;
-      if (tags.mbidArtist) {
-        artist = db.prepare('SELECT id, name, folder_path FROM music_artists WHERE mbid = ?').get(tags.mbidArtist);
+      // 1. Match by top-level folder path on disk (prevents compilation/remix tracks in artist folder from creating phantom artists)
+      if (topArtistFolder) {
+        const folderArtists = db.prepare('SELECT id, name, folder_path, mbid FROM music_artists WHERE folder_path = ?').all(topArtistFolder);
+        if (folderArtists.length > 0) {
+          artist = folderArtists.find(a => topFolderArtist && a.name.toLowerCase() === topFolderArtist.toLowerCase()) || folderArtists[0];
+        }
       }
+      // 2. Match by top-level folder name (case-insensitive)
+      if (!artist && topFolderArtist) {
+        artist = db.prepare(`
+          SELECT id, name, folder_path, mbid FROM music_artists
+          WHERE name LIKE ? COLLATE NOCASE OR sort_name LIKE ? COLLATE NOCASE
+          LIMIT 1
+        `).get(topFolderArtist, topFolderArtist);
+        if (artist && (!artist.folder_path || !fs.existsSync(artist.folder_path))) {
+          try {
+            db.prepare('UPDATE music_artists SET folder_path = ? WHERE id = ?').run(topArtistFolder, artist.id);
+            artist.folder_path = topArtistFolder;
+          } catch { /* ignore */ }
+        }
+      }
+      // 3. Match by MBID tag
+      if (!artist && tags.mbidArtist) {
+        artist = db.prepare('SELECT id, name, folder_path, mbid FROM music_artists WHERE mbid = ?').get(tags.mbidArtist);
+      }
+      // 4. Match by tag artist name
       if (!artist && artistName) {
         artist = db.prepare(`
-          SELECT id, name, folder_path FROM music_artists
+          SELECT id, name, folder_path, mbid FROM music_artists
           WHERE name LIKE ? COLLATE NOCASE OR sort_name LIKE ? COLLATE NOCASE
           LIMIT 1
         `).get(artistName, artistName);
       }
+      // 5. Create new artist if not found anywhere
       if (!artist) {
-        let artistFolder = path.dirname(path.dirname(filePath));
-        if (/^(?:cd|disc|disk)\s*\d+$/i.test(path.basename(path.dirname(filePath)))) {
-          artistFolder = path.dirname(artistFolder);
-        }
+        const resolvedArtistName = topFolderArtist || artistName;
         const insertArtist = db.prepare(`
           INSERT INTO music_artists (mbid, name, sort_name, genres, status, monitored, folder_path, quality_profile_id)
           VALUES (?, ?, ?, ?, 'monitored', 1, ?, ?)
         `).run(
           tags.mbidArtist || null,
-          artistName,
-          artistName,
+          resolvedArtistName,
+          resolvedArtistName,
           JSON.stringify(tags.genre ? [tags.genre] : []),
-          artistFolder,
+          topArtistFolder,
           defaultProfileId
         );
-        artist = { id: insertArtist.lastInsertRowid, name: artistName, folder_path: artistFolder };
+        artist = { id: insertArtist.lastInsertRowid, name: resolvedArtistName, folder_path: topArtistFolder };
         results.addedArtistsCount++;
       }
       if (artist?.id) {
@@ -196,6 +284,15 @@ const scanMusicLibrary = async (onProgress = null, checkCancelled = null) => {
       if (tags.mbidRelease) {
         album = db.prepare('SELECT id, title, folder_path FROM music_albums WHERE mbid = ?').get(tags.mbidRelease);
       }
+      // Match by albumFolder path if already set
+      if (!album && albumFolder) {
+        album = db.prepare(`
+          SELECT id, title, folder_path FROM music_albums
+          WHERE artist_id = ? AND folder_path = ?
+          LIMIT 1
+        `).get(artist.id, albumFolder);
+      }
+      // Match by tag album title
       if (!album && albumTitle) {
         album = db.prepare(`
           SELECT id, title, folder_path FROM music_albums
@@ -210,7 +307,30 @@ const scanMusicLibrary = async (onProgress = null, checkCancelled = null) => {
           album = artistAlbums.find(a => a.title.replace(/[^a-zA-Z0-9]/g, '').toLowerCase() === cleanNorm) || null;
         }
       }
+      // Match by folder name (e.g. "Back to Mine (2022)" -> "Back to Mine")
+      const folderAlbumTitle = path.basename(albumFolder).replace(/\s*\(\d{4}\)$/, '').trim();
+      if (!album && folderAlbumTitle) {
+        album = db.prepare(`
+          SELECT id, title, folder_path FROM music_albums
+          WHERE artist_id = ? AND title LIKE ? COLLATE NOCASE
+          LIMIT 1
+        `).get(artist.id, folderAlbumTitle);
+
+        if (!album) {
+          const folderCleanNorm = folderAlbumTitle.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+          const artistAlbums = db.prepare('SELECT id, title, folder_path FROM music_albums WHERE artist_id = ?').all(artist.id);
+          album = artistAlbums.find(a => a.title.replace(/[^a-zA-Z0-9]/g, '').toLowerCase() === folderCleanNorm) || null;
+        }
+      }
+      // If album found, link folder_path if not set
+      if (album && (!album.folder_path || !fs.existsSync(album.folder_path))) {
+        try {
+          db.prepare('UPDATE music_albums SET folder_path = ? WHERE id = ?').run(albumFolder, album.id);
+          album.folder_path = albumFolder;
+        } catch { /* ignore */ }
+      }
       if (!album) {
+        const finalAlbumTitle = folderAlbumTitle || albumTitle;
         const insertAlbum = db.prepare(`
           INSERT INTO music_albums (
             mbid, artist_id, title, year, album_type, status, monitored,
@@ -219,7 +339,7 @@ const scanMusicLibrary = async (onProgress = null, checkCancelled = null) => {
         `).run(
           tags.mbidRelease || null,
           artist.id,
-          albumTitle,
+          finalAlbumTitle,
           tags.year || null,
           albumFolder,
           format,
@@ -227,8 +347,102 @@ const scanMusicLibrary = async (onProgress = null, checkCancelled = null) => {
           tags.sampleRate || null,
           defaultProfileId
         );
-        album = { id: insertAlbum.lastInsertRowid, title: albumTitle, folder_path: albumFolder };
+        album = { id: insertAlbum.lastInsertRowid, title: finalAlbumTitle, folder_path: albumFolder };
         results.addedAlbumsCount++;
+      }
+
+      // Resolve trackNumber accurately (handle missing tags, 00 prefixes, CUE sheets, and collisions)
+      if (!trackNumber) {
+        const baseName = path.basename(filePath);
+        const fnMatch = baseName.match(/^(?:(?:\d{1,2})[-_.])?0*([1-9]\d{0,2})\s*[-._ ]/);
+        if (fnMatch) {
+          trackNumber = parseInt(fnMatch[1], 10);
+        }
+      }
+
+      // Try matching from CUE sheet in album folder
+      if (!trackNumber && albumFolder) {
+        const cueTracks = await parseCueSheetForFolder(albumFolder);
+        if (cueTracks && cueTracks.length > 0) {
+          const cleanNorm = trackTitle.toLowerCase().replace(/[^a-z0-9]/g, '');
+          let matched = cueTracks.find(ct => ct.title.toLowerCase().replace(/[^a-z0-9]/g, '') === cleanNorm);
+          if (!matched) {
+            matched = cueTracks.find(ct => {
+              const ctNorm = ct.title.toLowerCase().replace(/[^a-z0-9]/g, '');
+              return ctNorm && (ctNorm.includes(cleanNorm) || cleanNorm.includes(ctNorm));
+            });
+          }
+          if (matched) {
+            trackNumber = matched.trackNumber;
+          }
+        }
+      }
+
+      // Try matching by title against MusicBrainz release group tracks if album has MBID
+      if (!trackNumber && album?.mbid) {
+        try {
+          const mbTracks = await musicMetadataService.getReleaseGroupTracks(album.mbid);
+          const cleanNorm = trackTitle.toLowerCase().replace(/[^a-z0-9]/g, '');
+          let matchedMb = mbTracks.find(mt => (mt.title || '').toLowerCase().replace(/[^a-z0-9]/g, '') === cleanNorm);
+          if (!matchedMb) {
+            matchedMb = mbTracks.find(mt => {
+              const mtNorm = (mt.title || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+              return mtNorm && (mtNorm.includes(cleanNorm) || cleanNorm.includes(mtNorm));
+            });
+          }
+          if (matchedMb) {
+            trackNumber = matchedMb.track_number;
+            if (matchedMb.disc_number) discNumber = matchedMb.disc_number;
+          }
+        } catch { /* ignore */ }
+      }
+
+      // Try matching by title against existing tracks in this album
+      if (!trackNumber && album?.id) {
+        const cleanNorm = trackTitle.toLowerCase().replace(/[^a-z0-9]/g, '');
+        const existingAlbumTracks = db.prepare('SELECT id, track_number, disc_number, title FROM music_tracks WHERE album_id = ?').all(album.id);
+        let matchedEt = existingAlbumTracks.find(et => (et.title || '').toLowerCase().replace(/[^a-z0-9]/g, '') === cleanNorm);
+        if (!matchedEt) {
+          matchedEt = existingAlbumTracks.find(et => {
+            const etNorm = (et.title || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+            return etNorm && (etNorm.includes(cleanNorm) || cleanNorm.includes(etNorm));
+          });
+        }
+        if (matchedEt) {
+          trackNumber = matchedEt.track_number;
+          if (matchedEt.disc_number) discNumber = matchedEt.disc_number;
+        }
+      }
+
+      // Detect and prevent collision: if trackNumber is already used by a DIFFERENT file in this album, allocate next available
+      if (album?.id) {
+        let conflict = false;
+        if (trackNumber) {
+          const existingSlot = db.prepare(`
+            SELECT id, file_path FROM music_tracks
+            WHERE album_id = ? AND disc_number = ? AND track_number = ?
+          `).get(album.id, discNumber, trackNumber);
+          if (existingSlot && existingSlot.file_path && existingSlot.file_path !== filePath) {
+            conflict = true;
+          }
+        }
+
+        if (!trackNumber || conflict) {
+          const maxTrack = db.prepare(`
+            SELECT COALESCE(MAX(track_number), 0) as max_num
+            FROM music_tracks
+            WHERE album_id = ? AND disc_number = ?
+          `).get(album.id, discNumber)?.max_num || 0;
+          trackNumber = maxTrack + 1;
+        }
+
+        // If this filePath was previously assigned to a different track_number in this album, clean up the stale record
+        db.prepare(`
+          DELETE FROM music_tracks
+          WHERE album_id = ? AND file_path = ? AND (disc_number != ? OR track_number != ?)
+        `).run(album.id, filePath, discNumber, trackNumber);
+      } else if (!trackNumber) {
+        trackNumber = 1;
       }
 
       // Insert or update track record
@@ -536,7 +750,109 @@ const consolidateMultiDiscAlbums = (database = db) => {
   }
 };
 
+const consolidateDuplicateArtists = (database) => {
+  try {
+    const mergeDuplicateArtist = (primary, dup) => {
+      console.log(`[MusicScanner] Consolidating duplicate artist "${dup.name}" (id: ${dup.id}) into "${primary.name}" (id: ${primary.id})`);
+      const dupAlbums = database.prepare('SELECT * FROM music_albums WHERE artist_id = ?').all(dup.id);
+      for (const da of dupAlbums) {
+        let targetAlbum = null;
+        if (da.folder_path) {
+          targetAlbum = database.prepare('SELECT id, title, expected_track_count FROM music_albums WHERE artist_id = ? AND folder_path = ? LIMIT 1').get(primary.id, da.folder_path);
+        }
+        if (!targetAlbum) {
+          targetAlbum = database.prepare('SELECT id, title, expected_track_count FROM music_albums WHERE artist_id = ? AND title LIKE ? COLLATE NOCASE LIMIT 1').get(primary.id, da.title);
+        }
+        if (!targetAlbum) {
+          const cleanNorm = da.title.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+          const pAlbums = database.prepare('SELECT id, title, expected_track_count FROM music_albums WHERE artist_id = ?').all(primary.id);
+          targetAlbum = pAlbums.find(pa => pa.title.replace(/[^a-zA-Z0-9]/g, '').toLowerCase() === cleanNorm) || null;
+        }
+
+        if (targetAlbum) {
+          const tracks = database.prepare('SELECT * FROM music_tracks WHERE album_id = ?').all(da.id);
+          for (const trk of tracks) {
+            const existing = database.prepare('SELECT id, file_path FROM music_tracks WHERE album_id = ? AND disc_number = ? AND track_number = ?').get(targetAlbum.id, trk.disc_number, trk.track_number);
+            if (existing) {
+              if (existing.file_path && existing.file_path !== trk.file_path) {
+                const maxTrk = database.prepare('SELECT COALESCE(MAX(track_number), 0) as m FROM music_tracks WHERE album_id = ? AND disc_number = ?').get(targetAlbum.id, trk.disc_number)?.m || 0;
+                database.prepare('UPDATE music_tracks SET artist_id = ?, album_id = ?, track_number = ? WHERE id = ?').run(primary.id, targetAlbum.id, maxTrk + 1, trk.id);
+              } else {
+                database.prepare(`UPDATE music_tracks SET file_path = ?, file_size = ?, format = ?, bitrate = ?, bitdepth = ?, samplerate = ?, duration = ?, status = 'downloaded' WHERE id = ?`)
+                  .run(trk.file_path, trk.file_size, trk.format, trk.bitrate, trk.bitdepth, trk.samplerate, trk.duration, existing.id);
+                database.prepare('DELETE FROM music_tracks WHERE id = ?').run(trk.id);
+              }
+            } else {
+              database.prepare('UPDATE music_tracks SET artist_id = ?, album_id = ? WHERE id = ?').run(primary.id, targetAlbum.id, trk.id);
+            }
+          }
+          database.prepare('DELETE FROM music_albums WHERE id = ?').run(da.id);
+          database.prepare(`
+            UPDATE music_albums SET
+              status = CASE
+                WHEN expected_track_count > 0 AND (SELECT COUNT(*) FROM music_tracks WHERE album_id = ? AND file_path IS NOT NULL) >= expected_track_count THEN 'downloaded'
+                WHEN expected_track_count > 0 AND (SELECT COUNT(*) FROM music_tracks WHERE album_id = ? AND file_path IS NOT NULL) > 0 THEN 'partial'
+                WHEN (SELECT COUNT(*) FROM music_tracks WHERE album_id = ? AND file_path IS NOT NULL) > 0 THEN 'downloaded'
+                ELSE 'monitored'
+              END,
+              track_count = (SELECT COUNT(*) FROM music_tracks WHERE album_id = ?),
+              file_size = (SELECT COALESCE(SUM(file_size), 0) FROM music_tracks WHERE album_id = ?)
+            WHERE id = ?
+          `).run(targetAlbum.id, targetAlbum.id, targetAlbum.id, targetAlbum.id, targetAlbum.id, targetAlbum.id);
+        } else {
+          database.prepare('UPDATE music_albums SET artist_id = ? WHERE id = ?').run(primary.id, da.id);
+          database.prepare('UPDATE music_tracks SET artist_id = ? WHERE album_id = ?').run(primary.id, da.id);
+        }
+      }
+      database.prepare('DELETE FROM music_artists WHERE id = ?').run(dup.id);
+    };
+
+    // 1. Merge duplicate artists sharing folder_path
+    const allArtists = database.prepare('SELECT id, name, folder_path FROM music_artists WHERE folder_path IS NOT NULL').all();
+    const byFolder = new Map();
+    for (const a of allArtists) {
+      const norm = path.resolve(a.folder_path);
+      if (!byFolder.has(norm)) byFolder.set(norm, []);
+      byFolder.get(norm).push(a);
+    }
+
+    for (const [folder, artists] of byFolder.entries()) {
+      if (artists.length <= 1) continue;
+      const folderBase = path.basename(folder).toLowerCase();
+      let primary = artists.find(a => a.name.toLowerCase() === folderBase);
+      if (!primary) {
+        primary = artists.find(a => !a.name.includes(',') && !a.name.toLowerCase().includes('feat') && !a.name.toLowerCase().includes('ft.'));
+      }
+      if (!primary) {
+        primary = [...artists].sort((a, b) => a.name.length - b.name.length || a.id - b.id)[0];
+      }
+      const duplicates = artists.filter(a => a.id !== primary.id);
+      for (const dup of duplicates) {
+        mergeDuplicateArtist(primary, dup);
+      }
+    }
+
+    // 2. Merge foreign artists whose tracks are inside another primary artist folder
+    const primaryArtists = database.prepare('SELECT id, name, folder_path FROM music_artists WHERE folder_path IS NOT NULL').all();
+    for (const pa of primaryArtists) {
+      const foreignArtistRows = database.prepare(`
+        SELECT DISTINCT a.id, a.name, a.folder_path 
+        FROM music_tracks t
+        JOIN music_artists a ON t.artist_id = a.id
+        WHERE t.file_path LIKE ? AND t.artist_id != ?
+      `).all(pa.folder_path + '/%', pa.id);
+
+      for (const dup of foreignArtistRows) {
+        mergeDuplicateArtist(pa, dup);
+      }
+    }
+  } catch (err) {
+    console.error('[MusicScanner] consolidateDuplicateArtists error:', err.message);
+  }
+};
+
 module.exports = {
   scanMusicLibrary,
   consolidateMultiDiscAlbums,
+  consolidateDuplicateArtists,
 };

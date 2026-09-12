@@ -1247,6 +1247,106 @@ const MIGRATIONS = [
       `).run();
       console.log(`[DB Migration 42] Updated ${res.changes} partially downloaded albums to status 'partial'`);
     }
+  },
+  {
+    id: 43,
+    name: 'consolidate_duplicate_featuring_artists',
+    run: (db) => {
+      const mergeDuplicateArtist = (primary, dup) => {
+        console.log(`[DB Migration 43] Merging duplicate artist "${dup.name}" (id: ${dup.id}) into "${primary.name}" (id: ${primary.id})`);
+        const dupAlbums = db.prepare('SELECT * FROM music_albums WHERE artist_id = ?').all(dup.id);
+        for (const da of dupAlbums) {
+          let targetAlbum = null;
+          if (da.folder_path) {
+            targetAlbum = db.prepare('SELECT id, title, expected_track_count FROM music_albums WHERE artist_id = ? AND folder_path = ? LIMIT 1').get(primary.id, da.folder_path);
+          }
+          if (!targetAlbum) {
+            targetAlbum = db.prepare('SELECT id, title, expected_track_count FROM music_albums WHERE artist_id = ? AND title LIKE ? COLLATE NOCASE LIMIT 1').get(primary.id, da.title);
+          }
+          if (!targetAlbum) {
+            const cleanNorm = da.title.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+            const pAlbums = db.prepare('SELECT id, title, expected_track_count FROM music_albums WHERE artist_id = ?').all(primary.id);
+            targetAlbum = pAlbums.find(pa => pa.title.replace(/[^a-zA-Z0-9]/g, '').toLowerCase() === cleanNorm) || null;
+          }
+
+          if (targetAlbum) {
+            const tracks = db.prepare('SELECT * FROM music_tracks WHERE album_id = ?').all(da.id);
+            for (const trk of tracks) {
+              const existing = db.prepare('SELECT id, file_path FROM music_tracks WHERE album_id = ? AND disc_number = ? AND track_number = ?').get(targetAlbum.id, trk.disc_number, trk.track_number);
+              if (existing) {
+                if (existing.file_path && existing.file_path !== trk.file_path) {
+                  const maxTrk = db.prepare('SELECT COALESCE(MAX(track_number), 0) as m FROM music_tracks WHERE album_id = ? AND disc_number = ?').get(targetAlbum.id, trk.disc_number)?.m || 0;
+                  db.prepare('UPDATE music_tracks SET artist_id = ?, album_id = ?, track_number = ? WHERE id = ?').run(primary.id, targetAlbum.id, maxTrk + 1, trk.id);
+                } else {
+                  db.prepare(`UPDATE music_tracks SET file_path = ?, file_size = ?, format = ?, bitrate = ?, bitdepth = ?, samplerate = ?, duration = ?, status = 'downloaded' WHERE id = ?`)
+                    .run(trk.file_path, trk.file_size, trk.format, trk.bitrate, trk.bitdepth, trk.samplerate, trk.duration, existing.id);
+                  db.prepare('DELETE FROM music_tracks WHERE id = ?').run(trk.id);
+                }
+              } else {
+                db.prepare('UPDATE music_tracks SET artist_id = ?, album_id = ? WHERE id = ?').run(primary.id, targetAlbum.id, trk.id);
+              }
+            }
+            db.prepare('DELETE FROM music_albums WHERE id = ?').run(da.id);
+            db.prepare(`
+              UPDATE music_albums SET
+                status = CASE
+                  WHEN expected_track_count > 0 AND (SELECT COUNT(*) FROM music_tracks WHERE album_id = ? AND file_path IS NOT NULL) >= expected_track_count THEN 'downloaded'
+                  WHEN expected_track_count > 0 AND (SELECT COUNT(*) FROM music_tracks WHERE album_id = ? AND file_path IS NOT NULL) > 0 THEN 'partial'
+                  WHEN (SELECT COUNT(*) FROM music_tracks WHERE album_id = ? AND file_path IS NOT NULL) > 0 THEN 'downloaded'
+                  ELSE 'monitored'
+                END,
+                track_count = (SELECT COUNT(*) FROM music_tracks WHERE album_id = ?),
+                file_size = (SELECT COALESCE(SUM(file_size), 0) FROM music_tracks WHERE album_id = ?)
+              WHERE id = ?
+            `).run(targetAlbum.id, targetAlbum.id, targetAlbum.id, targetAlbum.id, targetAlbum.id, targetAlbum.id);
+          } else {
+            db.prepare('UPDATE music_albums SET artist_id = ? WHERE id = ?').run(primary.id, da.id);
+            db.prepare('UPDATE music_tracks SET artist_id = ? WHERE album_id = ?').run(primary.id, da.id);
+          }
+        }
+        db.prepare('DELETE FROM music_artists WHERE id = ?').run(dup.id);
+      };
+
+      // 1. Merge duplicate artists sharing folder_path
+      const allArtists = db.prepare('SELECT id, name, folder_path FROM music_artists WHERE folder_path IS NOT NULL').all();
+      const byFolder = new Map();
+      for (const a of allArtists) {
+        const norm = path.resolve(a.folder_path);
+        if (!byFolder.has(norm)) byFolder.set(norm, []);
+        byFolder.get(norm).push(a);
+      }
+
+      for (const [folder, artists] of byFolder.entries()) {
+        if (artists.length <= 1) continue;
+        const folderBase = path.basename(folder).toLowerCase();
+        let primary = artists.find(a => a.name.toLowerCase() === folderBase);
+        if (!primary) {
+          primary = artists.find(a => !a.name.includes(',') && !a.name.toLowerCase().includes('feat') && !a.name.toLowerCase().includes('ft.'));
+        }
+        if (!primary) {
+          primary = [...artists].sort((a, b) => a.name.length - b.name.length || a.id - b.id)[0];
+        }
+        const duplicates = artists.filter(a => a.id !== primary.id);
+        for (const dup of duplicates) {
+          mergeDuplicateArtist(primary, dup);
+        }
+      }
+
+      // 2. Merge foreign artists whose tracks are inside another primary artist folder
+      const primaryArtists = db.prepare('SELECT id, name, folder_path FROM music_artists WHERE folder_path IS NOT NULL').all();
+      for (const pa of primaryArtists) {
+        const foreignArtistRows = db.prepare(`
+          SELECT DISTINCT a.id, a.name, a.folder_path 
+          FROM music_tracks t
+          JOIN music_artists a ON t.artist_id = a.id
+          WHERE t.file_path LIKE ? AND t.artist_id != ?
+        `).all(pa.folder_path + '/%', pa.id);
+
+        for (const dup of foreignArtistRows) {
+          mergeDuplicateArtist(pa, dup);
+        }
+      }
+    }
   }
 ];
 

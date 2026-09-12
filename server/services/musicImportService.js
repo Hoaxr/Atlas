@@ -100,7 +100,17 @@ const readAudioTags = async (filePath) => {
     }
 
     const trackVal = tags.track || tags.tracknumber;
-    const trackNum = trackVal ? parseInt(String(trackVal).split('/')[0], 10) : null;
+    let trackNum = trackVal ? parseInt(String(trackVal).split('/')[0], 10) : null;
+    if (isNaN(trackNum) || trackNum === 0) trackNum = null;
+
+    // Fallback: extract track number from filename if not 00
+    if (!trackNum && filePath) {
+      const baseName = path.basename(filePath);
+      const fnMatch = baseName.match(/^(?:(?:\d{1,2})[-_.])?0*([1-9]\d{0,2})\s*[-._ ]/);
+      if (fnMatch) {
+        trackNum = parseInt(fnMatch[1], 10);
+      }
+    }
     const discVal = tags.disc || tags.discnumber;
     let discNum = discVal ? parseInt(String(discVal).split('/')[0], 10) : null;
     const yearVal = tags.date || tags.year || tags.originaldate;
