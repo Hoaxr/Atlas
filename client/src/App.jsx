@@ -1,8 +1,8 @@
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { lazy, Suspense, useEffect } from 'react';
-import { Toaster, useToasterStore, toast } from 'react-hot-toast';
+import { Toaster, ToastBar, useToasterStore, toast } from 'react-hot-toast';
 import { ThemeProvider } from './lib/ThemeContext';
-import { AudioPlayerProvider } from './context/AudioPlayerContext';
+import { AudioPlayerProvider, useAudioPlayer } from './context/AudioPlayerContext';
 import ErrorBoundary from './components/shared/ErrorBoundary';
 import Layout from './components/layout/Layout';
 import Dashboard from './pages/dashboard/Dashboard';
@@ -67,64 +67,88 @@ function ScrollToTop() {
   return null;
 }
 
+function AppToaster() {
+  const { currentTrack } = useAudioPlayer();
+
+  return (
+    <Toaster
+      position="bottom-right"
+      gutter={10}
+      containerStyle={{
+        bottom: currentTrack ? 90 : 20,
+        right: 20,
+        transition: 'bottom 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+        zIndex: 9999,
+      }}
+      toastOptions={{
+        duration: 3000,
+        style: {
+          background: 'transparent',
+          boxShadow: 'none',
+          padding: '0',
+          maxWidth: '100%',
+        },
+        success: {
+          duration: 2500,
+          style: {
+            background: 'rgba(15, 23, 42, 0.95)',
+            color: '#e2e8f0',
+            border: '1px solid rgba(16, 185, 129, 0.35)',
+            borderRadius: '0.75rem',
+            padding: '10px 14px',
+            fontSize: '0.8125rem',
+            maxWidth: '380px',
+            boxShadow: '0 10px 30px -10px rgba(0, 0, 0, 0.6)',
+          },
+          iconTheme: { primary: '#10b981', secondary: '#0f172a' },
+        },
+        error: {
+          duration: 4500,
+          style: {
+            background: 'rgba(15, 23, 42, 0.95)',
+            color: '#e2e8f0',
+            border: '1px solid rgba(239, 68, 68, 0.35)',
+            borderRadius: '0.75rem',
+            padding: '10px 14px',
+            fontSize: '0.8125rem',
+            maxWidth: '380px',
+            boxShadow: '0 10px 30px -10px rgba(0, 0, 0, 0.6)',
+          },
+          iconTheme: { primary: '#ef4444', secondary: '#0f172a' },
+        },
+        loading: {
+          style: {
+            background: 'rgba(15, 23, 42, 0.95)',
+            color: '#e2e8f0',
+            border: '1px solid rgba(6, 182, 212, 0.35)',
+            borderRadius: '0.75rem',
+            padding: '10px 14px',
+            fontSize: '0.8125rem',
+            maxWidth: '380px',
+          },
+          iconTheme: { primary: '#06b6d4', secondary: '#0f172a' },
+        },
+      }}
+    >
+      {(t) => (
+        <div
+          onClick={() => toast.dismiss(t.id)}
+          className="cursor-pointer transition-transform active:scale-95 select-none"
+          title="Click to dismiss"
+        >
+          <ToastBar toast={t} />
+        </div>
+      )}
+    </Toaster>
+  );
+}
+
 function App() {
   return (
     <ErrorBoundary>
         <ThemeProvider>
           <AudioPlayerProvider>
-          <Toaster
-            position="bottom-right"
-            gutter={10}
-            toastOptions={{
-              duration: 3000,
-              style: {
-                background: 'transparent',
-                boxShadow: 'none',
-                padding: '0',
-                maxWidth: '100%',
-              },
-              success: {
-                duration: 2500,
-                style: {
-                  background: 'rgba(15, 23, 42, 0.95)',
-                  color: '#e2e8f0',
-                  border: '1px solid rgba(16, 185, 129, 0.35)',
-                  borderRadius: '0.75rem',
-                  padding: '10px 14px',
-                  fontSize: '0.8125rem',
-                  maxWidth: '380px',
-                  boxShadow: '0 10px 30px -10px rgba(0, 0, 0, 0.6)',
-                },
-                iconTheme: { primary: '#10b981', secondary: '#0f172a' },
-              },
-              error: {
-                duration: 4500,
-                style: {
-                  background: 'rgba(15, 23, 42, 0.95)',
-                  color: '#e2e8f0',
-                  border: '1px solid rgba(239, 68, 68, 0.35)',
-                  borderRadius: '0.75rem',
-                  padding: '10px 14px',
-                  fontSize: '0.8125rem',
-                  maxWidth: '380px',
-                  boxShadow: '0 10px 30px -10px rgba(0, 0, 0, 0.6)',
-                },
-                iconTheme: { primary: '#ef4444', secondary: '#0f172a' },
-              },
-              loading: {
-                style: {
-                  background: 'rgba(15, 23, 42, 0.95)',
-                  color: '#e2e8f0',
-                  border: '1px solid rgba(6, 182, 212, 0.35)',
-                  borderRadius: '0.75rem',
-                  padding: '10px 14px',
-                  fontSize: '0.8125rem',
-                  maxWidth: '380px',
-                },
-                iconTheme: { primary: '#06b6d4', secondary: '#0f172a' },
-              },
-            }}
-          />
+          <AppToaster />
           <ToastLimiter limit={3} />
           <BrowserRouter>
             <ScrollToTop />

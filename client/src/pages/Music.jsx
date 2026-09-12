@@ -5,7 +5,7 @@ import {
   CheckCircle2, AlertCircle, Loader2, ChevronRight, X,
   Play, Pause, Sparkles, Filter, RotateCcw,
   CheckSquare, Square, Trash2, Eye, EyeOff,
-  Bookmark, ArrowRight
+  Bookmark
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../lib/api';
@@ -198,7 +198,8 @@ export default function Music() {
     return albums
       .filter((album) => {
         if (statusFilter === 'downloaded' && album.status !== 'downloaded') return false;
-        if (statusFilter === 'missing' && album.status === 'downloaded') return false;
+        if (statusFilter === 'partial' && album.status !== 'partial') return false;
+        if (statusFilter === 'missing' && (album.status === 'downloaded' || album.status === 'partial')) return false;
         if (statusFilter === 'monitored' && !album.monitored) return false;
 
         if (typeFilter !== 'all') {
@@ -597,6 +598,7 @@ export default function Music() {
                 >
                   <option value="monitored">Monitored</option>
                   <option value="downloaded">Downloaded</option>
+                  <option value="partial">Partial</option>
                   <option value="missing">Missing</option>
                 </FilterSelect>
 
@@ -817,7 +819,7 @@ export default function Music() {
                               )}
                             </td>
                             <td className="py-3 px-4 font-mono text-[11px] text-cyan-300">
-                              {album.file_format || '—'}
+                              {(album.status === 'downloaded' || album.downloaded_tracks > 0) && album.file_format ? album.file_format : '—'}
                             </td>
                             <td className="py-3 px-4">
                               {album.status === 'downloaded' ? (
@@ -880,7 +882,9 @@ export default function Music() {
                     const imgUrl = artist.image_url || artistImageUrl(artist);
                     const downloadedAlbums = artist.downloaded_albums || 0;
                     const totalAlbums = artist.album_count || 0;
-                    const isComplete = totalAlbums > 0 && downloadedAlbums >= totalAlbums;
+                    const partialAlbums = artist.partial_albums || 0;
+                    const isComplete = totalAlbums > 0 && downloadedAlbums >= totalAlbums && partialAlbums === 0;
+                    const isPartial = !isComplete && (downloadedAlbums > 0 || partialAlbums > 0);
                     const isBusy = artistActionId === artist.id;
 
                     return (
@@ -936,7 +940,7 @@ export default function Music() {
 
                           {/* Bottom-left status badge */}
                           <div className={`absolute bottom-1.5 sm:bottom-2 left-1.5 sm:left-2 z-20 flex items-center gap-1 px-1.5 sm:px-2 py-0.5 sm:py-1 bg-slate-950/80 backdrop-blur rounded-md border shadow-lg ${
-                            isComplete ? 'border-emerald-500/30' : downloadedAlbums > 0 ? 'border-amber-500/30' : 'border-rose-500/30'
+                            isComplete ? 'border-emerald-500/30' : isPartial ? 'border-amber-500/30' : 'border-rose-500/30'
                           }`}>
                             {isComplete ? (
                               <>
@@ -945,21 +949,13 @@ export default function Music() {
                               </>
                             ) : (
                               <>
-                                <AlertCircle className={`w-2.5 h-2.5 sm:w-3 sm:h-3 ${downloadedAlbums > 0 ? 'text-amber-400' : 'text-rose-400'}`} />
-                                <span className={`text-[9px] sm:text-[10px] font-bold ${downloadedAlbums > 0 ? 'text-amber-400' : 'text-rose-400'}`}>
-                                  {downloadedAlbums > 0 ? 'Partial' : 'Missing'}
+                                <AlertCircle className={`w-2.5 h-2.5 sm:w-3 sm:h-3 ${isPartial ? 'text-amber-400' : 'text-rose-400'}`} />
+                                <span className={`text-[9px] sm:text-[10px] font-bold ${isPartial ? 'text-amber-400' : 'text-rose-400'}`}>
+                                  {isPartial ? 'Partial' : 'Missing'}
                                 </span>
                               </>
                             )}
                           </div>
-
-                          {/* Bottom-right track count badge (hidden when there are no tracks) */}
-                          {(artist.track_count || 0) > 0 && (
-                            <div className="absolute bottom-1.5 sm:bottom-2 right-1.5 sm:right-2 z-20 flex items-center gap-1 px-1.5 sm:px-2 py-0.5 sm:py-1 bg-slate-950/80 backdrop-blur rounded-md border border-purple-500/30 shadow-lg">
-                              <FileAudio className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-purple-400" />
-                              <span className="text-[9px] sm:text-[10px] font-bold text-purple-400">{artist.track_count}</span>
-                            </div>
-                          )}
 
                           {imgUrl ? (
                             <img
@@ -972,32 +968,33 @@ export default function Music() {
                         </div>
 
                         {/* Info bar */}
-                        <div className="p-2 sm:p-3 w-full flex-1 flex flex-col justify-between bg-gradient-to-b from-slate-800/95 to-slate-900/95 border-t border-white/10 group-hover:border-cyan-500/30 transition-colors">
-                          <div className="flex items-center justify-between gap-1">
+                        <div className="p-2 sm:p-3 w-full flex-1 flex flex-col justify-center bg-gradient-to-b from-slate-800/95 to-slate-900/95 border-t border-white/10 group-hover:border-cyan-500/30 transition-colors">
+                          <div className="flex items-center justify-between gap-2">
                             <h3 className="font-semibold text-xs sm:text-sm text-slate-100 group-hover:text-cyan-400 transition-colors truncate tracking-wide flex-1" title={artist.name}>
                               {artist.name}
                             </h3>
-                            <ArrowRight className="w-3.5 h-3.5 text-cyan-400 opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-200 flex-shrink-0 hidden sm:block" />
-                          </div>
-                          {totalAlbums > 0 && (
-                            <div className="flex items-center justify-end mt-1 sm:mt-2 gap-2">
+                            {totalAlbums > 0 && (
                               <span
                                 className={`flex items-center gap-1 px-1.5 sm:px-2 py-0.5 rounded-md border flex-shrink-0 ${
-                                  downloadedAlbums === 0
+                                  downloadedAlbums === 0 && partialAlbums === 0
                                     ? 'bg-slate-500/10 border-slate-500/20 text-slate-400'
                                     : isComplete
                                       ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-300'
                                       : 'bg-amber-500/10 border-amber-500/20 text-amber-300'
                                 }`}
-                                title={downloadedAlbums > 0 ? `${downloadedAlbums} of ${totalAlbums} albums downloaded` : `${totalAlbums} albums`}
+                                title={
+                                  downloadedAlbums > 0 || partialAlbums > 0
+                                    ? `${downloadedAlbums} of ${totalAlbums} albums fully downloaded${partialAlbums > 0 ? ` (${partialAlbums} partial)` : ''}`
+                                    : `${totalAlbums} albums`
+                                }
                               >
                                 <Disc className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
                                 <span className="text-[10px] sm:text-[11px] font-bold">
-                                  {downloadedAlbums > 0 ? `${downloadedAlbums}/${totalAlbums}` : totalAlbums}
+                                  {downloadedAlbums > 0 || partialAlbums > 0 ? `${downloadedAlbums}/${totalAlbums}` : totalAlbums}
                                 </span>
                               </span>
-                            </div>
-                          )}
+                            )}
+                          </div>
                         </div>
                       </div>
                     );
@@ -1033,9 +1030,9 @@ export default function Music() {
                           <td className="py-3 px-4 text-slate-400">{artist.disambiguation || '—'}</td>
                           <td className="py-3 px-4">
                             <span className={
-                              (artist.downloaded_albums || 0) === 0
+                              (artist.downloaded_albums || 0) === 0 && (artist.partial_albums || 0) === 0
                                 ? 'text-slate-500 font-semibold'
-                                : (artist.downloaded_albums || 0) >= (artist.album_count || 0)
+                                : (artist.downloaded_albums || 0) >= (artist.album_count || 0) && (artist.partial_albums || 0) === 0
                                   ? 'text-green-400 font-semibold'
                                   : 'text-amber-400 font-semibold'
                             }>

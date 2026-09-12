@@ -1220,6 +1220,33 @@ const MIGRATIONS = [
       const res = db.prepare('DELETE FROM episodes WHERE season_number = 0').run();
       console.log(`[DB Migration 40] Removed ${res.changes} season 0 special episodes`);
     }
+  },
+  {
+    id: 41,
+    name: 'remove_undownloaded_non_album_releases',
+    run: (db) => {
+      const res = db.prepare(`
+        DELETE FROM music_albums
+        WHERE LOWER(album_type) != 'album'
+          AND status != 'downloaded'
+          AND id NOT IN (SELECT DISTINCT album_id FROM music_tracks WHERE file_path IS NOT NULL)
+      `).run();
+      console.log(`[DB Migration 41] Removed ${res.changes} undownloaded non-album releases (singles/EPs)`);
+    }
+  },
+  {
+    id: 42,
+    name: 'update_partial_album_statuses',
+    run: (db) => {
+      const res = db.prepare(`
+        UPDATE music_albums
+        SET status = 'partial'
+        WHERE expected_track_count > 0
+          AND (SELECT COUNT(*) FROM music_tracks WHERE album_id = music_albums.id AND file_path IS NOT NULL) < expected_track_count
+          AND (SELECT COUNT(*) FROM music_tracks WHERE album_id = music_albums.id AND file_path IS NOT NULL) > 0
+      `).run();
+      console.log(`[DB Migration 42] Updated ${res.changes} partially downloaded albums to status 'partial'`);
+    }
   }
 ];
 

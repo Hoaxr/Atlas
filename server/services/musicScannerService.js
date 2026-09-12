@@ -266,12 +266,17 @@ const scanMusicLibrary = async (onProgress = null, checkCancelled = null) => {
       // Keep album updated
       db.prepare(`
         UPDATE music_albums SET
-          status = 'downloaded',
+          status = CASE
+            WHEN expected_track_count > 0 AND (SELECT COUNT(*) FROM music_tracks WHERE album_id = ? AND file_path IS NOT NULL) >= expected_track_count THEN 'downloaded'
+            WHEN expected_track_count > 0 AND (SELECT COUNT(*) FROM music_tracks WHERE album_id = ? AND file_path IS NOT NULL) > 0 THEN 'partial'
+            WHEN (SELECT COUNT(*) FROM music_tracks WHERE album_id = ? AND file_path IS NOT NULL) > 0 THEN 'downloaded'
+            ELSE 'monitored'
+          END,
           file_format = COALESCE(file_format, ?),
           track_count = (SELECT COUNT(*) FROM music_tracks WHERE album_id = ?),
           file_size = (SELECT COALESCE(SUM(file_size), 0) FROM music_tracks WHERE album_id = ?)
         WHERE id = ?
-      `).run(format, album.id, album.id, album.id);
+      `).run(album.id, album.id, album.id, format, album.id, album.id, album.id);
 
       // Ensure album folder on disk has cover.jpg
       if (albumFolder && !imageService.findAlbumFolderCover(albumFolder)) {
@@ -512,14 +517,19 @@ const consolidateMultiDiscAlbums = (database = db) => {
       // Update target album counts and status
       database.prepare(`
         UPDATE music_albums SET
-          status = 'downloaded',
+          status = CASE
+            WHEN expected_track_count > 0 AND (SELECT COUNT(*) FROM music_tracks WHERE album_id = ? AND file_path IS NOT NULL) >= expected_track_count THEN 'downloaded'
+            WHEN expected_track_count > 0 AND (SELECT COUNT(*) FROM music_tracks WHERE album_id = ? AND file_path IS NOT NULL) > 0 THEN 'partial'
+            WHEN (SELECT COUNT(*) FROM music_tracks WHERE album_id = ? AND file_path IS NOT NULL) > 0 THEN 'downloaded'
+            ELSE 'monitored'
+          END,
           file_format = COALESCE(file_format, ?),
           file_bitdepth = COALESCE(file_bitdepth, ?),
           file_samplerate = COALESCE(file_samplerate, ?),
           track_count = (SELECT COUNT(*) FROM music_tracks WHERE album_id = ?),
           file_size = (SELECT COALESCE(SUM(file_size), 0) FROM music_tracks WHERE album_id = ?)
         WHERE id = ?
-      `).run(split.file_format || 'flac', split.file_bitdepth, split.file_samplerate, target.id, target.id, target.id);
+      `).run(target.id, target.id, target.id, split.file_format || 'flac', split.file_bitdepth, split.file_samplerate, target.id, target.id, target.id);
     }
   } catch (err) {
     console.error('[MusicScanner] consolidateMultiDiscAlbums error:', err.message);

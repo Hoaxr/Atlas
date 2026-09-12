@@ -215,7 +215,10 @@ const syncArtistAlbums = async (artistId, releaseGroups) => {
 
       match.mbid = match.mbid || rg.mbid;
     } else {
-      // 3. Insert new missing release from artist's discography
+      // 3. Insert new missing release from artist's discography (Albums only — no Singles or EPs)
+      const isAlbum = (rg.albumType || 'Album').toLowerCase() === 'album';
+      if (!isAlbum) continue;
+
       try {
         const profileId = artist.quality_profile_id || 1;
         const insertRes = db.prepare(`
@@ -272,7 +275,8 @@ const getArtists = (limit = 0, offset = 0, sort = 'name_asc', filters = {}) => {
   let query = `
     SELECT a.*,
       COUNT(DISTINCT al.id) as album_count,
-      COUNT(DISTINCT dt.album_id) as downloaded_albums,
+      COUNT(DISTINCT CASE WHEN al.status = 'downloaded' THEN al.id END) as downloaded_albums,
+      COUNT(DISTINCT CASE WHEN al.status = 'partial' OR (dt.album_id IS NOT NULL AND al.status != 'downloaded') THEN al.id END) as partial_albums,
       COUNT(DISTINCT t.id) as track_count,
       COALESCE(SUM(t.file_size), 0) as total_size
     FROM music_artists a

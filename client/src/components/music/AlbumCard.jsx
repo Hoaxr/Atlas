@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Play, Pause, Search, CheckCircle2, Disc, FileAudio, Music,
-  ArrowRight, Radio, DownloadCloud, Sparkles
+  Play, Pause, Search, AlertCircle, Disc,
+  Check, X
 } from 'lucide-react';
 import { useAudioPlayer } from '../../context/AudioPlayerContext';
 import { albumCoverUrl } from '../../lib/posterUrl';
@@ -13,7 +13,8 @@ export default function AlbumCard({
   selectMode = false,
   isSelected = false,
   onToggleSelect,
-  onManualSearch
+  onManualSearch,
+  onClick
 }) {
   const navigate = useNavigate();
   const { playAlbum, currentTrack, isPlaying, togglePlay } = useAudioPlayer();
@@ -21,18 +22,25 @@ export default function AlbumCard({
 
   if (!album) return null;
 
-  const isDownloaded = album.status === 'downloaded' || Number(album.downloaded_tracks) > 0;
+  const downloadedTracks = Number(album.downloaded_tracks || 0);
+  const totalTracks = Math.max(album.expected_track_count || 0, album.track_count || 0, downloadedTracks);
+  const isComplete = (album.status === 'downloaded' || (totalTracks > 0 && downloadedTracks >= totalTracks)) && (totalTracks === 0 ? downloadedTracks > 0 : downloadedTracks >= totalTracks);
+  const isPartial = downloadedTracks > 0 && !isComplete;
+  const isDownloaded = isComplete;
   const isCurrentAlbumPlaying =
     isPlaying &&
     ((currentTrack?.album_mbid && currentTrack.album_mbid === album.mbid) ||
       currentTrack?.album_id === album.id);
 
   const coverUrl = album.cover_url || albumCoverUrl(album);
-  const downloadedTracks = album.downloaded_tracks || 0;
-  const totalTracks = Math.max(album.expected_track_count || 0, album.track_count || 0, downloadedTracks);
-  const formatLabel = (album.file_format || album.quality_profile_format || '').toUpperCase();
+  const hasFiles = isDownloaded || isPartial || downloadedTracks > 0;
+  const formatLabel = hasFiles && album.file_format ? album.file_format.toUpperCase() : '';
 
-  const handleCardClick = () => {
+  const handleCardClick = (e) => {
+    if (onClick) {
+      onClick(album, e);
+      return;
+    }
     if (selectMode && onToggleSelect) {
       onToggleSelect(album.id);
     } else {
@@ -59,8 +67,10 @@ export default function AlbumCard({
   return (
     <div
       onClick={handleCardClick}
-      className={`group relative flex flex-col p-3 rounded-2xl bg-slate-900/70 hover:bg-slate-900 border border-slate-800 hover:border-cyan-500/40 transition-all duration-300 hover:-translate-y-1.5 hover:shadow-[0_12px_30px_-5px_rgba(6,182,212,0.18)] cursor-pointer select-none ${
-        isSelected ? 'ring-2 ring-cyan-400 bg-slate-900 border-cyan-500/50 shadow-[0_0_20px_rgba(6,182,212,0.3)]' : ''
+      className={`group relative flex flex-col p-3 rounded-2xl transition-all duration-200 cursor-pointer select-none ${
+        isSelected
+          ? 'bg-slate-800/95 border border-cyan-400/80 shadow-[0_4px_24px_-4px_rgba(6,182,212,0.3)]'
+          : 'bg-slate-900/70 hover:bg-slate-800/80 border border-slate-800/80 hover:border-slate-700/80 shadow-md hover:shadow-xl'
       }`}
     >
       {/* ── Album Artwork Frame ────────────────────────────────────────────── */}
@@ -80,7 +90,7 @@ export default function AlbumCard({
           />
         ) : null}
 
-        {/* Status Indicator (Top-Left Pill) */}
+        {/* Status Indicator (Top-Left Circular Mark) */}
         <div className="absolute top-2.5 left-2.5 z-20">
           {selectMode ? (
             <div
@@ -94,22 +104,34 @@ export default function AlbumCard({
                 className="w-4 h-4 rounded text-cyan-500 accent-cyan-500 cursor-pointer block"
               />
             </div>
-          ) : isDownloaded ? (
-            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-500/90 text-slate-950 backdrop-blur-md shadow-lg">
-              <CheckCircle2 className="w-3 h-3 stroke-[2.5]" />
-              Downloaded
-            </span>
+          ) : isComplete ? (
+            <div
+              title="Downloaded"
+              className="w-6 h-6 rounded-full bg-slate-950/90 backdrop-blur-md border border-emerald-500/60 flex items-center justify-center text-emerald-400 shadow-lg"
+            >
+              <Check className="w-3.5 h-3.5 stroke-[2.5]" />
+            </div>
+          ) : isPartial ? (
+            <div
+              title={`Partial (${downloadedTracks}/${totalTracks} tracks)`}
+              className="w-6 h-6 rounded-full bg-slate-950/90 backdrop-blur-md border border-amber-500/60 flex items-center justify-center text-amber-400 shadow-lg"
+            >
+              <AlertCircle className="w-3.5 h-3.5 stroke-[2.5]" />
+            </div>
           ) : (
-            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-rose-500/90 text-white backdrop-blur-md shadow-lg">
-              Missing
-            </span>
+            <div
+              title="Missing"
+              className="w-6 h-6 rounded-full bg-slate-950/90 backdrop-blur-md border border-rose-500/60 flex items-center justify-center text-rose-400 shadow-lg"
+            >
+              <X className="w-3.5 h-3.5 stroke-[2.5]" />
+            </div>
           )}
         </div>
 
         {/* Format Badge (Top-Right Pill) */}
         {formatLabel && (
           <div className="absolute top-2.5 right-2.5 z-20">
-            <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-slate-950/80 backdrop-blur-md text-slate-200 border border-white/10 shadow-sm">
+            <span className="px-2 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider bg-slate-950/80 backdrop-blur-md text-slate-200 border border-white/10 shadow-sm">
               {formatLabel}
               {album.file_format && album.file_bitdepth ? ` ${album.file_bitdepth}b` : ''}
             </span>

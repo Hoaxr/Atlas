@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import api from '../lib/api';
-import { DownloadCloud, ArrowDown, ArrowUp, Activity, Film, Tv, Music2, Play, Pause, Trash2, Clock, HardDrive, CheckSquare, Square, X } from 'lucide-react';
+import { DownloadCloud, ArrowDown, ArrowUp, Activity, Film, Tv, Music2, Play, Pause, Trash2, Clock, HardDrive, CheckSquare, Square, X, Loader2 } from 'lucide-react';
 import { customAlert, customConfirm } from '../utils/alerts';
 import useWebSocket from '../lib/useWebSocket';
 import StickyBar from '../components/shared/StickyBar';
@@ -8,10 +8,47 @@ import InlineError from '../components/shared/InlineError';
 import { useStickyBar } from '../lib/useStickyBar';
 import { parseResolution, parseCodec, parseAudio } from '../lib/format';
 
+const decodeHtml = (str) => {
+  if (!str) return '';
+  return str
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#039;|&apos;/g, "'")
+    .replace(/&ouml;/gi, 'ö')
+    .replace(/&auml;/gi, 'ä')
+    .replace(/&uuml;/gi, 'ü')
+    .replace(/&eacute;/gi, 'é')
+    .replace(/&egrave;/gi, 'è')
+    .replace(/&aring;/gi, 'å')
+    .replace(/&oslash;/gi, 'ø')
+    .replace(/&#(\d+);/g, (_, dec) => String.fromCharCode(dec));
+};
+
 const parseReleaseInfo = (rawName, torrent = {}) => {
   if (!rawName) return { title: 'Unknown', mediaLabel: 'Movie', resolution: null, source: null, codec: null, audio: null, hdr: null, isTv: false, isMusic: false, raw: '' };
+
+  const safeRawName = decodeHtml(rawName.trim());
+  const isHashName = /^[a-f0-9]{32,64}$/i.test(safeRawName);
+  if (isHashName) {
+    const isMusicClient = torrent.mediaType === 'music' || torrent.category === 'music' || torrent.category === 'audio';
+    return {
+      title: 'Retrieving metadata...',
+      mediaLabel: isMusicClient ? 'Audio' : 'Download',
+      resolution: null,
+      source: null,
+      codec: null,
+      audio: null,
+      hdr: null,
+      isTv: false,
+      isMusic: isMusicClient,
+      isPendingMetadata: true,
+      raw: safeRawName
+    };
+  }
   
-  const name = rawName.replace(/\.(mp4|mkv|avi|mov)$/i, '');
+  const name = safeRawName.replace(/\.(mp4|mkv|avi|mov)$/i, '');
   const totalBytes = torrent.total_size || torrent.size || 0;
   const isSmallSize = totalBytes > 0 && totalBytes < 1200 * 1024 * 1024; // Music releases are < 1.2GB
 
@@ -72,14 +109,16 @@ const parseReleaseInfo = (rawName, torrent = {}) => {
     // Format clean music title: Artist — Album (Year)
     let cleanMusicTitle = name
       .replace(/\[(?:FLAC|MP3|320k?|WEB|CD|Vinyl|24bit|Lossless|Hi-Res)[^\]]*\]/gi, '')
+      .replace(/\((?:FLAC|MP3|320k?|WEB|CD|Vinyl|24bit|Lossless|Hi-Res)[^)]*\)/gi, '')
       .replace(/\b(flac|mp3|320kbps|lossless|alac|opus|aac|v0|v2|web-flac|vinyl-flac|cd-flac|cdrip|webrip)\b.*/i, '')
+      .replace(/[\s\-_—([{\\/]+$/, '')
       .trim();
 
     if (cleanMusicTitle.includes(' - ')) {
       const parts = cleanMusicTitle.split(/\s+-\s+/).map(p => p.trim()).filter(Boolean);
       if (parts.length >= 2) {
         const artist = parts[0];
-        const album = parts[1];
+        const album = parts[1].replace(/[\s\-_—([{\\/]+$/, '').trim();
         let year = null;
         if (parts.length >= 3 && /^(19\d{2}|20\d{2})(?:\s*\(\d{4}\))?$/.test(parts[2])) {
           year = parts[2].match(/\b(19\d{2}|20\d{2})\b/)?.[1];
@@ -93,9 +132,17 @@ const parseReleaseInfo = (rawName, torrent = {}) => {
           cleanMusicTitle = `${artist} — ${album}`;
         }
       }
+    } else if (cleanMusicTitle.includes('-')) {
+      const parts = cleanMusicTitle.split('-').map(p => p.trim()).filter(Boolean);
+      if (parts.length >= 2) {
+        const artist = parts[0];
+        const album = parts.slice(1).join(' ').replace(/[\s\-_—([{\\/]+$/, '').trim();
+        cleanMusicTitle = `${artist} — ${album}`;
+      }
     } else {
       cleanMusicTitle = cleanMusicTitle.replace(/[._]/g, ' ').replace(/\s+/g, ' ').trim();
     }
+    cleanMusicTitle = cleanMusicTitle.replace(/[\s\-_—([{\\/]+$/, '').trim();
 
     return {
       title: cleanMusicTitle || rawName,
@@ -313,11 +360,13 @@ export default function Downloads() {
   };
 
   const formatBytes = (bytes) => {
-    if (!bytes || bytes === 0) return '0 B';
+    const num = Number(bytes);
+    if (!bytes || isNaN(num) || num <= 0) return '0 B';
     const k = 1024;
     const sizes = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+    const i = Math.floor(Math.log(num) / Math.log(k));
+    if (isNaN(i) || i < 0 || !sizes[i]) return '0 B';
+    return parseFloat((num / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
   };
 
   const formatSpeed = (bytes) => {
@@ -325,7 +374,7 @@ export default function Downloads() {
   };
 
   const formatEta = (totalSize, progress, speed) => {
-    if (!speed || speed <= 0 || !totalSize || progress >= 99.5) return null;
+    if (!speed || speed <= 0 || !totalSize || totalSize <= 0 || progress >= 99.5) return null;
     const remainingBytes = totalSize * (1 - progress / 100);
     const seconds = Math.floor(remainingBytes / speed);
     if (seconds <= 0) return 'Few seconds remaining';
@@ -341,10 +390,13 @@ export default function Downloads() {
   const getStateBadge = (state) => {
     const s = (state || '').toLowerCase();
     if (s.startsWith('paused') || s.startsWith('stopped')) {
-      return { class: 'bg-amber-500/15 text-amber-400 border-amber-500/30', dot: 'bg-amber-400' };
+      return { class: 'bg-amber-500/15 text-amber-400 border-amber-500/30', dot: 'bg-amber-400', label: 'Paused' };
     }
     if (s.includes('error')) {
-      return { class: 'bg-rose-500/15 text-rose-400 border-rose-500/30', dot: 'bg-rose-400' };
+      return { class: 'bg-rose-500/15 text-rose-400 border-rose-500/30', dot: 'bg-rose-400', label: 'Error' };
+    }
+    if (s === 'metadl' || s === 'allocating') {
+      return { class: 'bg-indigo-500/15 text-indigo-300 border-indigo-500/30', dot: 'bg-indigo-400', label: 'Fetching Metadata' };
     }
     if (s.includes('download') || s.endsWith('dl')) {
       return { class: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30', dot: 'bg-emerald-400' };
@@ -568,7 +620,11 @@ export default function Downloads() {
                           ) : (
                             <Film className="w-4 h-4 text-cyan-400 shrink-0" />
                           )}
-                          <h3 className="text-sm sm:text-base font-bold text-slate-100 group-hover:text-cyan-300 transition-colors">
+                          <h3 
+                            className="text-sm sm:text-base font-bold text-slate-100 group-hover:text-cyan-300 transition-colors flex items-center gap-2"
+                            title={t.name}
+                          >
+                            {info.isPendingMetadata && <Loader2 className="w-4 h-4 text-indigo-400 animate-spin shrink-0" />}
                             {info.title}
                           </h3>
 
@@ -613,10 +669,12 @@ export default function Downloads() {
                         </div>
                       </div>
 
-                      {/* Raw Release Title Subtext */}
-                      <p className="text-[11px] font-mono text-slate-500 truncate select-all" title={t.name}>
-                        {t.name}
-                      </p>
+                      {/* Raw Release Title Subtext - only for TV/movies when it provides distinct scene details */}
+                      {!info.isMusic && !info.isPendingMetadata && t.name && (info.title || '').toLowerCase().replace(/[^a-z0-9]/g, '') !== t.name.toLowerCase().replace(/[^a-z0-9]/g, '') && (
+                        <p className="text-[11px] font-mono text-slate-500 truncate select-all" title={t.name}>
+                          {t.name}
+                        </p>
+                      )}
                     </div>
                   </div>
 
@@ -710,11 +768,11 @@ export default function Downloads() {
                     <div className="flex items-center gap-2.5 flex-wrap">
                       <span className={`inline-flex items-center gap-1.5 text-[10px] font-bold uppercase px-2 py-0.5 rounded-md border ${stateBadge.class}`}>
                         <span className={`w-1.5 h-1.5 rounded-full ${stateBadge.dot} ${t.dlspeed > 0 ? 'animate-ping' : ''}`} />
-                        {t.state || 'Active'}
+                        {stateBadge.label || t.state || 'Active'}
                       </span>
                       <span className="flex items-center gap-1 text-slate-400">
                         <HardDrive className="w-3 h-3 text-slate-500" />
-                        Size: <strong className="text-slate-200 font-mono">{formatBytes(totalSize)}</strong>
+                        Size: <strong className="text-slate-200 font-mono">{totalSize > 0 ? formatBytes(totalSize) : 'Retrieving...'}</strong>
                       </span>
                       {eta && (
                         <span className="text-cyan-400 font-medium flex items-center gap-1">

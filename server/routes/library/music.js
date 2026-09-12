@@ -152,7 +152,16 @@ const backfillExpectedTrackCounts = (albums, limit = 30) => {
       try {
         const tracks = await musicMetadataService.getReleaseGroupTracks(a.mbid);
         if (tracks.length > 0) {
-          db.prepare('UPDATE music_albums SET expected_track_count = ? WHERE id = ?').run(tracks.length, a.id);
+          db.prepare(`
+            UPDATE music_albums SET
+              expected_track_count = ?,
+              status = CASE
+                WHEN (SELECT COUNT(*) FROM music_tracks WHERE album_id = music_albums.id AND file_path IS NOT NULL) >= ? THEN 'downloaded'
+                WHEN (SELECT COUNT(*) FROM music_tracks WHERE album_id = music_albums.id AND file_path IS NOT NULL) > 0 THEN 'partial'
+                ELSE status
+              END
+            WHERE id = ?
+          `).run(tracks.length, tracks.length, a.id);
         }
       } catch { /* ignore */ }
       finally { _expectedCountBackfill.delete(a.id); }
@@ -763,13 +772,22 @@ router.get('/albums/:id/tracks', (req, res, next) => {
 // ── Album Full Tracklist (local + missing from MusicBrainz) ───────────────────
 router.get('/albums/:id/tracklist', async (req, res, next) => {
   try {
-    const album = db.prepare('SELECT * FROM music_albums WHERE id = ?').get(req.params.id);
+    const album = db.prepare(`
+      SELECT al.*, a.name as artist_name
+      FROM music_albums al
+      JOIN music_artists a ON a.id = al.artist_id
+      WHERE al.id = ?
+    `).get(req.params.id);
     if (!album) return res.status(404).json({ status: 'error', message: 'Album not found' });
 
     // Local tracks we already have
     const localTracks = db.prepare(`
-      SELECT * FROM music_tracks WHERE album_id = ?
-      ORDER BY disc_number ASC, track_number ASC
+      SELECT t.*, a.name as artist_name, al.title as album_title, al.mbid as album_mbid
+      FROM music_tracks t
+      JOIN music_artists a ON a.id = t.artist_id
+      JOIN music_albums al ON al.id = t.album_id
+      WHERE t.album_id = ?
+      ORDER BY t.disc_number ASC, t.track_number ASC
     `).all(album.id);
 
     // If no MBID, just return local tracks
@@ -786,13 +804,24 @@ router.get('/albums/:id/tracklist', async (req, res, next) => {
       return res.json({ status: 'success', data: localTracks.map(t => ({ ...t, missing: false })) });
     }
 
-    // Merge: match local tracks by track_number+disc, or by mbid
+    // Merge: match local tracks by mbid, track_number+disc, or clean title
+    const matchedLocalIds = new Set();
+    const normalizeTitle = (s) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+
     const merged = mbTracks.map(mb => {
-      const local = localTracks.find(l =>
-        (mb.mbid && l.mbid === mb.mbid) ||
-        (l.track_number === mb.track_number && (l.disc_number || 1) === mb.disc_number)
-      );
-      if (local) return { ...local, missing: false };
+      const mbNorm = normalizeTitle(mb.title);
+      const local = localTracks.find(l => {
+        if (matchedLocalIds.has(l.id)) return false;
+        if (mb.mbid && l.mbid === mb.mbid) return true;
+        if (l.track_number === mb.track_number && (l.disc_number || 1) === mb.disc_number) return true;
+        if (mbNorm && normalizeTitle(l.title) === mbNorm) return true;
+        return false;
+      });
+
+      if (local) {
+        matchedLocalIds.add(local.id);
+        return { ...local, missing: false };
+      }
       return {
         id: null,
         mbid: mb.mbid,
@@ -805,12 +834,32 @@ router.get('/albums/:id/tracklist', async (req, res, next) => {
         format: null,
         bitrate: null,
         missing: true,
+        artist_name: album.artist_name,
+        album_title: album.title,
+        album_id: album.id,
+        album_mbid: album.mbid,
       };
     });
 
+    // Also include any extra local downloaded tracks not in the standard tracklist (e.g. bonus tracks on disk)
+    for (const l of localTracks) {
+      if (!matchedLocalIds.has(l.id)) {
+        merged.push({ ...l, missing: false });
+      }
+    }
+
     // Remember the expected size so album cards can show downloaded/expected
     try {
-      db.prepare('UPDATE music_albums SET expected_track_count = ? WHERE id = ?').run(merged.length, album.id);
+      db.prepare(`
+        UPDATE music_albums SET
+          expected_track_count = ?,
+          status = CASE
+            WHEN (SELECT COUNT(*) FROM music_tracks WHERE album_id = music_albums.id AND file_path IS NOT NULL) >= ? THEN 'downloaded'
+            WHEN (SELECT COUNT(*) FROM music_tracks WHERE album_id = music_albums.id AND file_path IS NOT NULL) > 0 THEN 'partial'
+            ELSE status
+          END
+        WHERE id = ?
+      `).run(merged.length, merged.length, album.id);
     } catch { /* ignore */ }
 
     res.json({ status: 'success', data: merged });

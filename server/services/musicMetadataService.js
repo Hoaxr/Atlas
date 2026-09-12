@@ -149,13 +149,13 @@ const searchAlbum = async (artistName, albumTitle) => {
   if (albumTitle && artistName) {
     const cleanAlbum = albumTitle.replace(/["+]/g, ' ').trim();
     const cleanArtist = artistName.replace(/["+]/g, ' ').trim();
-    query = `releasegroup:"${cleanAlbum}" AND artist:"${cleanArtist}"`;
+    query = `releasegroup:"${cleanAlbum}" AND artist:"${cleanArtist}" AND primarytype:Album`;
   } else if (albumTitle) {
     const cleanAlbum = albumTitle.replace(/["+]/g, ' ').trim();
-    query = `releasegroup:"${cleanAlbum}"`;
+    query = `releasegroup:"${cleanAlbum}" AND primarytype:Album`;
   } else if (artistName) {
     const cleanArtist = artistName.replace(/["+]/g, ' ').trim();
-    query = `artist:"${cleanArtist}"`;
+    query = `artist:"${cleanArtist}" AND primarytype:Album`;
   } else {
     return [];
   }
@@ -166,16 +166,18 @@ const searchAlbum = async (artistName, albumTitle) => {
 
   const data = await throttledGet(`${MB_BASE}/release-group`, { query, limit: 12 });
 
-  const results = (data['release-groups'] || []).map(rg => ({
-    mbid: rg.id,
-    title: rg.title,
-    albumType: rg['primary-type'] || 'Album',
-    year: rg['first-release-date'] ? parseInt(rg['first-release-date'].split('-')[0], 10) : null,
-    releaseDate: rg['first-release-date'] || null,
-    artistName: (rg['artist-credit'] || []).map(ac => ac.artist?.name || ac.name || '').join(', '),
-    artistMbid: rg['artist-credit']?.[0]?.artist?.id || null,
-    score: rg.score || 0,
-  }));
+  const results = (data['release-groups'] || [])
+    .filter(rg => !rg['primary-type'] || rg['primary-type'].toLowerCase() === 'album')
+    .map(rg => ({
+      mbid: rg.id,
+      title: rg.title,
+      albumType: rg['primary-type'] || 'Album',
+      year: rg['first-release-date'] ? parseInt(rg['first-release-date'].split('-')[0], 10) : null,
+      releaseDate: rg['first-release-date'] || null,
+      artistName: (rg['artist-credit'] || []).map(ac => ac.artist?.name || ac.name || '').join(', '),
+      artistMbid: rg['artist-credit']?.[0]?.artist?.id || null,
+      score: rg.score || 0,
+    }));
 
   setCached(cacheKey, results);
   return results;
@@ -397,7 +399,27 @@ const getReleaseGroupTracks = async (mbid) => {
 
   try {
     const data = await throttledGet(`${MB_BASE}/release`, { 'release-group': mbid, inc: 'recordings' });
-    const release = (data.releases || [])[0];
+    const officialReleases = (data.releases || []).filter(r => (r.status || '').toLowerCase() === 'official');
+    const pool = officialReleases.length > 0 ? officialReleases : (data.releases || []);
+
+    // Pick canonical standard release:
+    // Avoid releases marked with bonus tracks, deluxe, visual, remix, etc.
+    // Prefer standard single-medium release over bloated multi-disc bonus bundles.
+    const sorted = [...pool].sort((a, b) => {
+      const aDisambig = ((a.disambiguation || '') + ' ' + (a.title || '')).toLowerCase();
+      const bDisambig = ((b.disambiguation || '') + ' ' + (b.title || '')).toLowerCase();
+      const isBonusA = /bonus|deluxe|expanded|remix|instrumental|visual|sample|demo/i.test(aDisambig);
+      const isBonusB = /bonus|deluxe|expanded|remix|instrumental|visual|sample|demo/i.test(bDisambig);
+      if (isBonusA !== isBonusB) return isBonusA ? 1 : -1;
+
+      const aMediaCount = (a.media || []).length || 1;
+      const bMediaCount = (b.media || []).length || 1;
+      if (aMediaCount !== bMediaCount) return aMediaCount - bMediaCount;
+
+      return (a.date || '').localeCompare(b.date || '');
+    });
+
+    const release = sorted[0];
     const tracks = [];
     if (release) {
       for (const media of (release.media || [])) {

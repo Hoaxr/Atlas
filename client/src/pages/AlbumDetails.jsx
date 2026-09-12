@@ -151,10 +151,12 @@ export default function AlbumDetails() {
   }
 
   const coverUrl = album.cover_url || albumCoverUrl(album);
-  const isDownloaded = album.status === 'downloaded';
   const source = fullTracklist || album.tracks || [];
-  const totalTracks = source.length || album.track_count || 0;
+  const totalTracks = source.length || album.expected_track_count || album.track_count || 0;
   const downloadedTracks = source.filter((t) => !t.missing && (t.status === 'downloaded' || t.file_path)).length;
+  const isComplete = downloadedTracks > 0 && (totalTracks === 0 || downloadedTracks >= totalTracks);
+  const isPartial = downloadedTracks > 0 && !isComplete;
+  const isDownloaded = isComplete;
 
   const genres = Array.isArray(album.genres)
     ? album.genres
@@ -252,9 +254,13 @@ export default function AlbumDetails() {
                 {album.album_type || 'Album'}
               </span>
 
-              {isDownloaded ? (
+              {isComplete ? (
                 <span className="text-xs font-semibold px-2.5 py-0.5 rounded-md bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 flex items-center gap-1">
                   <CheckCircle2 className="w-3.5 h-3.5" /> Downloaded
+                </span>
+              ) : isPartial ? (
+                <span className="text-xs font-semibold px-2.5 py-0.5 rounded-md bg-amber-500/15 text-amber-400 border border-amber-500/30 flex items-center gap-1">
+                  <AlertCircle className="w-3.5 h-3.5" /> Partial ({downloadedTracks}/{totalTracks})
                 </span>
               ) : (
                 <span className="text-xs font-semibold px-2.5 py-0.5 rounded-md bg-rose-500/15 text-rose-400 border border-rose-500/30 flex items-center gap-1">
@@ -269,7 +275,7 @@ export default function AlbumDetails() {
                 </span>
               )}
 
-              {album.file_format && (
+              {(downloadedTracks > 0 || album.status === 'downloaded') && album.file_format && (
                 <span className="text-xs font-mono font-bold px-2 py-0.5 rounded-md bg-slate-800 text-slate-200 border border-white/10">
                   {album.file_format}
                   {album.file_bitdepth ? ` ${album.file_bitdepth}-bit` : ''}
@@ -368,21 +374,21 @@ export default function AlbumDetails() {
                   </div>
                 )}
 
-                <div className="bg-slate-900/40 border border-white/5 rounded-2xl overflow-hidden shadow">
-                  <table className="w-full text-left text-xs">
-                    <thead className="bg-slate-900/80 text-slate-400 border-b border-white/5 uppercase tracking-wider font-semibold text-[10px]">
+                <div className="bg-slate-900/60 border border-white/5 rounded-2xl overflow-hidden shadow-xl backdrop-blur-sm">
+                  <table className="w-full text-left">
+                    <thead className="bg-slate-900/95 text-slate-400 border-b border-white/5 uppercase tracking-wider font-bold text-xs">
                       <tr>
-                        <th className="py-2.5 px-3 w-10 text-center">Play</th>
-                        <th className="py-2.5 px-4 w-12">#</th>
-                        <th className="py-2.5 px-4">Title</th>
-                        <th className="py-2.5 px-4">Duration</th>
-                        <th className="py-2.5 px-4">Format</th>
-                        <th className="py-2.5 px-4">Bitrate</th>
-                        <th className="py-2.5 px-4">Size</th>
-                        <th className="py-2.5 px-4 text-right">Status</th>
+                        <th className="py-3.5 px-4 w-12 text-center">PLAY</th>
+                        <th className="py-3.5 px-4 w-14">#</th>
+                        <th className="py-3.5 px-4">TITLE</th>
+                        <th className="py-3.5 px-4">DURATION</th>
+                        <th className="py-3.5 px-4">FORMAT</th>
+                        <th className="py-3.5 px-4">BITRATE</th>
+                        <th className="py-3.5 px-4">SIZE</th>
+                        <th className="py-3.5 px-4 text-right">STATUS</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-white/5 text-slate-300">
+                    <tbody className="divide-y divide-white/5 text-slate-200">
                       {discGroups[discNum].map((track) => {
                         const isMissing = track.missing === true;
                         const isTrackDownloaded = !isMissing && (track.status === 'downloaded' || track.file_path);
@@ -391,33 +397,43 @@ export default function AlbumDetails() {
                         return (
                           <tr
                             key={track.id || track.mbid || `${track.disc_number}-${track.track_number}`}
-                            className={`transition-colors ${
+                            className={`transition-colors text-sm ${
                               isMissing
-                                ? 'opacity-40'
+                                ? 'opacity-40 hover:opacity-75'
                                 : isThisTrackPlaying
-                                  ? 'bg-cyan-500/10'
-                                  : 'hover:bg-white/[0.02]'
+                                  ? 'bg-cyan-500/15'
+                                  : 'hover:bg-white/[0.03]'
                             }`}
                           >
-                            <td className="py-2.5 px-3 text-center">
+                            <td className="py-3.5 px-4 text-center">
                               {isTrackDownloaded ? (
                                 <button
                                   onClick={() => {
                                     if (isThisTrackPlaying) {
                                       togglePlay();
                                     } else {
-                                      playTrack(
-                                        {
-                                          ...track,
-                                          artist_name: track.artist_name || album.artist_name,
-                                          album_title: track.album_title || album.title,
-                                          album_mbid: track.album_mbid || album.mbid,
-                                        },
-                                        (fullTracklist || album.tracks || []).filter(t => !t.missing)
-                                      );
+                                      const readyQueue = (fullTracklist || album.tracks || [])
+                                        .filter(t => !t.missing)
+                                        .map(t => ({
+                                          ...t,
+                                          artist_name: t.artist_name || album.artist_name,
+                                          artist_id: t.artist_id || album.artist_id,
+                                          album_title: t.album_title || album.title,
+                                          album_id: t.album_id || album.id,
+                                          album_mbid: t.album_mbid || album.mbid,
+                                        }));
+                                      const currentPlayable = {
+                                        ...track,
+                                        artist_name: track.artist_name || album.artist_name,
+                                        artist_id: track.artist_id || album.artist_id,
+                                        album_title: track.album_title || album.title,
+                                        album_id: track.album_id || album.id,
+                                        album_mbid: track.album_mbid || album.mbid,
+                                      };
+                                      playTrack(currentPlayable, readyQueue);
                                     }
                                   }}
-                                  className={`p-1.5 rounded-lg transition-colors ${
+                                  className={`p-2 rounded-lg transition-colors ${
                                     isThisTrackPlaying
                                       ? 'text-cyan-400 bg-cyan-500/20'
                                       : 'text-slate-400 hover:text-cyan-400 hover:bg-white/10'
@@ -425,49 +441,55 @@ export default function AlbumDetails() {
                                   title={isThisTrackPlaying ? 'Pause' : 'Play'}
                                 >
                                   {isThisTrackPlaying ? (
-                                    <span className="inline-flex gap-0.5 items-end h-3 w-3 justify-center">
-                                      <span className="w-0.5 h-3 bg-cyan-400 animate-pulse" />
-                                      <span className="w-0.5 h-2 bg-cyan-400 animate-pulse delay-75" />
-                                      <span className="w-0.5 h-2.5 bg-cyan-400 animate-pulse delay-150" />
+                                    <span className="inline-flex gap-0.5 items-end h-3.5 w-3.5 justify-center">
+                                      <span className="w-0.5 h-3.5 bg-cyan-400 animate-pulse" />
+                                      <span className="w-0.5 h-2.5 bg-cyan-400 animate-pulse delay-75" />
+                                      <span className="w-0.5 h-3 bg-cyan-400 animate-pulse delay-150" />
                                     </span>
                                   ) : (
-                                    <Play className="w-3.5 h-3.5 fill-current ml-0.5" />
+                                    <Play className="w-4 h-4 fill-current ml-0.5" />
                                   )}
                                 </button>
+                              ) : (
+                                <span className="text-slate-600 text-sm">—</span>
+                              )}
+                            </td>
+                            <td className="py-3.5 px-4 text-slate-400 tabular-nums font-semibold text-sm">
+                              {track.track_number ? String(track.track_number).padStart(2, '0') : '—'}
+                            </td>
+                            <td className={`py-3.5 px-4 font-semibold text-sm sm:text-base ${ isMissing ? 'text-slate-400 italic' : 'text-slate-100 hover:text-cyan-300 transition-colors' }`}>
+                              {track.title}
+                            </td>
+                            <td className="py-3.5 px-4 text-slate-300 tabular-nums font-medium text-sm">
+                              {formatDuration(track.duration)}
+                            </td>
+                            <td className="py-3.5 px-4">
+                              {track.format ? (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold uppercase tracking-wider bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
+                                  {track.format}
+                                </span>
                               ) : (
                                 <span className="text-slate-600">—</span>
                               )}
                             </td>
-                            <td className="py-2.5 px-4 text-slate-500 font-mono">
-                              {track.track_number ? String(track.track_number).padStart(2, '0') : '—'}
-                            </td>
-                            <td className={`py-2.5 px-4 font-semibold ${ isMissing ? 'text-slate-400 italic' : 'text-slate-100' }`}>
-                              {track.title}
-                            </td>
-                            <td className="py-2.5 px-4 font-mono text-slate-400">
-                              {formatDuration(track.duration)}
-                            </td>
-                            <td className="py-2.5 px-4 font-mono text-cyan-300">
-                              {track.format || '—'}
-                            </td>
-                            <td className="py-2.5 px-4 font-mono text-slate-400">
+                            <td className="py-3.5 px-4 text-slate-300 tabular-nums font-medium text-sm">
                               {track.bitrate ? `${track.bitrate} kbps` : '—'}
                             </td>
-                            <td className="py-2.5 px-4 font-mono text-slate-400">
+                            <td className="py-3.5 px-4 text-slate-300 tabular-nums font-medium text-sm">
                               {track.file_size ? formatSize(track.file_size) : '—'}
                             </td>
-                            <td className="py-2.5 px-4 text-right">
+                            <td className="py-3.5 px-4 text-right">
                               {isMissing ? (
-                                <span className="inline-flex items-center gap-1 text-rose-400 font-semibold text-[11px]">
-                                  <AlertCircle className="w-3.5 h-3.5" /> Missing
+                                <span className="inline-flex items-center gap-1.5 text-rose-400 font-semibold text-xs">
+                                  <AlertCircle className="w-4 h-4" /> Missing
                                 </span>
                               ) : isTrackDownloaded ? (
-                                <span className="inline-flex items-center gap-1 text-emerald-400 font-semibold text-[11px]">
-                                  <CheckCircle2 className="w-3.5 h-3.5" /> Ready
+                                <span className="inline-flex items-center gap-1.5 text-emerald-400 font-semibold text-xs">
+                                  <CheckCircle2 className="w-4 h-4" /> Ready
                                 </span>
                               ) : (
-                                <span className="inline-flex items-center gap-1 text-rose-400 font-semibold text-[11px]">
-                                  <AlertCircle className="w-3.5 h-3.5" /> Missing
+                                <span className="inline-flex items-center gap-1.5 text-rose-400 font-semibold text-xs">
+                                  <AlertCircle className="w-4 h-4" /> Missing
                                 </span>
                               )}
                             </td>
