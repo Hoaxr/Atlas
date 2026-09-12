@@ -12,7 +12,7 @@
     <a href="https://bdekker.nl"><img src="https://img.shields.io/badge/Website-BDekker.nl-cyan?style=flat-square" alt="Website" /></a>
   </p>
   <p>
-    <img src="./assets/atlas.png?v=2" alt="Atlas Dashboard" width="800" />
+    <img src="./assets/atlas.png?v=3" alt="Atlas Dashboard" width="800" />
   </p>
   <br>
 </div>
