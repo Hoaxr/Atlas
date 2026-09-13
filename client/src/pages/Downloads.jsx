@@ -1,6 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import api from '../lib/api';
-import { DownloadCloud, Download, ArrowDown, ArrowUp, Activity, Film, Tv, Music2, Play, Pause, Trash2, Clock, HardDrive, CheckSquare, Square, X, Loader2, Folder, MoreHorizontal, Check, Network, Menu, LayoutGrid, ChevronDown } from 'lucide-react';
+import {
+  DownloadCloud, Download, ArrowDown, ArrowUp, Activity,
+  Play, Pause, Trash2, Clock, CheckSquare, Square, X,
+  Loader2, MoreHorizontal, Check, Menu, LayoutGrid, ChevronDown, Search
+} from 'lucide-react';
 import { customAlert, customConfirm } from '../utils/alerts';
 import useWebSocket from '../lib/useWebSocket';
 import StickyBar from '../components/shared/StickyBar';
@@ -48,7 +52,7 @@ const parseReleaseInfo = (rawName, torrent = {}) => {
     };
   }
   
-  const name = safeRawName.replace(/\.(mp4|mkv|avi|mov)$/i, '');
+  const name = safeRawName.replace(/\.(mp4|mkv|avi|mov|flac|mp3|m4a|aac|opus|ogg|wav|webm|ts|m2ts)$/i, '');
   const totalBytes = torrent.total_size || torrent.size || 0;
   const isSmallSize = totalBytes > 0 && totalBytes < 1200 * 1024 * 1024; // Music releases are < 1.2GB
 
@@ -84,7 +88,20 @@ const parseReleaseInfo = (rawName, torrent = {}) => {
     (Array.isArray(torrent.tags) && torrent.tags.some(t => String(t).toLowerCase().includes('music'))) ||
     (torrent.save_path || torrent.downloadDir || '').toLowerCase().includes('/music');
 
-  const isMusic = isClientMusic || (hasExplicitMusicClues && !hasVideoClues) || (!hasVideoClues && !hasTvClues && isSmallSize && (name.includes(' - ') || hasExplicitMusicClues));
+  const isClientVideo = 
+    torrent.mediaType === 'movie' ||
+    torrent.mediaType === 'tv' ||
+    torrent.category === 'movies' ||
+    torrent.category === 'movie' ||
+    torrent.category === 'tv' ||
+    (torrent.save_path || torrent.downloadDir || '').toLowerCase().includes('/movies') ||
+    (torrent.save_path || torrent.downloadDir || '').toLowerCase().includes('/tv');
+
+  const isMusic = !isClientVideo && (
+    isClientMusic ||
+    (hasExplicitMusicClues && !hasVideoClues) ||
+    (!hasVideoClues && !hasTvClues && isSmallSize && (name.includes(' - ') || hasExplicitMusicClues))
+  );
 
   if (isMusic && !hasVideoClues) {
     let musicFormat = 'FLAC';
@@ -235,6 +252,7 @@ export default function Downloads() {
   const [activeTab, setActiveTab] = useState('active');
   const [sortBy, setSortBy] = useState('progress');
   const [viewMode, setViewMode] = useState('list');
+  const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
     const handleOutsideClick = () => setOpenMenuHash(null);
@@ -278,12 +296,18 @@ export default function Downloads() {
     });
   };
 
-  const toggleSelectAll = () => {
-    if (selectedHashes.size === downloads.length && downloads.length > 0) {
-      setSelectedHashes(new Set());
-    } else {
-      setSelectedHashes(new Set(downloads.map(d => d.hash)));
-    }
+  const toggleSelectAll = (visibleItems = []) => {
+    if (visibleItems.length === 0) return;
+    const allSelected = visibleItems.every(d => selectedHashes.has(d.hash));
+    setSelectedHashes(prev => {
+      const next = new Set(prev);
+      if (allSelected) {
+        visibleItems.forEach(d => next.delete(d.hash));
+      } else {
+        visibleItems.forEach(d => next.add(d.hash));
+      }
+      return next;
+    });
   };
 
   const clearSelection = () => {
@@ -431,40 +455,27 @@ export default function Downloads() {
     return formatBytes(bytes) + '/s';
   };
 
-  const formatEta = (totalSize, progress, speed) => {
-    if (!speed || speed <= 0 || !totalSize || totalSize <= 0 || progress >= 99.5) return null;
-    const remainingBytes = totalSize * (1 - progress / 100);
-    const seconds = Math.floor(remainingBytes / speed);
-    if (seconds <= 0) return 'Few seconds remaining';
+  const formatEta = (totalSize, progress, speed, clientEta = null) => {
+    let seconds = null;
+    if (clientEta !== null && clientEta !== undefined && clientEta > 0 && clientEta < 8640000) {
+      seconds = clientEta;
+    } else if (speed > 0 && totalSize > 0 && progress < 99.5) {
+      const remainingBytes = totalSize * (1 - progress / 100);
+      seconds = Math.floor(remainingBytes / speed);
+    }
+
+    if (!seconds || seconds <= 0) return null;
     if (seconds < 60) return `${seconds}s remaining`;
     const mins = Math.floor(seconds / 60);
     if (mins < 60) return `${mins}m remaining`;
     const hours = Math.floor(mins / 60);
     const remMins = mins % 60;
-    return remMins > 0 ? `${hours}h ${remMins}m remaining` : `${hours}h remaining`;
-  };
-
-  const getStateBadge = (state) => {
-    const s = (state || '').toLowerCase();
-    if (s.startsWith('paused') || s.startsWith('stopped')) {
-      return { class: 'bg-amber-500/15 text-amber-400 border-amber-500/30', dot: 'bg-amber-400', label: 'Paused' };
+    if (hours < 24) {
+      return remMins > 0 ? `${hours}h ${remMins}m remaining` : `${hours}h remaining`;
     }
-    if (s.includes('error')) {
-      return { class: 'bg-rose-500/15 text-rose-400 border-rose-500/30', dot: 'bg-rose-400', label: 'Error' };
-    }
-    if (s === 'metadl' || s === 'allocating') {
-      return { class: 'bg-indigo-500/15 text-indigo-300 border-indigo-500/30', dot: 'bg-indigo-400', label: 'Fetching Metadata' };
-    }
-    if (s.includes('download') || s.endsWith('dl')) {
-      return { class: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30', dot: 'bg-emerald-400' };
-    }
-    if (s.includes('upload') || s.includes('seed')) {
-      return { class: 'bg-cyan-500/15 text-cyan-400 border-cyan-500/30', dot: 'bg-cyan-400' };
-    }
-    if (s.startsWith('stall')) {
-      return { class: 'bg-rose-500/15 text-rose-400 border-rose-500/30', dot: 'bg-rose-400' };
-    }
-    return { class: 'bg-slate-700/30 text-slate-400 border-slate-700/50', dot: 'bg-slate-400' };
+    const days = Math.floor(hours / 24);
+    const remHours = hours % 24;
+    return remHours > 0 ? `${days}d ${remHours}h remaining` : `${days}d remaining`;
   };
 
   const isFailedTorrent = (t) => {
@@ -499,6 +510,7 @@ export default function Downloads() {
   const completedCount = completedDownloads.length;
   const failedCount = failedDownloads.length;
 
+  const completedTotalBytes = completedDownloads.reduce((acc, d) => acc + (d.total_size || d.size || 0), 0);
   const totalTrafficBytes = (Number(stats.dl_info_data) || 0) + (Number(stats.up_info_data) || 0);
   const totalTrafficFormatted = totalTrafficBytes > 0 
     ? formatBytes(totalTrafficBytes) 
@@ -507,21 +519,44 @@ export default function Downloads() {
         : '0 B');
 
   const filteredDownloads = downloads.filter(t => {
-    if (activeTab === 'active') return isActiveTorrent(t);
-    if (activeTab === 'queued') return isQueuedTorrent(t);
-    if (activeTab === 'completed') return isCompletedTorrent(t);
-    if (activeTab === 'failed') return isFailedTorrent(t);
+    if (activeTab === 'active') {
+      if (!isActiveTorrent(t)) return false;
+    } else if (activeTab === 'queued') {
+      if (!isQueuedTorrent(t)) return false;
+    } else if (activeTab === 'completed') {
+      if (!isCompletedTorrent(t)) return false;
+    } else if (activeTab === 'failed') {
+      if (!isFailedTorrent(t)) return false;
+    }
+
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase().trim();
+      const name = (t.name || '').toLowerCase();
+      const client = (t.clientName || '').toLowerCase();
+      const path = (t.save_path || t.downloadDir || '').toLowerCase();
+      if (!name.includes(q) && !client.includes(q) && !path.includes(q)) return false;
+    }
+
     return true;
   });
 
-  const sortedDownloads = [...filteredDownloads].sort((a, b) => {
-    if (sortBy === 'progress') return (b.progress || 0) - (a.progress || 0);
-    if (sortBy === 'speed') return ((b.dlspeed || 0) + (b.upspeed || 0)) - ((a.dlspeed || 0) + (a.upspeed || 0));
-    if (sortBy === 'name') return (a.name || '').localeCompare(b.name || '');
-    if (sortBy === 'size') return ((b.total_size || b.size || 0) - (a.total_size || a.size || 0));
-    if (sortBy === 'eta') return (a.eta || 999999) - (b.eta || 999999);
-    return 0;
-  });
+  const sortedDownloads = useMemo(() => {
+    return [...filteredDownloads].sort((a, b) => {
+      if (sortBy === 'progress') return (b.progress || 0) - (a.progress || 0);
+      if (sortBy === 'speed') return ((b.dlspeed || 0) + (b.upspeed || 0)) - ((a.dlspeed || 0) + (a.upspeed || 0));
+      if (sortBy === 'name') return (a.name || '').localeCompare(b.name || '');
+      if (sortBy === 'size') return ((b.total_size || b.size || 0) - (a.total_size || a.size || 0));
+      if (sortBy === 'eta') {
+        const getValidEta = (t) => {
+          const eta = t.eta;
+          if (eta === null || eta === undefined || eta <= 0 || eta >= 8640000) return Infinity;
+          return eta;
+        };
+        return getValidEta(a) - getValidEta(b);
+      }
+      return 0;
+    });
+  }, [filteredDownloads, sortBy]);
 
   const transferRatio = stats.up_info_data !== null && stats.up_info_data !== undefined && Number(stats.dl_info_data) > 0
     ? (stats.up_info_data / stats.dl_info_data).toFixed(2)
@@ -566,17 +601,17 @@ export default function Downloads() {
           </div>
         </div>
 
-        {/* Completed Today */}
+        {/* Completed */}
         <div className="glass-panel rounded-xl p-3 sm:p-3.5 border border-white/5 flex items-center gap-3">
           <div className="p-2.5 rounded-lg bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 shrink-0">
             <Check className="w-4 h-4 sm:w-5 sm:h-5" />
           </div>
           <div className="min-w-0 flex-1">
-            <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider truncate">Completed Today</p>
+            <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider truncate">Completed</p>
             <div className="flex items-baseline gap-2 mt-0.5">
               <span className="text-lg sm:text-2xl font-black text-slate-100">{completedCount}</span>
-              <span className="text-xs font-semibold text-cyan-400 flex items-center gap-0.5">
-                <ArrowUp className="w-3 h-3" /> {formatBytes(stats.up_info_data || 0)}
+              <span className="text-xs font-semibold text-cyan-400 flex items-center gap-0.5" title="Total size of completed items">
+                {formatBytes(completedTotalBytes)}
               </span>
             </div>
           </div>
@@ -709,18 +744,44 @@ export default function Downloads() {
         </div>
 
         {/* Right side controls */}
-        <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
+        <div className="flex items-center gap-2 sm:gap-2.5 shrink-0 flex-wrap sm:flex-nowrap">
+          {/* Quick Search */}
+          <div className="relative min-w-[130px] sm:min-w-[170px] max-w-[220px]">
+            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Filter..."
+              className="w-full bg-slate-900 border border-white/10 rounded-lg pl-8 pr-7 py-1 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-cyan-500/50"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery('')}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
+                title="Clear filter"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            )}
+          </div>
+
           {/* Select All Toggle */}
           {sortedDownloads.length > 0 && (
             <button
               type="button"
-              onClick={toggleSelectAll}
+              onClick={() => toggleSelectAll(sortedDownloads)}
               className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-200 px-2 py-1 rounded-lg hover:bg-slate-800/60 transition-colors"
-              title={selectedHashes.size === sortedDownloads.length ? 'Deselect all' : 'Select all'}
+              title={
+                sortedDownloads.every(d => selectedHashes.has(d.hash))
+                  ? 'Deselect all visible'
+                  : 'Select all visible'
+              }
             >
-              {selectedHashes.size === sortedDownloads.length ? (
+              {sortedDownloads.every(d => selectedHashes.has(d.hash)) ? (
                 <CheckSquare className="w-3.5 h-3.5 text-cyan-400" />
-              ) : selectedHashes.size > 0 ? (
+              ) : sortedDownloads.some(d => selectedHashes.has(d.hash)) ? (
                 <div className="w-3.5 h-3.5 rounded border border-cyan-400/60 bg-cyan-400/20 flex items-center justify-center">
                   <div className="w-1.5 h-0.5 bg-cyan-400 rounded" />
                 </div>
@@ -856,20 +917,18 @@ export default function Downloads() {
             const totalSize = t.total_size || t.size || 0;
             const progressPct = Math.min(100, Math.max(0, Math.round(t.progress || 0)));
             const completedBytes = t.completed || (totalSize > 0 ? (totalSize * progressPct / 100) : 0);
-            const eta = formatEta(totalSize, t.progress || 0, t.dlspeed || 0);
+            const eta = formatEta(totalSize, t.progress || 0, t.dlspeed || 0, t.eta);
             const info = parseReleaseInfo(t.name, t);
             const isPaused = (t.state || '').toLowerCase().includes('pause') || (t.state || '').toLowerCase().includes('stop');
             const isComplete = progressPct >= 100 || (t.state || '').toLowerCase().includes('seed') || (t.state || '').toLowerCase().includes('complete');
             const folderPath = t.save_path || t.downloadDir || (info.isMusic ? '/downloads/music' : info.isTv ? '/downloads/tvshows' : '/downloads/movies');
 
-            let speedText = '0 B/s';
-            if (t.dlspeed > 0) speedText = formatSpeed(t.dlspeed);
-            else if (t.upspeed > 0) speedText = formatSpeed(t.upspeed);
-            else if (isPaused) speedText = 'Paused';
+            const isDownloading = t.dlspeed > 0;
+            const isUploading = t.upspeed > 0;
 
             let etaText = '—';
             if (isPaused) etaText = 'Paused';
-            else if (isComplete && !eta) etaText = 'Completed';
+            else if (isComplete && !eta) etaText = isUploading ? 'Seeding' : 'Completed';
             else if (eta) etaText = eta;
             else if (t.dlspeed === 0) etaText = 'Stalled';
 
@@ -956,9 +1015,23 @@ export default function Downloads() {
                   {/* Right group: Speed, ETA, Size, Action buttons */}
                   <div className="flex items-center gap-3 sm:gap-4 shrink-0 font-mono text-xs">
                     {/* Speed */}
-                    <span className={`font-semibold ${t.dlspeed > 0 ? 'text-emerald-400' : 'text-slate-500'}`}>
-                      {speedText}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      {isDownloading && (
+                        <span className="font-semibold text-emerald-400 flex items-center gap-0.5" title="Download speed">
+                          <ArrowDown className="w-3 h-3 animate-pulse" /> {formatSpeed(t.dlspeed)}
+                        </span>
+                      )}
+                      {isUploading && (
+                        <span className="font-semibold text-cyan-400 flex items-center gap-0.5" title="Upload speed">
+                          <ArrowUp className="w-3 h-3" /> {formatSpeed(t.upspeed)}
+                        </span>
+                      )}
+                      {!isDownloading && !isUploading && (
+                        <span className="text-slate-500 font-semibold">
+                          {isPaused ? 'Paused' : isComplete ? 'Idle' : '0 B/s'}
+                        </span>
+                      )}
+                    </div>
 
                     {/* ETA */}
                     <span className="text-slate-400 hidden md:inline">
@@ -1074,6 +1147,18 @@ export default function Downloads() {
                   <div className="hidden sm:flex items-center gap-1.5 text-[11px] text-slate-500 shrink-0">
                     <span className="text-cyan-400/80 font-medium">{t.clientName || 'qBittorrent'}</span>
                     <span>•</span>
+                    {t.ratio !== undefined && t.ratio !== null && Number(t.ratio) >= 0 && (
+                      <>
+                        <span className="font-mono text-slate-400" title="Share ratio">Ratio: {Number(t.ratio).toFixed(2)}</span>
+                        <span>•</span>
+                      </>
+                    )}
+                    {t.num_seeds !== undefined && t.num_seeds !== null && Number(t.num_seeds) >= 0 && (
+                      <>
+                        <span className="font-mono text-slate-400" title="Seeds">Seeds: {t.num_seeds}</span>
+                        <span>•</span>
+                      </>
+                    )}
                     <span className="truncate max-w-[220px]" title={folderPath}>{folderPath}</span>
                   </div>
                 </div>

@@ -1,8 +1,8 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, Mic2, Disc, RefreshCw, Search, Trash2, Bookmark, BookmarkMinus,
-  CheckCircle2, AlertCircle, Calendar, ShieldCheck, Loader2, Sparkles, ExternalLink, FileAudio,
+  CheckCircle2, AlertCircle, Loader2, ExternalLink, FileAudio,
   Play, Pause, ChevronLeft, ChevronRight, SlidersHorizontal
 } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -39,7 +39,7 @@ export default function ArtistDetails() {
   const [deleting, setDeleting] = useState(false);
   const [manualSearchAlbum, setManualSearchAlbum] = useState(null);
 
-  const fetchArtist = async () => {
+  const fetchArtist = useCallback(async () => {
     try {
       const res = await api.get(`/library/music/artists/${id}`);
       if (res.data.status === 'success') {
@@ -51,11 +51,11 @@ export default function ArtistDetails() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [id]);
 
   useEffect(() => {
     fetchArtist();
-  }, [id]);
+  }, [fetchArtist]);
 
   const handleToggleMonitor = async () => {
     if (!artist) return;
@@ -64,7 +64,7 @@ export default function ArtistDetails() {
       await api.put(`/library/music/artists/${id}`, { monitored: newMonitored });
       setArtist((prev) => ({ ...prev, monitored: newMonitored }));
       toast.success(newMonitored ? 'Artist monitored' : 'Artist unmonitored', { id: `artist-monitor-${id}` });
-    } catch (err) {
+    } catch {
       toast.error('Failed to update monitoring status', { id: `artist-monitor-${id}` });
     }
   };
@@ -74,11 +74,11 @@ export default function ArtistDetails() {
     try {
       const res = await api.post(`/library/music/artists/${id}/refresh`);
       if (res.data.status === 'success') {
-        toast.success(res.data.message || 'Metadata refreshed', { id: `artist-refresh-${id}`, duration: 2500 });
-        fetchArtist();
+        toast.success('Artist refreshed with latest MusicBrainz data');
+        await fetchArtist();
       }
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Failed to refresh metadata', { id: `artist-refresh-${id}` });
+      toast.error(err.response?.data?.message || 'Refresh failed');
     } finally {
       setRefreshing(false);
     }
@@ -91,7 +91,7 @@ export default function ArtistDetails() {
       if (res.data.status === 'success') {
         toast.success(res.data.message || 'Searching releases for missing albums', { id: `artist-search-${id}`, duration: 2500 });
       }
-    } catch (err) {
+    } catch {
       toast.error('Failed to trigger search', { id: `artist-search-${id}` });
     } finally {
       setSearchingMissing(false);
@@ -104,7 +104,7 @@ export default function ArtistDetails() {
       await api.delete(`/library/music/artists/${id}?deleteFiles=${deleteFiles}`);
       toast.success(`Removed ${artist.name} from library`);
       navigate('/music?tab=artists');
-    } catch (err) {
+    } catch {
       toast.error('Failed to delete artist');
     } finally {
       setDeleting(false);
@@ -197,7 +197,7 @@ export default function ArtistDetails() {
     return () => {
       isMounted = false;
     };
-  }, [selectedAlbum?.id]);
+  }, [selectedAlbum?.id, selectedAlbum?.title, selectedAlbum?.mbid, artist?.id, artist?.name]);
 
   const handleScroll = (direction) => {
     if (!scrollRef.current) return;

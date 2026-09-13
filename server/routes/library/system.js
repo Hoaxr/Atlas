@@ -11,6 +11,7 @@ const { getAiredCutoffSql } = require('../../utils/airDate');
 const { parseResolution, isCutoffMet } = require('../../utils/mediaParsing');
 const cleanupWorker = require('../../services/cleanupWorker');
 const { scanSubtitleLangs } = require('../../services/scanner/fileScanner');
+const requireAdmin = require('../../middleware/requireAdmin');
 
 // ── Stats cache — avoids 20+ DB queries on every dashboard load ──
 let _statsCache = null;
@@ -525,7 +526,7 @@ router.delete('/paths/:id', (req, res, next) => {
 });
 
 // Browse server directories for root folder configuration
-router.get('/filesystem/browse', async (req, res, next) => {
+router.get('/filesystem/browse', requireAdmin, async (req, res, next) => {
   try {
     let targetDir = req.query.path ? path.resolve(req.query.path) : null;
 

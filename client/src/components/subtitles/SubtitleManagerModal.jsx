@@ -279,7 +279,7 @@ export default function SubtitleManagerModal({
                                 <span>{track.cueCount} cues</span>
                               </>
                             )}
-                            {track.syncDetails?.confidence != null && (
+                            {track.syncDetails?.confidence !== null && track.syncDetails?.confidence !== undefined && (
                               <>
                                 <span>•</span>
                                 <span className={track.syncStatus === 'in_sync' ? 'text-emerald-400/80' : 'text-amber-400/80'}>

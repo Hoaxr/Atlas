@@ -19,10 +19,7 @@ const MUSIC_IMAGE_VERSION = '2';
  */
 export const posterUrl = (type, tmdbId, tmdbPath = null, size = 'w500') => {
   if (tmdbId) {
-    const token = localStorage.getItem('atlas_token');
-    return token
-      ? `/api/images/${type}/${tmdbId}/poster?token=${encodeURIComponent(token)}`
-      : `/api/images/${type}/${tmdbId}/poster`;
+    return `/api/images/${type}/${tmdbId}/poster`;
   }
   // Fallback for items not yet in the library (search results, discover)
   if (tmdbPath) {
@@ -51,11 +48,7 @@ export const albumCoverUrl = (albumOrIdOrMbid) => {
     ? (albumOrIdOrMbid.id || albumOrIdOrMbid.mbid)
     : albumOrIdOrMbid;
   if (!key) return null;
-  const token = localStorage.getItem('atlas_token');
-  const base = `/api/library/music/albums/${key}/cover`;
-  return token
-    ? `${base}?token=${encodeURIComponent(token)}&v=${MUSIC_IMAGE_VERSION}`
-    : `${base}?v=${MUSIC_IMAGE_VERSION}`;
+  return `/api/library/music/albums/${key}/cover?v=${MUSIC_IMAGE_VERSION}`;
 };
 
 /**
@@ -71,11 +64,7 @@ export const artistImageUrl = (artistOrIdOrMbid) => {
     ? (artistOrIdOrMbid.id || artistOrIdOrMbid.mbid)
     : artistOrIdOrMbid;
   if (!key) return null;
-  const token = localStorage.getItem('atlas_token');
-  const base = `/api/library/music/artists/${key}/image`;
-  return token
-    ? `${base}?token=${encodeURIComponent(token)}&v=${MUSIC_IMAGE_VERSION}`
-    : `${base}?v=${MUSIC_IMAGE_VERSION}`;
+  return `/api/library/music/artists/${key}/image?v=${MUSIC_IMAGE_VERSION}`;
 };
 
 /**
@@ -85,8 +74,6 @@ export const artistImageUrl = (artistOrIdOrMbid) => {
  */
 export const trackStreamUrl = (trackId) => {
   if (!trackId) return null;
-  const token = localStorage.getItem('atlas_token');
-  const base = `/api/library/music/tracks/${trackId}/stream`;
-  return token ? `${base}?token=${encodeURIComponent(token)}` : base;
+  return `/api/library/music/tracks/${trackId}/stream`;
 };
 

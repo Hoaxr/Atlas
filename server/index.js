@@ -71,7 +71,7 @@ const app = express();
 app.set('trust proxy', 1);
 
 const server = http.createServer(app);
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 9898;
 
 // WebSocket server
 const wss = new WebSocketServer({ server, path: '/ws' });
@@ -80,7 +80,33 @@ function wsHeartbeat() {
   this.isAlive = true;
 }
 
-wss.on('connection', (ws, _req) => {
+function isAllowedWsOrigin(req) {
+  const origin = req.headers.origin;
+  if (!origin) return true; // non-browser clients (native apps, scripts)
+  try {
+    const originUrl = new URL(origin);
+    const host = req.headers.host;
+    if (host && (originUrl.host === host || originUrl.hostname === 'localhost' || originUrl.hostname === '127.0.0.1')) {
+      return true;
+    }
+    const configuredOrigin = process.env.CORS_ORIGIN;
+    if (configuredOrigin) {
+      const allowed = configuredOrigin.split(',').map(s => s.trim().toLowerCase());
+      if (allowed.includes(origin.toLowerCase()) || allowed.includes('*')) return true;
+    }
+  } catch {
+    return false;
+  }
+  return false;
+}
+
+wss.on('connection', (ws, req) => {
+  if (!isAllowedWsOrigin(req)) {
+    console.warn(`[WS] Rejected connection from unauthorized origin: ${req.headers.origin}`);
+    ws.close(1008, 'Origin not allowed');
+    return;
+  }
+
   ws.isAlive = true;
   ws.on('pong', wsHeartbeat);
   console.log('[WS] Client connected');
@@ -89,10 +115,11 @@ wss.on('connection', (ws, _req) => {
 
   const setupAuth = () => {
     authenticated = true;
-    // If no _userId was set by presenceTracker (bypass path), resolve the admin user from DB
+    // For anonymous setups when auth is disabled, do not attach to the admin user
     if (!ws._userId) {
-      const adminRow = db.prepare("SELECT id FROM users WHERE role = 'admin' ORDER BY id ASC LIMIT 1").get();
-      ws._userId = adminRow ? adminRow.id : 1;
+      ws._userId = 'anonymous';
+      ws._username = 'anonymous';
+      ws._role = 'anonymous';
     }
     console.log(`[WS] User ${ws._username || ws._userId} authenticated`);
     
@@ -330,10 +357,10 @@ app.use(express.json({ limit: '500kb' }));
 app.use('/api', (req, res, next) => {
   if (
     req.path.startsWith('/auth') ||
-    req.path.startsWith('/watcher/image') ||
     req.path.startsWith('/images') ||
     (req.method === 'GET' && req.path.startsWith('/library/music/artists/') && req.path.endsWith('/image')) ||
     (req.method === 'GET' && req.path.startsWith('/library/music/albums/') && req.path.endsWith('/cover')) ||
+    (req.method === 'GET' && req.path.startsWith('/library/music/tracks/') && req.path.endsWith('/stream')) ||
     req.path === '/webhooks/download-client'
   ) {
     return next();
@@ -349,8 +376,9 @@ const settingsAdminWrapper = (req, res, next) => {
   return requireAdmin(req, res, next);
 };
 
-// Safe routes wrapper for library (only GET is safe for users)
+// Safe routes wrapper for library (only GET is safe for users, but administrative routes require admin)
 const libraryAdminWrapper = (req, res, next) => {
+  if (req.path === '/filesystem/browse') return requireAdmin(req, res, next);
   if (req.method === 'GET') return next();
   return requireAdmin(req, res, next);
 };
@@ -415,11 +443,7 @@ app.get('/api/images/:type/:tmdbId/poster', async (req, res) => {
     } catch { /* ignore */ }
   }
 
-  if (!isAuthenticated) {
-    return res.status(404).json({ error: 'No poster available' });
-  }
-
-  // Cache miss (authenticated) — look up poster_path from DB and download
+  // Cache miss — look up poster_path from DB and download
   try {
     const table = type === 'movies' ? 'movies' : 'shows';
     const row   = db.prepare(`SELECT poster_path FROM ${table} WHERE tmdb_id = ?`).get(tmdbId);
@@ -429,6 +453,10 @@ app.get('/api/images/:type/:tmdbId/poster', async (req, res) => {
       // Check requests table
       const reqRow = db.prepare('SELECT poster_path FROM requests WHERE tmdb_id = ? AND type = ?').get(tmdbId, type === 'movies' ? 'movie' : 'show');
       tmdbPath = reqRow?.poster_path;
+    }
+
+    if (!isAuthenticated && !tmdbPath) {
+      return res.status(404).json({ error: 'No poster available' });
     }
 
     if (!tmdbPath) {

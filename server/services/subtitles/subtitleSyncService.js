@@ -30,11 +30,13 @@ const execFileAsync = util.promisify(execFile);
  */
 const probeMediaDuration = async (filePath) => {
   try {
+    const resolvedPath = path.resolve(filePath);
     const { stdout } = await execFileAsync('ffprobe', [
       '-v', 'error',
       '-show_entries', 'format=duration',
       '-of', 'json',
-      filePath
+      '--',
+      resolvedPath
     ], { timeout: 15000 });
     const info = JSON.parse(stdout || '{}');
     const sec = parseFloat(info?.format?.duration);
@@ -54,10 +56,11 @@ const probeMediaDuration = async (filePath) => {
 const probeAudioVolumeAt = async (filePath, startSec, durationSec = 2.0) => {
   try {
     const safeStart = Math.max(0, startSec);
+    const resolvedPath = path.resolve(filePath);
     const { stderr } = await execFileAsync('ffmpeg', [
       '-hide_banner',
       '-ss', String(safeStart),
-      '-i', filePath,
+      '-i', resolvedPath,
       '-t', String(durationSec),
       '-vn',
       '-af', 'volumedetect',
@@ -89,7 +92,7 @@ const probeAudioVolumeAt = async (filePath, startSec, durationSec = 2.0) => {
  * @param {number} [params.mediaId] - Media database ID
  * @returns {Promise<object>} Sync verification result
  */
-const verifySingleSubtitleSync = async ({ filePath, subPath, mediaType, mediaId }) => {
+const verifySingleSubtitleSync = async ({ filePath, subPath, _mediaType, _mediaId }) => {
   if (!fs.existsSync(filePath)) {
     return { status: 'error', synced: false, message: 'Video file missing on disk' };
   }
@@ -114,7 +117,7 @@ const verifySingleSubtitleSync = async ({ filePath, subPath, mediaType, mediaId 
     return { status: 'unknown', synced: true, confidence: 0.5, offsetSeconds: 0, message: 'Could not probe video file duration' };
   }
 
-  const { durationSec, durationMs } = mediaProbe;
+  const { durationMs } = mediaProbe;
   const firstCue = cues[0];
   const lastCue = cues[cues.length - 1];
 

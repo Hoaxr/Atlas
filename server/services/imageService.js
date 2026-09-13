@@ -254,9 +254,10 @@ const extractEmbeddedCover = async (audioFilePath, destPath) => {
 
   const tmpPath = `${destPath}.${process.pid}.${Date.now()}.${Math.random().toString(36).slice(2)}.tmp.jpg`;
   try {
+    const resolvedInput = path.resolve(audioFilePath);
     await execFileAsync('ffmpeg', [
       '-y',
-      '-i', audioFilePath,
+      '-i', resolvedInput,
       '-an',
       '-frames:v', '1',
       '-update', '1',

@@ -27,14 +27,17 @@ const checkFileIntegrity = async (filePath) => {
       '-v', 'error',
       '-show_entries', 'format=duration',
       '-of', 'default=noprint_wrappers=1:nokey=1',
-      filePath
+      '--', filePath
     ], { timeout: 30000 });
     return stdout.trim().length > 0;
   } catch (err) {
+    if (err.killed || err.signal === 'SIGTERM' || err.code === 'ETIMEDOUT' || err.message?.includes('timed out')) {
+      throw new Error(`ffprobe timed out probing ${filePath} (skipped to prevent false-positive deletion)`, { cause: err });
+    }
     // String error codes (ENOENT/EACCES) mean the binary couldn't spawn; numeric codes are
     // ffprobe exit codes for files it actually probed and judged invalid.
     if (typeof err.code === 'string') {
-      throw new ProbeUnavailableError(`ffprobe is missing or not executable (${err.code})`);
+      throw new ProbeUnavailableError(`ffprobe is missing or not executable (${err.code})`, { cause: err });
     }
     console.error(`[HealthCheck] ffprobe failed for ${filePath}: ${err.message}`);
     return false; // Probed successfully but reported invalid data
@@ -60,16 +63,25 @@ const processMediaItem = async (type, item) => {
   try {
     isHealthy = await checkFileIntegrity(item.file_path);
   } catch (err) {
-    console.error(`[HealthCheck] ${err.message}. Aborting integrity run — no further files will be checked or deleted.`);
-    eventBus.error('ffprobe unavailable — media health check aborted. No files were modified.');
-    integrityRunAborted = true;
+    if (err instanceof ProbeUnavailableError) {
+      console.error(`[HealthCheck] ${err.message}. Aborting integrity run — no further files will be checked or deleted.`);
+      eventBus.error('ffprobe unavailable — media health check aborted. No files were modified.');
+      integrityRunAborted = true;
+      return;
+    }
+    console.warn(`[HealthCheck] Skipped ${item.file_path}: ${err.message}`);
     return;
   }
 
   if (!isHealthy) {
-    // Skip auto-delete once an item has burned through its redownload attempts
+    // Stop auto-delete once an item has burned through its redownload attempts
     if ((item.retry_count || 0) >= MAX_HEALTH_RETRIES) {
-      console.warn(`[HealthCheck] ${type} ${item.id} still corrupt after ${item.retry_count} redownload attempts — skipping.`);
+      console.warn(`[HealthCheck] ${type} ${item.id} still corrupt after ${item.retry_count} redownload attempts — flagging as missing/unmonitored.`);
+      eventBus.error(`[HealthCheck] ${type} ${item.id} failed integrity after max retries (${MAX_HEALTH_RETRIES}). Unmonitoring to avoid download loops.`);
+      const failQuery = type === 'movie'
+        ? "UPDATE movies SET monitored = 0, status = 'missing' WHERE id = ?"
+        : "UPDATE episodes SET monitored = 0, status = 'missing' WHERE id = ?";
+      db.prepare(failQuery).run(item.id);
       return;
     }
     const newRetryCount = (item.retry_count || 0) + 1;
@@ -84,6 +96,12 @@ const processMediaItem = async (type, item) => {
       ? "UPDATE movies SET status = 'monitored', file_path = NULL, search_state = 'PENDING', retry_count = ?, next_search_at = datetime('now') WHERE id = ?"
       : "UPDATE episodes SET status = 'monitored', file_path = NULL, search_state = 'PENDING', retry_count = ?, next_search_at = datetime('now') WHERE id = ?";
     db.prepare(query).run(newRetryCount, item.id);
+  } else if ((item.retry_count || 0) > 0) {
+    // File is verified healthy — clear any previous corrupt retry count
+    const resetQuery = type === 'movie'
+      ? "UPDATE movies SET retry_count = 0 WHERE id = ?"
+      : "UPDATE episodes SET retry_count = 0 WHERE id = ?";
+    db.prepare(resetQuery).run(item.id);
   }
 };
 

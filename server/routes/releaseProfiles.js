@@ -23,8 +23,14 @@ const validateRegexArray = (arr) => {
   if (!Array.isArray(arr)) return [];
   return arr.filter(item => {
     if (typeof item !== 'string' || !item.trim()) return false;
+    const trimmed = item.trim();
+    if (trimmed.length > 100) return false;
+    // Reject dangerous nested quantifiers prone to catastrophic backtracking e.g. (a+)+ or (.*)*
+    if (/(\+|\*|\{[0-9]+,?[0-9]*\})\s*\)(\+|\*|\{[0-9]+,?[0-9]*\})/.test(trimmed)) {
+      return false;
+    }
     try {
-      new RegExp(item, 'i');
+      new RegExp(trimmed, 'i');
       return true;
     } catch {
       return false;

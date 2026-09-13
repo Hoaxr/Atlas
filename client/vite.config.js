@@ -13,7 +13,7 @@ let commitCount = 0;
 let version = '1.0.0';
 
 try {
-  const versionJsonPath = path.resolve(__dirname, 'src/version.json');
+  const versionJsonPath = path.resolve(import.meta.dirname, 'src/version.json');
   if (fs.existsSync(versionJsonPath)) {
     const v = JSON.parse(fs.readFileSync(versionJsonPath, 'utf8'));
     commit = v.commit || commit;

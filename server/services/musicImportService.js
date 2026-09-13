@@ -19,7 +19,7 @@ const fsp = require('fs/promises');
 const db = require('../config/database');
 const eventBus = require('./eventBus');
 const { isAudioFile } = require('../utils/fileUtils');
-const { parseMusicFormat, parseMusicBitrate, parseMusicBitdepth } = require('../utils/mediaParsing');
+const { parseMusicFormat } = require('../utils/mediaParsing');
 const { getSetting } = require('../utils/settings');
 const musicLibraryService = require('./musicLibraryService');
 const imageService = require('./imageService');
@@ -176,7 +176,7 @@ const readAudioTags = async (filePath) => {
       mbidRelease: tags.musicbrainz_albumid || tags.musicbrainz_releasegroupid || null,
       mbidArtist: tags.musicbrainz_artistid || tags.musicbrainz_albumartistid || null,
     };
-  } catch (err) {
+  } catch {
     // Fallback: parse from filename
     const basename = path.basename(filePath, path.extname(filePath));
     const trackMatch = basename.match(/^(\d+)[.\s-]+(.+)$/);
@@ -402,7 +402,6 @@ const importMusicDownload = async (downloadPath, downloadName) => {
   }
 
   // Detect format from files
-  const ext = path.extname(audioFiles[0]).toLowerCase();
   const format = parseMusicFormat(audioFiles[0]);
 
   // Destination paths of successfully imported tracks (used later to extract embedded cover art)
@@ -428,7 +427,7 @@ const importMusicDownload = async (downloadPath, downloadName) => {
       } else {
         try {
           await fsp.link(srcPath, destPath);
-        } catch (linkErr) {
+        } catch {
           await fsp.copyFile(srcPath, destPath);
         }
       }

@@ -149,10 +149,14 @@ router.put('/:id', requireAdmin, async (req, res, next) => {
           }
         }
 
+        const shouldBumpVersion = (password && hashed) || (effectiveRole !== user.role);
         if (password && hashed) {
-          // If password is changed, invalidate tokens by incrementing jwt_version
           db.prepare('UPDATE users SET username = ?, password = ?, email = ?, role = ?, jwt_version = jwt_version + 1 WHERE id = ?').run(
             username, hashed, email || null, effectiveRole, id
+          );
+        } else if (shouldBumpVersion) {
+          db.prepare('UPDATE users SET username = ?, email = ?, role = ?, jwt_version = jwt_version + 1 WHERE id = ?').run(
+            username, email || null, effectiveRole, id
           );
         } else {
           db.prepare('UPDATE users SET username = ?, email = ?, role = ? WHERE id = ?').run(

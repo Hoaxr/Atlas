@@ -90,7 +90,17 @@ router.get('/image', async (req, res) => {
       } catch {
         return res.status(400).send('Invalid path');
       }
-      if (!decodedPath || typeof decodedPath !== 'string' || !decodedPath.startsWith('/') || decodedPath.includes('..')) {
+      if (
+        !decodedPath ||
+        typeof decodedPath !== 'string' ||
+        !decodedPath.startsWith('/') ||
+        decodedPath.startsWith('//') ||
+        decodedPath.includes('..') ||
+        decodedPath.includes('\\') ||
+        decodedPath.includes('@') ||
+        decodedPath.includes('?') || // disallow query string injection
+        (!decodedPath.startsWith('/photo/:/transcode') && !decodedPath.startsWith('/library/metadata/'))
+      ) {
         return res.status(400).send('Invalid path');
       }
       const plexUrl = getSetting('plexUrl')?.replace(/\/$/, '');

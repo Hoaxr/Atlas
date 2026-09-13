@@ -40,8 +40,8 @@ RUN npm ci --omit=dev
 # ============================================================
 FROM node:22-alpine AS server
 
-# Only install runtime dependencies (ffmpeg for video resolution detection)
-RUN apk add --no-cache ffmpeg
+# Only install runtime dependencies (ffmpeg for video resolution detection, su-exec for PUID/PGID dropping)
+RUN apk add --no-cache ffmpeg su-exec
 
 WORKDIR /app
 
@@ -52,13 +52,16 @@ COPY --from=server-builder /app/server/node_modules ./server/node_modules
 # ---- Built client assets ----
 COPY --from=client-builder /app/client/dist ./client/dist
 
-# ---- Runtime data directory ----
-RUN mkdir -p /app/server/data
+# ---- Entrypoint and runtime data directory ----
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh && mkdir -p /app/server/data
 
 EXPOSE 9898
 
 ENV NODE_ENV=production
+ENV PORT=9898
 
-HEALTHCHECK --interval=30s --timeout=5s --start-period=20s CMD wget -qO- http://127.0.0.1:${PORT:-3000}/api/auth/status || exit 1
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s CMD wget -qO- http://127.0.0.1:${PORT:-9898}/api/auth/status || exit 1
 
+ENTRYPOINT ["/entrypoint.sh"]
 CMD ["node", "server/index.js"]

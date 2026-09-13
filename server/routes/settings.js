@@ -11,6 +11,7 @@ const { getSetting, setSetting, invalidateSettingsCache } = require('../utils/se
 const { getVersionInfo } = require('../utils/version');
 const downloadClientService = require('../services/downloadClientService');
 const { invalidateAuthCache } = require('../middleware/authMiddleware');
+const requireAdmin = require('../middleware/requireAdmin');
 
 router.get('/', (req, res, next) => {
   try {
@@ -60,9 +61,13 @@ router.get('/', (req, res, next) => {
       return isAdmin ? val : '';
     };
     
-    const clients = db.prepare('SELECT id, name, host, port, type, username FROM download_clients').all();
+    const clients = isAdmin
+      ? db.prepare('SELECT id, name, host, port, type, username FROM download_clients').all()
+      : [];
     const profiles = db.prepare('SELECT * FROM quality_profiles').all();
-    const libraryPaths = db.prepare('SELECT * FROM library_paths').all();
+    const libraryPaths = isAdmin
+      ? db.prepare('SELECT * FROM library_paths').all()
+      : [];
 
     res.json({
       status: 'success',
@@ -74,7 +79,7 @@ router.get('/', (req, res, next) => {
         geminiApiKey: mask(geminiApiKey),
         deepseekApiKey: mask(deepseekApiKey),
         claudeApiKey: mask(claudeApiKey),
-        prowlarrUrl,
+        prowlarrUrl: isAdmin ? prowlarrUrl : '',
         prowlarrApiKey: mask(prowlarrApiKey),
         translationProvider,
         targetLang,
@@ -101,23 +106,23 @@ router.get('/', (req, res, next) => {
         removeCompletedDownloads,
         deleteTorrentFiles,
         hideCompletedDownloads,
-        downloadPathMapping,
+        downloadPathMapping: isAdmin ? downloadPathMapping : ['', ''],
         defaultQualityProfileId: defaultQualityProfileId ? parseInt(defaultQualityProfileId) : null,
         clients,
         profiles,
         libraryPaths,
         authEnabled: getSetting('authEnabled') || 'false',
-        authUsername: getSetting('authUsername'),
+        authUsername: isAdmin ? getSetting('authUsername') : '',
         timezone: getSetting('timezone') || '',
-        plexUrl: getSetting('plexUrl'),
+        plexUrl: isAdmin ? getSetting('plexUrl') : '',
         plexToken: mask(getSetting('plexToken')),
-        jellyfinUrl: getSetting('jellyfinUrl'),
+        jellyfinUrl: isAdmin ? getSetting('jellyfinUrl') : '',
         jellyfinApiKey: mask(getSetting('jellyfinApiKey')),
-        embyUrl: getSetting('embyUrl'),
+        embyUrl: isAdmin ? getSetting('embyUrl') : '',
         embyApiKey: mask(getSetting('embyApiKey')),
         discordWebhookUrl: mask(getSetting('discordWebhookUrl')),
         telegramBotToken: mask(getSetting('telegramBotToken')),
-        telegramChatId: getSetting('telegramChatId'),
+        telegramChatId: isAdmin ? getSetting('telegramChatId') : '',
         notifyOnGrab: getSetting('notifyOnGrab') || 'false',
         notifyOnDownload: getSetting('notifyOnDownload') || 'false',
         notifyOnPlaybackStart: getSetting('notifyOnPlaybackStart') || 'false',
@@ -126,7 +131,7 @@ router.get('/', (req, res, next) => {
         pushoverUserKey: mask(getSetting('pushoverUserKey')),
         autoDeleteWatchedEnabled: getSetting('autoDeleteWatchedEnabled') === 'true',
         autoDeleteWatchedDays: getSetting('autoDeleteWatchedDays'),
-        autoWatchUser: getSetting('autoWatchUser') || ''
+        autoWatchUser: isAdmin ? (getSetting('autoWatchUser') || '') : ''
       }
     });
   } catch (e) {
@@ -375,6 +380,26 @@ router.post('/media-server/test', async (req, res) => {
       if (type === 'plex') finalApiKey = getSetting('plexToken') || apiKey;
       else if (type === 'jellyfin') finalApiKey = getSetting('jellyfinApiKey') || apiKey;
       else if (type === 'emby') finalApiKey = getSetting('embyApiKey') || apiKey;
+    }
+
+    let parsed;
+    try {
+      parsed = new URL(url);
+    } catch {
+      return res.status(400).json({ status: 'error', message: 'Invalid URL format' });
+    }
+    if (!['http:', 'https:'].includes(parsed.protocol)) {
+      return res.status(400).json({ status: 'error', message: 'Only http and https protocols are allowed' });
+    }
+    const host = parsed.hostname.toLowerCase();
+    if (
+      host === '169.254.169.254' ||
+      host.startsWith('169.254.') ||
+      host === '0.0.0.0' ||
+      host === 'metadata.google.internal' ||
+      host.includes('@')
+    ) {
+      return res.status(400).json({ status: 'error', message: 'Access to cloud metadata or link-local addresses is prohibited' });
     }
 
     const base = url.replace(/\/$/, '');
@@ -1167,18 +1192,35 @@ const restoreHandler = async (req, res, next) => {
 
     // Backup current database first
     const backupPath = path.join(__dirname, `../data/database-backup-${Date.now()}.sqlite`);
+    let backupCreated = false;
     if (fs.existsSync(dbPath)) {
       fs.copyFileSync(dbPath, backupPath);
+      backupCreated = true;
     }
 
-    // Flush WAL into the live file, remove stale sidecars, then atomically swap in the restore
-    db.exec('PRAGMA wal_checkpoint(TRUNCATE);');
-    for (const suffix of ['-wal', '-shm']) {
-      const sidecar = dbPath + suffix;
-      if (fs.existsSync(sidecar)) fs.unlinkSync(sidecar);
+    try {
+      // Flush WAL into the live file, remove stale sidecars, then atomically swap in the restore
+      db.exec('PRAGMA wal_checkpoint(TRUNCATE);');
+      for (const suffix of ['-wal', '-shm']) {
+        const sidecar = dbPath + suffix;
+        if (fs.existsSync(sidecar)) {
+          try { fs.unlinkSync(sidecar); } catch { /* ignore */ }
+        }
+      }
+      fs.renameSync(tempPath, dbPath);
+      tempPath = null;
+    } catch (swapErr) {
+      console.error('[restore] Failed during database swap:', swapErr);
+      if (backupCreated && fs.existsSync(backupPath)) {
+        try {
+          fs.copyFileSync(backupPath, dbPath);
+          console.log('[restore] Successfully restored live DB from backup after swap failure.');
+        } catch (rollbackErr) {
+          console.error('[restore] CRITICAL: Rollback failed:', rollbackErr);
+        }
+      }
+      throw swapErr;
     }
-    fs.renameSync(tempPath, dbPath);
-    tempPath = null;
 
     invalidateSettingsCache();
 
@@ -1188,11 +1230,13 @@ const restoreHandler = async (req, res, next) => {
   } catch (e) {
     next(e);
   } finally {
-    if (tempPath && fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
+    if (tempPath && fs.existsSync(tempPath)) {
+      try { fs.unlinkSync(tempPath); } catch { /* ignore */ }
+    }
   }
 };
 
-router.post('/restore', restoreHandler);
+router.post('/restore', requireAdmin, restoreHandler);
 
 // ─── Feature 5: Task Schedule Editor ─────────────────────────────────────────
 

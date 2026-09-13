@@ -11,7 +11,6 @@ const imageService = require('./imageService');
 
 const { getSetting } = require('../utils/settings');
 const { isVideoFile, isSubtitleFile, findLargestVideoFile } = require('../utils/fileUtils');
-const { isAudioFile } = require('../utils/fileUtils');
 const { getMediaMetadata, parseAudioFromFileName } = require('../utils/videoUtils');
 const subtitleService = require('./subtitles');
 const subtitleSyncService = require('./subtitles/subtitleSyncService');
@@ -699,10 +698,15 @@ const importMovie = async (torrent, movie) => {
       if (linkErr.code === 'EXDEV') {
         console.log(`[MediaManagement] Cross-device link failed. Falling back to copy for ${movie.title}`);
         await fs.promises.copyFile(videoFile.path, destFile);
-        console.log(`[MediaManagement] Copy complete for ${movie.title}. Deleting original file.`);
-        await fs.promises.unlink(videoFile.path).catch(e => {
-          if (e.code !== 'ENOENT') throw e;
-        });
+        const shouldRemoveCompleted = db.prepare('SELECT value FROM settings WHERE key = ?').get('removeCompletedDownloads')?.value === 'true';
+        if (shouldRemoveCompleted) {
+          console.log(`[MediaManagement] Copy complete for ${movie.title}. Deleting original download file.`);
+          await fs.promises.unlink(videoFile.path).catch(e => {
+            if (e.code !== 'ENOENT') throw e;
+          });
+        } else {
+          console.log(`[MediaManagement] Copy complete for ${movie.title}. Preserving original file for seeding.`);
+        }
       } else {
         throw linkErr;
       }
@@ -974,10 +978,15 @@ const importEpisode = async (torrent, episode) => {
       if (linkErr.code === 'EXDEV') {
         console.log(`[MediaManagement] Cross-device link failed. Falling back to copy for episode.`);
         await fs.promises.copyFile(videoFile.path, destFile);
-        console.log(`[MediaManagement] Copy complete for episode. Deleting original file.`);
-        await fs.promises.unlink(videoFile.path).catch(e => {
-          if (e.code !== 'ENOENT') throw e;
-        });
+        const shouldRemoveCompleted = db.prepare('SELECT value FROM settings WHERE key = ?').get('removeCompletedDownloads')?.value === 'true';
+        if (shouldRemoveCompleted) {
+          console.log(`[MediaManagement] Copy complete for episode. Deleting original download file.`);
+          await fs.promises.unlink(videoFile.path).catch(e => {
+            if (e.code !== 'ENOENT') throw e;
+          });
+        } else {
+          console.log(`[MediaManagement] Copy complete for episode. Preserving original file for seeding.`);
+        }
       } else {
         throw linkErr;
       }

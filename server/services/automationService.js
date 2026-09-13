@@ -1043,7 +1043,7 @@ const runMusicSearchCycle = async () => {
     try {
       // Skip if already active in the download client
       const albumKey = `${album.artist_name} ${album.title}`.toLowerCase().trim();
-      const alreadyActive = [...activeTitles].some(t => t.includes(album.title.toLowerCase().trim()));
+      const alreadyActive = [...activeTitles].some(t => t.includes(albumKey) || t.includes(album.title.toLowerCase().trim()));
       if (alreadyActive) {
         console.log(`[MusicSearch] Already in download client, skipping: ${album.artist_name} - ${album.title}`);
         db.prepare("UPDATE music_albums SET status = 'downloading' WHERE id = ?").run(album.id);

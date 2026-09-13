@@ -62,12 +62,46 @@ const addTorrent = async (torrentUrl, type = 'movie') => {
   return getAdapter(client).addTorrent(client, torrentUrl, type);
 };
 
+const enrichTorrents = (torrents) => {
+  if (!torrents || torrents.length === 0) return [];
+  
+  let knownArtists = [];
+  let knownAlbums = [];
+  try {
+    knownArtists = db.prepare('SELECT name FROM music_artists').all().map(a => a.name.toLowerCase()).filter(Boolean);
+    knownAlbums = db.prepare('SELECT title FROM music_albums').all().map(a => a.title.toLowerCase()).filter(t => t && t.length > 4);
+  } catch { /* proceed */ }
+
+  return torrents.map(t => {
+    let mediaType = t.mediaType || null;
+    const cat = (t.category || '').toLowerCase();
+    const tags = (Array.isArray(t.tags) ? t.tags.join(' ') : (t.tags || '')).toLowerCase();
+    const savePath = (t.save_path || t.downloadDir || '').toLowerCase();
+
+    if (cat === 'music' || cat === 'audio' || tags.includes('music') || savePath.includes('/music')) {
+      mediaType = 'music';
+    } else if (cat === 'tv' || tags.includes('tv') || savePath.includes('/tv')) {
+      mediaType = 'tv';
+    } else if (cat === 'movies' || cat === 'movie' || tags.includes('movie') || savePath.includes('/movie')) {
+      mediaType = 'movie';
+    } else {
+      const lowerName = (t.name || '').toLowerCase();
+      if (knownArtists.some(art => lowerName.includes(art)) || knownAlbums.some(alb => lowerName.includes(alb))) {
+        mediaType = 'music';
+      }
+    }
+
+    return { ...t, mediaType };
+  });
+};
+
 const getTorrents = async () => {
   const client = getClient();
   if (!client) return [];
   const torrents = await getAdapter(client).getTorrents(client);
   const clientName = client.name || (client.type === 'qbittorrent' ? 'qBittorrent' : client.type === 'deluge' ? 'Deluge' : client.type === 'transmission' ? 'Transmission' : client.type || 'qBittorrent');
-  return torrents.map(t => ({ ...t, clientName: t.clientName || clientName }));
+  const mapped = torrents.map(t => ({ ...t, clientName: t.clientName || clientName }));
+  return enrichTorrents(mapped);
 };
 
 const getTransferInfo = async () => {

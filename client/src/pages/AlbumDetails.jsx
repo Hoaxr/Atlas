@@ -1,9 +1,9 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import {
-  ArrowLeft, Disc, Search, Play, RefreshCw, Trash2, Bookmark, BookmarkMinus,
-  CheckCircle2, AlertCircle, Calendar, ShieldCheck, HardDrive, FileAudio,
-  Folder, Loader2, Sparkles, ExternalLink, ChevronRight
+  ArrowLeft, Disc, Search, Play, Trash2, Bookmark, BookmarkMinus,
+  CheckCircle2, AlertCircle, Calendar, FileAudio,
+  Folder, Loader2
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../lib/api';
@@ -29,7 +29,7 @@ export default function AlbumDetails() {
   const [deleteFiles, setDeleteFiles] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
-  const fetchAlbum = async () => {
+  const fetchAlbum = useCallback(async () => {
     try {
       const res = await api.get(`/library/music/albums/${id}`);
       if (res.data.status === 'success') {
@@ -41,9 +41,9 @@ export default function AlbumDetails() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [id]);
 
-  const fetchFullTracklist = async () => {
+  const fetchFullTracklist = useCallback(async () => {
     try {
       const res = await api.get(`/library/music/albums/${id}/tracklist`);
       if (res.data.status === 'success') {
@@ -52,12 +52,12 @@ export default function AlbumDetails() {
     } catch (err) {
       console.warn('Could not load full tracklist:', err);
     }
-  };
+  }, [id]);
 
   useEffect(() => {
     fetchAlbum();
     fetchFullTracklist();
-  }, [id]);
+  }, [fetchAlbum, fetchFullTracklist]);
 
   const handleToggleMonitor = async () => {
     if (!album) return;
@@ -66,7 +66,7 @@ export default function AlbumDetails() {
       await api.put(`/library/music/albums/${id}`, { monitored: newMonitored });
       setAlbum((prev) => ({ ...prev, monitored: newMonitored }));
       toast.success(newMonitored ? 'Album monitored' : 'Album unmonitored');
-    } catch (err) {
+    } catch {
       toast.error('Failed to update monitor status');
     }
   };
@@ -95,7 +95,7 @@ export default function AlbumDetails() {
       } else {
         navigate('/music?tab=albums');
       }
-    } catch (err) {
+    } catch {
       toast.error('Failed to delete album');
     } finally {
       setDeleting(false);
@@ -156,7 +156,6 @@ export default function AlbumDetails() {
   const downloadedTracks = source.filter((t) => !t.missing && (t.status === 'downloaded' || t.file_path)).length;
   const isComplete = downloadedTracks > 0 && (totalTracks === 0 || downloadedTracks >= totalTracks);
   const isPartial = downloadedTracks > 0 && !isComplete;
-  const isDownloaded = isComplete;
 
   const genres = Array.isArray(album.genres)
     ? album.genres

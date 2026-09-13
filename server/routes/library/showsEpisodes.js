@@ -57,8 +57,10 @@ router.post('/shows/:id/watched', async (req, res, next) => {
 
 router.get('/shows', (req, res, next) => {
   try {
-    const limit = parseInt(req.query.limit) || 0;
-    const offset = parseInt(req.query.offset) || 0;
+    const rawLimit = parseInt(req.query.limit, 10);
+    const rawOffset = parseInt(req.query.offset, 10);
+    const limit = (!isNaN(rawLimit) && rawLimit > 0) ? Math.min(rawLimit, 500) : 0;
+    const offset = (!isNaN(rawOffset) && rawOffset > 0) ? rawOffset : 0;
     const sort = req.query.sort || 'added_desc';
     const filters = {};
     if (req.query.status) filters.status = req.query.status;

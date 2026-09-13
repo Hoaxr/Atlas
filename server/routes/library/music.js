@@ -8,6 +8,7 @@ const router = express.Router();
 const path = require('path');
 const fs = require('fs');
 const db = require('../../config/database');
+const { isPathContainedInLibrary, isAudioFile } = require('../../utils/fileUtils');
 const musicLibraryService = require('../../services/musicLibraryService');
 const musicMetadataService = require('../../services/musicMetadataService');
 const indexerService = require('../../services/indexerService');
@@ -722,6 +723,14 @@ router.get('/tracks/:id/stream', (req, res, next) => {
       return res.status(404).json({ status: 'error', message: 'Audio file missing on disk' });
     }
 
+    if (!isPathContainedInLibrary(resolvedPath)) {
+      return res.status(403).json({ status: 'error', message: 'Access denied: File is outside library paths' });
+    }
+
+    if (!isAudioFile(resolvedPath)) {
+      return res.status(400).json({ status: 'error', message: 'Invalid audio file format' });
+    }
+
     const ext = path.extname(resolvedPath).toLowerCase();
     const mimeTypes = {
       '.flac': 'audio/flac',
@@ -746,6 +755,7 @@ router.get('/tracks/:id/stream', (req, res, next) => {
       const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
       const chunksize = (end - start) + 1;
       const file = fs.createReadStream(resolvedPath, { start, end });
+      file.on('error', (err) => next(err));
       const head = {
         'Content-Range': `bytes ${start}-${end}/${fileSize}`,
         'Accept-Ranges': 'bytes',
@@ -761,7 +771,9 @@ router.get('/tracks/:id/stream', (req, res, next) => {
         'Accept-Ranges': 'bytes'
       };
       res.writeHead(200, head);
-      fs.createReadStream(resolvedPath).pipe(res);
+      const file = fs.createReadStream(resolvedPath);
+      file.on('error', (err) => next(err));
+      file.pipe(res);
     }
   } catch (err) { next(err); }
 });

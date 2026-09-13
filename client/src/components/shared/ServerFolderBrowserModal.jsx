@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Folder, ChevronRight, Home, Loader2, Check, ArrowUp, HardDrive } from 'lucide-react';
+import { Folder, ChevronRight, Loader2, Check, ArrowUp, HardDrive } from 'lucide-react';
 import api from '../../lib/api';
 import ModalShell from './ModalShell';
 

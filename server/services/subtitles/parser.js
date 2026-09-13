@@ -152,6 +152,10 @@ async function readSubtitleFile(filePath) {
   if (!fs.existsSync(filePath)) {
     throw new Error(`Subtitle file not found: ${filePath}`);
   }
+  const stat = await fsp.stat(filePath);
+  if (stat.size > 5 * 1024 * 1024) {
+    throw new Error(`Subtitle file exceeds 5MB size limit (${stat.size} bytes)`);
+  }
   const buf = await fsp.readFile(filePath);
   if (buf.length === 0) {
     throw new Error('Subtitle file is empty (0 bytes)');

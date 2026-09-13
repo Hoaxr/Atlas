@@ -77,7 +77,7 @@ export default function ProfilesTab({ profiles, newProfile, setNewProfile, editi
       await api.delete(`/library/music/quality-profiles/${id}`);
       customAlert('Audio quality profile deleted!', 'success');
       fetchAudioProfiles();
-    } catch (err) {
+    } catch {
       customAlert('Failed to delete audio profile', 'error');
     }
   };

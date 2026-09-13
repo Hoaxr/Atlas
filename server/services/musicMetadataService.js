@@ -81,7 +81,7 @@ const normalizeArtistName = (str) => {
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase()
-    .replace(/[\u2010-\u2015\u2212\-]/g, ' ')
+    .replace(/[\u2010-\u2015\u2212-]/g, ' ')
     .replace(/[^a-z0-9\s]/g, '')
     .replace(/\s+/g, ' ')
     .trim();

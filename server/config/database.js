@@ -206,6 +206,7 @@ db.exec(`
 
   CREATE TABLE IF NOT EXISTS watch_history (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
     tmdb_id INTEGER NOT NULL,
     type TEXT NOT NULL,
     season_number INTEGER,
@@ -1371,6 +1372,17 @@ const MIGRATIONS = [
         WHERE monitored = 1
           AND (SELECT COUNT(*) FROM music_albums WHERE artist_id = music_artists.id) = 0;
       `).run();
+    }
+  },
+  {
+    id: 45,
+    name: 'add_user_id_to_watch_history_and_indexes',
+    run: (db) => {
+      if (!hasColumn('watch_history', 'user_id')) {
+        db.exec('ALTER TABLE watch_history ADD COLUMN user_id INTEGER REFERENCES users(id) ON DELETE CASCADE;');
+        db.exec('CREATE INDEX IF NOT EXISTS idx_watch_history_user_id ON watch_history(user_id);');
+      }
+      db.exec('CREATE INDEX IF NOT EXISTS idx_requests_user_id ON requests(user_id);');
     }
   }
 ];

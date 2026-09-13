@@ -331,6 +331,11 @@ router.get('/sync-issues', (req, res, next) => {
 router.get('/content/:mediaType/:mediaId/:filename', async (req, res, next) => {
   try {
     const { mediaType, mediaId, filename } = req.params;
+    const ext = path.extname(filename).toLowerCase();
+    if (!['.srt', '.vtt', '.ass', '.ssa', '.sub'].includes(ext)) {
+      return res.status(400).json({ status: 'error', message: 'Invalid subtitle file extension' });
+    }
+
     const resolved = resolveMedia(mediaType, mediaId);
     if (!resolved || !resolved.dir) {
       return res.status(404).json({ status: 'error', message: `${mediaType} not found` });
@@ -462,6 +467,11 @@ router.delete('/tracks/:mediaType/:mediaId/:filename', async (req, res, next) =>
 router.get('/download/:mediaType/:mediaId/:filename', (req, res) => {
   try {
     const { mediaType, mediaId, filename } = req.params;
+    const ext = path.extname(filename).toLowerCase();
+    if (!['.srt', '.vtt', '.ass', '.ssa', '.sub'].includes(ext)) {
+      return res.status(400).json({ status: 'error', message: 'Invalid subtitle file extension' });
+    }
+
     const resolved = resolveMedia(mediaType, mediaId);
     if (!resolved || !resolved.dir) {
       return res.status(404).json({ status: 'error', message: `${mediaType} not found` });

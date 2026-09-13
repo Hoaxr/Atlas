@@ -15,7 +15,7 @@ const subtitleService = require('../../services/subtitles');
 const { decodeSubtitleBuffer } = require('../../services/subtitles/parser');
 const { getMediaMetadata, parseAudioFromFileName } = require('../../utils/videoUtils');
 const { isWatchedSyncEnabled, extractLang, translateSrt, LANG_CODE } = require('./helpers');
-const { isRootLibraryPath, findLargestVideoFile } = require('../../utils/fileUtils');
+const { isRootLibraryPath, findLargestVideoFile, deleteFolderRecursive } = require('../../utils/fileUtils');
 const { scanSubtitleLangs } = require('../../services/scanner/fileScanner');
 const requireAdmin = require('../../middleware/requireAdmin');
 const imageService = require('../../services/imageService');
@@ -71,8 +71,10 @@ const scanDirectory = async (dirPath) => {
 
 router.get('/', async (req, res, next) => {
   try {
-    const limit = parseInt(req.query.limit) || 0;
-    const offset = parseInt(req.query.offset) || 0;
+    const rawLimit = parseInt(req.query.limit, 10);
+    const rawOffset = parseInt(req.query.offset, 10);
+    const limit = (!isNaN(rawLimit) && rawLimit > 0) ? Math.min(rawLimit, 500) : 0;
+    const offset = (!isNaN(rawOffset) && rawOffset > 0) ? rawOffset : 0;
     const sort = req.query.sort || 'added_desc';
     const filters = {};
     if (req.query.status) filters.status = req.query.status;
@@ -654,7 +656,7 @@ router.delete('/:id', async (req, res, next) => {
             // Only delete the file itself if the directory is a root library path
             if (movie.file_path) await fsp.unlink(movie.file_path).catch(() => {});
           } else {
-            await fsp.rm(dir, { recursive: true, force: true });
+            await deleteFolderRecursive(dir);
           }
         }
       } catch (e) {

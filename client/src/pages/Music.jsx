@@ -38,7 +38,7 @@ export default function Music() {
   const [albums, setAlbums] = useState([]);
   const [tracks, setTracks] = useState([]);
   const [musicPaths, setMusicPaths] = useState([]);
-  const [stats, setStats] = useState(null);
+  const [_stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
 
   // Filters & search

@@ -66,18 +66,21 @@ const translateWithGoogleTranslate = async (text, targetLang) => {
         return lines.map((orig, i) => parts[i]?.trim() || orig);
       } catch (err) {
         const status = err?.response?.status;
-        if (status === 429 && attempt < retries - 1) {
-          const wait = 2000 * Math.pow(2, attempt);
-          console.log(`[GoogleTranslate] 429, retrying in ${wait}ms`);
-          await new Promise(r => setTimeout(r, wait));
-          continue;
+        if (status === 429) {
+          if (attempt < retries - 1) {
+            const wait = 3000 * Math.pow(2, attempt);
+            console.warn(`[GoogleTranslate] Rate limit (429) encountered, retrying in ${wait}ms...`);
+            await new Promise(r => setTimeout(r, wait));
+            continue;
+          }
+          throw new Error('Google Translate rate limit exceeded (429). Please wait or use an AI translation provider.', { cause: err });
         }
         // 400/413/other: if more than one line, split in half and retry each half
         if (lines.length > 1) {
           const mid = Math.ceil(lines.length / 2);
-          await new Promise(r => setTimeout(r, 300));
+          await new Promise(r => setTimeout(r, 400));
           const left = await gtxTranslate(lines.slice(0, mid), targetCode, retries);
-          await new Promise(r => setTimeout(r, 300));
+          await new Promise(r => setTimeout(r, 400));
           const right = await gtxTranslate(lines.slice(mid), targetCode, retries);
           return [...left, ...right];
         }
@@ -169,7 +172,7 @@ const translateWithProvider = async (srtContent, targetLang, overrides = {}) => 
       });
     }
     if (i < batches.length - 1) {
-      const pacingMs = providerInstance.name === 'gemini' ? 3500 : (providerInstance.name === 'googleTranslate' ? 200 : 1000);
+      const pacingMs = providerInstance.name === 'gemini' ? 3500 : (providerInstance.name === 'googleTranslate' ? 800 : 1000);
       await new Promise(r => setTimeout(r, pacingMs));
     }
   }

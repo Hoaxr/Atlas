@@ -164,9 +164,11 @@ const getMovies = (limit = 0, offset = 0, sort = 'added_desc', filters = {}) => 
 
   sql += ` ORDER BY ${sortMap[sort] || 'm.added_at DESC, m.id DESC'}`;
 
-  if (limit > 0) {
+  const safeLimit = Math.max(0, parseInt(limit, 10) || 0);
+  const safeOffset = Math.max(0, parseInt(offset, 10) || 0);
+  if (safeLimit > 0) {
     sql += ` LIMIT ? OFFSET ?`;
-    params.push(limit, offset);
+    params.push(safeLimit, safeOffset);
   }
 
   return sanitizeWatched(db.prepare(sql).all(...params));
@@ -453,9 +455,11 @@ const getShows = (limit = 0, offset = 0, sort = 'added_desc', filters = {}) => {
     ORDER BY ${orderClause}
   `;
 
-  if (limit > 0) {
+  const safeLimit = Math.max(0, parseInt(limit, 10) || 0);
+  const safeOffset = Math.max(0, parseInt(offset, 10) || 0);
+  if (safeLimit > 0) {
     sql += ` LIMIT ? OFFSET ?`;
-    params.push(limit, offset);
+    params.push(safeLimit, safeOffset);
   }
 
   return sanitizeWatched(db.prepare(sql).all(...params));

@@ -85,13 +85,13 @@ export default function NamingTab({ settings, setSettings, handleSave }) {
 
   const generateArtistFolderExample = (format) => {
     const f = format || '{Artist Name}';
-    let result = f.replace(/{Artist Name}/gi, 'Daft Punk');
+    const result = f.replace(/{Artist Name}/gi, 'Daft Punk');
     return `Example: ${result}`;
   };
 
   const generateAlbumFolderExample = (format) => {
     const f = format || '{Album Title} ({Year})';
-    let result = f
+    const result = f
       .replace(/{Album Title}/gi, 'Random Access Memories')
       .replace(/{Year}/gi, '2013');
     return `Example: ${result}`;
@@ -99,7 +99,7 @@ export default function NamingTab({ settings, setSettings, handleSave }) {
 
   const generateTrackFormatExample = (format) => {
     const f = format || '{TrackNumber:00} - {Track Title}';
-    let result = f
+    const result = f
       .replace(/{TrackNumber:00}/gi, '01')
       .replace(/{TrackNumber}/gi, '1')
       .replace(/{Track Title}/gi, 'Give Life Back to Music');

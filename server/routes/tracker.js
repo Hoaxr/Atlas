@@ -580,7 +580,14 @@ router.get('/up-next', (req, res) => {
 router.delete('/history/:id', (req, res) => {
   try {
     const { id } = req.params;
-    const result = db.prepare('DELETE FROM watch_history WHERE id = ?').run(id);
+    const userId = req.user?.id;
+    const isAdmin = req.user?.role === 'admin';
+    let result;
+    if (isAdmin) {
+      result = db.prepare('DELETE FROM watch_history WHERE id = ?').run(id);
+    } else {
+      result = db.prepare('DELETE FROM watch_history WHERE id = ? AND (user_id = ? OR user_id IS NULL)').run(id, userId);
+    }
     if (result.changes === 0) {
       return res.status(404).json({ error: 'History entry not found' });
     }
@@ -599,15 +606,16 @@ router.post('/mark-watched', async (req, res) => {
 
   try {
     const watchedAt = new Date().toISOString();
+    const userId = req.user?.id || null;
 
     db.transaction(() => {
       if (type === 'movie') {
         const movie = db.prepare('SELECT id, runtime FROM movies WHERE tmdb_id = ?').get(tmdbId);
         const existingMovie = db.prepare('SELECT id FROM watch_history WHERE tmdb_id = ? AND type = ?').get(tmdbId, 'movie');
         if (existingMovie) {
-          db.prepare('UPDATE watch_history SET watched_at = ?, runtime = ? WHERE id = ?').run(watchedAt, movie ? movie.runtime : null, existingMovie.id);
+          db.prepare('UPDATE watch_history SET watched_at = ?, runtime = ?, user_id = COALESCE(user_id, ?) WHERE id = ?').run(watchedAt, movie ? movie.runtime : null, userId, existingMovie.id);
         } else {
-          db.prepare('INSERT INTO watch_history (tmdb_id, type, watched_at, runtime) VALUES (?, ?, ?, ?)').run(tmdbId, 'movie', watchedAt, movie ? movie.runtime : null);
+          db.prepare('INSERT INTO watch_history (tmdb_id, type, watched_at, runtime, user_id) VALUES (?, ?, ?, ?, ?)').run(tmdbId, 'movie', watchedAt, movie ? movie.runtime : null, userId);
         }
         if (movie) {
           db.prepare('UPDATE movies SET watched = 1, watched_at = ? WHERE id = ?').run(watchedAt, movie.id);
@@ -627,9 +635,9 @@ router.post('/mark-watched', async (req, res) => {
         }
         const existingEp = db.prepare('SELECT id FROM watch_history WHERE tmdb_id = ? AND type = ? AND season_number = ? AND episode_number = ?').get(tmdbId, 'episode', sNum, eNum);
         if (existingEp) {
-          db.prepare('UPDATE watch_history SET watched_at = ?, runtime = ? WHERE id = ?').run(watchedAt, epRuntime, existingEp.id);
+          db.prepare('UPDATE watch_history SET watched_at = ?, runtime = ?, user_id = COALESCE(user_id, ?) WHERE id = ?').run(watchedAt, epRuntime, userId, existingEp.id);
         } else {
-          db.prepare('INSERT INTO watch_history (tmdb_id, type, season_number, episode_number, watched_at, runtime) VALUES (?, ?, ?, ?, ?, ?)').run(tmdbId, 'episode', sNum, eNum, watchedAt, epRuntime);
+          db.prepare('INSERT INTO watch_history (tmdb_id, type, season_number, episode_number, watched_at, runtime, user_id) VALUES (?, ?, ?, ?, ?, ?, ?)').run(tmdbId, 'episode', sNum, eNum, watchedAt, epRuntime, userId);
         }
       }
     })();

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Folder, FolderTree, Plus, Trash2, HardDrive, Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Folder, Plus, Trash2, HardDrive, Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../../lib/api';
 import ModalShell from '../shared/ModalShell';
@@ -67,7 +67,7 @@ export default function MusicPathsModal({ open, onClose, onUpdated }) {
         await fetchPaths();
         if (onUpdated) onUpdated();
       }
-    } catch (err) {
+    } catch {
       toast.error('Failed to remove folder');
     }
   };

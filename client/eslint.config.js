@@ -33,6 +33,7 @@ const browserGlobals = {
   AbortController: 'readonly',
   structuredClone: 'readonly',
   queueMicrotask: 'readonly',
+  Audio: 'readonly',
   process: 'readonly',
   __APP_VERSION_INFO__: 'readonly',
 };

@@ -31,7 +31,7 @@ router.get('/', (req, res, next) => {
       requests = db.prepare(`
         SELECT r.*,
           u.username as requested_by,
-          COALESCE(r.poster_path, m.poster_path, s.poster_path, alb.cover_url, a.image_url) as poster_path
+          COALESCE(r.poster_path, m.poster_path, s.poster_path, alb.cover_path, a.image_path) as poster_path
         FROM requests r
         LEFT JOIN users u ON r.user_id = u.id
         LEFT JOIN movies m ON r.tmdb_id = m.tmdb_id AND r.type = 'movie'
@@ -87,33 +87,48 @@ router.post('/', (req, res, next) => {
       return res.status(400).json({ status: 'error', message: 'This item has already been requested by another user' });
     }
 
-    // Check if it's already in the library
-    let inLibrary = null;
-    if (type === 'movie') {
-      inLibrary = db.prepare('SELECT id FROM movies WHERE tmdb_id = ?').get(tmdb_id);
-    } else if (type === 'tv') {
-      inLibrary = db.prepare('SELECT id FROM shows WHERE tmdb_id = ?').get(tmdb_id);
-    } else if (type === 'music' || type === 'artist') {
-      inLibrary = db.prepare('SELECT id FROM music_artists WHERE mbid = ?').get(tmdb_id);
-    } else if (type === 'album') {
-      inLibrary = db.prepare('SELECT id FROM music_albums WHERE mbid = ?').get(tmdb_id);
-    }
-    if (inLibrary) {
-      return res.status(409).json({ status: 'error', message: 'This item is already in your library' });
-    }
-
     let requestId;
-    try {
+    const createTx = db.transaction(() => {
+      // Check if it's already in the library
+      let inLibrary = null;
+      if (type === 'movie') {
+        inLibrary = db.prepare('SELECT id FROM movies WHERE tmdb_id = ?').get(tmdb_id);
+      } else if (type === 'tv') {
+        inLibrary = db.prepare('SELECT id FROM shows WHERE tmdb_id = ?').get(tmdb_id);
+      } else if (type === 'music' || type === 'artist') {
+        inLibrary = db.prepare('SELECT id FROM music_artists WHERE mbid = ?').get(tmdb_id);
+      } else if (type === 'album') {
+        inLibrary = db.prepare('SELECT id FROM music_albums WHERE mbid = ?').get(tmdb_id);
+      }
+      if (inLibrary) {
+        const err = new Error('This item is already in your library');
+        err.statusCode = 409;
+        throw err;
+      }
+
+      const existing = db.prepare('SELECT id FROM requests WHERE tmdb_id = ? AND type = ? AND status != ?').get(tmdb_id, type, 'denied');
+      if (existing) {
+        const err = new Error('This item has already been requested');
+        err.statusCode = 400;
+        throw err;
+      }
+
       const result = db.prepare("INSERT INTO requests (user_id, tmdb_id, type, title, status, release_date, poster_path) VALUES (?, ?, ?, ?, 'pending', ?, ?)").run(
         user_id, tmdb_id, type, title, release_date || null, poster_path || null
       );
-      requestId = result.lastInsertRowid;
-    } catch (insertErr) {
-      // Unique index race: another request for the same item slipped in first
-      if (insertErr.errcode === 19 || String(insertErr.code || '').startsWith('SQLITE_CONSTRAINT') || /constraint failed/i.test(insertErr.message)) {
+      return result.lastInsertRowid;
+    });
+
+    try {
+      requestId = createTx();
+    } catch (txErr) {
+      if (txErr.statusCode) {
+        return res.status(txErr.statusCode).json({ status: 'error', message: txErr.message });
+      }
+      if (txErr.errcode === 19 || String(txErr.code || '').startsWith('SQLITE_CONSTRAINT') || /constraint failed/i.test(txErr.message)) {
         return res.status(400).json({ status: 'error', message: 'This item has already been requested' });
       }
-      throw insertErr;
+      throw txErr;
     }
 
     // Send notification if enabled
