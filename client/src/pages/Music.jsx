@@ -219,7 +219,7 @@ export default function Music() {
           const q = query.toLowerCase();
           const matchTitle = (album.title || '').toLowerCase().includes(q);
           const matchArtist = (album.artist_name || '').toLowerCase().includes(q);
-          const matchGenre = (album.genres || '').toLowerCase().includes(q);
+          const matchGenre = (Array.isArray(album.genres) ? album.genres.join(' ') : (album.genres || '')).toLowerCase().includes(q);
           if (!matchTitle && !matchArtist && !matchGenre) return false;
         }
         return true;

@@ -634,7 +634,8 @@ const runMissingFilesCheck = async () => {
         "SELECT COUNT(*) as cnt FROM music_tracks WHERE album_id = ? AND file_path IS NOT NULL AND status = 'downloaded'"
       ).get(albumId);
       if (!remainingDownloaded || remainingDownloaded.cnt === 0) {
-        db.prepare("UPDATE music_albums SET status = 'monitored' WHERE id = ? AND status = 'downloaded'").run(albumId);
+        // Don't reset albums that are actively downloading — only reset fully-downloaded ones whose files went missing
+        db.prepare("UPDATE music_albums SET status = 'monitored' WHERE id = ? AND status NOT IN ('downloading', 'monitored')").run(albumId);
       }
     }
   }
@@ -1019,6 +1020,10 @@ const runReleaseMonitoring = async () => {
 // ── Music: Search Cycle ───────────────────────────────────────────────────────
 
 const runMusicSearchCycle = async () => {
+  // Fetch active torrents to prevent double-downloading
+  const activeTorrents = await downloadClientService.getTorrents().catch(() => []);
+  const activeTitles = new Set(activeTorrents.map(t => t.name?.toLowerCase().trim()).filter(Boolean));
+
   const missingAlbums = db.prepare(`
     SELECT al.*, a.name as artist_name
     FROM music_albums al
@@ -1036,6 +1041,15 @@ const runMusicSearchCycle = async () => {
 
   for (const album of missingAlbums) {
     try {
+      // Skip if already active in the download client
+      const albumKey = `${album.artist_name} ${album.title}`.toLowerCase().trim();
+      const alreadyActive = [...activeTitles].some(t => t.includes(album.title.toLowerCase().trim()));
+      if (alreadyActive) {
+        console.log(`[MusicSearch] Already in download client, skipping: ${album.artist_name} - ${album.title}`);
+        db.prepare("UPDATE music_albums SET status = 'downloading' WHERE id = ?").run(album.id);
+        continue;
+      }
+
       const profile = db.prepare('SELECT * FROM music_quality_profiles WHERE id = ?').get(album.quality_profile_id);
       const results = await indexerService.searchMusic(album.artist_name, album.title, profile, false);
       const best = results && results[0];

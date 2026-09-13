@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import api from '../lib/api';
-import { DownloadCloud, Download, ArrowDown, ArrowUp, Activity, Film, Tv, Music2, Play, Pause, Trash2, Clock, HardDrive, CheckSquare, Square, X, Loader2, Folder, MoreHorizontal } from 'lucide-react';
+import { DownloadCloud, Download, ArrowDown, ArrowUp, Activity, Film, Tv, Music2, Play, Pause, Trash2, Clock, HardDrive, CheckSquare, Square, X, Loader2, Folder, MoreHorizontal, Check, Network, Menu, LayoutGrid, ChevronDown } from 'lucide-react';
 import { customAlert, customConfirm } from '../utils/alerts';
 import useWebSocket from '../lib/useWebSocket';
 import StickyBar from '../components/shared/StickyBar';
@@ -232,6 +232,9 @@ export default function Downloads() {
   const [selectedHashes, setSelectedHashes] = useState(new Set());
   const [bulkLoading, setBulkLoading] = useState(false);
   const [openMenuHash, setOpenMenuHash] = useState(null);
+  const [activeTab, setActiveTab] = useState('active');
+  const [sortBy, setSortBy] = useState('progress');
+  const [viewMode, setViewMode] = useState('list');
 
   useEffect(() => {
     const handleOutsideClick = () => setOpenMenuHash(null);
@@ -464,60 +467,315 @@ export default function Downloads() {
     return { class: 'bg-slate-700/30 text-slate-400 border-slate-700/50', dot: 'bg-slate-400' };
   };
 
+  const isFailedTorrent = (t) => {
+    const s = (t.state || '').toLowerCase();
+    return s.includes('error') || s.includes('fail') || s.includes('missing');
+  };
+
+  const isCompletedTorrent = (t) => {
+    if (isFailedTorrent(t)) return false;
+    const progress = Math.min(100, Math.max(0, Math.round(t.progress || 0)));
+    const s = (t.state || '').toLowerCase();
+    return progress >= 100 || s.includes('seed') || s.includes('upload') || s.includes('complete');
+  };
+
+  const isQueuedTorrent = (t) => {
+    if (isFailedTorrent(t) || isCompletedTorrent(t)) return false;
+    const s = (t.state || '').toLowerCase();
+    return s.includes('pause') || s.includes('stop') || s.includes('queue') || s.includes('waiting');
+  };
+
+  const isActiveTorrent = (t) => {
+    return !isFailedTorrent(t) && !isCompletedTorrent(t) && !isQueuedTorrent(t);
+  };
+
+  const activeDownloads = downloads.filter(isActiveTorrent);
+  const queuedDownloads = downloads.filter(isQueuedTorrent);
+  const completedDownloads = downloads.filter(isCompletedTorrent);
+  const failedDownloads = downloads.filter(isFailedTorrent);
+
+  const activeCount = activeDownloads.length;
+  const queuedCount = queuedDownloads.length;
+  const completedCount = completedDownloads.length;
+  const failedCount = failedDownloads.length;
+
+  const totalTrafficBytes = (Number(stats.dl_info_data) || 0) + (Number(stats.up_info_data) || 0);
+  const totalTrafficFormatted = totalTrafficBytes > 0 
+    ? formatBytes(totalTrafficBytes) 
+    : (downloads.reduce((acc, d) => acc + (d.total_size || d.size || 0), 0) > 0 
+        ? formatBytes(downloads.reduce((acc, d) => acc + (d.total_size || d.size || 0), 0))
+        : '0 B');
+
+  const filteredDownloads = downloads.filter(t => {
+    if (activeTab === 'active') return isActiveTorrent(t);
+    if (activeTab === 'queued') return isQueuedTorrent(t);
+    if (activeTab === 'completed') return isCompletedTorrent(t);
+    if (activeTab === 'failed') return isFailedTorrent(t);
+    return true;
+  });
+
+  const sortedDownloads = [...filteredDownloads].sort((a, b) => {
+    if (sortBy === 'progress') return (b.progress || 0) - (a.progress || 0);
+    if (sortBy === 'speed') return ((b.dlspeed || 0) + (b.upspeed || 0)) - ((a.dlspeed || 0) + (a.upspeed || 0));
+    if (sortBy === 'name') return (a.name || '').localeCompare(b.name || '');
+    if (sortBy === 'size') return ((b.total_size || b.size || 0) - (a.total_size || a.size || 0));
+    if (sortBy === 'eta') return (a.eta || 999999) - (b.eta || 999999);
+    return 0;
+  });
+
   const transferRatio = stats.up_info_data !== null && stats.up_info_data !== undefined && Number(stats.dl_info_data) > 0
     ? (stats.up_info_data / stats.dl_info_data).toFixed(2)
     : null;
 
   return (
-    <div className="space-y-4 max-w-6xl mx-auto">
+    <div className="space-y-3">
       <div ref={headerRef} className="flex items-center justify-between gap-3">
         <div className="min-w-0">
           <h1 className="text-xl sm:text-3xl font-black text-slate-800 dark:text-slate-100 flex items-center gap-2 sm:gap-3 !mb-0">
-            <DownloadCloud className="w-6 h-6 sm:w-8 sm:h-8 text-emerald-400" /> <span className="truncate">Downloads</span>
+            <DownloadCloud className="w-6 h-6 sm:w-8 sm:h-8 text-cyan-400" /> <span className="truncate">Downloads</span>
           </h1>
-          <p className="text-xs sm:text-base text-slate-400 mt-0.5 sm:mt-1 hidden sm:block">Monitor and manage active downloads across connected clients in real-time.</p>
+          <p className="text-xs sm:text-base text-slate-400 mt-0.5 sm:mt-1 hidden sm:block !mb-0">
+            Monitor and manage active downloads across connected clients in real-time.
+          </p>
         </div>
       </div>
 
       <StickyBar visible={stickyVisible}>
         <div className="flex items-center gap-3 ml-auto sm:hidden text-xs">
-          <span className="font-bold text-slate-300">{downloads.length} active</span>
+          <span className="font-bold text-slate-300">{activeCount} active</span>
           <span className="flex items-center gap-1 text-emerald-400"><ArrowDown className="w-3 h-3" />{formatSpeed(stats.dl_info_speed)}</span>
           <span className="flex items-center gap-1 text-slate-400"><ArrowUp className="w-3 h-3" />{formatSpeed(stats.up_info_speed)}</span>
         </div>
       </StickyBar>
 
-      <div className="hidden sm:grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="glass-panel p-6 rounded-2xl flex items-center space-x-4 border-l-4 border-l-emerald-500 shadow-lg shadow-black/10">
-          <div className="p-3.5 bg-emerald-500/10 rounded-xl text-emerald-400 border border-emerald-500/20">
-            <DownloadCloud className="w-6 h-6" />
+      {/* 4 Stat Cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {/* Active Downloads */}
+        <div className="glass-panel rounded-xl p-3 sm:p-3.5 border border-white/5 flex items-center gap-3">
+          <div className="p-2.5 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shrink-0">
+            <Download className="w-4 h-4 sm:w-5 sm:h-5" />
           </div>
-          <div className="flex-1">
-            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Active Downloads</p>
-            <div className="flex items-center justify-between mt-1">
-              <p className="text-3xl font-black text-slate-100">{downloads.length}</p>
-              <div className="flex flex-col text-xs font-mono text-emerald-400 text-right space-y-0.5">
-                <span className="flex items-center justify-end gap-1.5 font-bold"><ArrowDown className="w-3.5 h-3.5" /> {formatSpeed(stats.dl_info_speed)}</span>
-                <span className="flex items-center justify-end gap-1.5 text-slate-400"><ArrowUp className="w-3.5 h-3.5" /> {formatSpeed(stats.up_info_speed)}</span>
-              </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider truncate">Active Downloads</p>
+            <div className="flex items-baseline gap-2 mt-0.5">
+              <span className="text-lg sm:text-2xl font-black text-slate-100">{activeCount}</span>
+              <span className="text-xs font-semibold text-emerald-400 flex items-center gap-0.5">
+                <ArrowDown className="w-3 h-3" /> {formatSpeed(stats.dl_info_speed || 0)}
+              </span>
             </div>
           </div>
         </div>
 
-        <div className="glass-panel p-6 rounded-2xl flex items-center space-x-4 border-l-4 border-l-cyan-500 shadow-lg shadow-black/10">
-          <div className="p-3.5 bg-cyan-500/10 rounded-xl text-cyan-400 border border-cyan-500/20">
-            <Activity className="w-6 h-6" />
+        {/* Completed Today */}
+        <div className="glass-panel rounded-xl p-3 sm:p-3.5 border border-white/5 flex items-center gap-3">
+          <div className="p-2.5 rounded-lg bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 shrink-0">
+            <Check className="w-4 h-4 sm:w-5 sm:h-5" />
           </div>
-          <div className="flex-1">
-            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Session Transfer</p>
-            <div className="flex items-center justify-between mt-1">
-              <p className="text-sm font-semibold text-slate-400">Total Traffic</p>
-              <div className="flex flex-col text-xs font-mono text-cyan-400 text-right space-y-0.5">
-                {transferRatio !== null && (
-                  <span className="flex items-center justify-end gap-1.5 text-slate-400">Ratio: <strong>{transferRatio}</strong></span>
-                )}
-              </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider truncate">Completed Today</p>
+            <div className="flex items-baseline gap-2 mt-0.5">
+              <span className="text-lg sm:text-2xl font-black text-slate-100">{completedCount}</span>
+              <span className="text-xs font-semibold text-cyan-400 flex items-center gap-0.5">
+                <ArrowUp className="w-3 h-3" /> {formatBytes(stats.up_info_data || 0)}
+              </span>
             </div>
+          </div>
+        </div>
+
+        {/* Queued */}
+        <div className="glass-panel rounded-xl p-3 sm:p-3.5 border border-white/5 flex items-center gap-3">
+          <div className="p-2.5 rounded-lg bg-slate-800 text-slate-300 border border-white/5 shrink-0">
+            <Clock className="w-4 h-4 sm:w-5 sm:h-5 text-slate-400" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider truncate">Queued</p>
+            <div className="flex items-baseline gap-2 mt-0.5">
+              <span className="text-lg sm:text-2xl font-black text-slate-100">{queuedCount}</span>
+              <span className="text-xs font-medium text-slate-400">
+                {queuedCount} pending
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Total Traffic */}
+        <div className="glass-panel rounded-xl p-3 sm:p-3.5 border border-white/5 flex items-center gap-3">
+          <div className="p-2.5 rounded-lg bg-slate-800 text-slate-300 border border-white/5 shrink-0">
+            <Activity className="w-4 h-4 sm:w-5 sm:h-5 text-slate-400" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider truncate">Total Traffic</p>
+            <div className="flex items-baseline gap-2 mt-0.5">
+              <span className="text-lg sm:text-2xl font-black text-slate-100 truncate">{totalTrafficFormatted}</span>
+              <span className="text-xs font-medium text-slate-400 truncate">
+                Ratio: {transferRatio || '0.00'}
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Sub-header Filter & Controls Bar */}
+      <div className="glass-panel rounded-xl px-3 sm:px-4 py-2 border border-white/5 flex items-center justify-between gap-3 flex-wrap shadow-sm">
+        {/* Tabs */}
+        <div className="flex items-center gap-3 sm:gap-5 overflow-x-auto no-scrollbar">
+          <button
+            type="button"
+            onClick={() => setActiveTab('active')}
+            className={`relative py-1 flex items-center gap-2 text-xs sm:text-sm font-semibold transition-colors shrink-0 ${
+              activeTab === 'active' ? 'text-cyan-400 font-bold' : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <span>Active Downloads</span>
+            <span
+              className={`text-[10px] px-2 py-0.5 rounded-full transition-all ${
+                activeTab === 'active'
+                  ? 'bg-cyan-500/20 text-cyan-300 font-bold border border-cyan-500/30'
+                  : 'bg-slate-800 text-slate-400 font-medium border border-white/5'
+              }`}
+            >
+              {activeCount}
+            </span>
+            {activeTab === 'active' && (
+              <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-cyan-400 rounded-full shadow-[0_0_6px_rgba(6,182,212,0.6)]" />
+            )}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('queued')}
+            className={`relative py-1 flex items-center gap-2 text-xs sm:text-sm font-semibold transition-colors shrink-0 ${
+              activeTab === 'queued' ? 'text-cyan-400 font-bold' : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <span>Queued</span>
+            <span
+              className={`text-[10px] px-2 py-0.5 rounded-full transition-all ${
+                activeTab === 'queued'
+                  ? 'bg-cyan-500/20 text-cyan-300 font-bold border border-cyan-500/30'
+                  : 'bg-slate-800 text-slate-400 font-medium border border-white/5'
+              }`}
+            >
+              {queuedCount}
+            </span>
+            {activeTab === 'queued' && (
+              <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-cyan-400 rounded-full shadow-[0_0_6px_rgba(6,182,212,0.6)]" />
+            )}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('completed')}
+            className={`relative py-1 flex items-center gap-2 text-xs sm:text-sm font-semibold transition-colors shrink-0 ${
+              activeTab === 'completed' ? 'text-cyan-400 font-bold' : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <span>Completed</span>
+            <span
+              className={`text-[10px] px-2 py-0.5 rounded-full transition-all ${
+                activeTab === 'completed'
+                  ? 'bg-cyan-500/20 text-cyan-300 font-bold border border-cyan-500/30'
+                  : 'bg-slate-800 text-slate-400 font-medium border border-white/5'
+              }`}
+            >
+              {completedCount}
+            </span>
+            {activeTab === 'completed' && (
+              <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-cyan-400 rounded-full shadow-[0_0_6px_rgba(6,182,212,0.6)]" />
+            )}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('failed')}
+            className={`relative py-1 flex items-center gap-2 text-xs sm:text-sm font-semibold transition-colors shrink-0 ${
+              activeTab === 'failed' ? 'text-cyan-400 font-bold' : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <span>Failed</span>
+            <span
+              className={`text-[10px] px-2 py-0.5 rounded-full transition-all ${
+                activeTab === 'failed'
+                  ? 'bg-cyan-500/20 text-cyan-300 font-bold border border-cyan-500/30'
+                  : 'bg-slate-800 text-slate-400 font-medium border border-white/5'
+              }`}
+            >
+              {failedCount}
+            </span>
+            {activeTab === 'failed' && (
+              <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-cyan-400 rounded-full shadow-[0_0_6px_rgba(6,182,212,0.6)]" />
+            )}
+          </button>
+        </div>
+
+        {/* Right side controls */}
+        <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
+          {/* Select All Toggle */}
+          {sortedDownloads.length > 0 && (
+            <button
+              type="button"
+              onClick={toggleSelectAll}
+              className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-200 px-2 py-1 rounded-lg hover:bg-slate-800/60 transition-colors"
+              title={selectedHashes.size === sortedDownloads.length ? 'Deselect all' : 'Select all'}
+            >
+              {selectedHashes.size === sortedDownloads.length ? (
+                <CheckSquare className="w-3.5 h-3.5 text-cyan-400" />
+              ) : selectedHashes.size > 0 ? (
+                <div className="w-3.5 h-3.5 rounded border border-cyan-400/60 bg-cyan-400/20 flex items-center justify-center">
+                  <div className="w-1.5 h-0.5 bg-cyan-400 rounded" />
+                </div>
+              ) : (
+                <Square className="w-3.5 h-3.5 text-slate-500" />
+              )}
+              <span className="hidden sm:inline">Select All</span>
+            </button>
+          )}
+
+          {/* Sort selector */}
+          <div className="relative">
+            <div className="flex items-center bg-slate-900 border border-white/10 rounded-lg px-2.5 py-1 gap-1.5 focus-within:border-cyan-500/50">
+              <span className="text-slate-500 text-[11px] font-medium">Sort:</span>
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value)}
+                className="appearance-none bg-transparent text-slate-200 text-xs font-semibold focus:outline-none cursor-pointer pr-4"
+              >
+                <option value="progress" className="bg-slate-900 text-white">Progress</option>
+                <option value="speed" className="bg-slate-900 text-white">Speed</option>
+                <option value="name" className="bg-slate-900 text-white">Name</option>
+                <option value="size" className="bg-slate-900 text-white">Size</option>
+                <option value="eta" className="bg-slate-900 text-white">ETA</option>
+              </select>
+              <ChevronDown className="w-3 h-3 text-slate-400 pointer-events-none absolute right-2 top-1/2 -translate-y-1/2" />
+            </div>
+          </div>
+
+          {/* View mode toggle */}
+          <div className="flex items-center bg-slate-900 border border-white/10 rounded-lg p-0.5">
+            <button
+              type="button"
+              onClick={() => setViewMode('list')}
+              className={`p-1 rounded-md transition-all ${
+                viewMode === 'list'
+                  ? 'bg-slate-700 text-white shadow-sm'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+              title="List view"
+            >
+              <Menu className="w-3.5 h-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode('grid')}
+              className={`p-1 rounded-md transition-all ${
+                viewMode === 'grid'
+                  ? 'bg-slate-700 text-white shadow-sm'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+              title="Grid view"
+            >
+              <LayoutGrid className="w-3.5 h-3.5" />
+            </button>
           </div>
         </div>
       </div>
@@ -526,347 +784,317 @@ export default function Downloads() {
         <InlineError message="Download client not reachable" onRetry={fetchClientData} />
       )}
 
-      {initialLoading ? (
-        <div className="glass-panel flex flex-col items-center justify-center h-[320px] rounded-2xl border border-white/5 shadow-xl">
-          <div className="w-8 h-8 border-2 border-emerald-500/50 border-t-emerald-400 rounded-full animate-spin" />
-          <p className="text-sm text-slate-400 mt-4">Loading downloads...</p>
-        </div>
-      ) : downloads.length > 0 ? (
-        <div className="glass-panel p-4 sm:p-6 rounded-2xl border border-white/5 shadow-xl">
-          <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-            <div className="flex items-center gap-3">
-              <button
-                type="button"
-                onClick={toggleSelectAll}
-                className="p-1 -m-1 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-slate-200 transition-colors flex items-center gap-2"
-                title={selectedHashes.size === downloads.length && downloads.length > 0 ? "Deselect all" : "Select all"}
-                aria-label={selectedHashes.size === downloads.length && downloads.length > 0 ? "Deselect all" : "Select all"}
-              >
-                {selectedHashes.size === downloads.length && downloads.length > 0 ? (
-                  <CheckSquare className="w-5 h-5 text-emerald-400" />
-                ) : selectedHashes.size > 0 ? (
-                  <div className="w-5 h-5 rounded border-2 border-emerald-400/60 bg-emerald-400/20 flex items-center justify-center">
-                    <div className="w-2.5 h-0.5 bg-emerald-400 rounded" />
-                  </div>
-                ) : (
-                  <Square className="w-5 h-5 text-slate-500 hover:text-slate-400" />
-                )}
-              </button>
-              <h2 className="text-base sm:text-lg font-bold text-slate-100 flex items-center gap-2">
-                <DownloadCloud className="w-5 h-5 text-emerald-400" /> Live Queue
-              </h2>
-            </div>
-            <div className="flex items-center gap-2">
-              {selectedHashes.size > 0 && (
-                <span className="text-xs font-semibold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1 rounded-lg">
-                  {selectedHashes.size} selected
-                </span>
-              )}
-              <span className="text-xs font-semibold text-slate-400 bg-slate-800/80 px-2.5 py-1 rounded-lg border border-white/5">
-                {downloads.length} {downloads.length === 1 ? 'task' : 'tasks'} running
-              </span>
-            </div>
+      {/* Bulk Action Bar */}
+      {selectedHashes.size > 0 && (
+        <div className="glass-panel rounded-xl p-2.5 sm:p-3 border border-cyan-500/30 bg-cyan-950/20 flex items-center justify-between gap-3 flex-wrap animate-fade-in shadow-lg">
+          <div className="flex items-center gap-3">
+            <span className="text-xs sm:text-sm font-bold text-slate-200">
+              <span className="text-cyan-400">{selectedHashes.size}</span> of {sortedDownloads.length} selected
+            </span>
+            <button
+              type="button"
+              onClick={clearSelection}
+              className="text-xs text-slate-400 hover:text-white transition-colors underline"
+            >
+              Clear
+            </button>
           </div>
 
-          {/* Bulk Action Bar */}
-          {selectedHashes.size > 0 && (
-            <div className="glass-panel rounded-xl p-3 sm:p-4 mb-4 border border-emerald-500/30 bg-emerald-500/5 flex items-center justify-between gap-3 flex-wrap animate-fade-in shadow-lg">
-              <div className="flex items-center gap-3">
-                <span className="text-xs sm:text-sm font-bold text-slate-200">
-                  <span className="text-emerald-400">{selectedHashes.size}</span> of {downloads.length} selected
-                </span>
-                <button
-                  type="button"
-                  onClick={clearSelection}
-                  className="text-xs text-slate-400 hover:text-white transition-colors underline"
-                >
-                  Clear
-                </button>
-              </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              type="button"
+              onClick={handleBulkPause}
+              disabled={bulkLoading}
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 text-xs font-bold transition-all border border-amber-500/20 hover:border-amber-500/40 disabled:opacity-50"
+              title="Pause selected downloads"
+            >
+              <Pause className="w-3.5 h-3.5" /> Pause
+            </button>
 
-              <div className="flex items-center gap-2 flex-wrap">
-                <button
-                  type="button"
-                  onClick={handleBulkPause}
-                  disabled={bulkLoading}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 text-xs font-bold transition-all border border-amber-500/20 hover:border-amber-500/40 disabled:opacity-50"
-                  title="Pause selected downloads"
-                >
-                  <Pause className="w-3.5 h-3.5" /> Pause
-                </button>
+            <button
+              type="button"
+              onClick={handleBulkResume}
+              disabled={bulkLoading}
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 text-xs font-bold transition-all border border-emerald-500/20 hover:border-emerald-500/40 disabled:opacity-50"
+              title="Resume selected downloads"
+            >
+              <Play className="w-3.5 h-3.5 fill-emerald-400/20" /> Resume
+            </button>
 
-                <button
-                  type="button"
-                  onClick={handleBulkResume}
-                  disabled={bulkLoading}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 text-xs font-bold transition-all border border-emerald-500/20 hover:border-emerald-500/40 disabled:opacity-50"
-                  title="Resume selected downloads"
-                >
-                  <Play className="w-3.5 h-3.5 fill-emerald-400/20" /> Resume
-                </button>
+            <button
+              type="button"
+              onClick={handleBulkDelete}
+              disabled={bulkLoading}
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 text-xs font-bold transition-all border border-rose-500/20 hover:border-rose-500/40 disabled:opacity-50"
+              title="Cancel and delete selected downloads"
+            >
+              <Trash2 className="w-3.5 h-3.5" /> Delete
+            </button>
 
-                <button
-                  type="button"
-                  onClick={handleBulkDelete}
-                  disabled={bulkLoading}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 text-xs font-bold transition-all border border-rose-500/20 hover:border-rose-500/40 disabled:opacity-50"
-                  title="Cancel and delete selected downloads"
-                >
-                  <Trash2 className="w-3.5 h-3.5" /> Delete
-                </button>
+            <button
+              type="button"
+              onClick={clearSelection}
+              className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors ml-1"
+              title="Clear selection"
+              aria-label="Clear selection"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+      )}
 
-                <button
-                  type="button"
-                  onClick={clearSelection}
-                  className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors ml-1"
-                  title="Clear selection"
-                  aria-label="Clear selection"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-          )}
+      {initialLoading ? (
+        <div className="glass-panel flex flex-col items-center justify-center h-[260px] rounded-xl border border-white/5 shadow-xl">
+          <div className="w-8 h-8 border-2 border-cyan-500/50 border-t-cyan-400 rounded-full animate-spin" />
+          <p className="text-sm text-slate-400 mt-3">Loading downloads...</p>
+        </div>
+      ) : sortedDownloads.length > 0 ? (
+        <div className={viewMode === 'grid' ? "grid grid-cols-1 xl:grid-cols-2 gap-2.5" : "space-y-2"}>
+          {sortedDownloads.map(t => {
+            const isSelected = selectedHashes.has(t.hash);
+            const totalSize = t.total_size || t.size || 0;
+            const progressPct = Math.min(100, Math.max(0, Math.round(t.progress || 0)));
+            const completedBytes = t.completed || (totalSize > 0 ? (totalSize * progressPct / 100) : 0);
+            const eta = formatEta(totalSize, t.progress || 0, t.dlspeed || 0);
+            const info = parseReleaseInfo(t.name, t);
+            const isPaused = (t.state || '').toLowerCase().includes('pause') || (t.state || '').toLowerCase().includes('stop');
+            const isComplete = progressPct >= 100 || (t.state || '').toLowerCase().includes('seed') || (t.state || '').toLowerCase().includes('complete');
+            const folderPath = t.save_path || t.downloadDir || (info.isMusic ? '/downloads/music' : info.isTv ? '/downloads/tvshows' : '/downloads/movies');
 
-          <div className="space-y-4">
-            {downloads.map(t => {
-              const isSelected = selectedHashes.has(t.hash);
-              const totalSize = t.total_size || t.size || 0;
-              const progressPct = Math.min(100, Math.max(0, Math.round(t.progress || 0)));
-              const completedBytes = t.completed || (totalSize > 0 ? (totalSize * progressPct / 100) : 0);
-              const eta = formatEta(totalSize, t.progress || 0, t.dlspeed || 0);
-              const info = parseReleaseInfo(t.name, t);
-              const isPaused = (t.state || '').toLowerCase().includes('pause') || (t.state || '').toLowerCase().includes('stop');
-              const isComplete = progressPct >= 100 || (t.state || '').toLowerCase().includes('seed') || (t.state || '').toLowerCase().includes('complete');
-              const folderPath = t.save_path || t.downloadDir || (info.isMusic ? '/downloads/music' : info.isTv ? '/downloads/tvshows' : '/downloads/movies');
+            let speedText = '0 B/s';
+            if (t.dlspeed > 0) speedText = formatSpeed(t.dlspeed);
+            else if (t.upspeed > 0) speedText = formatSpeed(t.upspeed);
+            else if (isPaused) speedText = 'Paused';
 
-              let speedText = '0 B/s';
-              if (t.dlspeed > 0) speedText = formatSpeed(t.dlspeed);
-              else if (t.upspeed > 0) speedText = formatSpeed(t.upspeed);
-              else if (isPaused) speedText = '0 B/s';
+            let etaText = '—';
+            if (isPaused) etaText = 'Paused';
+            else if (isComplete && !eta) etaText = 'Completed';
+            else if (eta) etaText = eta;
+            else if (t.dlspeed === 0) etaText = 'Stalled';
 
-              let etaText = 'Calculating...';
-              if (isPaused) etaText = 'Paused';
-              else if (isComplete && !eta) etaText = 'Completed';
-              else if (eta) etaText = eta;
-              else if (t.dlspeed === 0) etaText = 'Stalled';
+            return (
+              <div 
+                key={t.hash} 
+                className={`glass-panel transition-all px-3 py-2.5 sm:px-4 sm:py-2.5 rounded-xl border group relative ${
+                  isSelected
+                    ? 'border-cyan-500/40 bg-cyan-950/20 ring-1 ring-cyan-500/30'
+                    : 'border-white/5 hover:border-white/10 bg-slate-900/40 hover:bg-slate-900/60'
+                }`}
+              >
+                {/* Line 1: Checkbox, Status Icon, Title, Badges ... Speed, ETA, Size, Actions */}
+                <div className="flex items-center justify-between gap-3 min-w-0">
+                  <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                    {/* Selection checkbox */}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleSelect(t.hash);
+                      }}
+                      className="text-slate-500 hover:text-slate-300 transition-colors shrink-0 p-0.5"
+                      title={isSelected ? 'Deselect download' : 'Select download'}
+                    >
+                      {isSelected ? (
+                        <CheckSquare className="w-4 h-4 text-cyan-400" />
+                      ) : (
+                        <Square className="w-4 h-4 text-slate-600 hover:text-slate-400" />
+                      )}
+                    </button>
 
-              return (
-                <div 
-                  key={t.hash} 
-                  className={`transition-all p-5 sm:p-6 rounded-2xl border shadow-lg group relative ${
-                    isSelected
-                      ? 'bg-slate-900/90 border-emerald-500/40 ring-1 ring-emerald-500/30'
-                      : 'bg-slate-900/60 hover:bg-slate-900/80 border-slate-800/80 hover:border-cyan-500/30'
-                  }`}
-                >
-                  <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5">
-                    {/* Left Column: Title + Badges, Client • Speed • ETA, Progress Bar */}
-                    <div className="flex-1 min-w-0 space-y-2.5">
-                      {/* Row 1: Checkbox + Title + Badges */}
-                      <div className="flex items-center gap-3 flex-wrap">
+                    {/* State icon */}
+                    <div className="shrink-0">
+                      {info.isPendingMetadata ? (
+                        <Loader2 className="w-4 h-4 text-cyan-400 animate-spin" />
+                      ) : isPaused ? (
+                        <Pause className="w-4 h-4 text-amber-400/90" title="Paused" />
+                      ) : isComplete ? (
+                        <Check className="w-4 h-4 text-cyan-400" title="Completed" />
+                      ) : t.dlspeed > 0 ? (
+                        <ArrowDown className="w-4 h-4 text-emerald-400 animate-pulse" title="Downloading" />
+                      ) : (
+                        <Clock className="w-4 h-4 text-slate-500" title={t.state || 'Queued'} />
+                      )}
+                    </div>
+
+                    {/* Title */}
+                    <span 
+                      className="text-xs sm:text-sm font-bold text-slate-200 truncate group-hover:text-white transition-colors"
+                      title={info.raw || t.name}
+                    >
+                      {info.title}
+                    </span>
+
+                    {/* Badges */}
+                    <div className="hidden sm:flex items-center gap-1.5 shrink-0">
+                      <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
+                        {info.mediaLabel}
+                      </span>
+                      {info.resolution && (
+                        <span className="text-[10px] font-medium font-mono px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 border border-white/5">
+                          {info.resolution}
+                        </span>
+                      )}
+                      {info.codec && info.codec !== info.resolution && (
+                        <span className="text-[10px] font-medium font-mono px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 border border-white/5">
+                          {info.codec}
+                        </span>
+                      )}
+                      {info.audio && info.audio !== info.codec && (
+                        <span className="text-[10px] font-medium font-mono px-1.5 py-0.5 rounded bg-slate-800/60 text-slate-400 border border-white/5">
+                          {info.audio}
+                        </span>
+                      )}
+                      {info.source && (
+                        <span className="text-[10px] font-medium font-mono px-1.5 py-0.5 rounded bg-slate-800/60 text-slate-400 border border-white/5">
+                          {info.source}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Right group: Speed, ETA, Size, Action buttons */}
+                  <div className="flex items-center gap-3 sm:gap-4 shrink-0 font-mono text-xs">
+                    {/* Speed */}
+                    <span className={`font-semibold ${t.dlspeed > 0 ? 'text-emerald-400' : 'text-slate-500'}`}>
+                      {speedText}
+                    </span>
+
+                    {/* ETA */}
+                    <span className="text-slate-400 hidden md:inline">
+                      {etaText}
+                    </span>
+
+                    {/* Downloaded / Total Size */}
+                    <span className="text-slate-400 hidden lg:inline">
+                      <span className="text-slate-200 font-medium">{formatBytes(completedBytes)}</span>
+                      <span className="text-slate-600 mx-1">/</span>
+                      <span>{formatBytes(totalSize)}</span>
+                    </span>
+
+                    {/* Controls */}
+                    <div className="flex items-center gap-1">
+                      {isPaused ? (
+                        <button
+                          type="button"
+                          onClick={() => handleResume(t.hash)}
+                          className="p-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 transition-colors"
+                          title="Resume download"
+                        >
+                          <Play className="w-3.5 h-3.5 fill-current" />
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => handlePause(t.hash)}
+                          className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-white/5 transition-colors"
+                          title="Pause download"
+                        >
+                          <Pause className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+
+                      <div className="relative">
                         <button
                           type="button"
                           onClick={(e) => {
                             e.stopPropagation();
-                            toggleSelect(t.hash);
+                            setOpenMenuHash(openMenuHash === t.hash ? null : t.hash);
                           }}
-                          className="p-1 -ml-1 rounded hover:bg-slate-800 text-slate-500 hover:text-slate-300 transition-colors shrink-0"
-                          title={isSelected ? 'Deselect download' : 'Select download'}
-                          aria-label={isSelected ? `Deselect ${info.title}` : `Select ${info.title}`}
+                          className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white border border-white/5 transition-colors"
+                          title="More options"
                         >
-                          {isSelected ? (
-                            <CheckSquare className="w-4 h-4 text-emerald-400" />
-                          ) : (
-                            <Square className="w-4 h-4 text-slate-600 group-hover:text-slate-400 transition-colors" />
-                          )}
+                          <MoreHorizontal className="w-3.5 h-3.5" />
                         </button>
 
-                        <h3 
-                          className="text-base sm:text-lg font-bold text-white tracking-wide truncate flex items-center gap-2"
-                          title={t.name}
-                        >
-                          {info.isPendingMetadata && <Loader2 className="w-4 h-4 text-indigo-400 animate-spin shrink-0" />}
-                          {info.title}
-                        </h3>
-
-                        {/* Badges */}
-                        <div className="flex items-center gap-2 flex-wrap">
-                          {/* Media Type Badge */}
-                          <span className={`text-xs font-semibold px-3 py-0.5 rounded-full border ${
-                            info.isMusic
-                              ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
-                              : info.isTv
-                              ? 'bg-purple-500/20 text-purple-300 border-purple-500/30'
-                              : 'bg-sky-500/20 text-sky-400 border-sky-500/30'
-                          }`}>
-                            {info.mediaLabel || (info.isMusic ? 'Music' : info.isTv ? 'TV Show' : 'Movie')}
-                          </span>
-
-                          {info.resolution && (
-                            <span className="text-xs font-medium px-2.5 py-0.5 rounded-md bg-slate-800/90 text-slate-300 border border-slate-700/60">
-                              {info.resolution}
-                            </span>
-                          )}
-
-                          {info.codec && info.codec !== info.resolution && info.codec !== info.audio && (
-                            <span className="text-xs font-medium px-2.5 py-0.5 rounded-md bg-purple-950/40 text-purple-300 border border-purple-800/50">
-                              {info.codec}
-                            </span>
-                          )}
-
-                          {info.source && info.source !== info.mediaLabel && (
-                            <span className="text-xs font-medium px-2.5 py-0.5 rounded-md bg-blue-950/40 text-blue-300 border border-blue-800/50">
-                              {info.source}
-                            </span>
-                          )}
-
-                          {info.audio && info.audio !== info.resolution && (
-                            <span className="text-xs font-medium px-2.5 py-0.5 rounded-md bg-cyan-950/40 text-cyan-300 border border-cyan-800/50">
-                              {info.audio}
-                            </span>
-                          )}
-
-                          {info.hdr && (
-                            <span className="text-xs font-medium px-2.5 py-0.5 rounded-md bg-amber-500/15 text-amber-300 border border-amber-500/30">
-                              {info.hdr}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Row 2: Client • Speed • ETA */}
-                      <div className="flex items-center text-xs sm:text-sm text-slate-400 gap-1.5 flex-wrap pl-6">
-                        <span className="text-sky-400 font-semibold">{t.clientName || 'qBittorrent'}</span>
-                        <span className="text-slate-500">•</span>
-                        <span className="text-slate-300">{speedText}</span>
-                        <span className="text-slate-500">•</span>
-                        <span className="text-slate-400">{etaText}</span>
-                      </div>
-
-                      {/* Row 3: Progress Bar + Percentage */}
-                      <div className="flex items-center gap-4 w-full pl-6 pt-0.5">
-                        <div className="flex-1 h-2 bg-slate-800/90 rounded-full overflow-hidden relative">
-                          <div 
-                            className="h-full rounded-full bg-emerald-400 transition-all duration-300 shadow-[0_0_12px_rgba(52,211,153,0.35)]" 
-                            style={{ width: `${progressPct}%` }}
-                          />
-                        </div>
-                        <span className="text-xs sm:text-sm font-semibold text-slate-300 font-mono shrink-0 w-12 text-right">
-                          {progressPct}%
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Right Column: Size/Path metadata + Circular Action Buttons */}
-                    <div className="flex items-center justify-between lg:justify-end gap-6 shrink-0 pt-3 lg:pt-0 border-t lg:border-t-0 border-white/5 pl-6 lg:pl-0">
-                      {/* Size & Path */}
-                      <div className="space-y-1.5 text-left">
-                        <div className="flex items-center gap-2 text-xs sm:text-sm font-medium text-slate-300 font-mono">
-                          <Download className="w-4 h-4 text-cyan-400 shrink-0" />
-                          <span>{formatBytes(completedBytes)} / {formatBytes(totalSize)}</span>
-                        </div>
-                        <div className="flex items-center gap-2 text-xs sm:text-sm text-slate-400 font-mono">
-                          <Folder className="w-4 h-4 text-cyan-400 shrink-0" />
-                          <span className="truncate max-w-[170px] sm:max-w-[220px]" title={folderPath}>
-                            {folderPath}
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Circular Action Buttons */}
-                      <div className="flex items-center gap-2.5 shrink-0">
-                        {/* Play / Pause Circular Button */}
-                        {isPaused || isComplete ? (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              isPaused ? handleResume(t.hash) : handlePause(t.hash);
-                            }}
-                            className="w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-emerald-950/40 text-emerald-400 border-2 border-emerald-500 shadow-[0_0_18px_rgba(16,185,129,0.35)] hover:bg-emerald-900/50 hover:scale-105 active:scale-95 flex items-center justify-center transition-all shrink-0"
-                            title={isPaused ? "Resume Download" : "Download Complete / Seeding"}
+                        {openMenuHash === t.hash && (
+                          <div
+                            onClick={(e) => e.stopPropagation()}
+                            className="absolute right-0 top-full mt-1 w-52 bg-slate-900 border border-white/10 rounded-xl shadow-2xl z-30 py-1 overflow-hidden"
                           >
-                            <Play className="w-4 h-4 fill-emerald-400 ml-0.5" />
-                          </button>
-                        ) : (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handlePause(t.hash);
-                            }}
-                            className="w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-slate-800/80 hover:bg-slate-700 text-slate-200 border border-white/10 flex items-center justify-center transition-all hover:scale-105 active:scale-95 shadow-md shrink-0"
-                            title="Pause Download"
-                          >
-                            <Pause className="w-4 h-4 fill-slate-200" />
-                          </button>
-                        )}
-
-                        {/* More Options (...) Circular Button */}
-                        <div className="relative" onClick={(e) => e.stopPropagation()}>
-                          <button
-                            onClick={() => setOpenMenuHash(openMenuHash === t.hash ? null : t.hash)}
-                            className="w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white border border-white/10 flex items-center justify-center transition-all hover:scale-105 active:scale-95 shadow-md shrink-0"
-                            title="More Options"
-                          >
-                            <MoreHorizontal className="w-4 h-4 sm:w-5 sm:h-5" />
-                          </button>
-
-                          {openMenuHash === t.hash && (
-                            <div 
-                              className="absolute right-0 top-full mt-2 w-52 bg-slate-900 border border-slate-700/80 rounded-xl shadow-2xl z-50 py-1.5 backdrop-blur-xl animate-scale-in"
+                            <button
+                              onClick={async () => {
+                                setOpenMenuHash(null);
+                                if (isPaused) await handleResume(t.hash);
+                                else await handlePause(t.hash);
+                              }}
+                              className="w-full px-3.5 py-2 text-left text-xs font-semibold text-slate-200 hover:bg-slate-800/80 flex items-center gap-2.5 transition-colors"
                             >
-                              <button
-                                onClick={() => {
-                                  isPaused ? handleResume(t.hash) : handlePause(t.hash);
-                                  setOpenMenuHash(null);
-                                }}
-                                className="w-full px-3.5 py-2 text-left text-xs font-semibold text-slate-200 hover:bg-slate-800/80 flex items-center gap-2.5 transition-colors"
-                              >
-                                {isPaused ? <Play className="w-4 h-4 text-emerald-400" /> : <Pause className="w-4 h-4 text-amber-400" />}
-                                <span>{isPaused ? 'Resume Download' : 'Pause Download'}</span>
-                              </button>
+                              {isPaused ? <Play className="w-4 h-4 text-emerald-400" /> : <Pause className="w-4 h-4 text-amber-400" />}
+                              <span>{isPaused ? 'Resume Download' : 'Pause Download'}</span>
+                            </button>
 
-                              <button
-                                onClick={async () => {
-                                  setOpenMenuHash(null);
-                                  await handleDelete(t.hash, false);
-                                }}
-                                className="w-full px-3.5 py-2 text-left text-xs font-semibold text-slate-200 hover:bg-slate-800/80 flex items-center gap-2.5 transition-colors"
-                              >
-                                <Trash2 className="w-4 h-4 text-slate-400" />
-                                <span>Remove from Client</span>
-                              </button>
+                            <button
+                              onClick={async () => {
+                                setOpenMenuHash(null);
+                                await handleDelete(t.hash, false);
+                              }}
+                              className="w-full px-3.5 py-2 text-left text-xs font-semibold text-slate-200 hover:bg-slate-800/80 flex items-center gap-2.5 transition-colors"
+                            >
+                              <Trash2 className="w-4 h-4 text-slate-400" />
+                              <span>Remove from Client</span>
+                            </button>
 
-                              <button
-                                onClick={async () => {
-                                  setOpenMenuHash(null);
-                                  await handleDelete(t.hash, true);
-                                }}
-                                className="w-full px-3.5 py-2 text-left text-xs font-semibold text-rose-400 hover:bg-rose-500/10 flex items-center gap-2.5 transition-colors border-t border-white/5"
-                              >
-                                <Trash2 className="w-4 h-4 text-rose-400" />
-                                <span>Cancel & Delete Files</span>
-                              </button>
-                            </div>
-                          )}
-                        </div>
+                            <button
+                              onClick={async () => {
+                                setOpenMenuHash(null);
+                                await handleDelete(t.hash, true);
+                              }}
+                              className="w-full px-3.5 py-2 text-left text-xs font-semibold text-rose-400 hover:bg-rose-500/10 flex items-center gap-2.5 transition-colors border-t border-white/5"
+                            >
+                              <Trash2 className="w-4 h-4 text-rose-400" />
+                              <span>Cancel & Delete Files</span>
+                            </button>
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
                 </div>
-              );
-            })}
-          </div>
+
+                {/* Line 2: Slim Progress Bar + Percent + Client & Save Path */}
+                <div className="flex items-center gap-2.5 pt-0.5">
+                  <div className="flex-1 h-1.5 bg-slate-800/80 rounded-full overflow-hidden">
+                    <div 
+                      className={`h-full rounded-full transition-all duration-500 ${
+                        isPaused
+                          ? 'bg-amber-500/80'
+                          : isComplete
+                          ? 'bg-cyan-400'
+                          : 'bg-gradient-to-r from-emerald-400 to-cyan-400'
+                      }`}
+                      style={{ width: `${progressPct}%` }}
+                    />
+                  </div>
+
+                  <span className="text-[11px] font-bold font-mono text-slate-300 tabular-nums shrink-0 w-8 text-right">
+                    {progressPct}%
+                  </span>
+
+                  <div className="hidden sm:flex items-center gap-1.5 text-[11px] text-slate-500 shrink-0">
+                    <span className="text-cyan-400/80 font-medium">{t.clientName || 'qBittorrent'}</span>
+                    <span>•</span>
+                    <span className="truncate max-w-[220px]" title={folderPath}>{folderPath}</span>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
         </div>
       ) : (
-        <div className="glass-panel flex flex-col items-center justify-center h-[320px] text-slate-400 rounded-2xl relative overflow-hidden border border-white/5 shadow-xl">
-          <div className="absolute inset-0 bg-gradient-to-b from-slate-800/20 to-transparent"></div>
+        <div className="glass-panel p-10 rounded-xl border border-white/5 text-center flex flex-col items-center justify-center relative overflow-hidden shadow-xl">
           <div className="relative z-10 flex flex-col items-center text-center max-w-sm px-4">
-            <div className="p-4 bg-slate-800/60 rounded-2xl mb-4 ring-1 ring-white/10 shadow-xl text-emerald-400">
-              <DownloadCloud className="w-10 h-10" />
+            <div className="p-3.5 bg-slate-800/60 rounded-xl mb-3 border border-white/5 text-cyan-400">
+              <DownloadCloud className="w-8 h-8" />
             </div>
-            <h3 className="text-base font-bold text-slate-200">No Active Downloads</h3>
-            <p className="text-xs text-slate-400 mt-1">When media downloads are triggered, their real-time progress and speeds will appear here.</p>
+            <h3 className="text-base font-bold text-slate-200 capitalize">
+              {downloads.length === 0 ? 'No Downloads in Queue' : `No ${activeTab} Downloads`}
+            </h3>
+            <p className="text-xs text-slate-400 mt-1">
+              {downloads.length === 0
+                ? 'When media downloads are triggered, their real-time progress and speeds will appear here.'
+                : `There are currently no downloads matching the "${activeTab}" filter.`}
+            </p>
           </div>
         </div>
       )}

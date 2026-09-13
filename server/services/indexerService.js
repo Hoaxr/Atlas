@@ -74,6 +74,28 @@ const findTokenSequenceMatch = (resultWords, expectedWords) => {
   return -1;
 };
 
+// Stricter artist match: the artist token sequence must appear at a word
+// boundary — i.e. the token immediately before the match (if any) must NOT be
+// a plain word token. This prevents "Burial" matching inside "After the Burial".
+// We consider the sequence to be boundary-safe when it starts at position 0,
+// or is preceded by a separator word like "the", "a", "an", or any token that
+// is a known prefix word. In practice, for single-word artists the simplest
+// sufficient rule is: the match must start at the very beginning of the token
+// array, OR the preceding token must be a non-artist separator. To avoid
+// over-fitting we simply check that the token RIGHT before the match is not
+// an alphabetic word (i.e. the artist appears at the start of the token stream
+// or right after punctuation/year/format tokens).
+const artistTokensMatch = (resultWords, artistWords) => {
+  const idx = findTokenSequenceMatch(resultWords, artistWords);
+  if (idx === -1) return false;
+  if (idx === 0) return true; // starts at beginning — clean match
+  // The token before the matched sequence must be a non-alpha separator
+  // token (e.g. a year like "2024", or a format tag) not a plain word,
+  // otherwise we'd be matching inside a longer artist name.
+  const preceding = resultWords[idx - 1];
+  return !/^[a-z]+$/.test(preceding); // only letters → it's a word → reject
+};
+
 // Extract a 4-digit release year (1900-2099) from a release title
 const extractReleaseYear = (title) => {
   const match = title.match(/\b(19\d{2}|20\d{2})\b/);
@@ -438,8 +460,10 @@ const searchMusic = async (artistName, albumTitle = null, profile = null, isManu
     rawResults = await searchProwlarr(searchTerm, 'search');
   }
 
-  if (!rawResults.length && cleanAlbum) {
-    // Retry with just artist name if album+artist yielded nothing
+  if (!rawResults.length && cleanAlbum && isManualSearch) {
+    // Only fall back to artist-only search in manual mode — in automated mode
+    // an artist-only query returns too many false positives (e.g. searching
+    // "Burial" returns "After the Burial" discography packs).
     try {
       rawResults = await searchProwlarr(cleanArtist, 'musicsearch');
     } catch {
@@ -457,15 +481,19 @@ const searchMusic = async (artistName, albumTitle = null, profile = null, isManu
     filtered = filtered.filter(r => r.seeders && r.seeders >= 1);
   }
 
-  // If we have an album title, filter to results that mention the artist or album
+  // If we have an album title, filter to results that mention the artist or album.
+  // In automated mode (not manual) BOTH must match to avoid grabbing releases
+  // from similarly-named artists (e.g. "After the Burial" when searching "Burial").
   if (cleanAlbum && artistName) {
     const artistWords = tokenizeTitle(artistName);
-    const albumWords = tokenizeTitle(albumTitle);
+    const albumWords  = tokenizeTitle(albumTitle);
     filtered = filtered.filter(r => {
       const resultWords = tokenizeTitle(r.title);
-      const hasArtist = findTokenSequenceMatch(resultWords, artistWords) !== -1;
-      const hasAlbum = findTokenSequenceMatch(resultWords, albumWords) !== -1;
-      return hasArtist || hasAlbum;
+      const hasArtist = artistTokensMatch(resultWords, artistWords);
+      const hasAlbum  = findTokenSequenceMatch(resultWords, albumWords) !== -1;
+      // Automated: require artist AND album both present to minimise false positives.
+      // Manual: relax to OR so users can still browse by just artist or just album.
+      return isManualSearch ? (hasArtist || hasAlbum) : (hasArtist && hasAlbum);
     });
   }
 
