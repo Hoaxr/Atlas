@@ -1,12 +1,14 @@
 import { useState, useEffect, useRef } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
-import { motion } from 'framer-motion';
-import { Search, Settings as SettingsIcon, Film, Activity, Tv as TvIcon, DownloadCloud, Heart, Calendar as CalendarIcon, BarChart3, LogOut, Eye, X, TrendingUp, Music } from 'lucide-react';
-import Logo from './Logo';
+import { Search, SlidersHorizontal, Film, ListTodo, Tv as TvIcon, DownloadCloud, Inbox, Calendar as CalendarIcon, BarChart3, Eye, X, TrendingUp, Music } from 'lucide-react';
+import AtlasLogo from '../common/AtlasLogo';
+import TopBar from './TopBar';
+import CommandPalette from './CommandPalette';
 import clsx from 'clsx';
 import api from '../../lib/api';
 import useWebSocket, { closeWebSocket } from '../../lib/useWebSocket';
 import { setCachedMovies, setCachedShows } from '../../lib/libraryCache';
+import { invalidateLibraryIndex } from '../../lib/libraryIndex';
 import useKeyboardShortcuts from '../../lib/useKeyboardShortcuts';
 import ShortcutsModal from '../shared/ShortcutsModal';
 import SubtitleJobBanner from '../subtitles/SubtitleJobBanner';
@@ -30,15 +32,15 @@ const navSections = [
     title: 'Operations',
     items: [
       { name: 'Downloads', path: '/downloads', icon: DownloadCloud },
-      { name: 'Requests', path: '/requests', icon: Heart },
-      { name: 'Tasks', path: '/tasks', icon: Activity },
+      { name: 'Requests', path: '/requests', icon: Inbox },
+      { name: 'Tasks', path: '/tasks', icon: ListTodo },
       { name: 'Watchers', path: '/watcher', icon: Eye },
     ]
   },
   {
     title: 'Configuration',
     items: [
-      { name: 'Settings', path: '/settings', icon: SettingsIcon },
+      { name: 'Settings', path: '/settings', icon: SlidersHorizontal },
     ]
   }
 ];
@@ -46,14 +48,36 @@ const navSections = [
 export default function Layout() {
   const { onEvent } = useWebSocket(); // Connect to real-time event stream
   const navigate = useNavigate();
-  const [libStats, setLibStats] = useState({ movies: 0, shows: 0, artists: 0 });
+  const [libStats, setLibStats] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem('atlas_lib_stats') || 'null') || { movies: 0, shows: 0, artists: 0 };
+    } catch {
+      return { movies: 0, shows: 0, artists: 0 };
+    }
+  });
   const [downloads, setDownloads] = useState([]);
+  const [downloadCount, setDownloadCount] = useState(() => {
+    try {
+      const saved = localStorage.getItem('atlas_download_count');
+      return saved !== null ? Number(saved) : 0;
+    } catch {
+      return 0;
+    }
+  });
   const [, setClientStats] = useState({ dl_info_speed: 0, up_info_speed: 0 });
   const [, setClientConnected] = useState(null);
   const [systemIssues, setSystemIssues] = useState([]);
   const [pendingRequests, setPendingRequests] = useState(0);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [user] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem('atlas_user') || 'null');
+    } catch {
+      return null;
+    }
+  });
   const [watcherCount, setWatcherCount] = useState(0);
   const { currentTrack } = useAudioPlayer();
 
@@ -65,6 +89,9 @@ export default function Layout() {
     }
     localStorage.removeItem('atlas_token');
     localStorage.removeItem('atlas_user');
+    setCachedMovies(null);
+    setCachedShows(null);
+    invalidateLibraryIndex();
     closeWebSocket();
     navigate('/login');
   };
@@ -116,52 +143,66 @@ export default function Layout() {
       if (data.message && data.message.toLowerCase().includes('scan complete')) {
         setCachedMovies(null);
         setCachedShows(null);
+        invalidateLibraryIndex();
       }
       // Layout push from server — replaces 3s polling
       if (data.type === 'LAYOUT_UPDATE' && data.data) {
-        setLibStats({ movies: data.data.movies, shows: data.data.shows, artists: data.data.music ?? data.data.artists ?? 0 });
+        const nextStats = { movies: data.data.movies, shows: data.data.shows, artists: data.data.music ?? data.data.artists ?? 0 };
+        setLibStats(nextStats);
+        try { localStorage.setItem('atlas_lib_stats', JSON.stringify(nextStats)); } catch { /* ignore */ }
         setPendingRequests(data.data.pendingRequests || 0);
       }
       // Torrent push from server
       if (data.type === 'TORRENTS_UPDATE' && data.data) {
-        setDownloads(data.data.torrents || []);
+        const torrents = data.data.torrents || [];
+        setDownloads(torrents);
+        const count = torrents.length;
+        setDownloadCount(count);
+        try { localStorage.setItem('atlas_download_count', String(count)); } catch { /* ignore */ }
         setClientStats(data.data.clientStats || { dl_info_speed: 0, up_info_speed: 0 });
         setClientConnected(data.data.clientConnected);
       }
     });
 
-    // One-time initial fetch for data not covered by WebSocket push
-    const initialFetch = async () => {
-      try {
-        const [libRes, statsRes, torrentsRes, issuesRes, requestsRes] = await Promise.allSettled([
-          api.get('/library/stats'),
-          api.get('/clients/stats'),
-          api.get('/clients/torrents'),
-          api.get('/settings/issues'),
-          api.get('/requests/pending-count')
-        ]);
-        
-        if (libRes.status === 'fulfilled' && libRes.value.data.status === 'success') {
-          setLibStats(libRes.value.data.data);
+    // Independent initial fetches so fast endpoints aren't blocked by slower ones
+    const initialFetch = () => {
+      api.get('/library/stats').then(res => {
+        if (res.data?.status === 'success' && res.data?.data) {
+          setLibStats(res.data.data);
+          try { localStorage.setItem('atlas_lib_stats', JSON.stringify(res.data.data)); } catch { /* ignore */ }
         }
-        if (statsRes.status === 'fulfilled' && statsRes.value.data.status === 'success' && statsRes.value.data.data) {
-          setClientStats(statsRes.value.data.data);
+      }).catch(() => {});
+
+      api.get('/clients/torrents').then(res => {
+        if (res.data?.status === 'success' && Array.isArray(res.data?.data)) {
+          const torrents = res.data.data;
+          setDownloads(torrents);
+          const count = torrents.length;
+          setDownloadCount(count);
+          try { localStorage.setItem('atlas_download_count', String(count)); } catch { /* ignore */ }
+        }
+      }).catch(() => {});
+
+      api.get('/clients/stats').then(res => {
+        if (res.data?.status === 'success' && res.data?.data) {
+          setClientStats(res.data.data);
           setClientConnected(true);
         } else {
           setClientConnected(false);
         }
-        if (torrentsRes.status === 'fulfilled' && torrentsRes.value.data.status === 'success' && torrentsRes.value.data.data) {
-          setDownloads(torrentsRes.value.data.data);
+      }).catch(() => setClientConnected(false));
+
+      api.get('/settings/issues').then(res => {
+        if (res.data?.status === 'success') {
+          setSystemIssues(res.data.data || []);
         }
-        if (issuesRes.status === 'fulfilled' && issuesRes.value.data.status === 'success') {
-          setSystemIssues(issuesRes.value.data.data || []);
+      }).catch(() => {});
+
+      api.get('/requests/pending-count').then(res => {
+        if (res.data?.status === 'success') {
+          setPendingRequests(res.data.data.count || 0);
         }
-        if (requestsRes.status === 'fulfilled' && requestsRes.value.data.status === 'success') {
-          setPendingRequests(requestsRes.value.data.data.count || 0);
-        }
-      } catch (err) {
-        console.error('Failed to fetch initial data', err);
-      }
+      }).catch(() => {});
     };
     initialFetch();
     prefetchLibrary();
@@ -192,10 +233,26 @@ export default function Layout() {
     'g t': () => navigate('/tasks'),
     'g k': () => navigate('/tracker'),
     'g x': () => navigate('/stats'),
-    '/': () => { document.querySelector('[data-search-input]')?.focus(); },
+    '/': () => setPaletteOpen(true),
     '?': () => setShortcutsOpen(true),
-    'escape': () => setShortcutsOpen(false),
+    'escape': () => {
+      setShortcutsOpen(false);
+      setPaletteOpen(false);
+    },
   });
+
+  // ⌘K / Ctrl+K — toggles the global search palette. Handled separately because
+  // useKeyboardShortcuts deliberately ignores modifier combinations.
+  useEffect(() => {
+    const handler = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setPaletteOpen((prev) => !prev);
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, []);
 
   // Listen for sidebar toggle from child components (e.g., sticky search bar)
   useEffect(() => {
@@ -241,8 +298,9 @@ export default function Layout() {
   }, [sidebarOpen]);
 
   return (
-      <div className="flex h-screen overflow-hidden bg-slate-50 dark:bg-slate-950" style={{ height: '100dvh', paddingBottom: 'env(safe-area-inset-bottom)' }}>
+      <div className="flex h-screen overflow-hidden bg-slate-50 dark:bg-[#0a1320]" style={{ height: '100dvh', paddingBottom: 'env(safe-area-inset-bottom)' }}>
       {shortcutsOpen && <ShortcutsModal onClose={() => setShortcutsOpen(false)} />}
+      <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
       {/* Mobile overlay */}
       {sidebarOpen && (
         <div
@@ -254,84 +312,37 @@ export default function Layout() {
       {/* Sidebar */}
       <aside
         className={clsx(
-          'w-64 flex flex-col fixed lg:relative z-50 h-full transition-transform duration-300',
-          'border-r border-slate-200/60 dark:border-indigo-500/10',
-          'bg-slate-100/95 dark:bg-slate-900/95 backdrop-blur-xl',
+          'w-64 flex flex-col fixed lg:relative z-50 h-full transition-transform duration-200',
+          'border-r border-slate-200 dark:border-slate-800/80',
+          'bg-slate-50 dark:bg-[#090f1d]',
           sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
         )}
       >
-        <div className="p-6 pb-6 flex items-center justify-between relative overflow-hidden">
-
-          {/* Animated Wave divider under the logo header */}
-          <div className="absolute bottom-0 left-0 right-0 w-full h-4 overflow-hidden pointer-events-none opacity-50 dark:opacity-30">
-            <svg className="w-full h-full text-cyan-550/15 dark:text-cyan-400/10" viewBox="0 0 1200 120" preserveAspectRatio="none">
-              <path d="M0,60 C150,100 350,100 500,80 C650,60 900,40 1200,80 L1200,120 L0,120 Z" fill="currentColor">
-                <animate 
-                  attributeName="d" 
-                  dur="8s" 
-                  repeatCount="indefinite" 
-                  values="
-                    M0,60 C150,100 350,100 500,80 C650,60 900,40 1200,80 L1200,120 L0,120 Z;
-                    M0,60 C180,80 320,110 500,90 C680,70 880,50 1200,70 L1200,120 L0,120 Z;
-                    M0,60 C150,100 350,100 500,80 C650,60 900,40 1200,80 L1200,120 L0,120 Z
-                  "
-                />
-              </path>
-              <path d="M0,75 C200,110 400,90 600,100 C800,110 1000,80 1200,95 L1200,120 L0,120 Z" fill="currentColor" opacity="0.5">
-                <animate 
-                  attributeName="d" 
-                  dur="12s" 
-                  repeatCount="indefinite" 
-                  values="
-                    M0,75 C200,110 400,90 600,100 C800,110 1000,80 1200,95 L1200,120 L0,120 Z;
-                    M0,75 C150,90 350,100 600,90 C850,80 1050,100 1200,85 L1200,120 L0,120 Z;
-                    M0,75 C200,110 400,90 600,100 C800,110 1000,80 1200,95 L1200,120 L0,120 Z
-                  "
-                />
-              </path>
-            </svg>
-          </div>
-
-          <div className="flex items-center space-x-3 select-none relative group/logo p-1 px-2">
-            {/* Large background Logo watermark behind the text */}
-            <div className="absolute -left-7 -top-7 w-28 h-28 scale-150 pointer-events-none group-hover/logo:scale-[1.6] transition-transform duration-500 will-change-transform transform-gpu">
-              <Logo className="w-full h-full" isWatermark={true} />
-            </div>
-
-            <div className="relative z-10 pl-12">
-              <span className="text-3xl font-display font-black uppercase tracking-widest drop-shadow-atlas-glow">
-                <span className="bg-gradient-to-r from-cyan-300 via-cyan-400 to-sky-400 bg-clip-text text-transparent">
-                  Atlas
-                </span>
-              </span>
-            </div>
-          </div>
-          <div className="flex items-center gap-2 relative z-10">
-            <button
-              onClick={() => setSidebarOpen(false)}
-              className="lg:hidden p-2 rounded-xl bg-slate-100 dark:bg-slate-800/50 border border-slate-200/60 dark:border-white/5 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300"
-              title="Close menu"
-              aria-label="Close menu"
-            >
-              <X className="w-5 h-5" />
-            </button>
-          </div>
+        {/* Sidebar Header */}
+        <div className="h-16 px-5 flex items-center justify-between shrink-0">
+          <AtlasLogo variant="lockup" className="h-[34px] w-auto" />
+          <button
+            onClick={() => setSidebarOpen(false)}
+            className="lg:hidden p-1.5 rounded-lg text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors"
+            title="Close menu"
+            aria-label="Close menu"
+          >
+            <X className="w-5 h-5" />
+          </button>
         </div>
-
 
         <div className="relative flex-1 overflow-hidden flex flex-col min-h-0">
           <nav 
             ref={navRef}
             onScroll={updateScrollState}
-            className="flex-1 px-3 py-2 space-y-4 overflow-y-auto hide-scrollbar"
+            className="flex-1 px-3 py-3 space-y-4 overflow-y-auto hide-scrollbar"
           >
             {navSections.map((section) => (
               <div key={section.title} className="space-y-1">
-                <div className="flex items-center px-4 mb-2">
-                  <h3 className="text-[10px] font-black text-slate-800 dark:text-white uppercase tracking-widest opacity-90">
+                <div className="px-3 mb-1.5">
+                  <h3 className="text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
                     {section.title}
                   </h3>
-                  <div className="flex-1 h-px bg-gradient-to-r from-slate-400/50 dark:from-white/30 to-transparent mt-0.5"></div>
                 </div>
                 <div className="space-y-0.5">
                   {section.items.map((item) => (
@@ -341,83 +352,94 @@ export default function Layout() {
                       onClick={() => setSidebarOpen(false)}
                       className={({ isActive }) =>
                         clsx(
-                          'group relative flex items-center justify-between px-4 py-2.5 rounded-xl transition-all duration-300 outline-none focus-visible:ring-2 focus-visible:ring-cyan-500',
+                          'group relative flex items-center justify-between px-3.5 py-2.5 rounded-xl transition-colors outline-none focus-visible:ring-2 focus-visible:ring-sky-500 text-[14px]',
                           isActive
-                            ? 'text-cyan-600 dark:text-cyan-400 font-semibold'
-                            : 'text-slate-500 hover:text-slate-700 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-slate-200 dark:hover:bg-white/5'
+                            ? 'font-semibold'
+                            : 'font-medium text-[#839eb5] hover:text-slate-100 hover:bg-slate-800/40'
                         )
                       }
                     >
                       {({ isActive }) => (
                         <>
                           {isActive && (
-                            <>
-                              {/* Sliding left accent bar */}
-                              <motion.div
-                                layoutId="active-nav-line"
-                                className="absolute left-0 top-1.5 bottom-1.5 w-1 bg-gradient-to-b from-cyan-400 to-sky-500 rounded-r-full"
-                                transition={{ type: 'spring', stiffness: 350, damping: 28 }}
-                              />
-                              {/* Subtle background glow with drifting particles */}
-                              <motion.div
-                                layoutId="active-nav-bg"
-                                className="absolute inset-0 bg-gradient-to-r from-cyan-500/8 via-cyan-500/2 to-transparent rounded-xl overflow-hidden active-nav-glow-container"
-                                transition={{ type: 'spring', stiffness: 350, damping: 28 }}
-                              >
-                                <span className="absolute top-2 w-1.5 h-1.5 bg-cyan-400/60 rounded-full blur-[0.4px] animate-particle-1" />
-                                <span className="absolute top-5.5 w-1 h-1 bg-sky-400/50 rounded-full blur-[0.4px] animate-particle-2" />
-                                <span className="absolute top-3.5 w-1.5 h-1.5 bg-blue-450/40 rounded-full blur-[0.4px] animate-particle-3" />
-                                <span className="absolute top-7 w-1 h-1 bg-cyan-400/30 rounded-full blur-[0.4px] animate-particle-4" />
-                              </motion.div>
-                            </>
+                            <div className="absolute inset-0 bg-[#0d274a] rounded-xl border border-[#1b3d68]/60 shadow-sm animate-fade-in-fast">
+                              <div className="absolute left-0 top-1.5 bottom-1.5 w-1 bg-[#32a2f6] shadow-[0_0_8px_rgba(50,162,246,0.6)] rounded-r-full" />
+                            </div>
                           )}
-                          <div className="relative z-10 flex items-center space-x-3 group-hover:translate-x-0.5 transition-transform duration-205">
-                            <item.icon className={clsx("w-5 h-5 transition-transform duration-300", isActive ? "scale-105" : "group-hover:scale-110")} />
-                            <span className="text-sm font-medium">{item.name}</span>
+                          <div className="relative z-10 flex items-center space-x-3">
+                            <item.icon className={clsx(
+                              "w-[18px] h-[18px] shrink-0 transition-colors",
+                              isActive
+                                ? "text-slate-100"
+                                : "text-[#839eb5] group-hover:text-slate-200"
+                            )} />
+                            <span className={clsx(
+                              "truncate transition-colors",
+                              isActive
+                                ? "text-[#33bbf5]"
+                                : "text-[#839eb5] group-hover:text-slate-200"
+                            )}>
+                              {item.name}
+                            </span>
                           </div>
-                          <div className="relative z-10 flex items-center space-x-2">
+                          <div className="relative z-10 flex items-center">
                             {item.path === '/movies' && libStats?.movies > 0 && (
                               <span className={clsx(
-                                "text-[11px] font-semibold px-2 py-0.5 rounded-lg border transition-colors",
+                                "inline-flex items-center justify-center px-2 py-0.5 min-w-[26px] rounded-md text-xs font-display font-semibold leading-tight border transition-all",
                                 isActive
-                                  ? "bg-cyan-500/15 text-cyan-300 border-cyan-500/30"
-                                  : "bg-slate-200/80 dark:bg-slate-800/80 text-slate-600 dark:text-slate-300 border-slate-300/40 dark:border-slate-700/50"
+                                  ? "bg-sky-500/20 border-sky-400/40 text-sky-200 font-bold"
+                                  : "bg-sky-500/10 border-sky-500/25 text-sky-400 group-hover:bg-sky-500/20 group-hover:border-sky-500/40 group-hover:text-sky-300"
                               )}>
                                 {libStats.movies.toLocaleString()}
                               </span>
                             )}
                             {item.path === '/shows' && libStats?.shows > 0 && (
                               <span className={clsx(
-                                "text-[11px] font-semibold px-2 py-0.5 rounded-lg border transition-colors",
+                                "inline-flex items-center justify-center px-2 py-0.5 min-w-[26px] rounded-md text-xs font-display font-semibold leading-tight border transition-all",
                                 isActive
-                                  ? "bg-cyan-500/15 text-cyan-300 border-cyan-500/30"
-                                  : "bg-slate-200/80 dark:bg-slate-800/80 text-slate-600 dark:text-slate-300 border-slate-300/40 dark:border-slate-700/50"
+                                  ? "bg-sky-500/20 border-sky-400/40 text-sky-200 font-bold"
+                                  : "bg-sky-500/10 border-sky-500/25 text-sky-400 group-hover:bg-sky-500/20 group-hover:border-sky-500/40 group-hover:text-sky-300"
                               )}>
                                 {libStats.shows.toLocaleString()}
                               </span>
                             )}
                             {item.path === '/music' && libStats?.artists > 0 && (
                               <span className={clsx(
-                                "text-[11px] font-semibold px-2 py-0.5 rounded-lg border transition-colors",
+                                "inline-flex items-center justify-center px-2 py-0.5 min-w-[26px] rounded-md text-xs font-display font-semibold leading-tight border transition-all",
                                 isActive
-                                  ? "bg-cyan-500/15 text-cyan-300 border-cyan-500/30"
-                                  : "bg-slate-200/80 dark:bg-slate-800/80 text-slate-600 dark:text-slate-300 border-slate-300/40 dark:border-slate-700/50"
+                                  ? "bg-sky-500/20 border-sky-400/40 text-sky-200 font-bold"
+                                  : "bg-sky-500/10 border-sky-500/25 text-sky-400 group-hover:bg-sky-500/20 group-hover:border-sky-500/40 group-hover:text-sky-300"
                               )}>
                                 {libStats.artists.toLocaleString()}
                               </span>
                             )}
                             {item.name === 'Requests' && pendingRequests > 0 && (
-                              <span className="bg-amber-500/20 text-amber-400 text-[10px] font-bold px-2 py-0.5 rounded-full border border-amber-500/30">
+                              <span className={clsx(
+                                "inline-flex items-center justify-center px-2 py-0.5 min-w-[26px] rounded-md text-xs font-display font-bold leading-tight border transition-all",
+                                isActive
+                                  ? "bg-amber-500/25 border-amber-400/50 text-amber-200 font-bold"
+                                  : "bg-amber-500/15 border-amber-500/30 text-amber-300 group-hover:bg-amber-500/25 group-hover:text-amber-200"
+                              )}>
                                 {pendingRequests}
                               </span>
                             )}
-                            {item.name === 'Downloads' && downloads.length > 0 && (
-                              <span className="bg-emerald-500/20 text-emerald-400 text-[10px] font-bold px-2 py-0.5 rounded-full border border-emerald-500/30">
-                                {downloads.length}
+                            {item.name === 'Downloads' && downloadCount > 0 && (
+                              <span className={clsx(
+                                "inline-flex items-center justify-center px-2 py-0.5 min-w-[26px] rounded-md text-xs font-display font-bold leading-tight border transition-all",
+                                isActive
+                                  ? "bg-emerald-500/25 border-emerald-400/50 text-emerald-200 font-bold"
+                                  : "bg-emerald-500/15 border-emerald-500/30 text-emerald-300 group-hover:bg-emerald-500/25 group-hover:text-emerald-200"
+                              )}>
+                                {downloadCount}
                               </span>
                             )}
                             {item.name === 'Watchers' && watcherCount > 0 && (
-                              <span className="bg-cyan-500/20 text-cyan-400 text-[10px] font-bold px-2 py-0.5 rounded-full border border-cyan-500/30">
+                              <span className={clsx(
+                                "inline-flex items-center justify-center px-2 py-0.5 min-w-[26px] rounded-md text-xs font-display font-bold leading-tight border transition-all",
+                                isActive
+                                  ? "bg-cyan-500/25 border-cyan-400/50 text-cyan-200 font-bold"
+                                  : "bg-cyan-500/15 border-cyan-500/30 text-cyan-300 group-hover:bg-cyan-500/25 group-hover:text-cyan-200"
+                              )}>
                                 {watcherCount}
                               </span>
                             )}
@@ -459,62 +481,29 @@ export default function Layout() {
           )}
         </div>
 
-        {/* Bottom action row: Logout + Status + Donate side by side */}
-        <div className="px-3 pb-4 pt-3 flex gap-1.5 mt-auto border-t border-slate-200/80 dark:border-slate-800/80" style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom))' }}>
-          {hasToken && (
-            <button
-              onClick={handleLogout}
-              className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-slate-200/60 dark:bg-slate-800/50 border border-slate-300/40 dark:border-white/5 text-slate-500 dark:text-slate-400 hover:bg-rose-500/10 hover:text-rose-400 hover:border-rose-500/20 dark:hover:bg-rose-500/10 dark:hover:text-rose-400 dark:hover:border-rose-500/20 transition-all duration-200 text-xs font-medium"
-              title="Logout"
-            >
-              <LogOut className="w-3.5 h-3.5" />
-              <span>Logout</span>
-            </button>
-          )}
-
-          <NavLink
-            to="/status"
-            onClick={() => setSidebarOpen(false)}
-            className={({ isActive }) => clsx(
-              "flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl border transition-all duration-200 text-xs font-medium relative group",
-              isActive
-                ? "bg-cyan-500/15 text-cyan-300 border-cyan-500/30"
-                : systemIssues.length > 0
-                  ? "bg-amber-500/10 text-amber-400 border-amber-500/20 hover:bg-amber-500/20"
-                  : "bg-slate-200/60 dark:bg-slate-800/50 border-slate-300/40 dark:border-white/5 text-slate-500 dark:text-slate-400 hover:bg-slate-300/60 dark:hover:bg-slate-700/50 hover:text-slate-700 dark:hover:text-slate-200"
-            )}
-            title={systemIssues.length > 0 ? `${systemIssues.length} System Issues` : "System Healthy"}
-          >
-            <div className="relative flex items-center">
-              <Activity className={clsx("w-3.5 h-3.5", systemIssues.length > 0 ? "text-amber-400" : "text-emerald-400")} />
-              <span className={clsx(
-                "absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full",
-                systemIssues.length > 0 ? "bg-amber-400 animate-pulse" : "bg-emerald-400"
-              )} />
-            </div>
-            <span>Status</span>
-          </NavLink>
-
-          <a
-            href="https://www.paypal.com/donate/?business=C5EDZZUFSMX4J&no_recurring=0&item_name=Thanks+for+the+coffee&currency_code=EUR"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 hover:bg-rose-500/20 hover:text-rose-300 hover:border-rose-500/35 transition-all duration-200 text-xs font-medium group"
-            title="Support Atlas"
-          >
-            <Heart className="w-3.5 h-3.5 group-hover:scale-110 transition-transform duration-200 fill-rose-400/30 group-hover:fill-rose-400/60" />
-            <span>Donate</span>
-          </a>
-        </div>
-
       </aside>
 
       {/* Main Content */}
-      <main className={clsx("flex-1 min-w-0 w-full overflow-y-auto overflow-x-hidden relative z-10", currentTrack && "pb-24")}>
-        <div className="p-3 sm:p-4 md:p-6 lg:p-8 w-full max-w-full overflow-x-clip">
-          <Outlet />
-        </div>
-      </main>
+      <div className="flex-1 flex flex-col min-w-0 h-full">
+        <TopBar
+          user={user}
+          activity={{
+            issues: systemIssues.length,
+            requests: pendingRequests,
+            downloads: downloadCount,
+            watchers: watcherCount,
+          }}
+          onOpenSearch={() => setPaletteOpen(true)}
+          onOpenShortcuts={() => setShortcutsOpen(true)}
+          onLogout={handleLogout}
+        />
+
+        <main className={clsx("flex-1 min-h-0 min-w-0 w-full overflow-y-auto overflow-x-hidden relative z-10", currentTrack && "pb-24")}>
+          <div className="p-3 sm:p-4 md:p-6 lg:p-8 w-full max-w-full overflow-x-clip">
+            <Outlet />
+          </div>
+        </main>
+      </div>
 
       {/* Floating Background Subtitle Job Progress Banner */}
       <SubtitleJobBanner />

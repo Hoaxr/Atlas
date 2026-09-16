@@ -139,9 +139,9 @@ export default function AddArtistModal({ open, onClose, onAdded }) {
               setSearchType('album');
               setSelectedItem(null);
             }}
-            className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
+            className={`px-3 py-1 rounded-md text-xs font-medium transition-all flex items-center gap-1.5 ${
               searchType === 'album'
-                ? 'bg-cyan-500 text-slate-950 shadow-md shadow-cyan-500/20'
+                ? 'bg-cyan-600 text-white'
                 : 'text-slate-400 hover:text-slate-200'
             }`}
           >
@@ -166,7 +166,7 @@ export default function AddArtistModal({ open, onClose, onAdded }) {
                 ? 'Search artists on MusicBrainz (e.g. Tycho, Daft Punk)...'
                 : 'Search albums on MusicBrainz (e.g. Tycho - Dive, or Random Access Memories)...'
             }
-            className="w-full pl-10 pr-10 py-2.5 bg-slate-900/60 dark:bg-slate-900/80 border border-slate-700/60 rounded-xl text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-cyan-500/80 focus:ring-1 focus:ring-cyan-500/80 transition-colors"
+            className="w-full pl-10 pr-10 py-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-cyan-500 transition-colors"
           />
           {searching && (
             <div className="absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none flex items-center">
@@ -189,10 +189,10 @@ export default function AddArtistModal({ open, onClose, onAdded }) {
                 }}
                 className={`flex items-center justify-between p-3 rounded-xl border transition-all cursor-pointer ${
                   inLib
-                    ? 'opacity-60 bg-slate-800/30 border-slate-800 cursor-not-allowed'
+                    ? 'opacity-60 bg-slate-900/40 border-slate-800 cursor-not-allowed'
                     : isSelected
-                    ? 'bg-cyan-500/15 border-cyan-500/50 shadow-[0_0_12px_rgba(6,182,212,0.15)]'
-                    : 'bg-slate-800/40 hover:bg-slate-800/70 border-white/5 hover:border-white/10'
+                    ? 'bg-cyan-500/10 border-cyan-500/40'
+                    : 'bg-slate-900/60 hover:bg-slate-850/60 border-slate-800 hover:border-slate-700'
                 }`}
               >
                 <div className="flex-1 min-w-0 pr-3">
@@ -278,11 +278,11 @@ export default function AddArtistModal({ open, onClose, onAdded }) {
 
         {/* Action buttons */}
         {selectedItem && (
-          <div className="pt-3 border-t border-slate-700/50 flex justify-end gap-2">
+          <div className="pt-3 border-t border-slate-800 flex justify-end gap-2">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-400 hover:text-slate-200 hover:bg-white/5 transition-colors"
+              className="px-4 py-2 rounded-lg text-xs font-medium text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors"
             >
               Cancel
             </button>
@@ -290,7 +290,7 @@ export default function AddArtistModal({ open, onClose, onAdded }) {
               type="button"
               onClick={handleAdd}
               disabled={adding}
-              className="px-5 py-2 rounded-xl text-xs font-semibold bg-cyan-500 hover:bg-cyan-400 text-slate-950 flex items-center gap-1.5 shadow-[0_0_15px_rgba(6,182,212,0.3)] transition-all disabled:opacity-50"
+              className="px-4 py-2 rounded-lg text-xs font-medium bg-cyan-600 hover:bg-cyan-500 text-white flex items-center gap-1.5 transition-colors disabled:opacity-50"
             >
               {adding ? (
                 <>

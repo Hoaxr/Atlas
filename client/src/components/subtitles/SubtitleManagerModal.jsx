@@ -5,7 +5,7 @@ import {
 } from 'lucide-react';
 import ModalShell from '../shared/ModalShell';
 import api from '../../lib/api';
-import { customAlert } from '../../utils/alerts';
+import { customAlert, customConfirm } from '../../utils/alerts';
 import { formatSize, LANG_LABEL, LANG_NAME } from '../../lib/format';
 import TranslateSubtitlesModal from './TranslateSubtitlesModal';
 import SubtitleEditorModal from './SubtitleEditorModal';
@@ -50,7 +50,12 @@ export default function SubtitleManagerModal({
   }, [open, fetchTracks]);
 
   const handleDelete = async (filename) => {
-    if (!window.confirm(`Are you sure you want to delete subtitle track "${filename}"?`)) return;
+    const confirmed = await customConfirm(`Are you sure you want to delete subtitle track "${filename}"?`, {
+      title: 'Delete Subtitle',
+      confirmText: 'Delete',
+      type: 'error',
+    });
+    if (!confirmed) return;
     setDeletingFile(filename);
     try {
       const res = await api.delete(`/library/subtitles/tracks/${mediaType}/${mediaId}/${encodeURIComponent(filename)}`);
@@ -158,9 +163,9 @@ export default function SubtitleManagerModal({
       <ModalShell open={open} onClose={onClose} size="3xl" noHeader noPadding noFloatingClose>
         <div className="flex flex-col max-h-[85vh]">
           {/* Header */}
-          <div className="p-5 border-b border-white/5 flex items-center justify-between shrink-0 bg-slate-900/60">
+          <div className="p-5 border-b border-slate-800 flex items-center justify-between shrink-0 bg-slate-900/90">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-pink-500/10 border border-pink-500/30 flex items-center justify-center text-pink-400">
+              <div className="w-10 h-10 rounded-lg bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center text-cyan-400">
                 <Languages className="w-5 h-5" />
               </div>
               <div>
@@ -177,7 +182,7 @@ export default function SubtitleManagerModal({
               <button
                 onClick={handleVerifySync}
                 disabled={verifyingSync || loading || tracks.length === 0}
-                className="px-3 py-1.5 text-xs font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 rounded-xl hover:bg-indigo-500/30 transition-colors flex items-center gap-1.5 shadow-md shadow-indigo-500/10 disabled:opacity-50"
+                className="px-3 py-1.5 text-xs font-medium bg-slate-800 text-slate-200 border border-slate-700 rounded-lg hover:bg-slate-700 transition-colors flex items-center gap-1.5 disabled:opacity-50"
                 title="Verify subtitle sync against speech"
               >
                 {verifyingSync ? (
@@ -189,7 +194,7 @@ export default function SubtitleManagerModal({
               </button>
               <button
                 onClick={() => setTranslateModalOpen(true)}
-                className="px-3.5 py-1.5 text-xs font-bold bg-pink-500/20 text-pink-300 border border-pink-500/40 rounded-xl hover:bg-pink-500/30 transition-colors flex items-center gap-1.5 shadow-md shadow-pink-500/10"
+                className="px-3.5 py-1.5 text-xs font-medium bg-cyan-600/20 text-cyan-300 border border-cyan-500/40 rounded-lg hover:bg-cyan-600/30 transition-colors flex items-center gap-1.5"
               >
                 <Sparkles className="w-3.5 h-3.5" /> Translate
               </button>
@@ -199,12 +204,12 @@ export default function SubtitleManagerModal({
                     onClose();
                     onOpenSubSearch();
                   }}
-                  className="px-3.5 py-1.5 text-xs font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 rounded-xl hover:bg-cyan-500/30 transition-colors flex items-center gap-1.5"
+                  className="px-3.5 py-1.5 text-xs font-medium bg-slate-800 text-slate-200 border border-slate-700 rounded-lg hover:bg-slate-700 transition-colors flex items-center gap-1.5"
                 >
                   <Search className="w-3.5 h-3.5" /> Download Subs
                 </button>
               )}
-              <button onClick={onClose} className="text-slate-400 hover:text-white p-1 rounded-lg transition-colors ml-1">
+              <button onClick={onClose} className="text-slate-400 hover:text-white p-1.5 rounded-lg hover:bg-slate-800 transition-colors ml-1">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -214,7 +219,7 @@ export default function SubtitleManagerModal({
           <div className="p-5 overflow-y-auto flex-1">
             {loading ? (
               <div className="py-16 flex flex-col items-center justify-center text-slate-400 gap-3">
-                <Loader2 className="w-7 h-7 animate-spin text-pink-400" />
+                <Loader2 className="w-7 h-7 animate-spin text-cyan-400" />
                 <span className="text-xs">Scanning subtitle tracks...</span>
               </div>
             ) : tracks.length === 0 ? (
@@ -234,11 +239,11 @@ export default function SubtitleManagerModal({
                   return (
                     <div
                       key={track.filename}
-                      className="p-3.5 rounded-xl bg-slate-800/40 hover:bg-slate-800/70 border border-white/5 hover:border-white/15 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 group"
+                      className="p-3.5 rounded-xl bg-slate-900/60 hover:bg-slate-850/60 border border-slate-800 hover:border-slate-700 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 group"
                     >
                       {/* Left: Info */}
                       <div className="flex items-start sm:items-center gap-3 min-w-0">
-                        <span className="text-[11px] font-bold uppercase tracking-wider px-2 py-1 rounded bg-pink-500/15 text-pink-300 border border-pink-500/30 shrink-0">
+                        <span className="text-[11px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-md bg-cyan-500/10 text-cyan-300 border border-cyan-500/20 shrink-0">
                           {langLabel}
                         </span>
 
@@ -328,13 +333,13 @@ export default function SubtitleManagerModal({
           </div>
 
           {/* Footer */}
-          <div className="p-4 border-t border-white/5 bg-slate-900/60 flex items-center justify-between shrink-0">
+          <div className="p-4 border-t border-slate-800 bg-slate-900/90 flex items-center justify-between shrink-0">
             <span className="text-xs text-slate-500">
               {tracks.length} subtitle track{tracks.length !== 1 ? 's' : ''} available
             </span>
             <button
               onClick={onClose}
-              className="px-5 py-2 text-sm font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl transition-colors"
+              className="px-4 py-2 text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg transition-colors"
             >
               Done
             </button>

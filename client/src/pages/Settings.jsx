@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import { motion, AnimatePresence } from 'framer-motion';
 import api from '../lib/api';
-import { AlertCircle, CheckCircle2, Search, Download, Settings2, FolderTree, Languages, ShieldAlert, Network, Users } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Search, Download, Settings2, FolderTree, Languages, ShieldAlert, Network, Users, Sliders, FileText } from 'lucide-react';
 import { customAlert } from '../utils/alerts';
 import { invalidateSettingsCache } from '../lib/useSettings';
 import StickyBar from '../components/shared/StickyBar';
@@ -11,17 +13,78 @@ import ClientsTab from './settings/ClientsTab';
 import ProfilesTab from './settings/ProfilesTab';
 import SubtitlesTab from './settings/SubtitlesTab';
 import LibraryTab from './settings/LibraryTab';
-import BackupTab from './settings/BackupTab';
 import NamingTab from './settings/NamingTab';
 import ReleaseProfilesTab from './settings/ReleaseProfilesTab';
 import ConnectionsTab from './settings/ConnectionsTab';
-import SecurityTab from './settings/SecurityTab';
+import GeneralTab from './settings/GeneralTab';
 import UsersTab from './settings/UsersTab';
+
+const SETTINGS_GROUPS = [
+  {
+    id: 'general',
+    label: 'General',
+    icon: Sliders,
+    tabs: [
+      { id: 'general', label: 'General', icon: Sliders },
+    ]
+  },
+  {
+    id: 'integrations',
+    label: 'Services & Integrations',
+    icon: Network,
+    tabs: [
+      { id: 'connections', label: 'Connections', icon: Network },
+      { id: 'indexers', label: 'Indexers', icon: Search },
+      { id: 'clients', label: 'Download Clients', icon: Download },
+      { id: 'subtitles', label: 'Subtitles & AI', icon: Languages },
+    ]
+  },
+  {
+    id: 'media',
+    label: 'Media Rules',
+    icon: FolderTree,
+    tabs: [
+      { id: 'profiles', label: 'Quality Profiles', icon: Settings2 },
+      { id: 'release-profiles', label: 'Release Profiles', icon: ShieldAlert },
+      { id: 'naming', label: 'Media Naming', icon: FileText },
+      { id: 'library', label: 'Library Management', icon: FolderTree },
+    ]
+  },
+  {
+    id: 'users',
+    label: 'Users',
+    icon: Users,
+    tabs: [
+      { id: 'users', label: 'Users', icon: Users },
+    ]
+  }
+];
 
 export default function Settings() {
   const { headerRef, stickyVisible } = useStickyBar();
-  const [activeTab, setActiveTab] = useState('connections');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const initialTab = searchParams.get('tab');
+  // Legacy tab ids that now live inside the General tab
+  const LEGACY_TAB_ALIASES = { security: 'general', backup: 'general' };
+  const [activeTab, setActiveTab] = useState(() => {
+    if (initialTab && SETTINGS_GROUPS.some(g => g.tabs.some(t => t.id === initialTab))) {
+      return initialTab;
+    }
+    if (initialTab && LEGACY_TAB_ALIASES[initialTab]) return LEGACY_TAB_ALIASES[initialTab];
+    return 'general';
+  });
+
+  useEffect(() => {
+    const tabParam = searchParams.get('tab');
+    const resolved = LEGACY_TAB_ALIASES[tabParam] || tabParam;
+    if (resolved && resolved !== activeTab && SETTINGS_GROUPS.some(g => g.tabs.some(t => t.id === resolved))) {
+      setActiveTab(resolved);
+    }
+  }, [searchParams, activeTab]);
+
   const [settings, setSettings] = useState({
+    authEnabled: false,
+    timezone: '',
     tmdbApiKey: '',
     osApiKey: '',
     geminiApiKey: '',
@@ -223,6 +286,8 @@ export default function Settings() {
       const res = await api.get('/settings');
       if (res.data.status === 'success') {
         setSettings({
+          authEnabled: res.data.data.authEnabled === 'true',
+          timezone: res.data.data.timezone || '',
           tmdbApiKey: res.data.data.tmdbApiKey || '',
           osApiKey: res.data.data.osApiKey || '',
           geminiApiKey: res.data.data.geminiApiKey || '',
@@ -369,7 +434,11 @@ export default function Settings() {
 
   const handleSave = async () => {
     try {
-      await api.post('/settings', settings);
+      const payload = { ...settings };
+      if (payload.authEnabled !== undefined) {
+        payload.authEnabled = payload.authEnabled.toString();
+      }
+      await api.post('/settings', payload);
       invalidateSettingsCache();
       customAlert('Settings saved!', 'success');
       if (settings.simklWatchedSync && settings.simklAccessToken) {
@@ -517,168 +586,227 @@ export default function Settings() {
     }
   };
 
-  const TABS = [
-    { id: 'connections', label: "Connections", icon: <Network className="w-4 h-4" /> },
-    { id: 'security', label: "Security", icon: <ShieldAlert className="w-4 h-4" /> },
-    { id: 'indexers', label: "Indexers", icon: <Search className="w-4 h-4" /> },
-    { id: 'clients', label: "Download Clients", icon: <Download className="w-4 h-4" /> },
-    { id: 'profiles', label: "Quality Profiles", icon: <Settings2 className="w-4 h-4" /> },
-    { id: 'release-profiles', label: "Release Profiles", icon: <ShieldAlert className="w-4 h-4" /> },
-    { id: 'naming', label: "Media Naming", icon: <FolderTree className="w-4 h-4" /> },
-    { id: 'subtitles', label: "Subtitles & AI Translation", icon: <Languages className="w-4 h-4" /> },
-    { id: 'library', label: "Library Management", icon: <FolderTree className="w-4 h-4" /> },
-    { id: 'users', label: "Users", icon: <Users className="w-4 h-4" /> },
-    { id: 'backup', label: "Backup & Restore", icon: <Download className="w-4 h-4" /> },
-  ];
+  const currentGroup = SETTINGS_GROUPS.find(g => g.tabs.some(t => t.id === activeTab)) || SETTINGS_GROUPS[0];
 
   return (
-    <div className="space-y-3">
-      <div ref={headerRef} className="flex items-center justify-between gap-3">
+    <div className="space-y-4 sm:space-y-5">
+      <div ref={headerRef} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
         <div className="min-w-0">
-          <h1 className="text-xl sm:text-3xl font-black text-slate-800 dark:text-slate-100 flex items-center gap-2 sm:gap-3 !mb-0">
-            <Settings2 className="w-6 h-6 sm:w-8 sm:h-8 text-cyan-400" /> <span className="truncate">Settings</span>
+          <h1 className="text-xl sm:text-3xl font-bold tracking-tight text-slate-100 font-display flex items-center gap-2.5 sm:gap-3 !mb-0">
+            <Settings2 className="w-6 h-6 sm:w-8 sm:h-8 text-cyan-400 shrink-0" /> <span className="truncate">Settings</span>
           </h1>
-          <p className="text-xs sm:text-base text-slate-400 mt-0.5 sm:mt-1 hidden sm:block">Manage your integrations, indexers, and application preferences.</p>
+          <p className="text-xs sm:text-sm text-slate-400 mt-1 hidden sm:block !mb-0 font-sans">
+            Manage your integrations, indexers, and application preferences.
+          </p>
         </div>
       </div>
 
       <StickyBar visible={stickyVisible} />
 
-      <div className="flex flex-col lg:flex-row gap-6">
-        {/* Sidebar / Top Pill Menu */}
-        <div className="lg:w-72 flex-shrink-0">
-          <div className="glass-panel p-2.5 sm:p-4 rounded-2xl lg:sticky lg:top-8 shadow-xl">
-            <nav className="flex lg:flex-col overflow-x-auto lg:overflow-visible gap-1.5 p-1 hide-scrollbar">
-              {TABS.map(tab => (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  className={`flex items-center gap-2 sm:gap-3 px-3.5 py-2.5 lg:py-3 rounded-xl transition-all duration-200 font-medium text-xs sm:text-sm whitespace-nowrap outline-none focus-visible:ring-2 focus-visible:ring-cyan-500 ${
-                    activeTab === tab.id
-                      ? 'bg-cyan-500/20 text-cyan-400 font-semibold shadow-sm border border-cyan-500/30'
-                      : 'text-slate-400 hover:bg-white/5 hover:text-slate-200 border border-transparent'
-                  }`}
-                >
-                  <div className={`shrink-0 ${activeTab === tab.id ? 'text-cyan-400' : 'text-slate-500'}`}>
-                    {tab.icon}
-                  </div>
-                  <span>{tab.label}</span>
-                </button>
-              ))}
-            </nav>
-          </div>
-        </div>
-
-        {/* Main Content Area */}
-        <div className="flex-1 glass-panel rounded-2xl p-6 md:p-8 relative min-h-[60vh] shadow-2xl space-y-6">
-          {status.message && (
-            <div className={`flex items-center space-x-2 p-4 rounded-xl ${status.type === 'success' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-red-500/10 text-red-400 border border-red-500/20'}`}>
-              {status.type === 'success' ? <CheckCircle2 className="w-5 h-5" /> : <AlertCircle className="w-5 h-5" />}
-              <span className="font-medium">{status.message}</span>
-            </div>
-          )}
-
-          {activeTab === 'connections' && (
-            <ConnectionsTab
-              settings={settings}
-              setSettings={setSettings}
-              handleSave={handleSave}
-              simklDeviceCode={simklDeviceCode}
-              simklUserCode={simklUserCode}
-              simklVerificationUrl={simklVerificationUrl}
-              simklPolling={simklPolling}
-              connectSimkl={connectSimkl}
-              fetchSettings={fetchSettings}
-              keyStatuses={keyStatuses}
-            />
-          )}
-          {activeTab === 'security' && <SecurityTab />}
-          {activeTab === 'users' && <UsersTab />}
-
-          {activeTab === 'indexers' && (
-            <IndexersTab
-              settings={settings}
-              setSettings={setSettings}
-              handleSave={saveIndexers}
-            />
-          )}
-
-          {activeTab === 'clients' && (
-            <ClientsTab
-              clients={clients}
-              newClient={newClient}
-              setNewClient={setNewClient}
-              clientStatuses={clientStatuses}
-              handleAddEntity={handleAddEntity}
-              handleDeleteEntity={handleDeleteEntity}
-              settings={settings}
-              setSettings={setSettings}
-              handleSave={saveClients}
-            />
-          )}
-
-          {activeTab === 'profiles' && (
-            <ProfilesTab
-              profiles={profiles}
-              newProfile={newProfile}
-              setNewProfile={setNewProfile}
-              editingProfile={editingProfile}
-              setEditingProfile={setEditingProfile}
-              handleAddEntity={handleAddEntity}
-              handleDeleteEntity={handleDeleteEntity}
-              fetchSettings={fetchSettings}
-              setStatus={setStatus}
-              settings={settings}
-              setSettings={setSettings}
-              handleSave={handleSave}
-            />
-          )}
-
-          {activeTab === 'release-profiles' && (
-            <ReleaseProfilesTab
-              releaseProfiles={releaseProfiles}
-              indexers={indexers}
-              newProfile={newReleaseProfile}
-              setNewProfile={setNewReleaseProfile}
-              editingProfile={editingReleaseProfile}
-              setEditingProfile={setEditingReleaseProfile}
-              handleAddProfile={handleAddReleaseProfile}
-              handleUpdateProfile={handleUpdateReleaseProfile}
-              handleDeleteProfile={handleDeleteReleaseProfile}
-            />
-          )}
-
-          {activeTab === 'naming' && (
-            <NamingTab
-              settings={settings}
-              setSettings={setSettings}
-              handleSave={saveNaming}
-            />
-          )}
-
-          {activeTab === 'subtitles' && (
-            <SubtitlesTab
-              settings={settings}
-              setSettings={setSettings}
-              keyStatuses={keyStatuses}
-              handleSave={saveSubtitles}
-            />
-          )}
-
-          {activeTab === 'library' && (
-            <LibraryTab
-              paths={paths} newPath={newPath} newPathType={newPathType} setNewPath={setNewPath} setNewPathType={setNewPathType}
-              handleAddPath={handleAddPath} fetchPaths={fetchPaths}
-              handleScan={handleScan} handleStopScan={handleStopScan} isScanning={isScanning} scanProgress={scanProgress}
-              scanResults={scanResults} isStaleResults={isStaleResults} setScanResults={setScanResults} setIsStaleResults={setIsStaleResults}
-              settings={settings} setSettings={setSettings}
-              handleSave={handleSave}
-            />
-          )}
-
-          {activeTab === 'backup' && <BackupTab />}
+      {/* Top Level Categories */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="relative flex items-center bg-[#101e31] p-1 rounded-xl border border-[#1c2d46] shadow-inner select-none w-fit max-w-full overflow-x-auto no-scrollbar gap-1">
+          {SETTINGS_GROUPS.map(group => {
+            const isGroupActive = currentGroup.id === group.id;
+            const GroupIcon = group.icon;
+            return (
+              <button
+                key={group.id}
+                type="button"
+                onClick={() => {
+                  if (currentGroup.id !== group.id) {
+                    const nextTab = group.tabs[0].id;
+                    setActiveTab(nextTab);
+                    setSearchParams({ tab: nextTab });
+                  }
+                }}
+                className={`relative px-4 sm:px-5 py-2 flex items-center justify-center gap-2 rounded-lg text-xs sm:text-sm font-bold tracking-tight whitespace-nowrap transition-colors duration-150 ${
+                  isGroupActive ? 'text-slate-950 font-bold' : 'text-slate-200 hover:text-white'
+                }`}
+              >
+                {isGroupActive && (
+                  <motion.div
+                    layoutId="settings-group-slider"
+                    className="absolute inset-0 rounded-lg bg-gradient-to-b from-[#38a7f4] to-[#2291ea] shadow-sm"
+                    transition={{ type: 'spring', stiffness: 500, damping: 35 }}
+                  />
+                )}
+                <GroupIcon className={`relative z-10 w-4 h-4 shrink-0 transition-colors duration-150 ${
+                  isGroupActive ? 'text-slate-950' : 'text-slate-400'
+                }`} />
+                <span className="relative z-10">{group.label}</span>
+              </button>
+            );
+          })}
         </div>
       </div>
+
+      {/* Sub-Navigation for Active Category */}
+      <AnimatePresence mode="wait" initial={false}>
+        {currentGroup.tabs.length > 1 && (
+          <motion.div
+            key={currentGroup.id}
+            initial={{ opacity: 0, y: -2 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -2 }}
+            transition={{ duration: 0.12 }}
+            className="flex items-center gap-1 p-1 bg-[#0c1624] border border-[#1c2d46] rounded-xl shadow-inner w-fit max-w-full overflow-x-auto no-scrollbar select-none"
+          >
+            {currentGroup.tabs.map(tab => {
+              const isTabActive = activeTab === tab.id;
+              const TabIcon = tab.icon;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => {
+                    setActiveTab(tab.id);
+                    setSearchParams({ tab: tab.id });
+                  }}
+                  className={`relative flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-medium whitespace-nowrap transition-colors duration-150 ${
+                    isTabActive
+                      ? 'text-cyan-300 font-semibold'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  {isTabActive && (
+                    <motion.div
+                      layoutId={`settings-subtab-slider-${currentGroup.id}`}
+                      className="absolute inset-0 rounded-lg bg-cyan-500/15 border border-cyan-500/30 shadow-sm"
+                      transition={{ type: 'spring', stiffness: 500, damping: 35 }}
+                    />
+                  )}
+                  <TabIcon className={`relative z-10 w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0 transition-colors duration-150 ${
+                    isTabActive ? 'text-cyan-400' : 'text-slate-500'
+                  }`} />
+                  <span className="relative z-10">{tab.label}</span>
+                </button>
+              );
+            })}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Main Content Area */}
+      <div className="space-y-6 pt-1 pb-24 min-h-[60vh]">
+        {status.message && (
+          <div className={`w-full flex items-center space-x-2 p-4 rounded-xl ${status.type === 'success' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-red-500/10 text-red-400 border border-red-500/20'}`}>
+            {status.type === 'success' ? <CheckCircle2 className="w-5 h-5" /> : <AlertCircle className="w-5 h-5" />}
+            <span className="font-medium">{status.message}</span>
+          </div>
+        )}
+
+        {activeTab === 'connections' && (
+          <ConnectionsTab
+            settings={settings}
+            setSettings={setSettings}
+            handleSave={handleSave}
+            simklDeviceCode={simklDeviceCode}
+            simklUserCode={simklUserCode}
+            simklVerificationUrl={simklVerificationUrl}
+            simklPolling={simklPolling}
+            connectSimkl={connectSimkl}
+            fetchSettings={fetchSettings}
+            keyStatuses={keyStatuses}
+          />
+        )}
+        {(activeTab === 'general' || activeTab === 'security') && <GeneralTab settings={settings} setSettings={setSettings} onNavigateTab={setActiveTab} />}
+        {activeTab === 'users' && <UsersTab />}
+
+        {activeTab === 'indexers' && (
+          <IndexersTab
+            settings={settings}
+            setSettings={setSettings}
+            handleSave={saveIndexers}
+          />
+        )}
+
+        {activeTab === 'clients' && (
+          <ClientsTab
+            clients={clients}
+            newClient={newClient}
+            setNewClient={setNewClient}
+            clientStatuses={clientStatuses}
+            handleAddEntity={handleAddEntity}
+            handleDeleteEntity={handleDeleteEntity}
+            settings={settings}
+            setSettings={setSettings}
+            handleSave={saveClients}
+          />
+        )}
+
+        {activeTab === 'profiles' && (
+          <ProfilesTab
+            profiles={profiles}
+            newProfile={newProfile}
+            setNewProfile={setNewProfile}
+            editingProfile={editingProfile}
+            setEditingProfile={setEditingProfile}
+            handleAddEntity={handleAddEntity}
+            handleDeleteEntity={handleDeleteEntity}
+            fetchSettings={fetchSettings}
+            setStatus={setStatus}
+            settings={settings}
+            setSettings={setSettings}
+            handleSave={handleSave}
+          />
+        )}
+
+        {activeTab === 'release-profiles' && (
+          <ReleaseProfilesTab
+            releaseProfiles={releaseProfiles}
+            indexers={indexers}
+            newProfile={newReleaseProfile}
+            setNewProfile={setNewReleaseProfile}
+            editingProfile={editingReleaseProfile}
+            setEditingProfile={setEditingReleaseProfile}
+            handleAddProfile={handleAddReleaseProfile}
+            handleUpdateProfile={handleUpdateReleaseProfile}
+            handleDeleteProfile={handleDeleteReleaseProfile}
+          />
+        )}
+
+        {activeTab === 'naming' && (
+          <NamingTab
+            settings={settings}
+            setSettings={setSettings}
+            handleSave={saveNaming}
+          />
+        )}
+
+        {activeTab === 'subtitles' && (
+          <SubtitlesTab
+            settings={settings}
+            setSettings={setSettings}
+            keyStatuses={keyStatuses}
+            handleSave={saveSubtitles}
+          />
+        )}
+
+        {activeTab === 'library' && (
+          <LibraryTab
+            paths={paths} newPath={newPath} newPathType={newPathType} setNewPath={setNewPath} setNewPathType={setNewPathType}
+            handleAddPath={handleAddPath} fetchPaths={fetchPaths}
+            handleScan={handleScan} handleStopScan={handleStopScan} isScanning={isScanning} scanProgress={scanProgress}
+            scanResults={scanResults} isStaleResults={isStaleResults} setScanResults={setScanResults} setIsStaleResults={setIsStaleResults}
+            settings={settings} setSettings={setSettings}
+          />
+        )}
+      </div>
+
+      {/* Bottom Fixed Bar */}
+      {['general', 'security', 'connections', 'indexers', 'clients', 'naming', 'subtitles', 'library'].includes(activeTab) && (
+        <div className="fixed bottom-0 left-0 right-0 z-50 bg-[#101b2b]/95 backdrop-blur-md border-t border-slate-800/80 p-3">
+          <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex justify-end">
+            <button
+              onClick={handleSave}
+              className="px-6 py-2.5 text-sm font-bold text-slate-950 bg-gradient-to-b from-[#38a7f4] to-[#2291ea] hover:brightness-110 rounded-xl transition-all flex items-center justify-center gap-2 w-full sm:w-auto shadow-[0_0_15px_rgba(56,167,244,0.3)] active:scale-95"
+            >
+              <CheckCircle2 className="w-4 h-4" /> Save Changes
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

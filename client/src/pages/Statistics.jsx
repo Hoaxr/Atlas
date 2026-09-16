@@ -7,11 +7,10 @@ import {
   CheckCircle2, Hash, Zap, PlayCircle, Activity, Languages, Trash2, FolderOpen,
   Music2, Disc, Mic2, FileAudio, ChevronRight
 } from 'lucide-react';
-import { StatsSkeleton } from '../components/shared/Skeleton';
+import LoadingState from '../components/shared/LoadingState';
 import EmptyState from '../components/shared/EmptyState';
 import StickyBar from '../components/shared/StickyBar';
 import ModalShell from '../components/shared/ModalShell';
-import Spinner from '../components/shared/Spinner';
 import { useStickyBar } from '../lib/useStickyBar';
 
 const STATUS_CONFIG = {
@@ -118,7 +117,7 @@ export default function Statistics() {
   if (loading) return (
     <div className="space-y-3">
       <PageHeader headerRef={headerRef} stickyVisible={stickyVisible} />
-      <StatsSkeleton />
+      <LoadingState className="min-h-[40vh] py-16" />
     </div>
   );
 
@@ -149,13 +148,13 @@ export default function Statistics() {
         <PageHeader headerRef={headerRef} stickyVisible={stickyVisible} />
 
       {/* ── Hero stat cards ── */}
-      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
-        <HeroCard icon={Film}         label="Movies"    value={stats.totalMovies}                   gradient="from-cyan-600/20 to-cyan-500/5"   iconColor="text-cyan-400"   iconBg="bg-cyan-500/15" />
-        <HeroCard icon={Tv}           label="TV Shows"  value={stats.totalShows}                    gradient="from-cyan-600/20 to-cyan-500/5" iconColor="text-cyan-400" iconBg="bg-cyan-500/15" />
-        <HeroCard icon={Hash}         label="Episodes"  value={stats.totalEpisodes.toLocaleString()} gradient="from-cyan-600/20 to-cyan-500/5" iconColor="text-cyan-400" iconBg="bg-cyan-500/15" />
-        <HeroCard icon={CheckCircle2} label="Downloaded" value={`${stats.downloadPct}%`}            gradient="from-cyan-600/20 to-cyan-500/5" iconColor="text-cyan-400" iconBg="bg-cyan-500/15" />
-        <HeroCard icon={HardDrive}    label="Storage"   value={formatSize(stats.totalFileSize)}     gradient="from-cyan-600/20 to-cyan-500/5"  iconColor="text-cyan-400"  iconBg="bg-cyan-500/15" />
-        <HeroCard icon={Star}         label="Avg Rating" value={stats.averageRating}                gradient="from-cyan-600/20 to-cyan-500/5" iconColor="text-cyan-400" iconBg="bg-cyan-500/15" />
+      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
+        <HeroCard icon={Film}         label="Movies"    value={stats.totalMovies} />
+        <HeroCard icon={Tv}           label="TV Shows"  value={stats.totalShows} />
+        <HeroCard icon={Hash}         label="Episodes"  value={stats.totalEpisodes.toLocaleString()} />
+        <HeroCard icon={CheckCircle2} label="Downloaded" value={`${stats.downloadPct}%`} />
+        <HeroCard icon={HardDrive}    label="Storage"   value={formatSize(stats.totalFileSize)} />
+        <HeroCard icon={Star}         label="Avg Rating" value={stats.averageRating} />
       </div>
 
 
@@ -164,7 +163,7 @@ export default function Statistics() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
         {/* Status distribution */}
-        <div className="glass-panel rounded-2xl p-6">
+        <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-5 sm:p-6 backdrop-blur-sm">
           <h3 className="text-base font-bold text-slate-200 mb-5 flex items-center gap-2">
             <Activity className="w-4 h-4 text-cyan-400" /> Library Status
           </h3>
@@ -349,7 +348,7 @@ export default function Statistics() {
         </div>
 
         {/* Top Genres */}
-        <div className="glass-panel rounded-2xl p-6">
+        <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-5 sm:p-6 backdrop-blur-sm">
           <h3 className="text-base font-bold text-slate-200 mb-5 flex items-center gap-2">
             <Zap className="w-4 h-4 text-cyan-400" /> Top 10 Genres
           </h3>
@@ -422,7 +421,7 @@ export default function Statistics() {
 
       {/* ── Recently Added ── */}
       {stats.recentItems.length > 0 && (
-        <div className="glass-panel rounded-2xl p-6">
+        <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-5 sm:p-6 backdrop-blur-sm">
           <h3 className="text-base font-bold text-slate-200 mb-5 flex items-center gap-2">
             <PlayCircle className="w-4 h-4 text-cyan-400" /> Recently Added
           </h3>
@@ -438,7 +437,7 @@ export default function Statistics() {
 
       {/* ── Music Collection Statistics ── */}
       {musicStats && (musicStats.artists > 0 || musicStats.albums > 0) && (
-        <div className="glass-panel rounded-2xl p-6">
+        <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-5 sm:p-6 backdrop-blur-sm">
           <div className="flex items-center justify-between mb-5">
             <h3 className="text-base font-bold text-slate-200 flex items-center gap-2">
               <Music2 className="w-4 h-4 text-emerald-400" /> Music Collection
@@ -489,7 +488,7 @@ export default function Statistics() {
       )}
 
       {/* ── Advanced Actions ── */}
-      <div className="glass-panel rounded-2xl p-6">
+      <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-5 sm:p-6 backdrop-blur-sm">
         <h3 className="text-base font-bold text-slate-200 mb-5 flex items-center gap-2">
           <FolderOpen className="w-4 h-4 text-cyan-400" /> Library Management
         </h3>
@@ -525,7 +524,7 @@ export default function Statistics() {
 
       <ModalShell open={missingSubsModal} onClose={() => setMissingSubsModal(false)} title="Missing Subtitles" width="max-w-2xl">
         {missingSubsLoading ? (
-          <div className="py-12 flex justify-center"><Spinner /></div>
+          <LoadingState className="py-12" />
         ) : !missingSubsData ? (
           <div className="py-12 text-center text-slate-500">Failed to load data.</div>
         ) : (
@@ -585,7 +584,7 @@ function PageHeader({ headerRef, stickyVisible }) {
   return (
     <>
       <div ref={headerRef}>
-        <h1 className="text-xl sm:text-3xl font-black text-slate-800 dark:text-slate-100 flex items-center gap-2 sm:gap-3 !mb-0">
+        <h1 className="text-xl sm:text-3xl font-black text-slate-800 dark:text-slate-100 flex items-center gap-2.5 sm:gap-3 !mb-0">
           <BarChart3 className="w-6 h-6 sm:w-8 sm:h-8 text-cyan-400 shrink-0" /> <span className="truncate">Statistics</span>
         </h1>
         <p className="text-xs sm:text-base text-slate-400 mt-0.5 sm:mt-1 hidden sm:block">Library analytics and insights.</p>
@@ -595,14 +594,16 @@ function PageHeader({ headerRef, stickyVisible }) {
   );
 }
 
-function HeroCard({ icon: Icon, label, value, gradient, iconColor, iconBg }) {
+function HeroCard({ icon: Icon, label, value }) {
   return (
-    <div className={`glass-panel rounded-2xl p-5 bg-gradient-to-br ${gradient} hover:scale-[1.03] transition-all duration-200 cursor-default`}>
-      <div className={`inline-flex p-2.5 rounded-xl ${iconBg} mb-3`}>
-        <Icon className={`w-5 h-5 ${iconColor}`} />
+    <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-4 transition-colors hover:border-slate-700">
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-xs font-medium text-slate-400">{label}</span>
+        <div className="p-1.5 rounded-lg bg-slate-800/80 border border-slate-700/60 text-cyan-400">
+          <Icon className="w-3.5 h-3.5" />
+        </div>
       </div>
-      <p className="text-2xl font-black text-slate-100 leading-none mb-1">{value}</p>
-      <p className="text-xs font-medium text-slate-400">{label}</p>
+      <p className="text-2xl font-black text-slate-100 tracking-tight">{value}</p>
     </div>
   );
 }

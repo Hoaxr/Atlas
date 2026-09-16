@@ -3,7 +3,7 @@ import { Search, Loader2, Plus, Clock, CheckCircle2, XCircle, LogOut, Key, Star,
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import api from '../lib/api';
-import Logo from '../components/layout/Logo';
+import AtlasLogo from '../components/common/AtlasLogo';
 import ChangePasswordModal from '../components/ChangePasswordModal';
 import MediaDetailsModal from '../components/MediaDetailsModal';
 import MediaRow from '../components/MediaRow';
@@ -335,17 +335,8 @@ export default function UserPortal() {
 
       <header className="sticky top-0 z-50 bg-slate-900/60 backdrop-blur-xl border-b border-white/10 shadow-lg overflow-hidden">
         <div className="max-w-[1600px] mx-auto px-4 sm:px-8 h-16 flex items-center justify-between">
-          <div className="flex items-center space-x-3 cursor-pointer select-none relative group/logo p-1 px-2" onClick={() => { setQuery(''); setResults([]); }}>
-            <div className="absolute -left-6 -top-6 w-28 h-28 scale-125 sm:scale-150 pointer-events-none group-hover/logo:scale-[1.35] sm:group-hover/logo:scale-[1.6] transition-transform duration-500 will-change-transform transform-gpu">
-              <Logo className="w-full h-full" isWatermark={true} />
-            </div>
-            <div className="relative z-10 pl-10 sm:pl-12">
-              <span className="text-2xl sm:text-3xl font-display font-black uppercase tracking-widest drop-shadow-lg">
-                <span className="bg-gradient-to-r from-cyan-300 via-cyan-400 to-sky-400 bg-clip-text text-transparent">
-                  Atlas
-                </span>
-              </span>
-            </div>
+          <div className="cursor-pointer select-none py-1" onClick={() => { setQuery(''); setResults([]); }}>
+            <AtlasLogo variant="lockup" className="h-8 w-auto" />
           </div>
           <div className="flex items-center gap-2">
             {user && (

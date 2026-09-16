@@ -98,16 +98,16 @@ export default function MediaDetailsModal({ isOpen, onClose, mediaId, mediaType,
 
   return createPortal(
     <div className="fixed inset-0 z-40 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm" onClick={onClose}>
-      <div className="bg-slate-900 border border-white/10 rounded-2xl w-full max-w-4xl max-h-[90vh] flex flex-col relative shadow-2xl" onClick={(e) => e.stopPropagation()}>
+      <div className="bg-slate-900 border border-slate-800 rounded-xl w-full max-w-4xl max-h-[90vh] flex flex-col relative shadow-2xl" onClick={(e) => e.stopPropagation()}>
         
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 bg-slate-800/50 shrink-0 rounded-t-2xl">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800 bg-slate-900/90 shrink-0 rounded-t-xl">
           <h2 className="text-xl md:text-2xl font-bold text-slate-200">
             {details ? `${details.title || details.name} ${details.release_date || details.first_air_date ? `(${(details.release_date || details.first_air_date).split('-')[0]})` : ''}` : 'Loading...'}
           </h2>
           <button 
             onClick={onClose}
-            className="text-slate-400 hover:text-white transition-colors"
+            className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
@@ -131,7 +131,7 @@ export default function MediaDetailsModal({ isOpen, onClose, mediaId, mediaType,
           <div className="flex flex-col h-full">
             <div className="flex flex-col md:flex-row gap-6 p-6">
               {/* Poster */}
-              <div className="w-40 md:w-56 shrink-0 mx-auto md:mx-0 shadow-xl overflow-hidden bg-slate-900 aspect-[2/3] border border-white/5 rounded-sm relative group">
+              <div className="w-40 md:w-56 shrink-0 mx-auto md:mx-0 shadow-xl overflow-hidden bg-slate-900 aspect-[2/3] border border-slate-800 rounded-lg relative group">
                 {details.poster_path ? (
                   <img 
                     src={isInLibrary
@@ -184,7 +184,7 @@ export default function MediaDetailsModal({ isOpen, onClose, mediaId, mediaType,
                     </div>
                   ) : null}
                   {details.genres && details.genres.length > 0 ? (
-                    <div className="text-slate-300 bg-slate-800 px-2 py-0.5 rounded border border-slate-700">
+                    <div className="text-slate-300 bg-slate-800 px-2 py-0.5 rounded-md border border-slate-700">
                       {details.genres.map(g => g.name).join(', ')}
                     </div>
                   ) : null}
@@ -204,7 +204,7 @@ export default function MediaDetailsModal({ isOpen, onClose, mediaId, mediaType,
                         setDeleteOpen(!deleteOpen);
                       }}
                       disabled={deleting}
-                      className="px-4 py-2 rounded-xl bg-rose-500/10 text-rose-400 border border-rose-500/20 hover:bg-rose-500/20 font-bold text-sm transition-colors disabled:opacity-50 flex items-center gap-2"
+                      className="px-3.5 py-2 rounded-lg bg-rose-500/10 text-rose-400 border border-rose-500/20 hover:bg-rose-500/20 font-medium text-xs transition-colors disabled:opacity-50 flex items-center gap-2"
                     >
                       {deleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
                       {deleting ? 'Deleting...' : 'Delete Movie'}
@@ -212,7 +212,7 @@ export default function MediaDetailsModal({ isOpen, onClose, mediaId, mediaType,
                     </button>
                     {deleteOpen && createPortal(
                       <div
-                        className="fixed w-44 bg-slate-800 border border-slate-700 rounded-lg shadow-xl z-50 py-1"
+                        className="fixed w-44 bg-slate-900 border border-slate-800 rounded-lg shadow-xl z-50 py-1"
                         style={{ top: dropdownPos.top, left: dropdownPos.left }}
                       >
                         <button
@@ -223,7 +223,7 @@ export default function MediaDetailsModal({ isOpen, onClose, mediaId, mediaType,
                             setDeleting(false);
                             onClose();
                           }}
-                          className="w-full text-left px-3 py-2 text-xs text-slate-300 hover:bg-slate-700 hover:text-white transition-colors"
+                          className="w-full text-left px-3 py-2 text-xs text-slate-300 hover:bg-slate-800 hover:text-white transition-colors"
                         >
                           Delete from library
                         </button>
@@ -235,7 +235,7 @@ export default function MediaDetailsModal({ isOpen, onClose, mediaId, mediaType,
                             setDeleting(false);
                             onClose();
                           }}
-                          className="w-full text-left px-3 py-2 text-xs text-rose-400 hover:bg-slate-700 hover:text-rose-300 transition-colors"
+                          className="w-full text-left px-3 py-2 text-xs text-rose-400 hover:bg-slate-800 hover:text-rose-300 transition-colors"
                         >
                           Delete with files
                         </button>
@@ -264,7 +264,7 @@ export default function MediaDetailsModal({ isOpen, onClose, mediaId, mediaType,
                     <div className="text-right font-bold text-slate-300 text-sm">Root Folder</div>
                     <div>
                       <select 
-                        className="w-full bg-slate-800/70 border border-white/5 rounded-md text-slate-200 px-3 py-1.5 focus:outline-none focus:border-cyan-500 text-sm shadow-[inset_0_1px_3px_rgba(0,0,0,0.4)]"
+                        className="w-full bg-slate-950 border border-slate-800 rounded-lg text-slate-200 px-3 py-2 focus:outline-none focus:border-cyan-500 text-sm"
                         value={selectedPath}
                         onChange={e => setSelectedPath(e.target.value)}
                       >
@@ -285,7 +285,7 @@ export default function MediaDetailsModal({ isOpen, onClose, mediaId, mediaType,
                     <div className="text-right font-bold text-slate-300 text-sm">Monitor</div>
                     {mediaType === 'show' ? (
                       <select 
-                        className="w-full bg-slate-800/70 border border-white/5 rounded-md text-slate-200 px-3 py-1.5 focus:outline-none focus:border-cyan-500 text-sm shadow-[inset_0_1px_3px_rgba(0,0,0,0.4)]"
+                        className="w-full bg-slate-950 border border-slate-800 rounded-lg text-slate-200 px-3 py-2 focus:outline-none focus:border-cyan-500 text-sm"
                         value={monitorLevel}
                         onChange={(e) => setMonitorLevel(e.target.value)}
                       >
@@ -296,14 +296,14 @@ export default function MediaDetailsModal({ isOpen, onClose, mediaId, mediaType,
                         <option value="none">None</option>
                       </select>
                     ) : (
-                      <select className="w-full bg-slate-800/70 border border-white/5 rounded-md text-slate-200 px-3 py-1.5 focus:outline-none focus:border-cyan-500 text-sm shadow-[inset_0_1px_3px_rgba(0,0,0,0.4)]" disabled>
+                      <select className="w-full bg-slate-950 border border-slate-800 rounded-lg text-slate-400 px-3 py-2 focus:outline-none text-sm" disabled>
                         <option>Movie Only</option>
                       </select>
                     )}
 
                     {/* Minimum Availability */}
                     <div className="text-right font-bold text-slate-300 text-sm">Minimum Availability</div>
-                    <select className="w-full bg-slate-800/70 border border-white/5 rounded-md text-slate-200 px-3 py-1.5 focus:outline-none focus:border-cyan-500 text-sm shadow-[inset_0_1px_3px_rgba(0,0,0,0.4)]">
+                    <select className="w-full bg-slate-950 border border-slate-800 rounded-lg text-slate-200 px-3 py-2 focus:outline-none focus:border-cyan-500 text-sm">
                       <option>Released</option>
                       <option>PreDB</option>
                       <option>Physical</option>
@@ -313,7 +313,7 @@ export default function MediaDetailsModal({ isOpen, onClose, mediaId, mediaType,
                     <div className="text-right font-bold text-slate-300 text-sm">Quality Profile</div>
                     <div>
                       <select 
-                        className="w-full bg-slate-800/70 border border-white/5 rounded-md text-slate-200 px-3 py-1.5 focus:outline-none focus:border-cyan-500 text-sm shadow-[inset_0_1px_3px_rgba(0,0,0,0.4)]"
+                        className="w-full bg-slate-950 border border-slate-800 rounded-lg text-slate-200 px-3 py-2 focus:outline-none focus:border-cyan-500 text-sm"
                         value={selectedProfile} 
                         onChange={(e) => setSelectedProfile(e.target.value)}
                       >
@@ -323,12 +323,11 @@ export default function MediaDetailsModal({ isOpen, onClose, mediaId, mediaType,
                       </select>
                     </div>
 
-
                     {/* Tags */}
                     <div className="text-right font-bold text-slate-300 text-sm">Tags</div>
                     <input 
                       type="text" 
-                      className="w-full bg-slate-800 border border-slate-600 rounded-md text-slate-200 px-3 py-1.5 focus:outline-none focus:border-cyan-500 text-sm" 
+                      className="w-full bg-slate-950 border border-slate-800 rounded-lg text-slate-200 px-3 py-2 focus:outline-none focus:border-cyan-500 text-sm" 
                       placeholder=""
                     />
                   </div>
@@ -346,7 +345,7 @@ export default function MediaDetailsModal({ isOpen, onClose, mediaId, mediaType,
                             const path = mediaType === 'movie' ? `/movies/${libraryId}` : `/shows/${libraryId}`;
                             navigate(path);
                           }}
-                          className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2 px-4 rounded-md flex items-center justify-center gap-2 transition-colors cursor-pointer text-sm"
+                          className="bg-cyan-600 hover:bg-cyan-500 text-white font-medium py-2 px-4 rounded-lg flex items-center justify-center gap-2 transition-colors cursor-pointer text-sm"
                         >
                           <CheckCircle2 className="w-4 h-4" />
                           View in Library
@@ -362,7 +361,7 @@ export default function MediaDetailsModal({ isOpen, onClose, mediaId, mediaType,
                       return (
                         <div className="flex items-center gap-3">
                           <button
-                            className={`border font-bold py-2 px-4 rounded-lg flex items-center justify-center gap-2 text-sm capitalize cursor-default
+                            className={`border font-semibold py-2 px-4 rounded-lg flex items-center justify-center gap-2 text-sm capitalize cursor-default
                               ${isApproved ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' :
                                 isDenied   ? 'bg-rose-500/10 text-rose-400 border-rose-500/20' :
                                              'bg-amber-500/10 text-amber-400 border-amber-500/20'}
@@ -376,7 +375,7 @@ export default function MediaDetailsModal({ isOpen, onClose, mediaId, mediaType,
                           {isPending && mode === 'details' && onRequest && !isInLibrary && (
                             <button
                               onClick={() => onRequest(details)}
-                              className="border border-rose-500/30 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 font-bold py-2 px-4 rounded-lg flex items-center justify-center gap-2 text-sm transition-colors cursor-pointer"
+                              className="border border-rose-500/30 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 font-medium py-2 px-4 rounded-lg flex items-center justify-center gap-2 text-sm transition-colors cursor-pointer"
                             >
                               <XCircle className="w-4 h-4 text-rose-400" />
                               Cancel Request
@@ -391,7 +390,7 @@ export default function MediaDetailsModal({ isOpen, onClose, mediaId, mediaType,
                       return (
                         <button
                           onClick={() => onRequest(details)}
-                          className="bg-cyan-600 hover:bg-cyan-500 text-white font-bold py-2 px-4 rounded-lg flex items-center justify-center gap-2 transition-colors cursor-pointer text-sm"
+                          className="bg-cyan-600 hover:bg-cyan-500 text-white font-medium py-2 px-4 rounded-lg flex items-center justify-center gap-2 transition-colors cursor-pointer text-sm"
                         >
                           <Plus className="w-4 h-4" />
                           Request {mediaType === 'movie' ? 'Movie' : 'Show'}
@@ -407,7 +406,7 @@ export default function MediaDetailsModal({ isOpen, onClose, mediaId, mediaType,
 
             {/* Footer */}
             {!isInLibrary && mode === 'add' && (
-              <div className="p-4 border-t border-white/10 bg-slate-900 flex justify-end items-center gap-6 mt-auto">
+              <div className="p-4 border-t border-slate-800 bg-slate-900/95 flex justify-end items-center gap-6 mt-auto rounded-b-xl">
                 <label className="flex items-center gap-2 cursor-pointer text-slate-300 hover:text-white transition-colors select-none">
                   <div className="mt-0.5">
                     <input type="checkbox" className="sr-only" checked={autoSearch} onChange={(e) => setAutoSearch(e.target.checked)} />
@@ -439,7 +438,7 @@ export default function MediaDetailsModal({ isOpen, onClose, mediaId, mediaType,
                       customAlert(err.response?.data?.message || 'Failed to add to library');
                     }
                   }}
-                  className="bg-green-500 hover:bg-green-400 text-slate-950 font-semibold py-2 px-6 rounded-md transition-all flex items-center justify-center text-sm shadow-sm"
+                  className="bg-cyan-600 hover:bg-cyan-500 text-white font-medium py-2 px-6 rounded-lg transition-colors flex items-center justify-center text-sm"
                 >
                   Add {mediaType === 'movie' ? 'Movie' : 'Show'}
                 </button>

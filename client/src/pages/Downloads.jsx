@@ -1,14 +1,19 @@
 import { useState, useEffect, useMemo } from 'react';
+import { motion } from 'framer-motion';
 import api from '../lib/api';
 import {
   DownloadCloud, Download, ArrowDown, ArrowUp, Activity,
   Play, Pause, Trash2, Clock, CheckSquare, Square, X,
-  Loader2, MoreHorizontal, Check, Menu, LayoutGrid, ChevronDown, Search
+  Loader2, MoreHorizontal, Check, List, LayoutGrid, Search,
+  CheckCircle2, AlertCircle, Plus
 } from 'lucide-react';
 import { customAlert, customConfirm } from '../utils/alerts';
 import useWebSocket from '../lib/useWebSocket';
 import StickyBar from '../components/shared/StickyBar';
 import InlineError from '../components/shared/InlineError';
+import EmptyState from '../components/shared/EmptyState';
+import LoadingState from '../components/shared/LoadingState';
+import { FilterSelect } from '../components/shared/FilterSelect';
 import { useStickyBar } from '../lib/useStickyBar';
 import { parseResolution, parseCodec, parseAudio } from '../lib/format';
 
@@ -253,6 +258,10 @@ export default function Downloads() {
   const [sortBy, setSortBy] = useState('progress');
   const [viewMode, setViewMode] = useState('list');
   const [searchQuery, setSearchQuery] = useState('');
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [addUrl, setAddUrl] = useState('');
+  const [addType, setAddType] = useState('movie');
+  const [addLoading, setAddLoading] = useState(false);
 
   useEffect(() => {
     const handleOutsideClick = () => setOpenMenuHash(null);
@@ -413,6 +422,22 @@ export default function Downloads() {
     }
   };
 
+  const handleAddTorrent = async () => {
+    if (!addUrl.trim()) return customAlert('Please enter a valid Magnet Link or Torrent URL.', 'error');
+    setAddLoading(true);
+    try {
+      await api.post('/clients/torrents', { url: addUrl.trim(), type: addType });
+      customAlert('Torrent added successfully', 'success');
+      setIsAddModalOpen(false);
+      setAddUrl('');
+      fetchClientData();
+    } catch (err) {
+      customAlert(err.response?.data?.message || 'Failed to add torrent', 'error');
+    } finally {
+      setAddLoading(false);
+    }
+  };
+
   const fetchClientData = async () => {
     try {
       const [statsResult, torrentsResult] = await Promise.allSettled([
@@ -563,16 +588,22 @@ export default function Downloads() {
     : null;
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-4 sm:space-y-5">
       <div ref={headerRef} className="flex items-center justify-between gap-3">
         <div className="min-w-0">
           <h1 className="text-xl sm:text-3xl font-black text-slate-800 dark:text-slate-100 flex items-center gap-2 sm:gap-3 !mb-0">
-            <DownloadCloud className="w-6 h-6 sm:w-8 sm:h-8 text-cyan-400" /> <span className="truncate">Downloads</span>
+            <DownloadCloud className="w-6 h-6 sm:w-8 sm:h-8 text-cyan-400 shrink-0" /> <span className="truncate">Downloads</span>
           </h1>
           <p className="text-xs sm:text-base text-slate-400 mt-0.5 sm:mt-1 hidden sm:block !mb-0">
             Monitor and manage active downloads across connected clients in real-time.
           </p>
         </div>
+        <button
+          onClick={() => setIsAddModalOpen(true)}
+          className="px-4 py-2 bg-cyan-500 hover:bg-cyan-400 text-slate-900 font-bold rounded-xl transition-colors flex items-center gap-2 shadow-sm whitespace-nowrap"
+        >
+          <Plus className="w-4 h-4" /> <span className="hidden sm:inline">Add Torrent</span>
+        </button>
       </div>
 
       <StickyBar visible={stickyVisible}>
@@ -586,14 +617,14 @@ export default function Downloads() {
       {/* 4 Stat Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {/* Active Downloads */}
-        <div className="glass-panel rounded-xl p-3 sm:p-3.5 border border-white/5 flex items-center gap-3">
+        <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-3 sm:p-3.5 shadow-sm transition-colors hover:border-slate-700 flex items-center gap-3">
           <div className="p-2.5 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shrink-0">
             <Download className="w-4 h-4 sm:w-5 sm:h-5" />
           </div>
           <div className="min-w-0 flex-1">
             <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider truncate">Active Downloads</p>
             <div className="flex items-baseline gap-2 mt-0.5">
-              <span className="text-lg sm:text-2xl font-black text-slate-100">{activeCount}</span>
+              <span className="text-lg sm:text-2xl font-bold text-slate-100">{activeCount}</span>
               <span className="text-xs font-semibold text-emerald-400 flex items-center gap-0.5">
                 <ArrowDown className="w-3 h-3" /> {formatSpeed(stats.dl_info_speed || 0)}
               </span>
@@ -602,14 +633,14 @@ export default function Downloads() {
         </div>
 
         {/* Completed */}
-        <div className="glass-panel rounded-xl p-3 sm:p-3.5 border border-white/5 flex items-center gap-3">
+        <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-3 sm:p-3.5 shadow-sm transition-colors hover:border-slate-700 flex items-center gap-3">
           <div className="p-2.5 rounded-lg bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 shrink-0">
             <Check className="w-4 h-4 sm:w-5 sm:h-5" />
           </div>
           <div className="min-w-0 flex-1">
             <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider truncate">Completed</p>
             <div className="flex items-baseline gap-2 mt-0.5">
-              <span className="text-lg sm:text-2xl font-black text-slate-100">{completedCount}</span>
+              <span className="text-lg sm:text-2xl font-bold text-slate-100">{completedCount}</span>
               <span className="text-xs font-semibold text-cyan-400 flex items-center gap-0.5" title="Total size of completed items">
                 {formatBytes(completedTotalBytes)}
               </span>
@@ -618,14 +649,14 @@ export default function Downloads() {
         </div>
 
         {/* Queued */}
-        <div className="glass-panel rounded-xl p-3 sm:p-3.5 border border-white/5 flex items-center gap-3">
-          <div className="p-2.5 rounded-lg bg-slate-800 text-slate-300 border border-white/5 shrink-0">
-            <Clock className="w-4 h-4 sm:w-5 sm:h-5 text-slate-400" />
+        <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-3 sm:p-3.5 shadow-sm transition-colors hover:border-slate-700 flex items-center gap-3">
+          <div className="p-2.5 rounded-lg bg-amber-500/10 text-amber-400 border border-amber-500/20 shrink-0">
+            <Clock className="w-4 h-4 sm:w-5 sm:h-5" />
           </div>
           <div className="min-w-0 flex-1">
             <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider truncate">Queued</p>
             <div className="flex items-baseline gap-2 mt-0.5">
-              <span className="text-lg sm:text-2xl font-black text-slate-100">{queuedCount}</span>
+              <span className="text-lg sm:text-2xl font-bold text-slate-100">{queuedCount}</span>
               <span className="text-xs font-medium text-slate-400">
                 {queuedCount} pending
               </span>
@@ -634,14 +665,14 @@ export default function Downloads() {
         </div>
 
         {/* Total Traffic */}
-        <div className="glass-panel rounded-xl p-3 sm:p-3.5 border border-white/5 flex items-center gap-3">
-          <div className="p-2.5 rounded-lg bg-slate-800 text-slate-300 border border-white/5 shrink-0">
-            <Activity className="w-4 h-4 sm:w-5 sm:h-5 text-slate-400" />
+        <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-3 sm:p-3.5 shadow-sm transition-colors hover:border-slate-700 flex items-center gap-3">
+          <div className="p-2.5 rounded-lg bg-sky-500/10 text-sky-400 border border-sky-500/20 shrink-0">
+            <Activity className="w-4 h-4 sm:w-5 sm:h-5" />
           </div>
           <div className="min-w-0 flex-1">
             <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider truncate">Total Traffic</p>
             <div className="flex items-baseline gap-2 mt-0.5">
-              <span className="text-lg sm:text-2xl font-black text-slate-100 truncate">{totalTrafficFormatted}</span>
+              <span className="text-lg sm:text-2xl font-bold text-slate-100 truncate">{totalTrafficFormatted}</span>
               <span className="text-xs font-medium text-slate-400 truncate">
                 Ratio: {transferRatio || '0.00'}
               </span>
@@ -650,119 +681,75 @@ export default function Downloads() {
         </div>
       </div>
 
-      {/* Sub-header Filter & Controls Bar */}
-      <div className="glass-panel rounded-xl px-3 sm:px-4 py-2 border border-white/5 flex items-center justify-between gap-3 flex-wrap shadow-sm">
-        {/* Tabs */}
-        <div className="flex items-center gap-3 sm:gap-5 overflow-x-auto no-scrollbar">
-          <button
-            type="button"
-            onClick={() => setActiveTab('active')}
-            className={`relative py-1 flex items-center gap-2 text-xs sm:text-sm font-semibold transition-colors shrink-0 ${
-              activeTab === 'active' ? 'text-cyan-400 font-bold' : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            <span>Active Downloads</span>
-            <span
-              className={`text-[10px] px-2 py-0.5 rounded-full transition-all ${
-                activeTab === 'active'
-                  ? 'bg-cyan-500/20 text-cyan-300 font-bold border border-cyan-500/30'
-                  : 'bg-slate-800 text-slate-400 font-medium border border-white/5'
+      {/* Controls & Filter Bar */}
+      <div className="flex flex-wrap items-center justify-between gap-2.5 sm:gap-3">
+        {/* Tabs: Signature Atlas Segmented Control */}
+        <div className="relative flex items-center bg-[#101e31] p-1 rounded-xl border border-[#1c2d46] shadow-inner select-none overflow-x-auto no-scrollbar max-w-full">
+          {[
+            { id: 'active', label: 'Active', icon: Download, count: activeCount },
+            { id: 'queued', label: 'Queued', icon: Clock, count: queuedCount },
+            { id: 'completed', label: 'Completed', icon: CheckCircle2, count: completedCount },
+            { id: 'failed', label: 'Failed', icon: AlertCircle, count: failedCount },
+          ].map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setActiveTab(tab.id)}
+              className={`relative h-8 sm:h-9 px-3 sm:px-3.5 flex items-center justify-center gap-2 rounded-lg text-xs sm:text-sm font-semibold whitespace-nowrap transition-colors duration-150 shrink-0 ${
+                activeTab === tab.id ? 'text-slate-950 font-bold' : 'text-slate-200 hover:text-white'
               }`}
             >
-              {activeCount}
-            </span>
-            {activeTab === 'active' && (
-              <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-cyan-400 rounded-full shadow-[0_0_6px_rgba(6,182,212,0.6)]" />
-            )}
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab('queued')}
-            className={`relative py-1 flex items-center gap-2 text-xs sm:text-sm font-semibold transition-colors shrink-0 ${
-              activeTab === 'queued' ? 'text-cyan-400 font-bold' : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            <span>Queued</span>
-            <span
-              className={`text-[10px] px-2 py-0.5 rounded-full transition-all ${
-                activeTab === 'queued'
-                  ? 'bg-cyan-500/20 text-cyan-300 font-bold border border-cyan-500/30'
-                  : 'bg-slate-800 text-slate-400 font-medium border border-white/5'
-              }`}
-            >
-              {queuedCount}
-            </span>
-            {activeTab === 'queued' && (
-              <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-cyan-400 rounded-full shadow-[0_0_6px_rgba(6,182,212,0.6)]" />
-            )}
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab('completed')}
-            className={`relative py-1 flex items-center gap-2 text-xs sm:text-sm font-semibold transition-colors shrink-0 ${
-              activeTab === 'completed' ? 'text-cyan-400 font-bold' : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            <span>Completed</span>
-            <span
-              className={`text-[10px] px-2 py-0.5 rounded-full transition-all ${
-                activeTab === 'completed'
-                  ? 'bg-cyan-500/20 text-cyan-300 font-bold border border-cyan-500/30'
-                  : 'bg-slate-800 text-slate-400 font-medium border border-white/5'
-              }`}
-            >
-              {completedCount}
-            </span>
-            {activeTab === 'completed' && (
-              <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-cyan-400 rounded-full shadow-[0_0_6px_rgba(6,182,212,0.6)]" />
-            )}
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab('failed')}
-            className={`relative py-1 flex items-center gap-2 text-xs sm:text-sm font-semibold transition-colors shrink-0 ${
-              activeTab === 'failed' ? 'text-cyan-400 font-bold' : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            <span>Failed</span>
-            <span
-              className={`text-[10px] px-2 py-0.5 rounded-full transition-all ${
-                activeTab === 'failed'
-                  ? 'bg-cyan-500/20 text-cyan-300 font-bold border border-cyan-500/30'
-                  : 'bg-slate-800 text-slate-400 font-medium border border-white/5'
-              }`}
-            >
-              {failedCount}
-            </span>
-            {activeTab === 'failed' && (
-              <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-cyan-400 rounded-full shadow-[0_0_6px_rgba(6,182,212,0.6)]" />
-            )}
-          </button>
+              {activeTab === tab.id && (
+                <motion.div
+                  layoutId="downloads-tab-slider"
+                  className="absolute inset-0 rounded-lg bg-gradient-to-b from-[#38a7f4] to-[#2291ea] shadow-sm"
+                  transition={{ type: 'spring', stiffness: 500, damping: 35 }}
+                />
+              )}
+              <tab.icon className={`relative z-10 w-3.5 h-3.5 shrink-0 ${activeTab === tab.id ? 'text-slate-950' : 'text-slate-400'}`} />
+              <span className="relative z-10">
+                {tab.id === 'active' ? (
+                  <>
+                    <span className="sm:hidden">Active</span>
+                    <span className="hidden sm:inline">Active Downloads</span>
+                  </>
+                ) : (
+                  tab.label
+                )}
+              </span>
+              <span
+                className={`relative z-10 text-[10px] px-1.5 py-0.5 rounded-md font-mono transition-colors ${
+                  activeTab === tab.id
+                    ? 'bg-slate-950/20 text-slate-950 font-bold'
+                    : 'bg-[#15243b] text-slate-400 border border-[#1c2d46]'
+                }`}
+              >
+                {tab.count}
+              </span>
+            </button>
+          ))}
         </div>
 
         {/* Right side controls */}
-        <div className="flex items-center gap-2 sm:gap-2.5 shrink-0 flex-wrap sm:flex-nowrap">
+        <div className="flex items-center gap-2 sm:gap-2.5 shrink-0 flex-wrap sm:flex-nowrap ml-auto">
           {/* Quick Search */}
           <div className="relative min-w-[130px] sm:min-w-[170px] max-w-[220px]">
-            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Filter..."
-              className="w-full bg-slate-900 border border-white/10 rounded-lg pl-8 pr-7 py-1 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-cyan-500/50"
+              className="h-9 sm:h-10 w-full bg-[#101e31] border border-[#1c2d46] hover:border-slate-600 rounded-xl pl-8 sm:pl-9 pr-7 py-1 text-xs sm:text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-cyan-500/50 transition-colors shadow-inner"
             />
             {searchQuery && (
               <button
                 type="button"
                 onClick={() => setSearchQuery('')}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white transition-colors"
                 title="Clear filter"
               >
-                <X className="w-3 h-3" />
+                <X className="w-3.5 h-3.5" />
               </button>
             )}
           </div>
@@ -772,7 +759,7 @@ export default function Downloads() {
             <button
               type="button"
               onClick={() => toggleSelectAll(sortedDownloads)}
-              className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-200 px-2 py-1 rounded-lg hover:bg-slate-800/60 transition-colors"
+              className="h-9 sm:h-10 flex items-center gap-1.5 px-3 rounded-xl border border-[#1c2d46] bg-[#101e31] hover:bg-[#16273f] hover:border-slate-600 text-xs sm:text-sm font-medium text-slate-300 hover:text-white transition-colors shadow-sm shrink-0"
               title={
                 sortedDownloads.every(d => selectedHashes.has(d.hash))
                   ? 'Deselect all visible'
@@ -780,62 +767,68 @@ export default function Downloads() {
               }
             >
               {sortedDownloads.every(d => selectedHashes.has(d.hash)) ? (
-                <CheckSquare className="w-3.5 h-3.5 text-cyan-400" />
+                <CheckSquare className="w-4 h-4 text-cyan-400" />
               ) : sortedDownloads.some(d => selectedHashes.has(d.hash)) ? (
-                <div className="w-3.5 h-3.5 rounded border border-cyan-400/60 bg-cyan-400/20 flex items-center justify-center">
-                  <div className="w-1.5 h-0.5 bg-cyan-400 rounded" />
+                <div className="w-4 h-4 rounded border border-cyan-400/60 bg-cyan-400/20 flex items-center justify-center">
+                  <div className="w-2 h-0.5 bg-cyan-400 rounded" />
                 </div>
               ) : (
-                <Square className="w-3.5 h-3.5 text-slate-500" />
+                <Square className="w-4 h-4 text-slate-500" />
               )}
               <span className="hidden sm:inline">Select All</span>
             </button>
           )}
 
           {/* Sort selector */}
-          <div className="relative">
-            <div className="flex items-center bg-slate-900 border border-white/10 rounded-lg px-2.5 py-1 gap-1.5 focus-within:border-cyan-500/50">
-              <span className="text-slate-500 text-[11px] font-medium">Sort:</span>
-              <select
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value)}
-                className="appearance-none bg-transparent text-slate-200 text-xs font-semibold focus:outline-none cursor-pointer pr-4"
-              >
-                <option value="progress" className="bg-slate-900 text-white">Progress</option>
-                <option value="speed" className="bg-slate-900 text-white">Speed</option>
-                <option value="name" className="bg-slate-900 text-white">Name</option>
-                <option value="size" className="bg-slate-900 text-white">Size</option>
-                <option value="eta" className="bg-slate-900 text-white">ETA</option>
-              </select>
-              <ChevronDown className="w-3 h-3 text-slate-400 pointer-events-none absolute right-2 top-1/2 -translate-y-1/2" />
-            </div>
-          </div>
+          <FilterSelect
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value)}
+            label="Sort: Progress"
+            hideAll
+            className="shrink-0"
+          >
+            <option value="progress">Sort: Progress</option>
+            <option value="speed">Sort: Speed</option>
+            <option value="name">Sort: Name</option>
+            <option value="size">Sort: Size</option>
+            <option value="eta">Sort: ETA</option>
+          </FilterSelect>
 
           {/* View mode toggle */}
-          <div className="flex items-center bg-slate-900 border border-white/10 rounded-lg p-0.5">
+          <div className="relative flex items-center bg-[#101e31] p-1 rounded-xl border border-[#1c2d46] shadow-inner select-none shrink-0">
             <button
               type="button"
               onClick={() => setViewMode('list')}
-              className={`p-1 rounded-md transition-all ${
-                viewMode === 'list'
-                  ? 'bg-slate-700 text-white shadow-sm'
-                  : 'text-slate-400 hover:text-white'
+              className={`relative h-7 sm:h-8 px-2.5 sm:px-3 flex items-center justify-center rounded-lg text-xs font-semibold transition-colors duration-150 ${
+                viewMode === 'list' ? 'text-slate-950 font-bold' : 'text-slate-100 hover:text-white'
               }`}
               title="List view"
             >
-              <Menu className="w-3.5 h-3.5" />
+              {viewMode === 'list' && (
+                <motion.div
+                  layoutId="downloads-view-slider"
+                  className="absolute inset-0 rounded-lg bg-gradient-to-b from-[#38a7f4] to-[#2291ea] shadow-sm"
+                  transition={{ type: 'spring', stiffness: 500, damping: 35 }}
+                />
+              )}
+              <List className={`relative z-10 w-3.5 h-3.5 sm:w-4 sm:h-4 transition-colors duration-150 ${viewMode === 'list' ? 'text-slate-950' : 'text-slate-100'}`} />
             </button>
             <button
               type="button"
               onClick={() => setViewMode('grid')}
-              className={`p-1 rounded-md transition-all ${
-                viewMode === 'grid'
-                  ? 'bg-slate-700 text-white shadow-sm'
-                  : 'text-slate-400 hover:text-white'
+              className={`relative h-7 sm:h-8 px-2.5 sm:px-3 flex items-center justify-center rounded-lg text-xs font-semibold transition-colors duration-150 ${
+                viewMode === 'grid' ? 'text-slate-950 font-bold' : 'text-slate-100 hover:text-white'
               }`}
               title="Grid view"
             >
-              <LayoutGrid className="w-3.5 h-3.5" />
+              {viewMode === 'grid' && (
+                <motion.div
+                  layoutId="downloads-view-slider"
+                  className="absolute inset-0 rounded-lg bg-gradient-to-b from-[#38a7f4] to-[#2291ea] shadow-sm"
+                  transition={{ type: 'spring', stiffness: 500, damping: 35 }}
+                />
+              )}
+              <LayoutGrid className={`relative z-10 w-3.5 h-3.5 sm:w-4 sm:h-4 transition-colors duration-150 ${viewMode === 'grid' ? 'text-slate-950' : 'text-slate-100'}`} />
             </button>
           </div>
         </div>
@@ -906,10 +899,7 @@ export default function Downloads() {
       )}
 
       {initialLoading ? (
-        <div className="glass-panel flex flex-col items-center justify-center h-[260px] rounded-xl border border-white/5 shadow-xl">
-          <div className="w-8 h-8 border-2 border-cyan-500/50 border-t-cyan-400 rounded-full animate-spin" />
-          <p className="text-sm text-slate-400 mt-3">Loading downloads...</p>
-        </div>
+        <LoadingState text="Loading downloads..." className="min-h-[260px] py-12 rounded-2xl border border-slate-800 bg-slate-900/40 shadow-sm" />
       ) : sortedDownloads.length > 0 ? (
         <div className={viewMode === 'grid' ? "grid grid-cols-1 xl:grid-cols-2 gap-2.5" : "space-y-2"}>
           {sortedDownloads.map(t => {
@@ -935,10 +925,10 @@ export default function Downloads() {
             return (
               <div 
                 key={t.hash} 
-                className={`glass-panel transition-all px-3 py-2.5 sm:px-4 sm:py-2.5 rounded-xl border group relative ${
+                className={`transition-all px-3.5 py-3 sm:px-4 sm:py-3 rounded-xl border group relative ${
                   isSelected
-                    ? 'border-cyan-500/40 bg-cyan-950/20 ring-1 ring-cyan-500/30'
-                    : 'border-white/5 hover:border-white/10 bg-slate-900/40 hover:bg-slate-900/60'
+                    ? 'border-cyan-500/50 bg-[#0c1e36] ring-1 ring-cyan-500/30 shadow-sm'
+                    : 'border-[#1c2d46] hover:border-slate-700/80 bg-[#0c1626]/90 hover:bg-[#101e31]/80 shadow-sm'
                 }`}
               >
                 {/* Line 1: Checkbox, Status Icon, Title, Badges ... Speed, ETA, Size, Actions */}
@@ -1083,7 +1073,7 @@ export default function Downloads() {
                         {openMenuHash === t.hash && (
                           <div
                             onClick={(e) => e.stopPropagation()}
-                            className="absolute right-0 top-full mt-1 w-52 bg-slate-900 border border-white/10 rounded-xl shadow-2xl z-30 py-1 overflow-hidden"
+                            className="absolute right-0 top-full mt-1.5 w-52 bg-[#0e1a2b] border border-[#1c2d46] rounded-xl shadow-2xl shadow-black/50 z-30 py-1 overflow-hidden"
                           >
                             <button
                               onClick={async () => {
@@ -1091,7 +1081,7 @@ export default function Downloads() {
                                 if (isPaused) await handleResume(t.hash);
                                 else await handlePause(t.hash);
                               }}
-                              className="w-full px-3.5 py-2 text-left text-xs font-semibold text-slate-200 hover:bg-slate-800/80 flex items-center gap-2.5 transition-colors"
+                              className="w-full px-3.5 py-2 text-left text-xs font-semibold text-slate-200 hover:bg-[#16273d] hover:text-white flex items-center gap-2.5 transition-colors"
                             >
                               {isPaused ? <Play className="w-4 h-4 text-emerald-400" /> : <Pause className="w-4 h-4 text-amber-400" />}
                               <span>{isPaused ? 'Resume Download' : 'Pause Download'}</span>
@@ -1102,7 +1092,7 @@ export default function Downloads() {
                                 setOpenMenuHash(null);
                                 await handleDelete(t.hash, false);
                               }}
-                              className="w-full px-3.5 py-2 text-left text-xs font-semibold text-slate-200 hover:bg-slate-800/80 flex items-center gap-2.5 transition-colors"
+                              className="w-full px-3.5 py-2 text-left text-xs font-semibold text-slate-200 hover:bg-[#16273d] hover:text-white flex items-center gap-2.5 transition-colors"
                             >
                               <Trash2 className="w-4 h-4 text-slate-400" />
                               <span>Remove from Client</span>
@@ -1113,7 +1103,7 @@ export default function Downloads() {
                                 setOpenMenuHash(null);
                                 await handleDelete(t.hash, true);
                               }}
-                              className="w-full px-3.5 py-2 text-left text-xs font-semibold text-rose-400 hover:bg-rose-500/10 flex items-center gap-2.5 transition-colors border-t border-white/5"
+                              className="w-full px-3.5 py-2 text-left text-xs font-semibold text-rose-400 hover:bg-rose-500/10 flex items-center gap-2.5 transition-colors border-t border-[#1c2d46]"
                             >
                               <Trash2 className="w-4 h-4 text-rose-400" />
                               <span>Cancel & Delete Files</span>
@@ -1126,7 +1116,7 @@ export default function Downloads() {
                 </div>
 
                 {/* Line 2: Slim Progress Bar + Percent + Client & Save Path */}
-                <div className="flex items-center gap-2.5 pt-0.5">
+                <div className="flex items-center gap-2.5 pt-1">
                   <div className="flex-1 h-1.5 bg-slate-800/80 rounded-full overflow-hidden">
                     <div 
                       className={`h-full rounded-full transition-all duration-500 ${
@@ -1167,19 +1157,87 @@ export default function Downloads() {
           })}
         </div>
       ) : (
-        <div className="glass-panel p-10 rounded-xl border border-white/5 text-center flex flex-col items-center justify-center relative overflow-hidden shadow-xl">
-          <div className="relative z-10 flex flex-col items-center text-center max-w-sm px-4">
-            <div className="p-3.5 bg-slate-800/60 rounded-xl mb-3 border border-white/5 text-cyan-400">
-              <DownloadCloud className="w-8 h-8" />
-            </div>
-            <h3 className="text-base font-bold text-slate-200 capitalize">
-              {downloads.length === 0 ? 'No Downloads in Queue' : `No ${activeTab} Downloads`}
-            </h3>
-            <p className="text-xs text-slate-400 mt-1">
-              {downloads.length === 0
+        <div className="rounded-2xl border border-slate-800 bg-slate-900/40 p-8 sm:p-12 text-center backdrop-blur-sm">
+          <EmptyState
+            icon="downloads"
+            title={downloads.length === 0 ? 'No Downloads in Queue' : `No ${activeTab} Downloads`}
+            description={
+              downloads.length === 0
                 ? 'When media downloads are triggered, their real-time progress and speeds will appear here.'
-                : `There are currently no downloads matching the "${activeTab}" filter.`}
-            </p>
+                : `There are currently no downloads matching the "${activeTab}" filter.`
+            }
+            action={
+              searchQuery ? (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  className="mt-2 px-3.5 py-1.5 rounded-xl bg-[#101e31] hover:bg-[#16273f] text-xs font-semibold text-slate-200 hover:text-white transition-colors border border-[#1c2d46]"
+                >
+                  Clear Filter
+                </button>
+              ) : null
+            }
+          />
+        </div>
+      )}
+
+      {/* Add Torrent Modal */}
+      {isAddModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fade-in">
+          <div className="bg-[#0c1624] border border-[#1c2d46] rounded-2xl p-6 w-full max-w-lg shadow-2xl relative">
+            <button
+              onClick={() => setIsAddModalOpen(false)}
+              className="absolute top-4 right-4 text-slate-400 hover:text-white transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+            <h2 className="text-xl font-bold text-slate-100 mb-6 flex items-center gap-2">
+              <DownloadCloud className="w-5 h-5 text-cyan-400" /> Add Download
+            </h2>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-1.5">Magnet Link or Torrent URL</label>
+                <input
+                  type="text"
+                  value={addUrl}
+                  onChange={(e) => setAddUrl(e.target.value)}
+                  placeholder="magnet:?xt=urn:btih:..."
+                  className="w-full bg-[#101e31] border border-[#1c2d46] rounded-xl px-4 py-2.5 text-slate-200 focus:outline-none focus:border-cyan-500/50 transition-colors"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-1.5">Category / Type</label>
+                <select
+                  value={addType}
+                  onChange={(e) => setAddType(e.target.value)}
+                  className="w-full bg-[#101e31] border border-[#1c2d46] rounded-xl px-4 py-2.5 text-slate-200 focus:outline-none focus:border-cyan-500/50 transition-colors appearance-none"
+                >
+                  <option value="movie">Movie</option>
+                  <option value="show">TV Show</option>
+                  <option value="music">Music</option>
+                  <option value="manual">Manual / Other</option>
+                </select>
+              </div>
+
+              <div className="flex justify-end gap-3 mt-6">
+                <button
+                  onClick={() => setIsAddModalOpen(false)}
+                  className="px-5 py-2.5 text-sm font-bold text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 rounded-xl transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleAddTorrent}
+                  disabled={addLoading}
+                  className="px-5 py-2.5 text-sm font-bold text-slate-900 bg-cyan-500 hover:bg-cyan-400 rounded-xl transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {addLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                  Add Download
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

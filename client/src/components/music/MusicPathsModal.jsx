@@ -97,12 +97,12 @@ export default function MusicPathsModal({ open, onClose, onUpdated }) {
                 value={newPath}
                 onChange={(e) => setNewPath(e.target.value)}
                 placeholder="e.g. /mnt/oblivion/muziek"
-                className="flex-1 px-3.5 py-2.5 bg-slate-900 border border-slate-700/80 rounded-xl text-xs font-mono text-slate-100 placeholder-slate-500 focus:outline-none focus:border-cyan-500"
+                className="flex-1 px-3.5 py-2 bg-slate-950 border border-slate-800 rounded-lg text-xs font-mono text-slate-100 placeholder-slate-500 focus:outline-none focus:border-cyan-500"
               />
               <button
                 type="button"
                 onClick={() => setBrowserOpen(true)}
-                className="px-3.5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors border border-white/5"
+                className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-colors border border-slate-700"
                 title="Browse server folders"
               >
                 <Folder className="w-3.5 h-3.5 text-cyan-400" />
@@ -111,7 +111,7 @@ export default function MusicPathsModal({ open, onClose, onUpdated }) {
               <button
                 type="submit"
                 disabled={adding || !newPath.trim()}
-                className="px-4 py-2.5 bg-cyan-500 hover:bg-cyan-400 text-slate-950 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all shadow-lg shadow-cyan-500/20 disabled:opacity-50"
+                className="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg text-xs font-medium flex items-center gap-1.5 transition-colors disabled:opacity-50"
               >
                 {adding ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
                 Add Mount
@@ -135,7 +135,7 @@ export default function MusicPathsModal({ open, onClose, onUpdated }) {
                 <span>Loading folders...</span>
               </div>
             ) : paths.length === 0 ? (
-              <div className="p-6 rounded-2xl bg-slate-900/40 border border-dashed border-slate-700/60 text-center space-y-1.5">
+              <div className="p-6 rounded-xl bg-slate-950/40 border border-dashed border-slate-800 text-center space-y-1.5">
                 <AlertCircle className="w-6 h-6 text-amber-400 mx-auto" />
                 <p className="text-xs font-semibold text-slate-300">No music mounts configured yet</p>
                 <p className="text-[11px] text-slate-500 max-w-sm mx-auto">
@@ -147,7 +147,7 @@ export default function MusicPathsModal({ open, onClose, onUpdated }) {
                 {paths.map((p) => (
                   <div
                     key={p.id}
-                    className="flex items-center justify-between p-3.5 rounded-xl bg-slate-900/70 border border-white/5 hover:border-cyan-500/20 transition-colors"
+                    className="flex items-center justify-between p-3.5 rounded-xl bg-slate-900/70 border border-slate-800 hover:border-slate-700 transition-colors"
                   >
                     <div className="flex items-center gap-3 min-w-0 pr-2">
                       <div className="p-2 rounded-lg bg-cyan-500/10 text-cyan-400 shrink-0">
@@ -180,7 +180,7 @@ export default function MusicPathsModal({ open, onClose, onUpdated }) {
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold rounded-xl transition-colors"
+              className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium rounded-lg transition-colors"
             >
               Done
             </button>

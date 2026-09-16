@@ -27,16 +27,16 @@ export default function EmptyState({
   return (
     <div
       className={clsx(
-        'flex flex-col items-center justify-center py-20 px-6 text-center',
+        'flex flex-col items-center justify-center py-12 sm:py-16 px-4 text-center',
         className
       )}
     >
-      <div className="p-6 rounded-3xl bg-slate-800/40 border border-slate-700/30 mb-6">
-        <Icon className="w-12 h-12 text-slate-500" />
+      <div className="p-3.5 rounded-xl bg-slate-800/50 border border-slate-700/50 mb-3.5 text-slate-400">
+        <Icon className="w-7 h-7" />
       </div>
-      <h3 className="text-xl font-bold text-slate-300 mb-2">{title}</h3>
+      <h3 className="text-base sm:text-lg font-semibold text-slate-200 mb-1 font-display">{title}</h3>
       {description && (
-        <p className="text-slate-500 max-w-sm mb-6">{description}</p>
+        <p className="text-xs sm:text-sm text-slate-400 max-w-sm mb-4 font-sans">{description}</p>
       )}
       {action && <div>{action}</div>}
     </div>

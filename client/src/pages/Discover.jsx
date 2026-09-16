@@ -2,13 +2,11 @@ import { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../lib/api';
-import { Search as SearchIcon, Plus, Tv, Film, Star, CheckCircle2, CheckSquare, ListFilter, X, Loader2, Eye } from 'lucide-react';
+import { Search as SearchIcon, Plus, Tv, Film, Star, CheckCircle2, CheckSquare, ListFilter, Eye } from 'lucide-react';
 import MediaDetailsModal from '../components/MediaDetailsModal';
 import MediaRow from '../components/MediaRow';
 import InlineError from '../components/shared/InlineError';
 import { useOutsideClick } from '../lib/useOutsideClick';
-import StickyBar from '../components/shared/StickyBar';
-import { useStickyBar } from '../lib/useStickyBar';
 
 
 
@@ -16,7 +14,7 @@ export default function Discover() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const initialMode = searchParams.get('mode') === 'shows' ? 'shows' : 'movies';
-  const [query, setQuery] = useState('');
+  const [query, setQuery] = useState(searchParams.get('q') || '');
   const [results, setResults] = useState([]);
   const [trendingResults, setTrendingResults] = useState([]);
   const [recentResults, setRecentResults] = useState([]);
@@ -52,22 +50,14 @@ export default function Discover() {
 
   // Cache data per mode so switching is instant
   const cacheRef = useRef({ movies: null, shows: null });
-  const searchInputRef = useRef(null);
-  const { headerRef, stickyVisible: stickySearchVisible } = useStickyBar();
 
   useEffect(() => {
-    if (searchInputRef.current) {
-      searchInputRef.current.focus();
+    const q = searchParams.get('q');
+    if (q !== null && q !== query) {
+      setQuery(q);
     }
-  }, [mode]);
+  }, [searchParams]);
 
-  // If the sticky bar unmounts (e.g. because the page height shrunk after clearing the discovery rows)
-  // the user loses focus. Automatically restore it to the main search input.
-  useEffect(() => {
-    if (!stickySearchVisible && query) {
-      searchInputRef.current?.focus();
-    }
-  }, [stickySearchVisible, query]);
 
   // Close rows menu on outside click — handled by useOutsideClick hook above
 
@@ -257,8 +247,8 @@ export default function Discover() {
     const displayType = media.media_type === 'tv' ? 'show' : media.media_type === 'movie' ? 'movie' : mode === 'movies' ? 'movie' : 'show';
 
     const cardClass = isGrid 
-      ? "glass-panel interactive-glow-card scroll-reveal-item rounded-xl overflow-hidden group hover:scale-[1.02] transition-transform duration-300 relative"
-      : "flex-none w-40 sm:w-44 glass-panel interactive-glow-card scroll-reveal-horizontal rounded-xl overflow-hidden group hover:scale-[1.02] transition-transform duration-300 relative snap-start";
+      ? "rounded-xl border border-slate-800 bg-slate-900/70 overflow-hidden group hover:border-slate-700 transition-all duration-200 relative"
+      : "flex-none w-40 sm:w-44 rounded-xl border border-slate-800 bg-slate-900/70 overflow-hidden group hover:border-slate-700 transition-all duration-200 relative snap-start";
 
     return (
       <div key={keyId} className={cardClass}>
@@ -333,38 +323,54 @@ export default function Discover() {
   const isDiscovering = !query;
 
   return (
-    <div className="space-y-3">
-      <div ref={headerRef} className="space-y-3">
-        <div className="flex items-center justify-between gap-3">
+    <div className="space-y-5">
+      <div className="flex items-center justify-between gap-4">
           <div className="min-w-0">
             <h1 className="text-xl sm:text-3xl font-black text-slate-800 dark:text-slate-100 flex items-center gap-2 sm:gap-3 !mb-0">
-              <SearchIcon className="w-5 h-5 sm:w-8 sm:h-8 text-emerald-400" /> <span className="truncate">Discover</span>
+              <SearchIcon className="w-6 h-6 sm:w-8 sm:h-8 text-cyan-400 shrink-0" />
+              <span className="truncate">Discover</span>
             </h1>
-            <p className="text-slate-400 mt-1 text-sm sm:text-base hidden sm:block">Search and add new media to your library.</p>
+            <p className="text-xs sm:text-base text-slate-400 mt-0.5 sm:mt-1 hidden sm:block !mb-0">
+              Search and add new media to your library.
+            </p>
           </div>
           
-          {/* Mode Toggle */}
-          <div className="flex items-center gap-2 shrink-0">
-            <div className="flex relative bg-slate-800/60 p-0.5 rounded-xl border border-white/5">
-              <motion.div
-                layoutId="discover-mode-slider"
-                className={`absolute top-0.5 bottom-0.5 rounded-lg shadow-sm ${mode === 'movies' ? 'left-0.5 bg-cyan-500/15 border border-cyan-500/20' : 'right-0.5 bg-purple-500/15 border border-purple-500/20'}`}
-                style={{ width: 'calc(50% - 2px)' }}
-                transition={{ type: 'spring', stiffness: 400, damping: 30 }}
-              />
+          {/* Mode Toggle & Options */}
+          <div className="flex items-center gap-3 shrink-0">
+            <div className="relative flex items-center bg-[#101e31] p-1 rounded-xl border border-[#1c2d46] shadow-inner select-none">
               <button 
+                type="button"
                 onClick={() => setMode('movies')}
-                className={`relative z-10 flex-1 flex items-center justify-center gap-2 px-3 sm:px-6 py-2.5 rounded-lg text-sm font-semibold whitespace-nowrap transition-colors duration-200 ${mode === 'movies' ? 'text-cyan-300' : 'text-slate-500 hover:text-slate-300'}`}
+                className={`relative flex items-center justify-center gap-2.5 px-4 sm:px-5 py-2 rounded-lg text-xs sm:text-sm font-semibold whitespace-nowrap transition-colors duration-150 ${
+                  mode === 'movies' ? 'text-slate-950 font-bold' : 'text-slate-100 hover:text-white'
+                }`}
               >
-                <Film className="w-4 h-4 shrink-0" />
-                <span className="hidden sm:inline">Movies</span>
+                {mode === 'movies' && (
+                  <motion.div
+                    layoutId="discover-mode-slider"
+                    className="absolute inset-0 rounded-lg bg-gradient-to-b from-[#38a7f4] to-[#2291ea] shadow-sm"
+                    transition={{ type: 'spring', stiffness: 500, damping: 35 }}
+                  />
+                )}
+                <Film className={`relative z-10 w-4 h-4 sm:w-[18px] sm:h-[18px] shrink-0 transition-colors duration-150 ${mode === 'movies' ? 'text-slate-950' : 'text-slate-100'}`} />
+                <span className="relative z-10 hidden sm:inline">Movies</span>
               </button>
               <button 
+                type="button"
                 onClick={() => setMode('shows')}
-                className={`relative z-10 flex-1 flex items-center justify-center gap-2 px-3 sm:px-6 py-2.5 rounded-lg text-sm font-semibold whitespace-nowrap transition-colors duration-200 ${mode === 'shows' ? 'text-purple-300' : 'text-slate-500 hover:text-slate-300'}`}
+                className={`relative flex items-center justify-center gap-2.5 px-4 sm:px-5 py-2 rounded-lg text-xs sm:text-sm font-semibold whitespace-nowrap transition-colors duration-150 ${
+                  mode === 'shows' ? 'text-slate-950 font-bold' : 'text-slate-100 hover:text-white'
+                }`}
               >
-                <Tv className="w-4 h-4 shrink-0" />
-                <span className="hidden sm:inline">TV Shows</span>
+                {mode === 'shows' && (
+                  <motion.div
+                    layoutId="discover-mode-slider"
+                    className="absolute inset-0 rounded-lg bg-gradient-to-b from-[#38a7f4] to-[#2291ea] shadow-sm"
+                    transition={{ type: 'spring', stiffness: 500, damping: 35 }}
+                  />
+                )}
+                <Tv className={`relative z-10 w-4 h-4 sm:w-[18px] sm:h-[18px] shrink-0 transition-colors duration-150 ${mode === 'shows' ? 'text-slate-950' : 'text-slate-100'}`} />
+                <span className="relative z-10 hidden sm:inline">TV Shows</span>
               </button>
             </div>
             
@@ -373,25 +379,30 @@ export default function Discover() {
               <div ref={rowsMenuRef} className="relative">
                 <button
                   onClick={() => setRowsMenuOpen(!rowsMenuOpen)}
-                  className={`p-2 rounded-xl transition-colors ${rowsMenuOpen ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
-                  title="Toggle rows"
+                  className={`h-10 w-10 flex items-center justify-center rounded-xl border transition-all duration-150 ${
+                    rowsMenuOpen 
+                      ? 'bg-gradient-to-b from-[#38a7f4] to-[#2291ea] text-slate-950 shadow-sm border-transparent' 
+                      : 'bg-[#101e31] border border-[#1c2d46] text-slate-100 hover:text-white hover:border-slate-600 shadow-sm'
+                  }`}
+                  title="Toggle visible rows"
+                  aria-label="Toggle visible rows"
                 >
                   <ListFilter className="w-5 h-5" />
                 </button>
                 {rowsMenuOpen && (
-                  <div className="absolute right-0 top-full mt-3 w-48 bg-slate-800 border border-white/10 rounded-xl shadow-xl z-[60] overflow-hidden">
-                    <div className="px-4 py-2.5 border-b border-white/10 text-xs font-bold text-slate-400 uppercase tracking-wider">Visible Rows</div>
+                  <div className="absolute right-0 top-full mt-2 w-48 bg-[#0e1a2b] border border-[#1c2d46] rounded-xl shadow-2xl z-[60] overflow-hidden">
+                    <div className="px-3.5 py-2 border-b border-[#1c2d46] text-[10px] font-bold text-slate-400 uppercase tracking-wider">Visible Rows</div>
                     <div className="p-1.5 flex flex-col gap-0.5">
                       {ROW_KEYS.filter(k => k !== 'upcoming' || mode === 'movies').map(key => (
-                        <label key={key} className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-white/5 cursor-pointer transition-colors group" onClick={(e) => { e.preventDefault(); setVisibleRows(prev => ({ ...prev, [key]: !prev[key] })); }}>
+                        <label key={key} className="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg hover:bg-slate-800/60 cursor-pointer transition-colors group" onClick={(e) => { e.preventDefault(); setVisibleRows(prev => ({ ...prev, [key]: !prev[key] })); }}>
                           {visibleRows[key] ? (
-                            <div className="w-4 h-4 rounded bg-cyan-500/20 border border-cyan-500/50 flex items-center justify-center">
-                              <CheckSquare className="w-3.5 h-3.5 text-cyan-400" />
+                            <div className="w-3.5 h-3.5 rounded bg-[#0d2b51] border border-[#1f4e82] flex items-center justify-center">
+                              <CheckSquare className="w-3 h-3 text-cyan-400" />
                             </div>
                           ) : (
-                            <div className="w-4 h-4 rounded bg-slate-800 border border-slate-600/50 group-hover:border-slate-500 transition-colors" />
+                            <div className="w-3.5 h-3.5 rounded bg-slate-900 border border-slate-700 group-hover:border-slate-600 transition-colors" />
                           )}
-                          <span className="text-sm text-slate-300 capitalize select-none group-hover:text-white transition-colors">{ROW_LABELS[key]}</span>
+                          <span className="text-xs text-slate-300 capitalize select-none group-hover:text-slate-100 transition-colors">{ROW_LABELS[key]}</span>
                         </label>
                       ))}
                     </div>
@@ -402,45 +413,7 @@ export default function Discover() {
           </div>
         </div>
 
-        {/* Desktop Search */}
-        <div className="glass-panel rounded-2xl p-4 sm:p-6 shadow-2xl hidden sm:block">
-          <div className="relative flex items-center">
-            <SearchIcon className="absolute left-3 sm:left-4 w-4 h-4 sm:w-5 sm:h-5 text-slate-400" />
-            <input
-              ref={searchInputRef}
-              type="text"
-              placeholder="Search by title, IMDb ID, or TMDB ID..."
-              className="glass-input w-full !pl-10 sm:!pl-12 !pr-12 sm:!pr-14 h-10 sm:h-12 text-base sm:text-lg shadow-inner"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-            />
-            <div className="absolute right-2 sm:right-3 flex items-center gap-2">
-              {query && (loading || isTyping) && (
-                <Loader2 className="w-4 h-4 sm:w-5 sm:h-5 text-slate-400 animate-spin" />
-              )}
-              {query && !(loading || isTyping) && (
-                <button
-                  type="button"
-                  onClick={() => setQuery('')}
-                  className="p-1 sm:p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"
-                  title="Clear search"
-                >
-                  <X className="w-4 h-4 sm:w-5 sm:h-5" />
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
 
-      <StickyBar
-        visible={stickySearchVisible}
-        searchQuery={query}
-        onSearchChange={setQuery}
-        searchPlaceholder="Search..."
-        showSearch
-        isTyping={Boolean(query && (loading || isTyping))}
-      />
 
       {error && (
         <InlineError message={error} />
@@ -449,7 +422,7 @@ export default function Discover() {
       {isDiscovering && !error && (
         <div className="mt-2 relative min-h-[calc(100vh-200px)]">
           {loading && (
-            <div className="absolute inset-[-1rem] sm:inset-[-1.5rem] z-50 bg-slate-50 dark:bg-slate-950 text-slate-400 flex flex-col">
+            <div className="absolute inset-0 z-30 bg-slate-50 dark:bg-[#0a1320] text-slate-400">
               <div className="sticky top-[40vh] flex flex-col items-center justify-center gap-4 text-slate-400">
                 <div className="w-8 h-8 border-2 border-cyan-500/50 border-t-cyan-400 rounded-full animate-spin" />
                 <p className="text-sm font-medium">Loading data...</p>
@@ -481,10 +454,8 @@ export default function Discover() {
 
       {!isDiscovering && results.length > 0 && !(loading || isTyping) && (
         <div className="mt-8 min-h-[50vh]">
-           <h2 className="text-xl font-bold text-slate-200 flex items-center space-x-2 mb-6">
-             <span className="bg-gradient-to-r from-cyan-400 to-blue-500 text-transparent bg-clip-text">
-               Search Results
-             </span>
+           <h2 className="text-base sm:text-lg font-bold text-slate-100 mb-4">
+             Search Results
            </h2>
            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 gap-3 sm:gap-4">
              {results.map((item) => renderMediaCard(item, false, true))}

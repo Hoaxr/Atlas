@@ -16,16 +16,16 @@ export default function TrailerModal({ trailerKey, onClose }) {
   return createPortal(
     <div className="fixed inset-0 z-40 flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-md" onClick={onClose}>
       <div className="relative w-full max-w-5xl" role="dialog" aria-modal="true" aria-label="Movie trailer" onClick={(e) => e.stopPropagation()}>
-        <div className="flex justify-end mb-4">
+        <div className="flex justify-end mb-3">
           <button 
             onClick={onClose}
-            className="text-slate-400 hover:text-white transition-colors bg-slate-900/50 p-2 rounded-full border border-white/10 hover:bg-slate-800"
+            className="text-slate-400 hover:text-white transition-colors bg-slate-900 border border-slate-800 p-2 rounded-lg hover:bg-slate-800"
             aria-label="Close trailer"
           >
-            <X className="w-6 h-6" />
+            <X className="w-5 h-5" />
           </button>
         </div>
-        <div className="aspect-video bg-black rounded-2xl overflow-hidden shadow-[0_0_50px_rgba(0,0,0,0.5)] border border-white/10">
+        <div className="aspect-video bg-black rounded-xl overflow-hidden shadow-2xl border border-slate-800">
           <iframe
             src={`https://www.youtube.com/embed/${trailerKey}?autoplay=1&origin=${window.location.origin}`}
             title="YouTube video player"

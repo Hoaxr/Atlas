@@ -19,7 +19,7 @@ const updateLibraryMetadata = async (scanProgress, nextStage, mode = 'full') => 
     if (mode === 'refresh') {
       allMovies = db.prepare("SELECT id, title, tmdb_id FROM movies WHERE tmdb_id IS NOT NULL").all();
     } else {
-      allMovies = db.prepare("SELECT id, title, tmdb_id FROM movies WHERE tmdb_id IS NOT NULL AND (rating IS NULL OR rating = 0 OR genres IS NULL)").all();
+      allMovies = db.prepare("SELECT id, title, tmdb_id FROM movies WHERE tmdb_id IS NOT NULL AND (rating IS NULL OR rating = 0 OR genres IS NULL OR genres = '')").all();
     }
   }
 
@@ -29,7 +29,7 @@ const updateLibraryMetadata = async (scanProgress, nextStage, mode = 'full') => 
     if (mode === 'refresh') {
       allShows = db.prepare("SELECT id, title, tmdb_id FROM shows WHERE tmdb_id IS NOT NULL").all();
     } else {
-      allShows = db.prepare("SELECT id, title, tmdb_id FROM shows WHERE tmdb_id IS NOT NULL AND (rating IS NULL OR rating = 0 OR genres IS NULL)").all();
+      allShows = db.prepare("SELECT id, title, tmdb_id FROM shows WHERE tmdb_id IS NOT NULL AND (rating IS NULL OR rating = 0 OR genres IS NULL OR genres = '')").all();
     }
   }
 

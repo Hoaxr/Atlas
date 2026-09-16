@@ -30,6 +30,20 @@ router.get('/torrents', async (req, res) => {
   }
 });
 
+router.post('/torrents', async (req, res) => {
+  try {
+    const { url, type = 'movie' } = req.body;
+    if (!url) {
+      return res.status(400).json({ status: 'error', message: 'URL is required' });
+    }
+    await downloadClientService.addTorrent(url, type);
+    eventBus.emit('TORRENTS_MUTATED');
+    res.json({ status: 'success', message: 'Torrent added successfully' });
+  } catch (err) {
+    res.status(500).json({ status: 'error', message: err.message });
+  }
+});
+
 router.post('/torrents/bulk-pause', async (req, res) => {
   try {
     const { hashes } = req.body;

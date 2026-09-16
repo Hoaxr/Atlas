@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { Lock, KeyRound, Loader2 } from 'lucide-react';
+import { Lock, KeyRound } from 'lucide-react';
 import api from '../lib/api';
 import { customAlert } from '../utils/alerts';
 import ModalShell from './shared/ModalShell';
 import PasswordInput from './shared/PasswordInput';
+import Button from './shared/Button';
 
 export default function ChangePasswordModal({ isOpen, onClose }) {
   const [currentPassword, setCurrentPassword] = useState('');
@@ -38,16 +39,16 @@ export default function ChangePasswordModal({ isOpen, onClose }) {
   };
 
   return (
-    <ModalShell open={isOpen} onClose={onClose} size="md" icon={<Lock className="w-5 h-5" />} title="Change Password" backdropClass="bg-black/60" noScroll>
+    <ModalShell open={isOpen} onClose={onClose} size="md" icon={<Lock className="w-5 h-5 text-cyan-400" />} title="Change Password" noScroll>
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="space-y-1.5">
-          <label className="text-sm font-medium text-slate-300">Current Password</label>
+          <label className="text-xs font-semibold text-slate-300">Current Password</label>
           <div className="relative">
             <KeyRound className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
             <PasswordInput
               value={currentPassword}
               onChange={e => setCurrentPassword(e.target.value)}
-              className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-10 pr-4 py-2.5 text-slate-200 focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/50 transition-all placeholder:text-slate-600"
+              className="w-full bg-slate-950 border border-slate-800 rounded-lg pl-10 pr-4 py-2 text-xs text-slate-200 focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/50 transition-colors placeholder:text-slate-600"
               placeholder="Enter current password"
               required
             />
@@ -55,13 +56,13 @@ export default function ChangePasswordModal({ isOpen, onClose }) {
         </div>
 
         <div className="space-y-1.5">
-          <label className="text-sm font-medium text-slate-300">New Password</label>
+          <label className="text-xs font-semibold text-slate-300">New Password</label>
           <div className="relative">
             <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
             <PasswordInput
               value={newPassword}
               onChange={e => setNewPassword(e.target.value)}
-              className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-10 pr-4 py-2.5 text-slate-200 focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/50 transition-all placeholder:text-slate-600"
+              className="w-full bg-slate-950 border border-slate-800 rounded-lg pl-10 pr-4 py-2 text-xs text-slate-200 focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/50 transition-colors placeholder:text-slate-600"
               placeholder="Enter new password"
               required
             />
@@ -69,41 +70,35 @@ export default function ChangePasswordModal({ isOpen, onClose }) {
         </div>
 
         <div className="space-y-1.5">
-          <label className="text-sm font-medium text-slate-300">Confirm New Password</label>
+          <label className="text-xs font-semibold text-slate-300">Confirm New Password</label>
           <div className="relative">
             <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
             <PasswordInput
               value={confirmPassword}
               onChange={e => setConfirmPassword(e.target.value)}
-              className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-10 pr-4 py-2.5 text-slate-200 focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/50 transition-all placeholder:text-slate-600"
+              className="w-full bg-slate-950 border border-slate-800 rounded-lg pl-10 pr-4 py-2 text-xs text-slate-200 focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/50 transition-colors placeholder:text-slate-600"
               placeholder="Confirm new password"
               required
             />
           </div>
         </div>
 
-        <div className="pt-4 flex justify-end gap-3">
-          <button
+        <div className="pt-3 flex justify-end gap-2.5">
+          <Button
             type="button"
+            variant="secondary"
             onClick={onClose}
-            className="px-4 py-2 text-sm font-medium text-slate-300 hover:text-white bg-slate-800/50 hover:bg-slate-800 rounded-xl transition-colors"
           >
             Cancel
-          </button>
-          <button
+          </Button>
+          <Button
             type="submit"
+            variant="primary"
             disabled={loading}
-            className="px-4 py-2 text-sm font-medium text-slate-900 bg-cyan-400 hover:bg-cyan-300 rounded-xl transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            loading={loading}
           >
-            {loading ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                Saving...
-              </>
-            ) : (
-              'Save Password'
-            )}
-          </button>
+            Save Password
+          </Button>
         </div>
       </form>
     </ModalShell>

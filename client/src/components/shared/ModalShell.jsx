@@ -72,24 +72,24 @@ export default function ModalShell({
 
       {/* Panel */}
       <div
-        className={`relative bg-slate-900 border border-white/10 rounded-2xl shadow-2xl w-full ${maxW} ${noScroll ? '' : 'max-h-[85vh] flex flex-col'} modal-animate-shell open ${className}`}
+        className={`relative bg-slate-900 border border-slate-800 rounded-xl shadow-2xl shadow-black/60 w-full ${maxW} ${noScroll ? '' : 'max-h-[85vh] flex flex-col'} modal-animate-shell open ${className}`}
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
       >
         {/* Header */}
         {!noHeader && (title || icon) && (
-          <div className="flex items-center justify-between p-5 border-b border-white/5 shrink-0">
+          <div className="flex items-center justify-between px-5 py-4 border-b border-slate-800 shrink-0">
             <div className="flex items-center gap-3 min-w-0">
-              {icon && <div className="p-2 rounded-xl bg-cyan-500/10 text-cyan-400 shrink-0">{icon}</div>}
-              <h2 className="text-lg font-bold text-white truncate">{title}</h2>
+              {icon && <div className="p-2 rounded-lg bg-slate-800 text-cyan-400 border border-slate-700/60 shrink-0">{icon}</div>}
+              <h2 className="text-base sm:text-lg font-semibold text-slate-100 font-display truncate !mb-0">{title}</h2>
             </div>
             <button
               onClick={onClose}
-              className="text-slate-400 hover:text-white p-2.5 rounded-lg hover:bg-slate-800 transition-all shrink-0 ml-3"
+              className="text-slate-400 hover:text-slate-200 p-1.5 rounded-lg hover:bg-slate-800 transition-colors shrink-0 ml-3"
               aria-label="Close"
             >
-              <X className="w-5 h-5" />
+              <X className="w-4 h-4" />
             </button>
           </div>
         )}

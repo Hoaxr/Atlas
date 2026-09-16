@@ -2,25 +2,36 @@ import { Save, Languages, CheckCircle2, CheckSquare, Square } from 'lucide-react
 import CustomSelect from '../../components/shared/CustomSelect';
 import LanguageInput from './LanguageInput';
 import PasswordInput from '../../components/shared/PasswordInput';
+import { SettingsSection, SettingsHeader, SettingsGroup, SettingsLabel, SettingsHelper } from '../../components/settings/layout';
+import ToggleRow from '../../components/shared/ToggleRow';
 
-export default function SubtitlesTab({ settings, setSettings, keyStatuses, handleSave }) {
+export default function SubtitlesTab({ settings, setSettings, keyStatuses }) {
   return (
-    <div className="max-w-5xl mx-auto space-y-8 animate-fade-in">
+    <div className="w-full space-y-8 animate-fade-in">
+      <div>
+        <h2 className="text-lg sm:text-xl font-bold font-display text-slate-100 flex items-center gap-2.5 mb-1.5">
+          <Languages className="w-5 h-5 text-cyan-400 shrink-0" /> Subtitles & AI
+        </h2>
+        <p className="text-xs sm:text-sm text-slate-400 leading-relaxed">
+          Configure subtitle providers, desired languages, and AI translation settings.
+        </p>
+      </div>
 
       {/* === Section 1: Subtitle Providers === */}
-      <div>
-        <div className="flex items-center justify-between mb-2">
-          <h2 className="text-2xl font-bold text-pink-400 flex items-center gap-2">
-            <Languages className="w-7 h-7" /> Subtitle Providers
-          </h2>
-        </div>
-        <div className="glass-panel p-4 rounded-xl border border-white/5 mb-5">
-          <p className="text-xs text-slate-400 font-medium mb-2">Search Languages</p>
-          <p className="text-xs text-slate-500 mb-3">Select which languages to search for when downloading subtitles.</p>
-          <LanguageInput
-            selected={settings.providerLangs || ['en']}
-            onChange={(langs) => setSettings({ ...settings, providerLangs: langs.length ? langs : ['en'] })}
-          />
+      <SettingsSection>
+        <SettingsHeader
+          title="Subtitle Providers"
+          icon={Languages}
+        />
+        <div className="glass-panel p-5 rounded-2xl border border-white/10 mb-5">
+          <SettingsLabel title="Search Languages" />
+          <SettingsHelper text="Select which languages to search for when downloading subtitles." />
+          <div className="mt-3">
+            <LanguageInput
+              selected={settings.providerLangs || ['en']}
+              onChange={(langs) => setSettings({ ...settings, providerLangs: langs.length ? langs : ['en'] })}
+            />
+          </div>
         </div>
         
         <div className="space-y-5">
@@ -30,10 +41,10 @@ export default function SubtitlesTab({ settings, setSettings, keyStatuses, handl
             { id: 'subsource', name: 'SubSource', color: 'border-l-purple-500', desc: 'Alternative. Free: 7,200 requests/day.', key: settings.subsourceApiKey, setter: (v) => setSettings({ ...settings, subsourceApiKey: v }) },
           ].map(provider => (
             <div key={provider.id} className={`glass-panel p-5 rounded-2xl border-l-4 ${provider.color}`}>
-              <div className="flex items-center justify-between mb-3">
-                <label className="block text-sm font-bold text-slate-200">{provider.name}</label>
+              <div className="flex items-center justify-between mb-2">
+                <label className="block text-base font-bold font-display text-slate-100">{provider.name}</label>
                 {keyStatuses[provider.id]?.status && (
-                  <span className={`flex items-center gap-1 text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${
+                  <span className={`flex items-center gap-1.5 text-xs font-semibold px-2.5 py-0.5 rounded-full ${
                     keyStatuses[provider.id]?.status === 'connected'
                       ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
                       : 'bg-red-500/20 text-red-400 border border-red-500/30'
@@ -43,43 +54,41 @@ export default function SubtitlesTab({ settings, setSettings, keyStatuses, handl
                   </span>
                 )}
               </div>
-              <p className="text-xs text-slate-500 mb-3">{provider.desc}</p>
+              <p className="text-xs sm:text-sm text-slate-400 mb-3">{provider.desc}</p>
               <PasswordInput placeholder={`${provider.name} API Key`} className="glass-input w-full" value={provider.key} onChange={(e) => provider.setter(e.target.value)} />
-              <p className="text-xs text-slate-500 mt-2">Get key from: <a href={`https://${provider.id === 'opensubtitles' ? 'opensubtitles.com' : provider.id === 'subdl' ? 'subdl.com/panel/login' : 'subsource.net/dashboard/profile'}`} target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:underline">{provider.id === 'opensubtitles' ? 'opensubtitles.com' : provider.id === 'subdl' ? 'subdl.com' : 'subsource.net'}</a></p>
+              <p className="text-xs sm:text-sm text-slate-400 mt-2">Get key from: <a href={`https://${provider.id === 'opensubtitles' ? 'opensubtitles.com' : provider.id === 'subdl' ? 'subdl.com/panel/login' : 'subsource.net/dashboard/profile'}`} target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:underline">{provider.id === 'opensubtitles' ? 'opensubtitles.com' : provider.id === 'subdl' ? 'subdl.com' : 'subsource.net'}</a></p>
             </div>
           ))}
         </div>
-      </div>
-
-      <hr className="border-white/5" />
+      </SettingsSection>
 
       {/* === Section 2: Auto Translation === */}
-      <div>
-        <div className="flex items-center gap-3 mb-4">
-          <Languages className="w-6 h-6 text-pink-400" />
-          <h2 className="text-xl font-bold text-pink-400">Auto Translation</h2>
-        </div>
-        <p className="text-sm text-slate-400 mb-6">Automatically translate downloaded English subtitles into your preferred languages.</p>
+      <SettingsSection>
+        <SettingsHeader
+          title="Auto Translation"
+          icon={Languages}
+          description="Automatically translate downloaded English subtitles into your preferred languages."
+        />
 
         <div className="space-y-6">
-          <div>
-            <label className="block text-sm font-medium text-slate-300">Translation Provider</label>
-            <CustomSelect 
-              className="mt-2"
-              value={settings.translationProvider || 'gemini'} 
-              onChange={(e) => setSettings({ ...settings, translationProvider: e.target.value })}
-              options={[
-                { label: 'Gemini AI', value: 'gemini' },
-                { label: 'DeepSeek', value: 'deepseek' },
-                { label: 'Claude (Anthropic)', value: 'claude' }
-              ]}
-            />
-            <p className="text-xs text-slate-500 mt-2">
-              {settings.translationProvider === 'gemini' && 'Gemini AI — high quality, requires a Gemini API key.'}
-              {settings.translationProvider === 'deepseek' && 'DeepSeek — very affordable, requires a DeepSeek API key.'}
-              {settings.translationProvider === 'claude' && 'Claude by Anthropic — high quality, requires an Anthropic API key.'}
-            </p>
-          </div>
+          <SettingsGroup>
+            <div>
+              <SettingsLabel title="Translation Provider" />
+              <CustomSelect 
+                value={settings.translationProvider || 'gemini'} 
+                onChange={(e) => setSettings({ ...settings, translationProvider: e.target.value })}
+                options={[
+                  { label: 'Gemini AI', value: 'gemini' },
+                  { label: 'DeepSeek', value: 'deepseek' },
+                  { label: 'Claude (Anthropic)', value: 'claude' }
+                ]}
+              />
+              <SettingsHelper text={
+                settings.translationProvider === 'gemini' ? 'Gemini AI — high quality, requires a Gemini API key.' :
+                settings.translationProvider === 'deepseek' ? 'DeepSeek — very affordable, requires a DeepSeek API key.' :
+                'Claude by Anthropic — high quality, requires an Anthropic API key.'
+              } />
+            </div>
 
           {[
             { id: 'gemini', key: settings.geminiApiKey, setter: (v) => setSettings({ ...settings, geminiApiKey: v }) },
@@ -88,11 +97,11 @@ export default function SubtitlesTab({ settings, setSettings, keyStatuses, handl
           ].filter(p => settings.translationProvider === p.id).map(p => (
             <div key={p.id}>
               <div className="flex items-center justify-between">
-                <label className="block text-sm font-medium text-slate-300">{p.id.charAt(0).toUpperCase() + p.id.slice(1)} API Key</label>
+                <label className="block text-xs sm:text-sm font-medium text-slate-300">{p.id.charAt(0).toUpperCase() + p.id.slice(1)} API Key</label>
                 {keyStatuses[p.id]?.status && (
                   <span
                     title={keyStatuses[p.id]?.message || ''}
-                    className={`flex items-center gap-1 text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${
+                    className={`flex items-center gap-1.5 text-xs font-semibold px-2.5 py-0.5 rounded-full ${
                       keyStatuses[p.id]?.status === 'connected'
                         ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
                         : 'bg-red-500/20 text-red-400 border border-red-500/30'
@@ -108,7 +117,7 @@ export default function SubtitlesTab({ settings, setSettings, keyStatuses, handl
                   {keyStatuses[p.id].message}
                 </p>
               )}
-              <p className="text-xs text-slate-500 mt-2">Get key from: <a href={{
+              <p className="text-xs sm:text-sm text-slate-400 mt-2">Get key from: <a href={{
                 gemini: 'https://aistudio.google.com/apikey',
                 deepseek: 'https://platform.deepseek.com/api_keys',
                 claude: 'https://console.anthropic.com/settings/keys'
@@ -120,70 +129,54 @@ export default function SubtitlesTab({ settings, setSettings, keyStatuses, handl
             </div>
           ))}
 
-          <div>
-            <label className="block text-sm font-medium text-slate-300">Target Languages</label>
-            <p className="text-xs text-slate-500 mt-1 mb-2">Select the languages you want subtitles translated into.</p>
-            <div className="flex flex-wrap gap-2">
-              {['Dutch', 'French', 'German', 'Spanish', 'Italian', 'Portuguese'].map(lang => {
-                const isSelected = settings.targetLangs.includes(lang);
-                return (
-                  <button
-                    key={lang}
-                    onClick={() => {
-                      const newLangs = isSelected
-                        ? settings.targetLangs.filter(l => l !== lang)
-                        : [...settings.targetLangs, lang];
-                      setSettings({ ...settings, targetLangs: newLangs });
-                    }}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
-                      isSelected
-                        ? 'bg-pink-500/20 text-pink-300 border-pink-500/40'
-                        : 'bg-slate-800/50 text-slate-400 border-white/5 hover:border-slate-500/30'
-                    }`}
-                  >
-                    {isSelected && <CheckCircle2 className="w-3 h-3 inline mr-1" />}
-                    {lang}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          <div 
-            className="flex items-center gap-3 p-4 bg-slate-900/50 border border-white/5 rounded-xl cursor-pointer select-none transition-colors hover:bg-slate-800/50"
-            onClick={() => setSettings({ ...settings, autoTranslate: !settings.autoTranslate })}
-          >
-            <div className="text-cyan-500">
-              {settings.autoTranslate ? <CheckSquare className="w-6 h-6" /> : <Square className="w-6 h-6 text-slate-500" />}
-            </div>
             <div>
-              <span className="font-medium text-slate-200 block mb-0.5">Auto-translate after subtitle download</span>
-              <p className="text-xs text-slate-500 mt-0.5">When English subtitles are downloaded, automatically translate them into all selected target languages.</p>
+              <SettingsLabel title="Target Languages" />
+              <SettingsHelper text="Select the languages you want subtitles translated into." />
+              <div className="flex flex-wrap gap-2 mt-3">
+                {['Dutch', 'French', 'German', 'Spanish', 'Italian', 'Portuguese'].map(lang => {
+                  const isSelected = settings.targetLangs?.includes(lang);
+                  return (
+                    <button
+                      key={lang}
+                      onClick={() => {
+                        const newLangs = isSelected
+                          ? settings.targetLangs.filter(l => l !== lang)
+                          : [...(settings.targetLangs || []), lang];
+                        setSettings({ ...settings, targetLangs: newLangs });
+                      }}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${
+                        isSelected
+                          ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40'
+                          : 'bg-slate-800/50 text-slate-400 border-white/5 hover:border-slate-500/30'
+                      }`}
+                    >
+                      {isSelected && <CheckCircle2 className="w-3 h-3 inline mr-1" />}
+                      {lang}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
-          </div>
+          </SettingsGroup>
+
+          <ToggleRow
+            checked={settings.autoTranslate}
+            onChange={() => setSettings({ ...settings, autoTranslate: !settings.autoTranslate })}
+            title="Auto-translate after subtitle download"
+            description="When English subtitles are downloaded, automatically translate them into all selected target languages."
+          />
 
           {settings.autoTranslate && (
-            <div 
-              className="flex items-center gap-3 p-4 bg-slate-900/50 border border-white/5 rounded-xl cursor-pointer select-none transition-colors hover:bg-slate-800/50"
-              onClick={() => setSettings({ ...settings, preferNativeBeforeTranslate: !settings.preferNativeBeforeTranslate })}
-            >
-              <div className="text-amber-400">
-                {settings.preferNativeBeforeTranslate ? <CheckSquare className="w-6 h-6" /> : <Square className="w-6 h-6 text-slate-500" />}
-              </div>
-              <div>
-                <span className="font-medium text-slate-200 block mb-0.5">Prefer native subtitles before auto-translate</span>
-                <p className="text-xs text-slate-500 mt-0.5">First search for native subtitles in your target languages. Only auto-translate from English if no native subtitles are found. When native subtitles become available later, they will replace translated ones.</p>
-              </div>
-            </div>
+            <ToggleRow
+              checked={settings.preferNativeBeforeTranslate}
+              onChange={() => setSettings({ ...settings, preferNativeBeforeTranslate: !settings.preferNativeBeforeTranslate })}
+              title="Prefer native subtitles before auto-translate"
+              description="First search for native subtitles in your target languages. Only auto-translate from English if no native subtitles are found. When native subtitles become available later, they will replace translated ones."
+            />
           )}
 
-          <div className="flex justify-end pt-2">
-            <button onClick={handleSave} className="px-8 py-3 font-bold text-cyan-400 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 rounded-xl transition-all flex items-center justify-center gap-2 w-full sm:w-auto mx-auto sm:mx-0 shadow-[0_0_15px_rgba(6,182,212,0.15)] disabled:opacity-50">
-              <Save className="w-5 h-5" /> Save Changes
-            </button>
-          </div>
         </div>
-      </div>
+      </SettingsSection>
 
     </div>
   );

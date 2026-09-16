@@ -123,15 +123,15 @@ export default function SubtitleEditorModal({
     <ModalShell open={open} onClose={onClose} size="4xl" noHeader noPadding noFloatingClose>
       <div className="flex flex-col h-[88vh]">
         {/* Top Header */}
-        <div className="p-4 border-b border-white/5 flex items-center justify-between shrink-0 bg-slate-900/80">
+        <div className="p-4 border-b border-slate-800 flex items-center justify-between shrink-0 bg-slate-900/90">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400">
+            <div className="w-9 h-9 rounded-lg bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center text-cyan-400">
               <FileText className="w-5 h-5" />
             </div>
             <div>
               <h3 className="text-base font-bold text-slate-100 flex items-center gap-2">
                 Subtitle Editor
-                <span className="text-xs font-mono font-normal px-2 py-0.5 rounded bg-slate-800 border border-white/10 text-slate-400">
+                <span className="text-xs font-mono font-normal px-2 py-0.5 rounded-md bg-slate-950 border border-slate-800 text-slate-400">
                   {filename}
                 </span>
               </h3>
@@ -159,7 +159,7 @@ export default function SubtitleEditorModal({
         </div>
 
         {/* Search & Actions Bar */}
-        <div className="p-3 border-b border-white/5 bg-slate-900/40 flex items-center justify-between gap-4 shrink-0">
+        <div className="p-3 border-b border-slate-800 bg-slate-900/60 flex items-center justify-between gap-4 shrink-0">
           <div className="relative flex-1 max-w-md">
             <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
             <input
@@ -167,14 +167,14 @@ export default function SubtitleEditorModal({
               placeholder="Search dialogue or timestamps..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-slate-800/80 border border-white/10 rounded-xl pl-9 pr-4 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-cyan-500/50"
+              className="w-full bg-slate-950 border border-slate-800 rounded-lg pl-9 pr-4 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-cyan-500"
             />
           </div>
 
           <div className="flex items-center gap-2">
             <button
               onClick={() => handleAddCueAfter(cues.length - 1)}
-              className="px-3 py-1.5 text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-white/10 rounded-lg transition-colors flex items-center gap-1.5"
+              className="px-3 py-1.5 text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-lg transition-colors flex items-center gap-1.5"
             >
               <Plus className="w-3.5 h-3.5 text-cyan-400" /> Add Cue
             </button>
@@ -245,32 +245,32 @@ export default function SubtitleEditorModal({
                   {/* Timing Inputs */}
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
+                      <label className="block text-[10px] font-semibold uppercase tracking-wider text-slate-500 mb-1">
                         Start Timestamp
                       </label>
                       <input
                         type="text"
                         value={cues[selectedCueIndex].startTime || ''}
                         onChange={(e) => handleUpdateCueTimes(selectedCueIndex, e.target.value, cues[selectedCueIndex].endTime)}
-                        className="w-full bg-slate-800 border border-white/10 rounded-xl px-3 py-2 font-mono text-xs text-cyan-300 focus:outline-none focus:border-cyan-500/50"
+                        className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 font-mono text-xs text-cyan-300 focus:outline-none focus:border-cyan-500"
                       />
                     </div>
                     <div>
-                      <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
+                      <label className="block text-[10px] font-semibold uppercase tracking-wider text-slate-500 mb-1">
                         End Timestamp
                       </label>
                       <input
                         type="text"
                         value={cues[selectedCueIndex].endTime || ''}
                         onChange={(e) => handleUpdateCueTimes(selectedCueIndex, cues[selectedCueIndex].startTime, e.target.value)}
-                        className="w-full bg-slate-800 border border-white/10 rounded-xl px-3 py-2 font-mono text-xs text-cyan-300 focus:outline-none focus:border-cyan-500/50"
+                        className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 font-mono text-xs text-cyan-300 focus:outline-none focus:border-cyan-500"
                       />
                     </div>
                   </div>
 
                   {/* Dialogue Text Area */}
                   <div>
-                    <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
+                    <label className="block text-[10px] font-semibold uppercase tracking-wider text-slate-500 mb-1">
                       Dialogue Text
                     </label>
                     <textarea
@@ -278,7 +278,7 @@ export default function SubtitleEditorModal({
                       value={cues[selectedCueIndex].text || ''}
                       onChange={(e) => handleUpdateCueText(selectedCueIndex, e.target.value)}
                       placeholder="Enter subtitle dialogue..."
-                      className="w-full bg-slate-800 border border-white/10 rounded-xl p-3 text-sm text-slate-100 focus:outline-none focus:border-cyan-500/50 resize-none font-sans leading-relaxed"
+                      className="w-full bg-slate-950 border border-slate-800 rounded-lg p-3 text-sm text-slate-100 focus:outline-none focus:border-cyan-500 resize-none font-sans leading-relaxed"
                     />
                     <p className="text-[11px] text-slate-500 mt-1">
                       Formatting tags such as &lt;i&gt;italics&lt;/i&gt;, speaker labels, and sound descriptions are supported.
@@ -295,7 +295,7 @@ export default function SubtitleEditorModal({
         )}
 
         {/* Bottom Actions Footer */}
-        <div className="p-4 border-t border-white/5 bg-slate-900/80 flex items-center justify-between shrink-0">
+        <div className="p-4 border-t border-slate-800 bg-slate-900/90 flex items-center justify-between shrink-0">
           <button
             onClick={onClose}
             className="px-4 py-2 text-sm font-medium text-slate-400 hover:text-white transition-colors"
@@ -305,7 +305,7 @@ export default function SubtitleEditorModal({
           <button
             onClick={handleSave}
             disabled={saving || cues.length === 0}
-            className="px-6 py-2.5 text-sm font-bold bg-cyan-500 text-slate-950 rounded-xl hover:bg-cyan-400 transition-all disabled:opacity-50 flex items-center gap-2 shadow-lg shadow-cyan-500/20"
+            className="px-5 py-2 text-sm font-medium bg-cyan-600 text-white rounded-lg hover:bg-cyan-500 transition-colors disabled:opacity-50 flex items-center gap-2"
           >
             {saving ? (
               <>

@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import { createPortal } from 'react-dom';
-import { HelpCircle, CheckSquare, Square, FileText, X, Tag, Save } from 'lucide-react';
+import { HelpCircle, CheckSquare, Square, FileText, X, Tag, Save, Film, Tv, Music } from 'lucide-react';
 import CustomSelect from '../../components/shared/CustomSelect';
+import { SettingsSection, SettingsHeader, SettingsGroup, SettingsLabel, SettingsHelper } from '../../components/settings/layout';
+import ToggleRow from '../../components/shared/ToggleRow';
 
 const TagsModal = ({ title, tags, onClose }) => {
   return createPortal(
@@ -41,14 +43,29 @@ const TagsModal = ({ title, tags, onClose }) => {
   );
 };
 
-export default function NamingTab({ settings, setSettings, handleSave }) {
+export default function NamingTab({ settings, setSettings }) {
   const [modalType, setModalType] = useState(null);
+
+  const previewShow = 'Breaking Bad';
+
+  // Fills both the server's vocabulary ({Show Title}/{Season}/{Episode}) and the newer
+  // template style ({Series Title}/{season:00}/{episode:00}) so previews always render.
+  const fillTvTags = (format, fallback) => (format || fallback)
+    .replace(/{Show Title}/gi, previewShow)
+    .replace(/{Series Title}/gi, previewShow)
+    .replace(/{season:00}/gi, '01')
+    .replace(/{Season}/gi, '01')
+    .replace(/{Season Number}/gi, '1')
+    .replace(/{episode:00}/gi, '01')
+    .replace(/{Episode}/gi, '01')
+    .replace(/{Episode Title}/gi, 'Pilot')
+    .replace(/{Release Year}/gi, '2008');
 
   const showMovieHelp = () => {
     setModalType('movie');
   };
 
-  const showEpisodeHelp = () => {
+  const showTvHelp = () => {
     setModalType('episode');
   };
 
@@ -56,73 +73,17 @@ export default function NamingTab({ settings, setSettings, handleSave }) {
     setModalType('audio');
   };
 
-  const generateMovieExample = (format) => {
-    if (!format) return 'Example: ';
-    let result = format;
-    result = result.replace(/{Movie Title}/gi, 'The Movie Title');
-    result = result.replace(/{Release Year}/gi, '2010');
-    return `Example: ${result}`;
-  };
 
-  const generateEpisodeExample = (format) => {
-    if (!format) return 'Example: ';
-    let result = format;
-    result = result.replace(/{Show Title}/gi, 'The Show Title');
-    result = result.replace(/{Season}/gi, '01');
-    result = result.replace(/{Episode}/gi, '01');
-    result = result.replace(/{Episode Title}/gi, 'Episode Title');
-    return `Example: ${result}`;
-  };
-
-  const generateSeasonFolderExample = (format) => {
-    if (!format) return 'Example: ';
-    let result = format;
-    result = result.replace(/{Show Title}/gi, 'The Show Title');
-    result = result.replace(/{Season}/gi, '02');
-    result = result.replace(/{Season Number}/gi, '2');
-    return `Example: ${result}`;
-  };
-
-  const generateArtistFolderExample = (format) => {
-    const f = format || '{Artist Name}';
-    const result = f.replace(/{Artist Name}/gi, 'Daft Punk');
-    return `Example: ${result}`;
-  };
-
-  const generateAlbumFolderExample = (format) => {
-    const f = format || '{Album Title} ({Year})';
-    const result = f
-      .replace(/{Album Title}/gi, 'Random Access Memories')
-      .replace(/{Year}/gi, '2013');
-    return `Example: ${result}`;
-  };
-
-  const generateTrackFormatExample = (format) => {
-    const f = format || '{TrackNumber:00} - {Track Title}';
-    const result = f
-      .replace(/{TrackNumber:00}/gi, '01')
-      .replace(/{TrackNumber}/gi, '1')
-      .replace(/{Track Title}/gi, 'Give Life Back to Music');
-    return `Example: ${result}.flac`;
-  };
 
   const previewMovieName = (settings?.standardMovieFormat || '{Movie Title} ({Release Year})')
     .replace(/{Movie Title}/gi, 'Inception')
     .replace(/{Release Year}/gi, '2010');
   const previewMoviePath = `/media/movies/${previewMovieName}/${previewMovieName}.mkv`;
 
-  const previewShow = 'Breaking Bad';
-  const previewSeasonFolder = (settings?.seasonFolderFormat || 'Season {Season Number}')
-    .replace(/{Show Title}/gi, previewShow)
-    .replace(/{Season}/gi, '01')
-    .replace(/{Season Number}/gi, '1');
-  const previewEpisodeFile = (settings?.standardEpisodeFormat || '{Show Title} - S{Season}E{Episode} - {Episode Title}')
-    .replace(/{Show Title}/gi, previewShow)
-    .replace(/{Season}/gi, '01')
-    .replace(/{Season Number}/gi, '1')
-    .replace(/{Episode}/gi, '01')
-    .replace(/{Episode Title}/gi, 'Pilot');
-  const previewEpisodePath = `/media/tv/${previewShow}/${previewSeasonFolder}/${previewEpisodeFile}.mkv`;
+  const previewSeasonFolder = fillTvTags(settings?.seasonFolderFormat, 'Season {Season Number}');
+  const previewEpisodeFile = fillTvTags(settings?.standardEpisodeFormat, '{Show Title} - S{Season}E{Episode} - {Episode Title}');
+  const previewSeriesFolder = fillTvTags(settings?.seriesFolderFormat, previewShow);
+  const previewTvPath = `/media/tv/${previewSeriesFolder}/${previewSeasonFolder}/${previewEpisodeFile}.mkv`;
 
   const previewArtist = (settings?.musicArtistFolderFormat || '{Artist Name}').replace(/{Artist Name}/gi, 'Daft Punk');
   const previewAlbum = (settings?.musicAlbumFolderFormat || '{Album Title} ({Year})')
@@ -134,60 +95,42 @@ export default function NamingTab({ settings, setSettings, handleSave }) {
     .replace(/{Track Title}/gi, 'Give Life Back to Music') + '.flac';
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6">
-      <div className="flex items-center justify-between mb-2">
-        <h2 className="text-2xl font-bold text-orange-400 flex items-center gap-2">
-          <FileText className="w-7 h-7" /> Media Naming
+    <div className="w-full space-y-6 animate-fade-in">
+      <div className="mb-6">
+        <h2 className="text-lg sm:text-xl font-bold font-display text-slate-100 flex items-center gap-2.5 mb-1.5">
+          <FileText className="w-5 h-5 text-cyan-400 shrink-0" /> Media Naming
         </h2>
+        <p className="text-xs sm:text-sm text-slate-400 leading-relaxed">
+          Configure how Atlas renames and organizes your media files using custom format tags.
+        </p>
       </div>
 
       {/* Movie Naming Section */}
-      <div className="glass-panel p-6 rounded-2xl border border-white/10 space-y-6 shadow-xl relative overflow-hidden">
-        <h3 className="text-lg font-bold text-slate-200 flex items-center gap-2">
-          Movie Naming
-        </h3>
-        <p className="text-xs text-slate-500">Configure how Atlas renames your movie files using custom format tags.</p>
+      <SettingsSection>
+        <SettingsHeader
+          title="Movie Naming"
+          icon={Film}
+          description="Configure how Atlas renames your movie files using custom format tags."
+        />
         
-        <div className="space-y-6">
-          <div className="flex flex-col sm:flex-row sm:items-start gap-2 sm:gap-4">
-            <div className="sm:w-1/3">
-              <label className="text-sm font-medium text-slate-300">Rename Movies</label>
-            </div>
-            <div className="sm:w-2/3">
-              <div 
-                className="flex items-center gap-3 cursor-pointer select-none"
-                onClick={() => setSettings({...settings, renameMovies: !settings.renameMovies})}
-              >
-                <div className="text-cyan-500">
-                  {settings.renameMovies ? <CheckSquare className="w-6 h-6" /> : <Square className="w-6 h-6 text-slate-500" />}
-                </div>
-                <span className="text-sm text-slate-400">Atlas will use the existing file name if renaming is disabled</span>
-              </div>
-            </div>
-          </div>
+        <div className="space-y-4">
+          <ToggleRow
+            checked={settings.renameMovies}
+            onChange={() => setSettings({...settings, renameMovies: !settings.renameMovies})}
+            title="Rename Movies"
+            description="Atlas will use the existing file name if renaming is disabled"
+          />
 
-          <div className="flex flex-col sm:flex-row sm:items-start gap-2 sm:gap-4">
-            <div className="sm:w-1/3">
-              <label className="text-sm font-medium text-slate-300">Replace Illegal Characters</label>
-            </div>
-            <div className="sm:w-2/3">
-              <div 
-                className="flex items-center gap-3 cursor-pointer select-none"
-                onClick={() => setSettings({...settings, replaceIllegalCharacters: !settings.replaceIllegalCharacters})}
-              >
-                <div className="text-cyan-500">
-                  {settings.replaceIllegalCharacters ? <CheckSquare className="w-6 h-6" /> : <Square className="w-6 h-6 text-slate-500" />}
-                </div>
-                <span className="text-sm text-slate-400">Replace illegal characters. If unchecked, Atlas will remove them instead</span>
-              </div>
-            </div>
-          </div>
+          <ToggleRow
+            checked={settings.replaceIllegalCharacters}
+            onChange={() => setSettings({...settings, replaceIllegalCharacters: !settings.replaceIllegalCharacters})}
+            title="Replace Illegal Characters"
+            description="Replace illegal characters. If unchecked, Atlas will remove them instead"
+          />
 
-          <div className="flex flex-col sm:flex-row sm:items-start gap-2 sm:gap-4">
-            <div className="sm:w-1/3">
-              <label className="text-sm font-medium text-slate-300">Colon Replacement</label>
-            </div>
-            <div className="sm:w-2/3">
+          <SettingsGroup>
+            <div>
+              <SettingsLabel title="Colon Replacement" />
               <CustomSelect 
                 value={settings.colonReplacement}
                 onChange={e => setSettings({...settings, colonReplacement: e.target.value})}
@@ -197,19 +140,15 @@ export default function NamingTab({ settings, setSettings, handleSave }) {
                   { label: 'Replace with Space', value: 'space' }
                 ]}
               />
-              <p className="text-xs text-slate-500 mt-2">Change how Atlas handles colon replacement in titles</p>
+              <SettingsHelper text="Change how Atlas handles colon replacement in titles" />
             </div>
-          </div>
 
-          <div className="flex flex-col sm:flex-row sm:items-start gap-2 sm:gap-4">
-            <div className="sm:w-1/3">
-              <label className="text-sm font-medium text-slate-300">Standard Movie Format</label>
-            </div>
-            <div className="sm:w-2/3">
+            <div>
+              <SettingsLabel title="Standard Movie Format" />
               <div className="flex">
                 <input 
                   type="text"
-                  className="flex-1 bg-slate-900/50 border border-slate-700 rounded-l-lg px-4 py-2 text-white font-mono text-sm focus:outline-none focus:border-cyan-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="flex-1 bg-[#0c1624] border border-[#1c2d46] rounded-l-xl px-4 py-2.5 text-sm text-slate-200 focus:outline-none focus:ring-1 focus:ring-cyan-500/50 focus:border-cyan-500/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed placeholder:text-slate-600 font-mono"
                   value={settings.standardMovieFormat || ''}
                   placeholder="{Movie Title} ({Release Year})"
                   onChange={e => setSettings({...settings, standardMovieFormat: e.target.value})}
@@ -217,14 +156,13 @@ export default function NamingTab({ settings, setSettings, handleSave }) {
                 />
                 <button 
                   onClick={showMovieHelp}
-                  className="bg-cyan-500 hover:bg-cyan-600 text-white px-3 py-2 rounded-r-lg border border-cyan-500 transition-colors"
+                  className="bg-[#1c2d46] hover:bg-[#274063] text-slate-300 px-4 py-2.5 rounded-r-xl border border-[#1c2d46] border-l-0 transition-colors"
                 >
                   <HelpCircle className="w-5 h-5" />
                 </button>
               </div>
-              <p className="text-xs text-slate-500 mt-2">{generateMovieExample(settings.standardMovieFormat)}</p>
             </div>
-          </div>
+          </SettingsGroup>
 
           {/* Live Preview Box */}
           <div className="p-3.5 rounded-xl bg-slate-900/40 border border-white/5 space-y-1">
@@ -234,171 +172,163 @@ export default function NamingTab({ settings, setSettings, handleSave }) {
             </p>
           </div>
         </div>
-      </div>
+      </SettingsSection>
 
       {/* TV Naming Section */}
-      <div className="glass-panel p-6 rounded-2xl border border-white/10 space-y-6 shadow-xl relative overflow-hidden mt-8">
-        <h3 className="text-lg font-bold text-slate-200 flex items-center gap-2">
-          Episode Naming
-        </h3>
-        <p className="text-xs text-slate-500">Configure how Atlas renames your TV episode files using custom format tags.</p>
+      <SettingsSection>
+        <SettingsHeader
+          title="Episode Naming"
+          icon={Tv}
+          description="Configure how Atlas renames your TV episode files using custom format tags."
+        />
         
-        <div className="space-y-6">
-          <div className="flex flex-col sm:flex-row sm:items-start gap-2 sm:gap-4">
-            <div className="sm:w-1/3">
-              <label className="text-sm font-medium text-slate-300">Rename Episodes</label>
-            </div>
-            <div className="sm:w-2/3">
-              <div 
-                className="flex items-center gap-3 cursor-pointer select-none"
-                onClick={() => setSettings({...settings, renameEpisodes: !settings.renameEpisodes})}
-              >
-                <div className="text-cyan-500">
-                  {settings.renameEpisodes ? <CheckSquare className="w-6 h-6" /> : <Square className="w-6 h-6 text-slate-500" />}
-                </div>
-                <span className="text-sm text-slate-400">Atlas will use the existing file name if renaming is disabled</span>
-              </div>
-            </div>
-          </div>
+        <div className="space-y-4">
+          <ToggleRow
+            checked={settings.renameEpisodes}
+            onChange={() => setSettings({...settings, renameEpisodes: !settings.renameEpisodes})}
+            title="Rename Episodes"
+            description="Atlas will use the existing file name if renaming is disabled"
+          />
 
-          <div className="flex flex-col sm:flex-row sm:items-start gap-2 sm:gap-4">
-            <div className="sm:w-1/3">
-              <label className="text-sm font-medium text-slate-300">Standard Episode Format</label>
+          <ToggleRow
+            checked={settings.replaceIllegalCharacters}
+            onChange={() => setSettings({...settings, replaceIllegalCharacters: !settings.replaceIllegalCharacters})}
+            title="Replace Illegal Characters"
+            description="Replace illegal characters. If unchecked, Atlas will remove them instead"
+          />
+
+          <SettingsGroup>
+            <div>
+              <SettingsLabel title="Colon Replacement" />
+              <CustomSelect 
+                value={settings.colonReplacement}
+                onChange={e => setSettings({...settings, colonReplacement: e.target.value})}
+                options={[
+                  { label: 'Delete', value: 'delete' },
+                  { label: 'Replace with Dash', value: 'dash' },
+                  { label: 'Replace with Space', value: 'space' }
+                ]}
+              />
+              <SettingsHelper text="Change how Atlas handles colon replacement in titles" />
             </div>
-            <div className="sm:w-2/3">
+
+            <div>
+              <SettingsLabel title="Standard Episode Format" />
               <div className="flex">
                 <input 
                   type="text"
-                  className="flex-1 bg-slate-900/50 border border-slate-700 rounded-l-lg px-4 py-2 text-white font-mono text-sm focus:outline-none focus:border-cyan-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="flex-1 bg-[#0c1624] border border-[#1c2d46] rounded-l-xl px-4 py-2.5 text-sm text-slate-200 focus:outline-none focus:ring-1 focus:ring-cyan-500/50 focus:border-cyan-500/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed placeholder:text-slate-600 font-mono"
                   value={settings.standardEpisodeFormat || ''}
                   placeholder="{Show Title} - S{Season}E{Episode} - {Episode Title}"
                   onChange={e => setSettings({...settings, standardEpisodeFormat: e.target.value})}
                   disabled={!settings.renameEpisodes}
                 />
                 <button 
-                  onClick={showEpisodeHelp}
-                  className="bg-cyan-500 hover:bg-cyan-600 text-white px-3 py-2 rounded-r-lg border border-cyan-500 transition-colors"
+                  onClick={showTvHelp}
+                  className="bg-[#1c2d46] hover:bg-[#274063] text-slate-300 px-4 py-2.5 rounded-r-xl border border-[#1c2d46] border-l-0 transition-colors"
                 >
                   <HelpCircle className="w-5 h-5" />
                 </button>
               </div>
-              <p className="text-xs text-slate-500 mt-2">{generateEpisodeExample(settings.standardEpisodeFormat)}</p>
             </div>
-          </div>
 
-          <div className="flex flex-col sm:flex-row sm:items-start gap-2 sm:gap-4">
-            <div className="sm:w-1/3">
-              <label className="text-sm font-medium text-slate-300">Season Folder Format</label>
-            </div>
-            <div className="w-2/3">
+            <div>
+              <SettingsLabel title="Series Folder Format" />
               <div className="flex">
                 <input 
                   type="text"
-                  className="flex-1 bg-slate-900/50 border border-slate-700 rounded-l-lg px-4 py-2 text-white font-mono text-sm focus:outline-none focus:border-cyan-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  value={settings.seasonFolderFormat || ''}
-                  placeholder="Season {Season Number}"
-                  onChange={e => setSettings({...settings, seasonFolderFormat: e.target.value})}
+                  className="flex-1 bg-[#0c1624] border border-[#1c2d46] rounded-l-xl px-4 py-2.5 text-sm text-slate-200 focus:outline-none focus:ring-1 focus:ring-cyan-500/50 focus:border-cyan-500/50 transition-colors placeholder:text-slate-600 font-mono"
+                  value={settings.seriesFolderFormat || ''}
+                  placeholder="{Show Title} ({Release Year})"
+                  onChange={e => setSettings({...settings, seriesFolderFormat: e.target.value})}
                 />
                 <button 
-                  onClick={showEpisodeHelp}
-                  className="bg-cyan-500 hover:bg-cyan-600 text-white px-3 py-2 rounded-r-lg border border-cyan-500 transition-colors"
+                  onClick={showTvHelp}
+                  className="bg-[#1c2d46] hover:bg-[#274063] text-slate-300 px-4 py-2.5 rounded-r-xl border border-[#1c2d46] border-l-0 transition-colors"
                 >
                   <HelpCircle className="w-5 h-5" />
                 </button>
               </div>
-              <p className="text-xs text-slate-500 mt-2">{generateSeasonFolderExample(settings.seasonFolderFormat || 'Season {Season Number}')}</p>
             </div>
-          </div>
+          </SettingsGroup>
 
           {/* Live Preview Box */}
           <div className="p-3.5 rounded-xl bg-slate-900/40 border border-white/5 space-y-1">
             <span className="text-[10px] uppercase tracking-wider font-bold text-slate-400">Live Preview:</span>
             <p className="font-mono text-xs text-cyan-300 break-all">
-              {previewEpisodePath}
+              {previewTvPath}
             </p>
           </div>
         </div>
-      </div>
+      </SettingsSection>
 
       {/* Audio Naming Section */}
-      <div className="glass-panel p-6 rounded-2xl border border-white/10 space-y-6 shadow-xl relative overflow-hidden mt-8">
-        <h3 className="text-lg font-bold text-slate-200 flex items-center gap-2">
-          Audio Naming
-        </h3>
-        <p className="text-xs text-slate-500">Configure how Atlas formats and organizes your music library files.</p>
+      <SettingsSection>
+        <SettingsHeader
+          title="Audio Naming"
+          icon={Music}
+          description="Configure how Atlas formats and organizes your music library files."
+        />
         
-        <div className="space-y-6">
-          <div className="flex flex-col sm:flex-row sm:items-start gap-2 sm:gap-4">
-            <div className="sm:w-1/3">
-              <label className="text-sm font-medium text-slate-300">Artist Folder Format</label>
-            </div>
-            <div className="sm:w-2/3">
+        <div className="space-y-4">
+          <SettingsGroup>
+            <div>
+              <SettingsLabel title="Artist Folder Format" />
               <div className="flex">
                 <input 
                   type="text"
-                  className="flex-1 bg-slate-900/50 border border-slate-700 rounded-l-lg px-4 py-2 text-white font-mono text-sm focus:outline-none focus:border-cyan-500 transition-colors"
+                  className="flex-1 bg-[#0c1624] border border-[#1c2d46] rounded-l-xl px-4 py-2.5 text-sm text-slate-200 focus:outline-none focus:ring-1 focus:ring-cyan-500/50 focus:border-cyan-500/50 transition-colors placeholder:text-slate-600 font-mono"
                   value={settings.musicArtistFolderFormat || ''}
                   placeholder="{Artist Name}"
                   onChange={e => setSettings({...settings, musicArtistFolderFormat: e.target.value})}
                 />
                 <button 
                   onClick={showAudioHelp}
-                  className="bg-cyan-500 hover:bg-cyan-600 text-white px-3 py-2 rounded-r-lg border border-cyan-500 transition-colors"
+                  className="bg-[#1c2d46] hover:bg-[#274063] text-slate-300 px-4 py-2.5 rounded-r-xl border border-[#1c2d46] border-l-0 transition-colors"
                 >
                   <HelpCircle className="w-5 h-5" />
                 </button>
               </div>
-              <p className="text-xs text-slate-500 mt-2">{generateArtistFolderExample(settings.musicArtistFolderFormat)}</p>
             </div>
-          </div>
 
-          <div className="flex flex-col sm:flex-row sm:items-start gap-2 sm:gap-4">
-            <div className="sm:w-1/3">
-              <label className="text-sm font-medium text-slate-300">Album Folder Format</label>
-            </div>
-            <div className="sm:w-2/3">
+            <div>
+              <SettingsLabel title="Album Folder Format" />
               <div className="flex">
                 <input 
                   type="text"
-                  className="flex-1 bg-slate-900/50 border border-slate-700 rounded-l-lg px-4 py-2 text-white font-mono text-sm focus:outline-none focus:border-cyan-500 transition-colors"
+                  className="flex-1 bg-[#0c1624] border border-[#1c2d46] rounded-l-xl px-4 py-2.5 text-sm text-slate-200 focus:outline-none focus:ring-1 focus:ring-cyan-500/50 focus:border-cyan-500/50 transition-colors placeholder:text-slate-600 font-mono"
                   value={settings.musicAlbumFolderFormat || ''}
                   placeholder="{Album Title} ({Year})"
                   onChange={e => setSettings({...settings, musicAlbumFolderFormat: e.target.value})}
                 />
                 <button 
                   onClick={showAudioHelp}
-                  className="bg-cyan-500 hover:bg-cyan-600 text-white px-3 py-2 rounded-r-lg border border-cyan-500 transition-colors"
+                  className="bg-[#1c2d46] hover:bg-[#274063] text-slate-300 px-4 py-2.5 rounded-r-xl border border-[#1c2d46] border-l-0 transition-colors"
                 >
                   <HelpCircle className="w-5 h-5" />
                 </button>
               </div>
-              <p className="text-xs text-slate-500 mt-2">{generateAlbumFolderExample(settings.musicAlbumFolderFormat)}</p>
             </div>
-          </div>
 
-          <div className="flex flex-col sm:flex-row sm:items-start gap-2 sm:gap-4">
-            <div className="sm:w-1/3">
-              <label className="text-sm font-medium text-slate-300">Track Format</label>
-            </div>
-            <div className="sm:w-2/3">
+            <div>
+              <SettingsLabel title="Track Format" />
               <div className="flex">
                 <input 
                   type="text"
-                  className="flex-1 bg-slate-900/50 border border-slate-700 rounded-l-lg px-4 py-2 text-white font-mono text-sm focus:outline-none focus:border-cyan-500 transition-colors"
+                  className="flex-1 bg-[#0c1624] border border-[#1c2d46] rounded-l-xl px-4 py-2.5 text-sm text-slate-200 focus:outline-none focus:ring-1 focus:ring-cyan-500/50 focus:border-cyan-500/50 transition-colors placeholder:text-slate-600 font-mono"
                   value={settings.musicTrackFileFormat || ''}
                   placeholder="{TrackNumber:00} - {Track Title}"
                   onChange={e => setSettings({...settings, musicTrackFileFormat: e.target.value})}
                 />
                 <button 
                   onClick={showAudioHelp}
-                  className="bg-cyan-500 hover:bg-cyan-600 text-white px-3 py-2 rounded-r-lg border border-cyan-500 transition-colors"
+                  className="bg-[#1c2d46] hover:bg-[#274063] text-slate-300 px-4 py-2.5 rounded-r-xl border border-[#1c2d46] border-l-0 transition-colors"
                 >
                   <HelpCircle className="w-5 h-5" />
                 </button>
               </div>
-              <p className="text-xs text-slate-500 mt-2">{generateTrackFormatExample(settings.musicTrackFileFormat)}</p>
             </div>
-          </div>
+          </SettingsGroup>
 
           <div className="p-3.5 rounded-xl bg-slate-900/40 border border-white/5 space-y-1">
             <span className="text-[10px] uppercase tracking-wider font-bold text-slate-400">Live Preview:</span>
@@ -407,13 +337,9 @@ export default function NamingTab({ settings, setSettings, handleSave }) {
             </p>
           </div>
         </div>
-      </div>
+      </SettingsSection>
 
-      <div className="flex justify-end">
-        <button onClick={handleSave} className="px-8 py-3 font-bold text-cyan-400 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 rounded-xl transition-all flex items-center justify-center gap-2 w-full sm:w-auto mx-auto sm:mx-0 shadow-[0_0_15px_rgba(6,182,212,0.15)] disabled:opacity-50">
-          <Save className="w-5 h-5" /> Save Changes
-        </button>
-      </div>
+
 
       {modalType === 'movie' && (
         <TagsModal 
@@ -431,6 +357,7 @@ export default function NamingTab({ settings, setSettings, handleSave }) {
           title="Episode Naming Tags"
           tags={[
             { name: '{Show Title}', desc: 'Title of the show' },
+            { name: '{Release Year}', desc: 'Release year of the show' },
             { name: '{Season}', desc: 'Padded (e.g. 02)' },
             { name: '{Season Number}', desc: 'Unpadded (e.g. 2)' },
             { name: '{Episode}', desc: 'Episode number' },

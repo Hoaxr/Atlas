@@ -6,9 +6,9 @@ import { ProviderLabel } from '../utils/providerColors';
 export default function SubSearchModal({ open, onClose, label, filePath, sceneName, results, searching, searched, onSearch, onDownload, onRefresh }) {
   if (!open) return null;
 
-  const handleDownload = async (item, downloadKey) => {
+  const handleDownload = async (item, downloadKey, providerName) => {
     try {
-      await onDownload(item, downloadKey);
+      await onDownload({ ...item, provider: item.provider || providerName }, downloadKey);
       onClose();
       onRefresh();
     } catch (err) {
@@ -80,7 +80,7 @@ export default function SubSearchModal({ open, onClose, label, filePath, sceneNa
                               </a>
                             </div>
                             <button
-                              onClick={() => handleDownload(item, label)}
+                              onClick={() => handleDownload(item, label, provider.provider)}
                               className="shrink-0 bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-400 border border-cyan-500/30 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors"
                             >
                               <Download className="w-4 h-4" />
@@ -124,7 +124,7 @@ export default function SubSearchModal({ open, onClose, label, filePath, sceneNa
                           </span>
                           <span className="text-[10px] text-slate-500 text-right shrink-0 max-w-[80px] truncate hidden lg:block" title={item.uploadDate || ''}>{item.uploadDate || ''}</span>
                           <button
-                            onClick={() => handleDownload(item, label)}
+                            onClick={() => handleDownload(item, label, provider.provider)}
                             className="shrink-0 bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-400 border border-cyan-500/30 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-colors"
                           >
                             <Download className="w-3.5 h-3.5" />

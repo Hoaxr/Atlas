@@ -1,5 +1,8 @@
 <div align="center">
-  <h1>Atlas 🎬 🎵</h1>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Hoaxr/Atlas/main/assets/logo.png">
+    <img src="https://raw.githubusercontent.com/Hoaxr/Atlas/main/assets/logo-light.png" alt="Atlas — media manager" width="420">
+  </picture>
   <p><strong>An elegant, all-in-one media management dashboard — track, search, download, and stream your Movies, TV Shows, and Music.</strong></p>
   <p>
     <strong>Replaces Radarr • Sonarr • Lidarr • Bazarr • Tautulli • Overseerr/Jellyseerr</strong><br>

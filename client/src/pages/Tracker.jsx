@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { tmdbImgUrl } from '../lib/posterUrl';
 import StickyBar from '../components/shared/StickyBar';
+import LoadingState from '../components/shared/LoadingState';
 import { useStickyBar } from '../lib/useStickyBar';
 
 const formatRuntime = (minutes) => {
@@ -21,31 +22,55 @@ const formatRuntime = (minutes) => {
   return `${m}m`;
 };
 
+const tmdbCardCache = new Map();
+
 const TimelineHistoryCard = ({ item, handleMarkUnwatched, handleDeleteHistory }) => {
   const navigate = useNavigate();
   const isMovie = item.type === 'movie';
-  const [localTitle, setLocalTitle] = useState(isMovie ? item.movie_title : item.show_title);
-  const [localPoster, setLocalPoster] = useState(isMovie ? item.movie_poster : item.show_poster);
+  const resolvedTitle = isMovie ? item.movie_title : item.show_title;
+  const resolvedPoster = isMovie ? item.movie_poster : item.show_poster;
+  const [localTitle, setLocalTitle] = useState(resolvedTitle);
+  const [localPoster, setLocalPoster] = useState(resolvedPoster);
 
   useEffect(() => {
-    setLocalTitle(isMovie ? item.movie_title : item.show_title);
-    setLocalPoster(isMovie ? item.movie_poster : item.show_poster);
+    const title = isMovie ? item.movie_title : item.show_title;
+    const poster = isMovie ? item.movie_poster : item.show_poster;
+    setLocalTitle(title);
+    setLocalPoster(poster);
   }, [item.movie_title, item.show_title, item.movie_poster, item.show_poster, isMovie]);
 
   useEffect(() => {
     if (!localTitle && item.tmdb_id) {
-      const fetchTmdb = async () => {
-        try {
-          const res = await api.get(`/tmdb/${isMovie ? 'movie' : 'show'}/${item.tmdb_id}`);
-          if (res.data && res.data.data) {
-            setLocalTitle(isMovie ? res.data.data.title : res.data.data.name);
-            setLocalPoster(res.data.data.poster_path);
+      const cacheKey = `${isMovie ? 'movie' : 'show'}:${item.tmdb_id}`;
+      if (tmdbCardCache.has(cacheKey)) {
+        tmdbCardCache.get(cacheKey).then((data) => {
+          if (data) {
+            setLocalTitle(data.title);
+            setLocalPoster(data.poster);
           }
-        } catch (e) {
-          console.error('Failed to fetch tmdb data', e);
+        });
+        return;
+      }
+
+      const fetchPromise = api.get(`/tmdb/${isMovie ? 'movie' : 'show'}/${item.tmdb_id}`)
+        .then((res) => {
+          if (res.data && res.data.data) {
+            return {
+              title: isMovie ? res.data.data.title : res.data.data.name,
+              poster: res.data.data.poster_path
+            };
+          }
+          return null;
+        })
+        .catch(() => null);
+
+      tmdbCardCache.set(cacheKey, fetchPromise);
+      fetchPromise.then((data) => {
+        if (data) {
+          setLocalTitle(data.title);
+          setLocalPoster(data.poster);
         }
-      };
-      fetchTmdb();
+      });
     }
   }, [item.tmdb_id, isMovie, localTitle]);
 
@@ -68,47 +93,44 @@ const TimelineHistoryCard = ({ item, handleMarkUnwatched, handleDeleteHistory })
 
   return (
     <div className="relative group flex items-center gap-2 sm:gap-4 my-2 sm:my-2.5 w-full">
-      {/* Glow effect behind card on hover */}
-      <div className="absolute -inset-1 rounded-2xl bg-gradient-to-r from-cyan-500/20 via-purple-500/20 to-pink-500/20 opacity-0 group-hover:opacity-100 blur-lg transition-all duration-500 pointer-events-none" />
-
       {/* Timeline Node Point */}
       <div className="relative z-10 flex flex-col items-center shrink-0">
-        <div className="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full bg-slate-900 border-2 border-cyan-400 group-hover:border-cyan-300 group-hover:scale-125 transition-all duration-300 shadow-md shadow-cyan-500/40" />
+        <div className="w-2.5 h-2.5 rounded-full bg-slate-950 border-2 border-cyan-400 group-hover:scale-110 transition-all duration-200" />
       </div>
 
       {/* Timeline Card */}
-      <div className="relative z-10 flex-1 p-2.5 sm:p-3.5 rounded-xl sm:rounded-2xl bg-slate-900/70 border border-white/5 backdrop-blur-xl hover:bg-slate-800/70 hover:border-cyan-500/30 transition-all duration-300 shadow-lg group-hover:-translate-y-0.5 flex gap-2.5 sm:gap-4 items-center">
+      <div className="relative z-10 flex-1 p-2.5 sm:p-3.5 rounded-xl bg-slate-900/70 border border-slate-800 hover:border-slate-700 hover:bg-slate-900/90 transition-all duration-200 flex gap-2.5 sm:gap-4 items-center">
         {/* Poster */}
         <div 
           onClick={handleTitleClick}
-          className="relative w-12 h-16 sm:w-16 sm:h-22 bg-slate-800 rounded-lg sm:rounded-xl overflow-hidden shrink-0 cursor-pointer shadow-md group/poster border border-white/10"
+          className="relative w-12 h-16 sm:w-14 sm:h-20 bg-slate-950 rounded-lg overflow-hidden shrink-0 cursor-pointer border border-slate-800 group/poster"
         >
           {poster ? (
             <img 
               src={tmdbImgUrl(poster, 'w200')} 
               alt={title} 
-              className="w-full h-full object-cover group-hover/poster:scale-110 transition-transform duration-500" 
+              className="w-full h-full object-cover group-hover/poster:scale-105 transition-transform duration-300" 
             />
           ) : (
-            <div className="w-full h-full flex items-center justify-center text-slate-500">
-              {isMovie ? <Film className="w-6 h-6" /> : <Tv className="w-6 h-6" />}
+            <div className="w-full h-full flex items-center justify-center text-slate-600">
+              {isMovie ? <Film className="w-5 h-5" /> : <Tv className="w-5 h-5" />}
             </div>
           )}
         </div>
 
         {/* Card Body */}
         <div className="flex-1 min-w-0 space-y-1">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded-full ${isMovie ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30' : 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30'}`}>
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="text-[10px] uppercase font-semibold px-2 py-0.5 rounded-md bg-slate-800/80 text-slate-300 border border-slate-700/60">
               {isMovie ? 'Movie' : 'Episode'}
             </span>
             {quality && (
-              <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700">
+              <span className="text-[10px] font-mono font-medium px-1.5 py-0.5 rounded-md bg-slate-950 text-slate-400 border border-slate-800">
                 {quality}
               </span>
             )}
             {hdr && (
-              <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
+              <span className="text-[10px] font-mono font-medium px-1.5 py-0.5 rounded-md bg-amber-500/10 text-amber-400 border border-amber-500/20">
                 {hdr}
               </span>
             )}
@@ -116,13 +138,13 @@ const TimelineHistoryCard = ({ item, handleMarkUnwatched, handleDeleteHistory })
 
           <h3 
             onClick={handleTitleClick}
-            className="text-slate-100 font-bold text-xs sm:text-sm md:text-base line-clamp-2 cursor-pointer hover:text-cyan-400 transition-colors leading-tight"
+            className="text-slate-200 font-semibold text-xs sm:text-sm line-clamp-2 cursor-pointer hover:text-cyan-400 transition-colors leading-tight"
           >
             {title}
           </h3>
 
           {!isMovie && (item.season_number !== null && item.season_number !== undefined || item.episode_number !== null && item.episode_number !== undefined) && (
-            <p className="text-[10px] sm:text-xs text-cyan-300/90 font-medium truncate">
+            <p className="text-[10px] sm:text-xs text-slate-400 font-mono truncate">
               S{String(item.season_number || 1).padStart(2, '0')} E{String(item.episode_number || 1).padStart(2, '0')}
             </p>
           )}
@@ -135,26 +157,26 @@ const TimelineHistoryCard = ({ item, handleMarkUnwatched, handleDeleteHistory })
               <span className="text-slate-500 font-mono text-[10px] sm:text-xs">{formatRuntime(runtimeMin)}</span>
             )}
             <span className="flex items-center gap-1 text-emerald-400 font-semibold text-xs" title="Watched">
-              <CheckCircle2 className="w-4 h-4" />
+              <CheckCircle2 className="w-3.5 h-3.5" />
             </span>
           </div>
 
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1">
             <button
               onClick={() => handleMarkUnwatched(item)}
-              className="p-1.5 sm:p-2 rounded-lg bg-slate-800/90 hover:bg-amber-500/20 text-slate-400 hover:text-amber-300 border border-white/10 transition-all active:scale-95"
+              className="p-1.5 rounded-lg bg-slate-800/60 hover:bg-slate-800 text-slate-400 hover:text-amber-300 border border-slate-800 transition-all"
               title="Mark unwatched"
               aria-label="Mark unwatched"
             >
-              <Undo2 className="w-4 h-4" />
+              <Undo2 className="w-3.5 h-3.5" />
             </button>
             <button
               onClick={() => handleDeleteHistory(item.history_id)}
-              className="p-1.5 sm:p-2 rounded-lg bg-slate-800/90 hover:bg-red-500/20 text-slate-400 hover:text-red-300 border border-white/10 transition-all active:scale-95"
+              className="p-1.5 rounded-lg bg-slate-800/60 hover:bg-slate-800 text-slate-400 hover:text-rose-400 border border-slate-800 transition-all"
               title="Remove from history"
               aria-label="Remove from history"
             >
-              <Trash2 className="w-4 h-4" />
+              <Trash2 className="w-3.5 h-3.5" />
             </button>
           </div>
         </div>
@@ -347,38 +369,7 @@ const Tracker = () => {
   }, [history]);
 
   if (loading && !stats) {
-    return (
-      <div className="w-full space-y-6 sm:space-y-8 md:space-y-10 pb-12 sm:pb-16 animate-pulse">
-        {/* Hero skeleton */}
-        <div className="relative rounded-2xl sm:rounded-3xl border border-slate-700/50 bg-slate-900/80 p-4 sm:p-6 md:p-10 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-8">
-          <div className="space-y-3 max-w-2xl w-full">
-            <div className="h-10 bg-slate-800 rounded-xl w-64" />
-            <div className="h-6 bg-slate-800/60 rounded-lg w-80 max-w-full" />
-            <div className="h-4 bg-slate-800/40 rounded-lg w-48" />
-          </div>
-        </div>
-
-        {/* Continue watching skeleton */}
-        <div className="space-y-4">
-          <div className="h-7 bg-slate-800/80 rounded-lg w-48" />
-          <div className="flex gap-3 sm:gap-5 overflow-hidden">
-            {Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} className="w-48 sm:w-72 md:w-80 h-56 bg-slate-800/40 rounded-xl sm:rounded-2xl shrink-0 border border-slate-700/40" />
-            ))}
-          </div>
-        </div>
-
-        {/* Activity feed skeleton */}
-        <div className="p-4 sm:p-6 md:p-8 rounded-2xl sm:rounded-3xl border border-slate-700/50 bg-slate-800/40 space-y-4">
-          <div className="h-6 bg-slate-800 rounded-lg w-40" />
-          <div className="space-y-3">
-            {Array.from({ length: 3 }).map((_, i) => (
-              <div key={i} className="h-20 bg-slate-900/60 rounded-xl border border-white/5" />
-            ))}
-          </div>
-        </div>
-      </div>
-    );
+    return <LoadingState className="w-full min-h-[50vh] py-24" />;
   }
 
   if (error) {
@@ -394,23 +385,23 @@ const Tracker = () => {
       <StickyBar visible={stickyVisible} />
       
       {/* ── HERO HEADER ── */}
-      <div ref={headerRef} className="relative rounded-2xl sm:rounded-3xl overflow-hidden border border-slate-700/50 bg-slate-900/80 backdrop-blur-xl shadow-2xl p-4 sm:p-6 md:p-10">
+      <div ref={headerRef} className="relative rounded-xl overflow-hidden border border-slate-800 bg-slate-900/70 backdrop-blur-sm p-5 sm:p-6 md:p-8">
         {(activeWatching?.poster || currently?.backdrop) && (
-          <div className="absolute inset-0 z-0 opacity-20 filter blur-2xl scale-110 pointer-events-none">
+          <div className="absolute inset-0 z-0 opacity-15 filter blur-3xl scale-110 pointer-events-none">
             <img src={tmdbImgUrl(activeWatching?.poster || currently?.backdrop, 'w1280')} alt="" className="w-full h-full object-cover" />
           </div>
         )}
         
-        <div className="relative z-10 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-8">
-          <div className="space-y-3 max-w-2xl">
-            <h1 className="text-2xl sm:text-3xl md:text-5xl font-black text-slate-100 tracking-tight flex items-center gap-2 sm:gap-3">
-              <TrendingUp className="w-6 h-6 sm:w-8 sm:h-8 md:w-9 md:h-9 text-cyan-400" /> Watch Tracker
+        <div className="relative z-10 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6">
+          <div className="space-y-2 max-w-2xl">
+            <h1 className="text-2xl sm:text-3xl md:text-4xl font-black text-slate-100 tracking-tight flex items-center gap-2.5">
+              <TrendingUp className="w-6 h-6 sm:w-7 sm:h-7 text-cyan-400" /> Watch Tracker
             </h1>
             <div className="space-y-1">
-              <p className="text-slate-300 text-sm sm:text-lg md:text-xl font-medium">
-                You've watched <span className="text-cyan-400 font-bold">{stats?.total_days || '0'} days</span> ({stats?.total_hours || '0'} hours) of content
+              <p className="text-slate-300 text-sm sm:text-base font-medium">
+                You've watched <span className="text-cyan-400 font-semibold">{stats?.total_days || '0'} days</span> ({stats?.total_hours || '0'} hours) of content
               </p>
-              <p className="text-slate-400 text-xs sm:text-sm font-medium">
+              <p className="text-slate-400 text-xs font-medium">
                 {stats?.movies?.count ? `${stats.movies.count.toLocaleString()} movies` : ''}{stats?.episodes?.count ? ` · ${stats.episodes.count.toLocaleString()} episodes` : ''}{stats?.shows?.count ? ` · ${stats.shows.count.toLocaleString()} shows` : ''}{stats?.finished_seasons ? ` · ${stats.finished_seasons} seasons` : ''}
               </p>
             </div>
@@ -418,9 +409,7 @@ const Tracker = () => {
 
           {/* Active Now Watching Panel or Latest Watch Panel */}
           {activeWatching ? (
-            <div className="w-full lg:w-[420px] p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-slate-900/90 via-slate-800/90 to-cyan-950/40 border border-cyan-500/40 backdrop-blur-xl shadow-2xl shadow-cyan-500/10 flex items-center gap-4 group relative overflow-hidden">
-              <div className="absolute top-0 right-0 w-32 h-32 bg-cyan-500/10 rounded-full blur-2xl pointer-events-none animate-pulse" />
-
+            <div className="w-full lg:w-[400px] p-3.5 sm:p-4 rounded-xl bg-slate-950/70 border border-slate-800 backdrop-blur-sm flex items-center gap-3.5 group relative">
               <div 
                 onClick={() => {
                   const isMovie = activeWatching.type === 'movie';
@@ -428,7 +417,7 @@ const Tracker = () => {
                   else if (!isMovie && activeWatching.media_id) navigate(`/shows/${activeWatching.media_id}`);
                   else if (activeWatching.tmdb_id) navigate(`/${isMovie ? 'movies' : 'shows'}/${activeWatching.tmdb_id}`);
                 }}
-                className="w-16 sm:w-20 h-24 sm:h-28 rounded-xl overflow-hidden bg-slate-950 shrink-0 border border-cyan-500/30 cursor-pointer shadow-lg relative group/poster"
+                className="w-14 sm:w-16 h-20 sm:h-24 rounded-lg overflow-hidden bg-slate-950 shrink-0 border border-slate-800 cursor-pointer relative group/poster"
               >
                 {activeWatching.poster ? (
                   <img 
@@ -437,25 +426,25 @@ const Tracker = () => {
                     className="w-full h-full object-cover group-hover/poster:scale-105 transition-transform duration-300" 
                   />
                 ) : (
-                  <div className="w-full h-full flex items-center justify-center text-cyan-400"><Tv className="w-7 h-7" /></div>
+                  <div className="w-full h-full flex items-center justify-center text-cyan-400"><Tv className="w-6 h-6" /></div>
                 )}
               </div>
 
-              <div className="flex-1 min-w-0 space-y-1.5 z-10">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className={`text-[10px] uppercase font-black px-2.5 py-0.5 rounded-full flex items-center gap-1.5 ${
+              <div className="flex-1 min-w-0 space-y-1 z-10">
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded-md flex items-center gap-1.5 ${
                     activeWatching.state === 'paused'
-                      ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
-                      : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
+                      ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                      : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
                   }`}>
-                    <span className={`w-2 h-2 rounded-full ${
-                      activeWatching.state === 'paused' ? 'bg-amber-400' : 'bg-emerald-400 animate-ping'
+                    <span className={`w-1.5 h-1.5 rounded-full ${
+                      activeWatching.state === 'paused' ? 'bg-amber-400' : 'bg-emerald-400 animate-pulse'
                     }`} />
                     {activeWatching.state === 'paused' ? 'Paused' : 'Now Watching'}
                   </span>
 
                   {activeWatching.server && (
-                    <span className="text-[10px] font-bold text-slate-300 bg-slate-800/80 px-2 py-0.5 rounded-full border border-slate-700">
+                    <span className="text-[10px] font-medium text-slate-400 bg-slate-800/80 px-2 py-0.5 rounded-md border border-slate-700/60">
                       {activeWatching.server}
                     </span>
                   )}
@@ -468,7 +457,7 @@ const Tracker = () => {
                     else if (!isMovie && activeWatching.media_id) navigate(`/shows/${activeWatching.media_id}`);
                     else if (activeWatching.tmdb_id) navigate(`/${isMovie ? 'movies' : 'shows'}/${activeWatching.tmdb_id}`);
                   }}
-                  className="text-slate-100 font-extrabold text-sm sm:text-base line-clamp-1 group-hover:text-cyan-400 transition-colors cursor-pointer leading-snug"
+                  className="text-slate-100 font-bold text-sm line-clamp-1 group-hover:text-cyan-400 transition-colors cursor-pointer leading-snug"
                 >
                   {activeWatching.title}
                 </h3>
@@ -484,9 +473,9 @@ const Tracker = () => {
                     <span>{Math.round(activeWatching.progress || 0)}%</span>
                     {activeWatching.eta && <span>ETA {activeWatching.eta}</span>}
                   </div>
-                  <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden border border-white/5">
+                  <div className="w-full h-1 bg-slate-800 rounded-full overflow-hidden">
                     <div 
-                      className="h-full bg-gradient-to-r from-cyan-500 to-emerald-400 rounded-full transition-all duration-500" 
+                      className="h-full bg-cyan-400 rounded-full transition-all duration-500" 
                       style={{ width: `${Math.min(100, Math.max(0, activeWatching.progress || 0))}%` }}
                     />
                   </div>
@@ -494,7 +483,7 @@ const Tracker = () => {
               </div>
             </div>
           ) : currently ? (
-            <div className="w-full lg:w-96 p-3 sm:p-4 rounded-xl sm:rounded-2xl bg-slate-800/80 border border-slate-700/60 backdrop-blur-md shadow-xl flex items-center gap-3 sm:gap-4 group">
+            <div className="w-full lg:w-96 p-3 sm:p-4 rounded-xl bg-slate-950/70 border border-slate-800 backdrop-blur-sm flex items-center gap-3.5 group">
               <div 
                 onClick={() => {
                   const isMovie = currently.type === 'movie';
@@ -502,7 +491,7 @@ const Tracker = () => {
                   else if (!isMovie && currently.show_id) navigate(`/shows/${currently.show_id}`);
                   else if (currently.tmdb_id) navigate(`/${isMovie ? 'movies' : 'shows'}/${currently.tmdb_id}`);
                 }}
-                className="w-14 sm:w-16 h-20 sm:h-22 rounded-lg sm:rounded-xl overflow-hidden bg-slate-900 shrink-0 border border-slate-700/50 cursor-pointer"
+                className="w-14 sm:w-16 h-20 sm:h-22 rounded-lg overflow-hidden bg-slate-950 shrink-0 border border-slate-800 cursor-pointer"
               >
                 {currently.poster ? (
                   <img src={tmdbImgUrl(currently.poster, 'w200')} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
@@ -511,7 +500,7 @@ const Tracker = () => {
                 )}
               </div>
               <div className="flex-1 min-w-0">
-                <span className="text-[10px] uppercase font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                <span className="text-[10px] uppercase font-semibold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-md border border-emerald-500/20">
                   Latest Watch
                 </span>
                 <h3 
@@ -521,18 +510,18 @@ const Tracker = () => {
                     else if (!isMovie && currently.show_id) navigate(`/shows/${currently.show_id}`);
                     else if (currently.tmdb_id) navigate(`/${isMovie ? 'movies' : 'shows'}/${currently.tmdb_id}`);
                   }}
-                  className="text-slate-100 font-bold text-sm sm:text-base truncate mt-1 group-hover:text-cyan-400 transition-colors cursor-pointer"
+                  className="text-slate-100 font-bold text-sm truncate mt-1 group-hover:text-cyan-400 transition-colors cursor-pointer"
                 >
                   {currently.title}
                 </h3>
                 {currently.season && (
-                  <p className="text-[11px] sm:text-xs text-slate-400 truncate">S{currently.season} E{currently.episode} {currently.episode_title ? `— ${currently.episode_title}` : ''}</p>
+                  <p className="text-[11px] text-slate-400 font-mono truncate">S{currently.season} E{currently.episode} {currently.episode_title ? `— ${currently.episode_title}` : ''}</p>
                 )}
-                <div className="mt-2 sm:mt-2.5 flex items-center gap-2">
-                  <div className="flex-1 h-1.5 bg-slate-700/80 rounded-full overflow-hidden">
-                    <div className="h-full bg-gradient-to-r from-cyan-500 to-emerald-400 rounded-full" style={{ width: `${currently.progress ?? 100}%` }}></div>
+                <div className="mt-2 flex items-center gap-2">
+                  <div className="flex-1 h-1 bg-slate-800 rounded-full overflow-hidden">
+                    <div className="h-full bg-cyan-400 rounded-full" style={{ width: `${currently.progress ?? 100}%` }}></div>
                   </div>
-                  <span className="text-[10px] text-slate-400 font-mono font-semibold">{formatRuntime(currently.runtime) || `${currently.runtime}m`}</span>
+                  <span className="text-[10px] text-slate-400 font-mono">{formatRuntime(currently.runtime) || `${currently.runtime}m`}</span>
                 </div>
               </div>
             </div>
@@ -545,22 +534,22 @@ const Tracker = () => {
         <div className="space-y-4">
           <div className="flex justify-between items-center">
             <div className="min-w-0 mr-2">
-              <h2 className="text-lg sm:text-xl md:text-2xl font-bold text-slate-100 flex items-center gap-2">
-                <Play className="w-5 h-5 sm:w-6 sm:h-6 text-cyan-400 fill-cyan-400" /> Continue Watching
+              <h2 className="text-base sm:text-lg font-bold text-slate-100 flex items-center gap-2">
+                <Play className="w-4 h-4 text-cyan-400 fill-cyan-400" /> Continue Watching
               </h2>
-              <p className="text-xs sm:text-sm text-slate-400 hidden sm:block">Pick up right where you left off across your library</p>
+              <p className="text-xs text-slate-400 hidden sm:block">Pick up right where you left off across your library</p>
             </div>
-            <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-              <button onClick={() => scrollContainer('left')} className="p-1.5 sm:p-2 rounded-lg sm:rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700/50 transition-all">
-                <ChevronLeft className="w-4 h-4 sm:w-5 sm:h-5" />
+            <div className="flex items-center gap-1.5 shrink-0">
+              <button onClick={() => scrollContainer('left')} className="p-1.5 rounded-lg bg-slate-900/80 hover:bg-slate-800 text-slate-300 border border-slate-800 transition-all">
+                <ChevronLeft className="w-4 h-4" />
               </button>
-              <button onClick={() => scrollContainer('right')} className="p-1.5 sm:p-2 rounded-lg sm:rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700/50 transition-all">
-                <ChevronRight className="w-4 h-4 sm:w-5 sm:h-5" />
+              <button onClick={() => scrollContainer('right')} className="p-1.5 rounded-lg bg-slate-900/80 hover:bg-slate-800 text-slate-300 border border-slate-800 transition-all">
+                <ChevronRight className="w-4 h-4" />
               </button>
             </div>
           </div>
 
-          <div ref={scrollRef} className="flex gap-3 sm:gap-5 overflow-x-auto scrollbar-none pb-4 pt-1 snap-x">
+          <div ref={scrollRef} className="flex gap-3 sm:gap-4 overflow-x-auto scrollbar-none pb-4 pt-1 snap-x">
             {upNextEpisodes.map(ep => (
               <AnimatedUpNextCard 
                 key={ep._type === 'episode' ? `up-ep-${ep.episode_id}` : `up-movie-${ep.id}`}
@@ -578,22 +567,22 @@ const Tracker = () => {
         <div className="space-y-4">
           <div className="flex justify-between items-center">
             <div className="min-w-0 mr-2">
-              <h2 className="text-lg sm:text-xl md:text-2xl font-bold text-slate-100 flex items-center gap-2">
-                <Zap className="w-5 h-5 sm:w-6 sm:h-6 text-cyan-400" /> Next Up
+              <h2 className="text-base sm:text-lg font-bold text-slate-100 flex items-center gap-2">
+                <Zap className="w-4 h-4 text-cyan-400" /> Next Up
               </h2>
-              <p className="text-xs sm:text-sm text-slate-400 hidden sm:block">Episodes dropping in the coming week</p>
+              <p className="text-xs text-slate-400 hidden sm:block">Episodes dropping in the coming week</p>
             </div>
-            <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-              <button onClick={() => scrollContainerWeek('left')} className="p-1.5 sm:p-2 rounded-lg sm:rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700/50 transition-all">
-                <ChevronLeft className="w-4 h-4 sm:w-5 sm:h-5" />
+            <div className="flex items-center gap-1.5 shrink-0">
+              <button onClick={() => scrollContainerWeek('left')} className="p-1.5 rounded-lg bg-slate-900/80 hover:bg-slate-800 text-slate-300 border border-slate-800 transition-all">
+                <ChevronLeft className="w-4 h-4" />
               </button>
-              <button onClick={() => scrollContainerWeek('right')} className="p-1.5 sm:p-2 rounded-lg sm:rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700/50 transition-all">
-                <ChevronRight className="w-4 h-4 sm:w-5 sm:h-5" />
+              <button onClick={() => scrollContainerWeek('right')} className="p-1.5 rounded-lg bg-slate-900/80 hover:bg-slate-800 text-slate-300 border border-slate-800 transition-all">
+                <ChevronRight className="w-4 h-4" />
               </button>
             </div>
           </div>
 
-          <div ref={weekScrollRef} className="flex gap-3 sm:gap-5 overflow-x-auto scrollbar-none pb-4 pt-1 snap-x">
+          <div ref={weekScrollRef} className="flex gap-3 sm:gap-4 overflow-x-auto scrollbar-none pb-4 pt-1 snap-x">
             {thisWeekCombined.map(item => (
               <ThisWeekCard
                 key={item._type === 'episode' ? `wk-ep-${item.episode_id}` : `wk-movie-${item.id}`}
@@ -606,35 +595,35 @@ const Tracker = () => {
       )}
 
       {/* ── WATCH ACTIVITY FEED ── */}
-      <div className="glass-panel p-3 sm:p-5 md:p-8 rounded-2xl sm:rounded-3xl border border-slate-700/50 bg-slate-800/40 backdrop-blur-xl shadow-xl">
-        <div className="flex justify-between items-center pb-2 sm:pb-3 border-b border-white/5 mb-4 sm:mb-6">
+      <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-4 sm:p-6 backdrop-blur-sm">
+        <div className="flex justify-between items-center pb-3 border-b border-slate-800 mb-4 sm:mb-5">
           <div className="min-w-0 mr-2">
-            <h3 className="text-base sm:text-lg md:text-xl font-bold text-slate-100 flex items-center gap-2">
-              <Clock className="w-4 h-4 sm:w-5 sm:h-5 text-cyan-400" /> Watch Activity Feed
+            <h3 className="text-sm sm:text-base font-bold text-slate-100 flex items-center gap-2">
+              <Clock className="w-4 h-4 text-cyan-400" /> Watch Activity Feed
             </h3>
-            <p className="text-[10px] sm:text-xs text-slate-400 mt-0.5 hidden sm:block">Chronological activity stream of watched movies & episodes</p>
+            <p className="text-[11px] text-slate-400 mt-0.5 hidden sm:block">Chronological activity stream of watched movies & episodes</p>
           </div>
-          <span className="text-[10px] sm:text-xs text-slate-400 font-mono bg-slate-900/60 px-2 sm:px-3 py-1 sm:py-1.5 rounded-full border border-slate-700/50 shrink-0">
+          <span className="text-[11px] text-slate-400 font-mono bg-slate-950 px-2.5 py-1 rounded-md border border-slate-800 shrink-0">
             {history.length} events
           </span>
         </div>
 
         {/* Vertical Timeline Container */}
         <div className="relative pt-2">
-          <div className="absolute left-[5px] sm:left-[5.5px] top-2 bottom-4 w-0.5 bg-gradient-to-b from-cyan-500 via-teal-500/50 to-slate-800 shadow-[0_0_12px_rgba(6,182,212,0.4)] pointer-events-none z-0" />
+          <div className="absolute left-[5px] sm:left-[5.5px] top-2 bottom-4 w-px bg-slate-800 pointer-events-none z-0" />
 
-          <div className="space-y-8 relative z-10">
+          <div className="space-y-6 relative z-10">
             {Object.entries(groupedHistory).map(([groupTitle, groupData]) => {
               if (!groupData?.items || groupData.items.length === 0) return null;
               const { items, totalMinutes, moviesCount, episodesCount } = groupData;
 
               return (
-                <div key={groupTitle} className="space-y-4">
-                  <div className="sticky top-4 z-30 flex items-center justify-start pl-5 sm:pl-8">
-                    <div className="px-3 sm:px-4 py-1 sm:py-1.5 rounded-full bg-slate-900/90 border border-cyan-500/30 text-cyan-300 backdrop-blur-md shadow-xl flex items-center gap-2 sm:gap-2.5">
-                      <Calendar className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-cyan-400" />
-                      <span className="font-bold text-[11px] sm:text-sm tracking-wide">{groupTitle}</span>
-                      <span className="text-[10px] sm:text-[11px] text-slate-400 font-mono pl-1.5 sm:pl-2 border-l border-slate-700">
+                <div key={groupTitle} className="space-y-3">
+                  <div className="sticky top-4 z-30 flex items-center justify-start pl-4 sm:pl-7">
+                    <div className="px-3 py-1 rounded-md bg-slate-900 border border-slate-800 text-slate-200 backdrop-blur-md flex items-center gap-2">
+                      <Calendar className="w-3.5 h-3.5 text-cyan-400" />
+                      <span className="font-semibold text-xs tracking-wide">{groupTitle}</span>
+                      <span className="text-[11px] text-slate-400 font-mono pl-2 border-l border-slate-800">
                         {moviesCount > 0 && `${moviesCount} movie${moviesCount > 1 ? 's' : ''}`}
                         {moviesCount > 0 && episodesCount > 0 && ' · '}
                         {episodesCount > 0 && `${episodesCount} ep${episodesCount > 1 ? 's' : ''}`}
@@ -643,7 +632,7 @@ const Tracker = () => {
                     </div>
                   </div>
 
-                  <div className="space-y-3">
+                  <div className="space-y-2">
                     {items.map((item, idx) => (
                       <TimelineHistoryCard
                         key={item.history_id || idx}

@@ -4,7 +4,7 @@ const axios = require('axios');
 const bcrypt = require('bcrypt');
 const rateLimit = require('express-rate-limit');
 const db = require('../config/database');
-const { getSetting, setSetting } = require('../utils/settings');
+const { getSetting, setSetting, isAuthEnabled } = require('../utils/settings');
 
 const jwt = require('jsonwebtoken');
 
@@ -35,7 +35,7 @@ const generalLimiter = rateLimit({
 // Login endpoint
 router.post('/login', loginLimiter, async (req, res) => {
   const { username, password } = req.body;
-  const authEnabled = getSetting('authEnabled') === 'true';
+  const authEnabled = isAuthEnabled();
 
   if (!authEnabled) {
     return res.json({ status: 'success', message: 'Authentication is disabled' });
@@ -147,8 +147,7 @@ router.post('/simkl/disconnect', authMiddleware, (req, res) => {
 
 // Check if authentication is enabled
 router.get('/status', (req, res) => {
-  const { getSetting } = require('../utils/settings');
-  const authEnabled = getSetting('authEnabled') === 'true';
+  const authEnabled = isAuthEnabled();
   const plexConfigured = !!getSetting('plexUrl');
   const jellyfinConfigured = !!getSetting('jellyfinUrl');
 
@@ -197,8 +196,7 @@ router.get('/plex/pin/:id', generalLimiter, async (req, res) => {
 
 router.post('/plex/login', loginLimiter, async (req, res) => {
   const { authToken } = req.body;
-  const { getSetting } = require('../utils/settings');
-  const authEnabled = getSetting('authEnabled') === 'true';
+  const authEnabled = isAuthEnabled();
 
   if (!authEnabled) {
     return res.json({ status: 'success', message: 'Authentication is disabled' });
@@ -251,8 +249,7 @@ router.post('/plex/login', loginLimiter, async (req, res) => {
 // Jellyfin Auth endpoint
 router.post('/jellyfin/login', loginLimiter, async (req, res) => {
   const { username, password } = req.body;
-  const { getSetting } = require('../utils/settings');
-  const authEnabled = getSetting('authEnabled') === 'true';
+  const authEnabled = isAuthEnabled();
 
   if (!authEnabled) {
     return res.json({ status: 'success', message: 'Authentication is disabled' });

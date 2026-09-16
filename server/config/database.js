@@ -55,7 +55,9 @@ db.exec(`
     role TEXT DEFAULT 'user',
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     last_login DATETIME,
-    jwt_version INTEGER DEFAULT 1
+    jwt_version INTEGER DEFAULT 1,
+    request_limit INTEGER DEFAULT NULL,
+    permissions TEXT DEFAULT '{}'
   );
 
   CREATE TABLE IF NOT EXISTS requests (
@@ -1383,6 +1385,18 @@ const MIGRATIONS = [
         db.exec('CREATE INDEX IF NOT EXISTS idx_watch_history_user_id ON watch_history(user_id);');
       }
       db.exec('CREATE INDEX IF NOT EXISTS idx_requests_user_id ON requests(user_id);');
+    }
+  },
+  {
+    id: 46,
+    name: 'add_user_quotas_and_permissions',
+    run: (db) => {
+      if (!hasColumn('users', 'request_limit')) {
+        db.exec('ALTER TABLE users ADD COLUMN request_limit INTEGER DEFAULT NULL;');
+      }
+      if (!hasColumn('users', 'permissions')) {
+        db.exec("ALTER TABLE users ADD COLUMN permissions TEXT DEFAULT '{}';");
+      }
     }
   }
 ];

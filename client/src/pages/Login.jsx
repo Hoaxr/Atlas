@@ -5,7 +5,7 @@ import { Shield, Lock, User, ArrowRight, X, Smartphone } from 'lucide-react';
 import api from '../lib/api';
 import { customAlert } from '../utils/alerts';
 import PasswordInput from '../components/shared/PasswordInput';
-import Logo from '../components/layout/Logo';
+import AtlasLogo from '../components/common/AtlasLogo';
 
 function PlexLogo({ className = "w-5 h-5" }) {
   return (
@@ -251,16 +251,12 @@ export default function Login() {
           <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-cyan-500 via-sky-500 to-blue-500"></div>
           
           <div className="text-center mb-8">
-            <div className="flex items-center justify-center mb-4">
-              <div className="w-18 h-18 p-2 rounded-2xl bg-gradient-to-br from-slate-900/90 to-slate-950/90 shadow-xl border border-cyan-500/20 ring-1 ring-white/5 flex items-center justify-center group/logo hover:border-cyan-400/40 transition-all duration-300">
-                <Logo className="w-14 h-14 drop-shadow-[0_0_12px_rgba(34,211,238,0.45)] group-hover/logo:scale-105 transition-transform duration-300" />
-              </div>
+            <div className="group/logo flex items-center justify-center mb-5">
+              <AtlasLogo
+                variant="lockup"
+                className="h-12 w-auto drop-shadow-[0_0_18px_rgba(56,189,248,0.35)] group-hover/logo:scale-105 transition-transform duration-300"
+              />
             </div>
-            <h1 className="text-3xl font-display font-black uppercase tracking-widest drop-shadow-atlas-glow">
-              <span className="bg-gradient-to-r from-cyan-300 via-cyan-400 to-sky-400 bg-clip-text text-transparent">
-                Atlas
-              </span>
-            </h1>
             <p className="text-slate-400 mt-2 text-sm font-medium">Sign in to access your media manager</p>
           </div>
 

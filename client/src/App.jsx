@@ -10,7 +10,7 @@ import Discover from './pages/Discover';
 import ShowDetails from './pages/ShowDetails';
 import MovieDetails from './pages/MovieDetails';
 import Tracker from './pages/Tracker';
-import Spinner from './components/shared/Spinner';
+import LoadingState from './components/shared/LoadingState';
 
 const Settings = lazy(() => import('./pages/Settings'));
 const SystemTasks = lazy(() => import('./pages/SystemTasks'));
@@ -32,11 +32,7 @@ const AlbumDetails = lazy(() => import('./pages/AlbumDetails'));
 import ProtectedRoute from './components/layout/ProtectedRoute';
 
 function PageFallback() {
-  return (
-    <div className="flex items-center justify-center h-96">
-      <Spinner size="lg" />
-    </div>
-  );
+  return <LoadingState className="min-h-[50vh] py-20" />;
 }
 
 /**
@@ -143,6 +139,12 @@ function AppToaster() {
   );
 }
 
+function getDefaultLandingPage() {
+  const saved = localStorage.getItem('atlas_landing_page');
+  const valid = ['/tracker', '/movies', '/shows', '/music', '/discover', '/downloads'];
+  return saved && valid.includes(saved) ? saved : '/tracker';
+}
+
 function App() {
   return (
     <ErrorBoundary>
@@ -156,7 +158,7 @@ function App() {
               <Route path="/login" element={<LazyPage><Login /></LazyPage>} />
               <Route element={<ProtectedRoute />}>
                 <Route path="/" element={<Layout />}>
-                  <Route index element={<Navigate to="/tracker" replace />} />
+                  <Route index element={<Navigate to={getDefaultLandingPage()} replace />} />
                   <Route path="movies" element={<Dashboard key="movies-view" />} />
                   <Route path="shows" element={<Dashboard key="shows-view" />} />
                   <Route path="movies/:id" element={<MovieDetails />} />

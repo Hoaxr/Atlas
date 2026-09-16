@@ -78,6 +78,34 @@ router.post('/', (req, res, next) => {
       return res.status(400).json({ status: 'error', message: 'type must be "movie", "tv", "music", "album", or "artist"' });
     }
 
+    // Check user permissions and quotas for non-admin users
+    if (req.user?.role !== 'admin') {
+      const userRow = db.prepare('SELECT request_limit, permissions FROM users WHERE id = ?').get(user_id);
+      if (userRow) {
+        let permissions = {};
+        try { permissions = userRow.permissions ? JSON.parse(userRow.permissions) : {}; } catch { /* ignore */ }
+
+        if (permissions.can_request === false) {
+          return res.status(403).json({ status: 'error', message: 'You do not have permission to request media' });
+        }
+
+        if (userRow.request_limit !== null && userRow.request_limit >= 0) {
+          // Count requests created by this user in the last 7 days
+          const recentRequests = db.prepare(`
+            SELECT COUNT(*) as count FROM requests 
+            WHERE user_id = ? AND created_at >= datetime('now', '-7 days')
+          `).get(user_id);
+          const weeklyCount = recentRequests ? recentRequests.count : 0;
+          if (weeklyCount >= userRow.request_limit) {
+            return res.status(429).json({
+              status: 'error',
+              message: `Weekly request quota reached (${weeklyCount}/${userRow.request_limit}). Please try again later or contact an administrator.`
+            });
+          }
+        }
+      }
+    }
+
     // Check if already requested globally
     const existing = db.prepare('SELECT id, user_id FROM requests WHERE tmdb_id = ? AND type = ?').get(tmdb_id, type);
     if (existing) {

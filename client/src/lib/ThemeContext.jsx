@@ -1,4 +1,4 @@
-import { createContext, useState, useEffect } from 'react';
+import { createContext, useContext, useState, useEffect } from 'react';
 
 const ThemeContext = createContext();
 
@@ -27,5 +27,13 @@ export function ThemeProvider({ children }) {
       {children}
     </ThemeContext.Provider>
   );
+}
+
+/**
+ * Reads the current theme. Falls back to dark when rendered outside a provider
+ * (Atlas is dark-first, so that keeps brand assets legible).
+ */
+export function useTheme() {
+  return useContext(ThemeContext) || { theme: 'dark', toggleTheme: () => {} };
 }
 

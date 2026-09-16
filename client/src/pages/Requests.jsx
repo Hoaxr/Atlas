@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Clock, CheckCircle2, XCircle, Loader2, Trash2, Heart, CalendarClock, Music2 } from 'lucide-react';
+import { Clock, CheckCircle2, XCircle, Loader2, Trash2, Inbox, CalendarClock, Music2, Film, Tv } from 'lucide-react';
 import api from '../lib/api';
 import { customAlert, customConfirm } from '../utils/alerts';
 import MediaDetailsModal from '../components/MediaDetailsModal';
 import StickyBar from '../components/shared/StickyBar';
+import LoadingState from '../components/shared/LoadingState';
 import { useStickyBar } from '../lib/useStickyBar';
 
 export default function Requests() {
@@ -108,96 +109,145 @@ export default function Requests() {
     return new Date(releaseDate) > new Date();
   };
 
-  const getStatusIcon = (status) => {
+  const renderStatusBadge = (status) => {
     switch (status) {
-      case 'approved': return <CheckCircle2 className="w-5 h-5 text-emerald-400" />;
-      case 'denied': return <XCircle className="w-5 h-5 text-rose-400" />;
-      default: return <Clock className="w-5 h-5 text-amber-400" />;
+      case 'approved':
+        return (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+            <CheckCircle2 className="w-3.5 h-3.5 shrink-0" /> Approved
+          </span>
+        );
+      case 'denied':
+        return (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-rose-500/10 text-rose-400 border border-rose-500/20">
+            <XCircle className="w-3.5 h-3.5 shrink-0" /> Denied
+          </span>
+        );
+      default:
+        return (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/20">
+            <Clock className="w-3.5 h-3.5 shrink-0" /> Pending
+          </span>
+        );
     }
+  };
+
+  const renderMediaIcon = (type) => {
+    if (type === 'movie') {
+      return (
+        <div className="p-2.5 rounded-xl bg-[#101e31] border border-[#1c2d46] text-sky-400 group-hover:border-cyan-500/40 group-hover:text-cyan-300 transition-colors shrink-0">
+          <Film className="w-4 h-4" />
+        </div>
+      );
+    }
+    if (type === 'tv' || type === 'show') {
+      return (
+        <div className="p-2.5 rounded-xl bg-[#101e31] border border-[#1c2d46] text-cyan-400 group-hover:border-cyan-500/40 group-hover:text-cyan-300 transition-colors shrink-0">
+          <Tv className="w-4 h-4" />
+        </div>
+      );
+    }
+    return (
+      <div className="p-2.5 rounded-xl bg-[#101e31] border border-[#1c2d46] text-indigo-400 group-hover:border-cyan-500/40 group-hover:text-cyan-300 transition-colors shrink-0">
+        <Music2 className="w-4 h-4" />
+      </div>
+    );
   };
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <Loader2 className="w-8 h-8 animate-spin text-cyan-500" />
+      <div className="space-y-4">
+        <div>
+          <h1 className="text-xl sm:text-3xl font-black text-slate-800 dark:text-slate-100 flex items-center gap-2.5 sm:gap-3 !mb-0">
+            <Inbox className="w-6 h-6 sm:w-8 sm:h-8 text-cyan-400 shrink-0" /> <span className="truncate">Requests</span>
+          </h1>
+          <p className="text-xs sm:text-base text-slate-400 mt-0.5 sm:mt-1 hidden sm:block">Manage user requests for movies and TV shows.</p>
+        </div>
+        <LoadingState className="min-h-[40vh] py-16" />
       </div>
     );
   }
 
+  const pendingCount = requests.filter(r => r.status === 'pending').length;
+  const approvedCount = requests.filter(r => r.status === 'approved').length;
+
   return (
-    <div className="space-y-3">
-      <div ref={headerRef}>
-        <h1 className="text-xl sm:text-3xl font-black text-slate-800 dark:text-slate-100 flex items-center gap-2 sm:gap-3 !mb-0">
-          <Heart className="w-6 h-6 sm:w-8 sm:h-8 text-rose-400" /> <span className="truncate">Requests</span>
-        </h1>
-        <p className="text-xs sm:text-base text-slate-400 mt-0.5 sm:mt-1 hidden sm:block">Manage user requests for movies and TV shows.</p>
+    <div className="space-y-4">
+      <div ref={headerRef} className="flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <h1 className="text-xl sm:text-3xl font-black text-slate-800 dark:text-slate-100 flex items-center gap-2.5 sm:gap-3 !mb-0">
+            <Inbox className="w-6 h-6 sm:w-8 sm:h-8 text-cyan-400 shrink-0" /> <span className="truncate">Requests</span>
+          </h1>
+          <p className="text-xs sm:text-base text-slate-400 mt-0.5 sm:mt-1 hidden sm:block">Manage user requests for movies and TV shows.</p>
+        </div>
+        <div className="hidden sm:flex items-center gap-2">
+          {pendingCount > 0 && (
+            <span className="px-3 py-1 rounded-xl text-xs font-bold bg-[#101e31] text-amber-400 border border-[#1c2d46]">
+              {pendingCount} Pending
+            </span>
+          )}
+          <span className="px-3 py-1 rounded-xl text-xs font-bold bg-[#101e31] text-emerald-400 border border-[#1c2d46]">
+            {approvedCount} Approved
+          </span>
+        </div>
       </div>
 
       <StickyBar visible={stickyVisible}>
         <div className="flex items-center gap-2 ml-auto sm:hidden text-xs">
-          <span className="text-slate-300">{requests.filter(r => r.status === 'pending').length} open</span>
-          <span className="text-emerald-400">{requests.filter(r => r.status === 'approved').length} approved</span>
+          <span className="text-amber-400">{pendingCount} open</span>
+          <span className="text-emerald-400">{approvedCount} approved</span>
         </div>
       </StickyBar>
 
-      <div className="glass-panel rounded-2xl border border-white/10 overflow-hidden">
+      <div className="rounded-xl border border-[#1c2d46] bg-[#0c1626]/90 overflow-hidden backdrop-blur-sm shadow-md">
         {/* Desktop table */}
         <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-left text-sm">
             <thead>
-              <tr className="border-b border-white/10 text-slate-400 bg-slate-900/50">
-                <th className="py-4 px-6 font-medium">Title</th>
-                <th className="py-4 px-6 font-medium">Type</th>
-                <th className="py-4 px-6 font-medium">Requested By</th>
-                <th className="py-4 px-6 font-medium">Status</th>
-                <th className="py-4 px-6 font-medium">Date</th>
-                <th className="py-4 px-6 font-medium text-right">Actions</th>
+              <tr className="bg-[#15243b] border-b border-[#1c2d46]">
+                <th className="py-3 px-6 font-bold text-xs uppercase tracking-wider text-slate-300">Title</th>
+                <th className="py-3 px-6 font-bold text-xs uppercase tracking-wider text-slate-300">Requested By</th>
+                <th className="py-3 px-6 font-bold text-xs uppercase tracking-wider text-slate-300">Status</th>
+                <th className="py-3 px-6 font-bold text-xs uppercase tracking-wider text-slate-300">Date</th>
+                <th className="py-3 px-6 font-bold text-xs uppercase tracking-wider text-slate-300 text-right">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-white/5">
+            <tbody className="divide-y divide-[#1c2d46]/70">
               {requests.map(req => {
                 const unreleased = req.status === 'approved' && isNotYetReleased(req.release_date);
                 return (
-                <tr key={req.id} className="hover:bg-slate-800/30 transition-colors">
-                  <td className="py-4 px-6 font-medium text-slate-200">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (req.type === 'album') navigate(`/music/albums/${req.tmdb_id}`);
-                        else if (req.type === 'music' || req.type === 'artist') navigate(`/music/artists/${req.tmdb_id}`);
-                        else navigate(`/${req.type === 'movie' ? 'movies' : 'shows'}/${req.tmdb_id}`);
-                      }}
-                      className="text-left hover:text-cyan-400 transition-colors cursor-pointer"
-                    >
-                      {req.title}
-                    </button>
-                    {unreleased && req.release_date && (
-                      <div className="flex items-center gap-1 mt-1">
-                        <span className="flex items-center gap-1 text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-full bg-violet-500/15 text-violet-300 border border-violet-500/30">
-                          <CalendarClock className="w-3 h-3" />
-                          Coming Soon · {new Date(req.release_date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
-                        </span>
+                <tr key={req.id} className="hover:bg-[#101e31]/60 transition-colors group">
+                  <td className="py-3.5 px-6 font-medium text-slate-200">
+                    <div className="flex items-center gap-3.5">
+                      {renderMediaIcon(req.type)}
+                      <div className="min-w-0 flex-1">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (req.type === 'album') navigate(`/music/albums/${req.tmdb_id}`);
+                            else if (req.type === 'music' || req.type === 'artist') navigate(`/music/artists/${req.tmdb_id}`);
+                            else navigate(`/${req.type === 'movie' ? 'movies' : 'shows'}/${req.tmdb_id}`);
+                          }}
+                          className="text-left font-semibold text-slate-100 hover:text-cyan-400 transition-colors cursor-pointer block truncate"
+                        >
+                          {req.title}
+                        </button>
+                        {unreleased && req.release_date && (
+                          <div className="flex items-center gap-1 mt-1">
+                            <span className="flex items-center gap-1 text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-md bg-cyan-500/10 text-cyan-300 border border-cyan-500/20">
+                              <CalendarClock className="w-3 h-3" />
+                              Coming Soon · {new Date(req.release_date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                            </span>
+                          </div>
+                        )}
                       </div>
-                    )}
+                    </div>
                   </td>
-                  <td className="py-4 px-6 text-slate-400 uppercase text-xs tracking-wider">
-                    {['music', 'artist', 'album'].includes(req.type) ? (
-                      <span className="flex items-center gap-1 text-emerald-400 font-semibold">
-                        <Music2 className="w-3.5 h-3.5" />
-                        {req.type}
-                      </span>
-                    ) : (
-                      req.type
-                    )}
-                  </td>
-                  <td className="py-4 px-6 text-slate-300">{req.requested_by}</td>
+                  <td className="py-4 px-6 text-slate-300 font-medium">{req.requested_by}</td>
                   <td className="py-4 px-6">
-                    <span className="flex items-center gap-2 capitalize text-slate-300">
-                      {getStatusIcon(req.status)}
-                      {req.status}
-                    </span>
+                    {renderStatusBadge(req.status)}
                   </td>
-                  <td className="py-4 px-6 text-slate-400">
+                  <td className="py-4 px-6 text-slate-400 text-xs">
                     {new Date(req.created_at).toLocaleDateString()}
                   </td>
                   <td className="py-4 px-6">
@@ -206,14 +256,14 @@ export default function Requests() {
                         <>
                           <button
                             onClick={() => handleApproveInit(req)}
-                            className="px-3 py-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 font-medium transition-colors text-xs"
+                            className="px-3 py-1.5 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30 font-semibold transition-colors text-xs shadow-xs"
                           >
                             Approve
                           </button>
                           <button
                             onClick={() => handleDeny(req.id)}
                             disabled={actionBusy === `${req.id}:deny`}
-                            className="px-3 py-1.5 rounded-lg bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 font-medium transition-colors text-xs disabled:opacity-50 disabled:pointer-events-none"
+                            className="px-3 py-1.5 rounded-lg bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 border border-rose-500/30 font-semibold transition-colors text-xs shadow-xs disabled:opacity-50 disabled:pointer-events-none"
                           >
                             Deny
                           </button>
@@ -222,7 +272,7 @@ export default function Requests() {
                       <button
                         onClick={() => handleDelete(req.id)}
                         disabled={!!actionBusy}
-                        className="p-1.5 rounded-lg text-slate-500 hover:bg-slate-800 hover:text-rose-400 transition-colors ml-2 disabled:opacity-50 disabled:pointer-events-none"
+                        className="p-2 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-[#101e31] border border-transparent hover:border-[#1c2d46] transition-colors ml-1 disabled:opacity-50 disabled:pointer-events-none"
                         title="Delete Request"
                       >
                         <Trash2 className="w-4 h-4" />
@@ -233,7 +283,7 @@ export default function Requests() {
               )})}
               {requests.length === 0 && (
                 <tr>
-                  <td colSpan="6" className="py-12 text-center text-slate-500">
+                  <td colSpan="5" className="py-12 text-center text-slate-500">
                     No requests found.
                   </td>
                 </tr>
@@ -242,66 +292,64 @@ export default function Requests() {
           </table>
         </div>
 
-        <div className="md:hidden divide-y divide-white/5">
+        <div className="md:hidden divide-y divide-[#1c2d46]/70">
           {requests.length === 0 ? (
             <div className="py-12 text-center text-slate-500">No requests found.</div>
           ) : (
             requests.map(req => {
               const unreleased = req.status === 'approved' && isNotYetReleased(req.release_date);
               return (
-              <div key={req.id} className="p-4 space-y-3 hover:bg-slate-800/20 transition-colors">
-                <div className="flex items-start justify-between gap-3">
+              <div key={req.id} className="p-4 space-y-3 hover:bg-[#101e31]/40 transition-colors">
+                <div className="flex items-start gap-3">
+                  {renderMediaIcon(req.type)}
                   <div className="min-w-0 flex-1">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (req.type === 'album') navigate(`/music/albums/${req.tmdb_id}`);
-                        else if (req.type === 'music' || req.type === 'artist') navigate(`/music/artists/${req.tmdb_id}`);
-                        else navigate(`/${req.type === 'movie' ? 'movies' : 'shows'}/${req.tmdb_id}`);
-                      }}
-                      className="font-bold text-slate-200 text-sm truncate text-left hover:text-cyan-400 transition-colors cursor-pointer"
-                    >
-                      {req.title}
-                    </button>
-                    <div className="flex items-center gap-2 mt-1 flex-wrap">
-                      <span className="text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 border border-white/5 flex items-center gap-1">
-                        {['music', 'artist', 'album'].includes(req.type) && <Music2 className="w-3 h-3 text-emerald-400" />}
-                        {req.type}
-                      </span>
-                      <span className="text-[10px] text-slate-500">
+                    <div className="flex items-start justify-between gap-2">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (req.type === 'album') navigate(`/music/albums/${req.tmdb_id}`);
+                          else if (req.type === 'music' || req.type === 'artist') navigate(`/music/artists/${req.tmdb_id}`);
+                          else navigate(`/${req.type === 'movie' ? 'movies' : 'shows'}/${req.tmdb_id}`);
+                        }}
+                        className="font-bold text-slate-100 text-sm truncate text-left hover:text-cyan-400 transition-colors cursor-pointer block"
+                      >
+                        {req.title}
+                      </button>
+                      <div className="shrink-0">
+                        {renderStatusBadge(req.status)}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                      <span className="text-[10px] text-slate-400 font-medium">
                         {new Date(req.created_at).toLocaleDateString()}
                       </span>
                       {unreleased && (
-                        <span className="flex items-center gap-1 text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-full bg-violet-500/15 text-violet-300 border border-violet-500/30">
+                        <span className="flex items-center gap-1 text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-md bg-cyan-500/10 text-cyan-300 border border-cyan-500/20">
                           <CalendarClock className="w-3 h-3" />
                           Coming Soon
                         </span>
                       )}
                     </div>
                   </div>
-                  <span className="flex items-center gap-1.5 text-xs capitalize text-slate-300 shrink-0">
-                    {getStatusIcon(req.status)}
-                    {req.status}
-                  </span>
                 </div>
 
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-slate-500">
-                    by <span className="text-slate-400 font-medium">{req.requested_by}</span>
+                <div className="flex items-center justify-between pt-1">
+                  <span className="text-xs text-slate-400">
+                    by <span className="text-slate-200 font-semibold">{req.requested_by}</span>
                   </span>
                   <div className="flex items-center gap-2">
                     {req.status === 'pending' && (
                       <>
                         <button
                           onClick={() => handleApproveInit(req)}
-                          className="px-3 py-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 font-medium transition-colors text-xs"
+                          className="px-3 py-1.5 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30 font-semibold transition-colors text-xs shadow-xs"
                         >
                           Approve
                         </button>
                         <button
                           onClick={() => handleDeny(req.id)}
                           disabled={actionBusy === `${req.id}:deny`}
-                          className="px-3 py-1.5 rounded-lg bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 font-medium transition-colors text-xs disabled:opacity-50 disabled:pointer-events-none"
+                          className="px-3 py-1.5 rounded-lg bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 border border-rose-500/30 font-semibold transition-colors text-xs shadow-xs disabled:opacity-50 disabled:pointer-events-none"
                         >
                           Deny
                         </button>
@@ -310,7 +358,7 @@ export default function Requests() {
                     <button
                       onClick={() => handleDelete(req.id)}
                       disabled={!!actionBusy}
-                      className="p-1.5 rounded-lg text-slate-500 hover:bg-slate-800 hover:text-rose-400 transition-colors disabled:opacity-50 disabled:pointer-events-none"
+                      className="p-2 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-[#101e31] border border-transparent hover:border-[#1c2d46] transition-colors disabled:opacity-50 disabled:pointer-events-none"
                       title="Delete Request"
                     >
                       <Trash2 className="w-4 h-4" />
@@ -321,6 +369,28 @@ export default function Requests() {
               );
             })
           )}
+        </div>
+      </div>
+
+      {/* Bottom Icon Legend */}
+      <div className="flex items-center justify-center gap-6 text-xs text-slate-400 font-medium pt-2">
+        <div className="flex items-center gap-2">
+          <div className="p-1.5 rounded-lg bg-[#101e31] border border-[#1c2d46] text-sky-400">
+            <Film className="w-3.5 h-3.5" />
+          </div>
+          <span className="text-slate-300">Movies</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="p-1.5 rounded-lg bg-[#101e31] border border-[#1c2d46] text-cyan-400">
+            <Tv className="w-3.5 h-3.5" />
+          </div>
+          <span className="text-slate-300">TV Shows</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="p-1.5 rounded-lg bg-[#101e31] border border-[#1c2d46] text-indigo-400">
+            <Music2 className="w-3.5 h-3.5" />
+          </div>
+          <span className="text-slate-300">Music</span>
         </div>
       </div>
 

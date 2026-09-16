@@ -34,4 +34,8 @@ const isWatchedSyncEnabled = () => {
   return getSetting('simklWatchedSync') === 'true';
 };
 
-module.exports = { getSetting, setSetting, isWatchedSyncEnabled, invalidateSettingsCache };
+const isAuthEnabled = () => {
+  return getSetting('authEnabled') !== 'false';
+};
+
+module.exports = { getSetting, setSetting, isWatchedSyncEnabled, isAuthEnabled, invalidateSettingsCache };

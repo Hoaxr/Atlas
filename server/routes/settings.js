@@ -39,7 +39,7 @@ router.get('/', (req, res, next) => {
     // Naming config
     const renameMovies = getSetting('renameMovies') !== 'false'; // default true
     const replaceIllegalCharacters = getSetting('replaceIllegalCharacters') !== 'false'; // default true
-    const colonReplacement = getSetting('colonReplacement') || 'dash';
+    const colonReplacement = getSetting('colonReplacement') || 'delete';
     const standardMovieFormat = getSetting('standardMovieFormat') || '{Movie Title} ({Release Year})';
     const renameEpisodes = getSetting('renameEpisodes') !== 'false';
     const standardEpisodeFormat = getSetting('standardEpisodeFormat') || '{Show Title} - S{Season}E{Episode} - {Episode Title}';
@@ -58,7 +58,8 @@ router.get('/', (req, res, next) => {
     const isAdmin = req.user && req.user.role === 'admin';
     const mask = (val) => {
       if (!val) return '';
-      return isAdmin ? val : '';
+      if (!isAdmin) return '';
+      return '***' + (val.length > 4 ? val.slice(-4) : '');
     };
     
     const clients = isAdmin
@@ -201,7 +202,7 @@ const SETTING_SCHEMA = {
   blockPrivateTorrentHosts: { type: 'boolean' },
 };
 
-const isMasked = (val) => typeof val === 'string' && /^\*+$/.test(val);
+const isMasked = (val) => typeof val === 'string' && (/^\*+$/.test(val) || val.startsWith('***'));
 
 const isValidUrl = (val) => {
   if (!val || typeof val !== 'string') return false;

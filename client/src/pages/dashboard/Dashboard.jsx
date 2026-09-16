@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useRef, forwardRef } from 'react';
+import { motion } from 'framer-motion';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { VirtuosoGrid } from 'react-virtuoso';
 import api from '../../lib/api';
@@ -16,8 +17,6 @@ import { posterUrl } from '../../lib/posterUrl';
 import { SortIcon, FilterSelect, MultiFilterSelect } from '../../components/shared/FilterSelect';
 import BulkActions from '../../components/dashboard/BulkActions';
 import ManualSearchModal from '../../components/ManualSearchModal';
-import StickyBar from '../../components/shared/StickyBar';
-import { useStickyBar } from '../../lib/useStickyBar';
 
 
 export default function Dashboard() {
@@ -132,24 +131,6 @@ export default function Dashboard() {
 
   const [searchQuery, setSearchQuery] = useState('');
   const [alphaFilter, setAlphaFilter] = useState(null);
-  
-  const searchInputRef = useRef(null);
-  const { headerRef, stickyVisible: stickySearchVisible } = useStickyBar();
-
-  // Focus search input when switching between movies and shows
-  useEffect(() => {
-    if (searchInputRef.current) {
-      searchInputRef.current.focus();
-    }
-  }, [viewMode]);
-
-  // If the sticky bar unmounts (e.g. because the page height shrunk after filtering)
-  // the user loses focus. Automatically restore it to the main search input.
-  useEffect(() => {
-    if (!stickySearchVisible && searchQuery) {
-      searchInputRef.current?.focus();
-    }
-  }, [stickySearchVisible, searchQuery]);
 
   const REORDER_FLASH_MS = 150;
 
@@ -677,178 +658,204 @@ export default function Dashboard() {
     )
   }), [posterSize]);
 
+  const sliderPercent = Math.min(100, Math.max(0, ((posterSize - 90) / (240 - 90)) * 100));
+
   return (
-    <div className="space-y-3">
-      <div ref={headerRef} className="flex items-start sm:items-center justify-between gap-3">
+    <div className="space-y-5">
+      <div className="flex items-center justify-between gap-4">
         <div className="min-w-0">
           <h1 className="text-xl sm:text-3xl font-black text-slate-800 dark:text-slate-100 flex items-center gap-2 sm:gap-3 !mb-0">
-            {viewMode === 'movies' ? <Film className="w-6 h-6 sm:w-8 sm:h-8 text-cyan-400 shrink-0" /> : <Tv className="w-6 h-6 sm:w-8 sm:h-8 text-purple-400 shrink-0" />} <span className="truncate">{viewMode === 'movies' ? 'Movies' : 'TV Shows'}</span>
+            {viewMode === 'movies' ? (
+              <Film className="w-6 h-6 sm:w-8 sm:h-8 text-cyan-400 shrink-0" />
+            ) : (
+              <Tv className="w-6 h-6 sm:w-8 sm:h-8 text-cyan-400 shrink-0" />
+            )}
+            <span className="truncate">{viewMode === 'movies' ? 'Movies' : 'TV Shows'}</span>
           </h1>
-          <p className="text-xs sm:text-base text-slate-400 mt-0.5 sm:mt-1 hidden sm:block !mb-0">Your tracked and imported media collection.</p>
+          <p className="text-xs sm:text-base text-slate-400 mt-0.5 sm:mt-1 hidden sm:block !mb-0">
+            Your tracked and imported media collection.
+          </p>
         </div>
-        
-        {/* View Toggle + Add */}
-        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-          <div className="relative w-full max-w-xs hidden sm:block">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none" />
-            <input
-              ref={searchInputRef}
-              type="text"
-              value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
-              placeholder={`Search ${viewMode === 'movies' ? 'movies' : 'shows'}...`}
-              className="w-full bg-slate-900 border border-white/10 text-slate-200 text-base rounded-lg pl-9 pr-8 py-2 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500/50 placeholder-slate-500 transition-all"
-            />
-            {searchQuery && (
-              <button
-                onClick={() => setSearchQuery('')}
-                className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 text-slate-500 hover:text-slate-300 transition-colors"
-                aria-label="Clear search"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            )}
-          </div>
-          <div className="flex bg-slate-900 rounded-lg p-1 border border-white/10 shrink-0">
-            <button 
-              onClick={() => setViewStyle('grid')}
-              className={`p-1.5 rounded-md transition-colors ${viewStyle === 'grid' ? 'bg-slate-700 text-white shadow-sm' : 'text-slate-400 hover:text-white'}`}
-              title="Grid View"
-            >
-              <LayoutGrid className="w-4 h-4" />
-            </button>
-            <button 
-              onClick={() => setViewStyle('list')}
-              className={`p-1.5 rounded-md transition-colors ${viewStyle === 'list' ? 'bg-slate-700 text-white shadow-sm' : 'text-slate-400 hover:text-white'}`}
-              title="List View"
-            >
-              <List className="w-4 h-4" />
-            </button>
-            
-            {viewStyle === 'list' && (
-              <div ref={columnsMenuRef} className="relative ml-1 flex items-center">
-                <div className="w-px h-5 bg-white/10 mx-1" />
-                <button
-                  onClick={() => setColumnsMenuOpen(!columnsMenuOpen)}
-                  className={`p-1.5 rounded-md transition-colors ${columnsMenuOpen ? 'bg-slate-700 text-white shadow-sm' : 'text-slate-400 hover:text-white'}`}
-                  title="Table Columns"
-                  aria-label="Table Columns"
-                  aria-expanded={columnsMenuOpen}
-                >
-                  <Columns className="w-4 h-4" />
-                </button>
-                {columnsMenuOpen && (
-                  <div className="absolute right-0 top-full mt-3 w-48 bg-slate-800 border border-white/10 rounded-xl shadow-xl z-[60] overflow-hidden">
-                    <div className="px-4 py-2.5 border-b border-white/10 text-xs font-bold text-slate-400 uppercase tracking-wider">Columns</div>
-                    <div className="p-1.5 flex flex-col gap-0.5">
-                      {columnOrder.filter(col => {
-                        const def = COLUMN_DEFS[col];
-                        if (!def) return false;
-                        if (col === 'seasons' && viewMode !== 'shows') return false;
-                        if (col === 'episodes' && viewMode !== 'shows') return false;
-                        if (col === 'subtitles' && viewMode !== 'movies') return false;
-                        return true;
-                      }).map(col => (
-                        <label key={col} className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-white/5 cursor-pointer transition-colors group" onClick={(e) => { e.preventDefault(); setTableColumns(prev => ({ ...prev, [col]: !prev[col] })); }}>
-                          {tableColumns[col] ? (
-                            <div className="w-4 h-4 rounded bg-cyan-500/20 border border-cyan-500/50 flex items-center justify-center">
-                              <CheckSquare className="w-3.5 h-3.5 text-cyan-400" />
-                            </div>
-                          ) : (
-                            <div className="w-4 h-4 rounded bg-slate-800 border border-slate-600/50 group-hover:border-slate-500 transition-colors" />
-                          )}
-                          <span className="text-sm text-slate-300 capitalize select-none group-hover:text-white transition-colors">{col}</span>
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-          {viewMode === 'movies' && (
-            <button
-              onClick={() => navigate('/discover?mode=movies')}
-              className="flex items-center gap-1.5 px-3 py-2 bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 rounded-xl text-xs sm:text-sm font-bold transition-all shrink-0"
-              title="Add Movie"
-            >
-              <Plus className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> <span className="hidden sm:inline">Add Movie</span>
-            </button>
-          )}
-          {viewMode === 'shows' && (
-            <button
-              onClick={() => navigate('/discover?mode=shows')}
-              className="flex items-center gap-1.5 px-3 py-2 bg-purple-500/10 hover:bg-purple-500/20 text-purple-400 border border-purple-500/30 rounded-xl text-xs sm:text-sm font-bold transition-all shrink-0"
-              title="Add TV Show"
-            >
-              <Plus className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> <span className="hidden sm:inline">Add TV Show</span>
-            </button>
-          )}
-        </div>
+
+        <button
+          onClick={() => navigate(viewMode === 'movies' ? '/discover?mode=movies' : '/discover?mode=shows')}
+          className="flex items-center gap-1.5 px-5 h-10 bg-gradient-to-b from-[#38a7f4] to-[#2291ea] hover:from-[#47b2fc] hover:to-[#2e9ef4] text-slate-950 rounded-2xl text-sm font-semibold transition-all shadow-sm active:scale-95 shrink-0"
+          title={viewMode === 'movies' ? 'Add Movie' : 'Add Show'}
+        >
+          <Plus className="w-4 h-4 stroke-[2.5]" />
+          <span>{viewMode === 'movies' ? 'Add Movie' : 'Add Show'}</span>
+        </button>
       </div>
 
-      <StickyBar
-        visible={stickySearchVisible}
-        searchQuery={searchQuery}
-        onSearchChange={setSearchQuery}
-        searchPlaceholder={`Search ${viewMode === 'movies' ? 'movies' : 'shows'}...`}
-        showSearch
-      />
+      {/* Main Controls & Filters Row */}
+      <div className="space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-2.5 sm:gap-3">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-2.5 min-w-0 flex-1">
+            <FilterSelect
+              value={sort}
+              onChange={e => setSort(e.target.value)}
+              label="Recently Added"
+              hideAll
+              className="shrink-0"
+            >
+              <option value="added_desc">Recently Added</option>
+              <option value="rating_desc">Highest Rating</option>
+              <option value="rating_asc">Lowest Rating</option>
+              <option value="size_desc">Largest Size</option>
+              <option value="size_asc">Smallest Size</option>
+              <option value="title_asc">Title (A-Z)</option>
+              <option value="title_desc">Title (Z-A)</option>
+            </FilterSelect>
 
-      {/* Main Content Area */}
-      
-      <div className="glass-panel rounded-2xl min-h-[100vh]">
-        {/* Filter Bar Header */}
-        <div className={`border-b ${viewMode === 'movies' ? 'border-cyan-500/30' : 'border-purple-500/30'} bg-slate-900/50 rounded-t-2xl`}>
-          
-          {/* Main Controls Row */}
-          <div className="flex items-center gap-1.5 sm:gap-2 p-2.5 sm:p-4 pb-2 sm:pb-3 justify-between">
-            <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 flex-1">
+            {allGenres.length > 0 && (
+              <MultiFilterSelect
+                values={genreFilter}
+                onChange={setGenreFilter}
+                label="All Genres"
+                className="shrink-0"
+              >
+                {allGenres.map(g => (
+                  <option key={g} value={g}>{g}</option>
+                ))}
+              </MultiFilterSelect>
+            )}
+
+            {allQualities.length > 0 && (
               <FilterSelect
-                value={sort}
-                onChange={e => setSort(e.target.value)}
-                label="Sort: Recently Added"
-                hideAll
-                className="max-w-[130px] sm:max-w-none shrink-0"
+                value={qualityFilter}
+                onChange={e => setQualityFilter(e.target.value)}
+                label="All Quality"
+                className="shrink-0"
               >
-                <option value="added_desc">Recently Added</option>
-                <option value="rating_desc">Highest Rating</option>
-                <option value="rating_asc">Lowest Rating</option>
-                <option value="size_desc">Largest Size</option>
-                <option value="size_asc">Smallest Size</option>
-                <option value="title_asc">Title (A-Z)</option>
-                <option value="title_desc">Title (Z-A)</option>
+                {allQualities.map(q => (
+                  <option key={q} value={q}>{q}</option>
+                ))}
               </FilterSelect>
+            )}
 
+            <FilterSelect
+              value={statusFilter}
+              onChange={e => setStatusFilter(e.target.value)}
+              label="All Status"
+              className="shrink-0"
+            >
+              <option value="monitored">Monitored</option>
+              <option value="unmonitored">Unmonitored</option>
+              <option value="downloaded">Downloaded</option>
+              <option value="downloading">Downloading</option>
+              <option value="missing">Missing</option>
+            </FilterSelect>
+
+            <button
+              onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
+              className={`flex items-center gap-1.5 text-xs sm:text-sm font-medium px-3.5 py-2 rounded-xl border transition-colors shrink-0 ${
+                showAdvancedFilters || activeFilterCount > 0
+                  ? 'bg-[#0d2b51] text-[#e7ecf6] border-[#1b4273] shadow-sm'
+                  : 'bg-[#101e31] text-slate-300 border-[#1c2d46] hover:border-slate-600 hover:text-white'
+              }`}
+            >
+              <FilterIcon className="w-3.5 h-3.5 shrink-0" />
+              <span>Filters</span>
+              {activeFilterCount > 0 && (
+                <span className="bg-sky-500 text-slate-950 rounded-full px-1.5 py-0.2 text-[10px] font-bold ml-0.5">
+                  {activeFilterCount}
+                </span>
+              )}
+            </button>
+          </div>
+
+          <div className="flex items-center gap-4 sm:gap-5 shrink-0 ml-auto">
+            {/* Grid / List toggle + column picker */}
+            <div className="relative flex items-center bg-[#101e31] p-1 rounded-xl border border-[#1c2d46] shadow-inner select-none shrink-0">
               <button
-                onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
-                className={`flex items-center gap-1 sm:gap-1.5 text-xs font-medium px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl border transition-colors shrink-0 ${
-                  showAdvancedFilters || activeFilterCount > 0
-                    ? 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30'
-                    : 'bg-slate-900/50 text-slate-400 border-white/5 hover:bg-slate-800/50 hover:text-slate-200'
+                type="button"
+                onClick={() => setViewStyle('grid')}
+                className={`relative h-8 px-3.5 flex items-center justify-center rounded-lg text-xs font-semibold transition-colors duration-150 ${
+                  viewStyle === 'grid' ? 'text-slate-950 font-bold' : 'text-slate-100 hover:text-white'
                 }`}
+                title="Grid View"
               >
-                <FilterIcon className="w-3.5 h-3.5 shrink-0" />
-                <span>Filters</span>
-                {activeFilterCount > 0 && <span className="bg-cyan-500 text-slate-900 rounded-full px-1.5 py-0.5 text-[10px] font-bold ml-0.5">{activeFilterCount}</span>}
+                {viewStyle === 'grid' && (
+                  <motion.div
+                    layoutId="dashboard-view-slider"
+                    className="absolute inset-0 rounded-lg bg-gradient-to-b from-[#38a7f4] to-[#2291ea] shadow-sm"
+                    transition={{ type: 'spring', stiffness: 500, damping: 35 }}
+                  />
+                )}
+                <LayoutGrid className={`relative z-10 w-4 h-4 transition-colors duration-150 ${viewStyle === 'grid' ? 'text-slate-950' : 'text-slate-100'}`} />
               </button>
+              <button
+                type="button"
+                onClick={() => setViewStyle('list')}
+                className={`relative h-8 px-3.5 flex items-center justify-center rounded-lg text-xs font-semibold transition-colors duration-150 ${
+                  viewStyle === 'list' ? 'text-slate-950 font-bold' : 'text-slate-100 hover:text-white'
+                }`}
+                title="List View"
+              >
+                {viewStyle === 'list' && (
+                  <motion.div
+                    layoutId="dashboard-view-slider"
+                    className="absolute inset-0 rounded-lg bg-gradient-to-b from-[#38a7f4] to-[#2291ea] shadow-sm"
+                    transition={{ type: 'spring', stiffness: 500, damping: 35 }}
+                  />
+                )}
+                <List className={`relative z-10 w-4 h-4 transition-colors duration-150 ${viewStyle === 'list' ? 'text-slate-950' : 'text-slate-100'}`} />
+              </button>
+
+              {viewStyle === 'list' && (
+                <div ref={columnsMenuRef} className="relative ml-0.5 flex items-center pr-0.5">
+                  <div className="w-px h-4 bg-[#1c2d46] mx-1" />
+                  <button
+                    onClick={() => setColumnsMenuOpen(!columnsMenuOpen)}
+                    className={`p-1.5 rounded-lg transition-colors ${
+                      columnsMenuOpen ? 'bg-[#16273f] text-cyan-400 font-medium shadow-sm' : 'text-slate-100 hover:text-white'
+                    }`}
+                    title="Table Columns"
+                    aria-label="Table Columns"
+                    aria-expanded={columnsMenuOpen}
+                  >
+                    <Columns className="w-4 h-4" />
+                  </button>
+                  {columnsMenuOpen && (
+                    <div className="absolute right-0 top-full mt-2 w-48 bg-[#0e1a2b] border border-[#1c2d46] rounded-xl shadow-xl shadow-black/40 z-[60] overflow-hidden">
+                      <div className="px-3.5 py-2 border-b border-[#1c2d46] text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Columns</div>
+                      <div className="p-1.5 flex flex-col gap-0.5">
+                        {columnOrder.filter(col => {
+                          const def = COLUMN_DEFS[col];
+                          if (!def) return false;
+                          if (col === 'seasons' && viewMode !== 'shows') return false;
+                          if (col === 'episodes' && viewMode !== 'shows') return false;
+                          if (col === 'subtitles' && viewMode !== 'movies') return false;
+                          return true;
+                        }).map(col => (
+                          <label key={col} className="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg hover:bg-slate-800/60 cursor-pointer transition-colors group" onClick={(e) => { e.preventDefault(); setTableColumns(prev => ({ ...prev, [col]: !prev[col] })); }}>
+                            {tableColumns[col] ? (
+                              <div className="w-4 h-4 rounded bg-cyan-500/15 border border-cyan-500/40 flex items-center justify-center">
+                                <CheckSquare className="w-3.5 h-3.5 text-cyan-400" />
+                              </div>
+                            ) : (
+                              <div className="w-4 h-4 rounded bg-slate-900 border border-slate-700/60 group-hover:border-slate-600 transition-colors" />
+                            )}
+                            <span className="text-xs text-slate-300 capitalize select-none group-hover:text-white transition-colors">{col}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Poster Size Slider Control (Grid View only) */}
             {viewStyle === 'grid' && (
-              <div className="flex items-center gap-1 sm:gap-2 bg-slate-900/60 border border-white/5 px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-xl shrink-0">
+              <div className="flex items-center gap-2.5 shrink-0">
                 <button
                   type="button"
                   onClick={() => setPosterSize(prev => Math.max(90, prev - 15))}
-                  className={`p-0.5 transition-colors rounded ${
-                    posterSize <= 120
-                      ? viewMode === 'movies' ? 'text-cyan-400' : 'text-purple-400'
-                      : 'text-slate-400 hover:text-slate-200'
-                  }`}
-                  title="Kleinere posters (meer posters in beeld)"
-                  aria-label="Kleinere posters"
+                  className="text-slate-100 hover:text-white transition-colors"
+                  title="Smaller posters"
                 >
-                  <LayoutGrid className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+                  <LayoutGrid className="w-4 h-4" />
                 </button>
                 <input
                   type="range"
@@ -858,159 +865,117 @@ export default function Dashboard() {
                   value={posterSize}
                   onChange={e => setPosterSize(Number(e.target.value))}
                   onDoubleClick={() => setPosterSize(180)}
-                  title={`Poster grootte: ${posterSize}px (dubbelklik voor standaard 180px)`}
-                  aria-label="Poster grootte bepalen"
-                  className={`w-14 sm:w-24 md:w-28 h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer ${
-                    viewMode === 'movies' ? 'accent-cyan-400' : 'accent-purple-400'
-                  }`}
+                  title={`Poster size: ${posterSize}px`}
+                  style={{
+                    background: `linear-gradient(to right, #38a7f4 0%, #38a7f4 ${sliderPercent}%, #101e31 ${sliderPercent}%, #101e31 100%)`
+                  }}
+                  className="w-20 sm:w-28 md:w-32 h-1.5 rounded-full appearance-none cursor-pointer border border-[#1c2d46] [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3.5 [&::-webkit-slider-thumb]:h-3.5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-[#42a8f8] [&::-webkit-slider-thumb]:shadow-md [&::-webkit-slider-thumb]:cursor-pointer [&::-moz-range-thumb]:w-3.5 [&::-moz-range-thumb]:h-3.5 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-[#42a8f8] [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:cursor-pointer"
                 />
                 <button
                   type="button"
                   onClick={() => setPosterSize(prev => Math.min(240, prev + 15))}
-                  className={`p-0.5 transition-colors rounded ${
-                    posterSize >= 210
-                      ? viewMode === 'movies' ? 'text-cyan-400' : 'text-purple-400'
-                      : 'text-slate-400 hover:text-slate-200'
-                  }`}
-                  title="Grotere posters"
-                  aria-label="Grotere posters"
+                  className="text-slate-100 hover:text-white transition-colors"
+                  title="Larger posters"
                 >
-                  <LayoutGrid className="w-3.5 h-3.5 sm:w-4.5 sm:h-4.5" />
+                  <LayoutGrid className="w-4 h-4" />
                 </button>
               </div>
             )}
           </div>
+        </div>
 
-          {showAdvancedFilters && (
-            <div className="px-3 sm:px-4 pb-3 sm:pb-4 border-t border-white/5 pt-3 mt-1 bg-slate-900/30">
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:flex lg:flex-wrap items-center gap-2 mb-1">
+        {showAdvancedFilters && (
+          <div className="p-3 sm:p-4 rounded-xl bg-slate-900/60 border border-slate-800/80 mt-1">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:flex lg:flex-wrap items-center gap-2 mb-1">
+              <FilterSelect
+                value={yearFilter}
+                onChange={e => setYearFilter(e.target.value)}
+                label="All Years"
+              >
+                {allYears.map(year => (
+                  <option key={year} value={year}>{year}</option>
+                ))}
+              </FilterSelect>
+
+              {viewMode === 'shows' && (
                 <FilterSelect
-                  value={yearFilter}
-                  onChange={e => setYearFilter(e.target.value)}
-                  label="All Years"
+                  value={tmdbStatusFilter}
+                  onChange={e => setTmdbStatusFilter(e.target.value)}
+                  label="Show: All"
                 >
-                  {allYears.map(year => (
-                    <option key={year} value={year}>{year}</option>
+                  <option value="Returning Series">Returning Series</option>
+                  <option value="Ended">Ended</option>
+                  <option value="Canceled">Canceled</option>
+                  <option value="In Production">In Production</option>
+                </FilterSelect>
+              )}
+
+              <FilterSelect
+                value={watchedFilter}
+                onChange={e => setWatchedFilter(e.target.value)}
+                label="Watched: All"
+              >
+                <option value="watched">Watched</option>
+                <option value="unwatched">Unwatched</option>
+              </FilterSelect>
+
+              {allResolutions.length > 0 && (
+                <FilterSelect
+                  value={resolutionFilter}
+                  onChange={e => setResolutionFilter(e.target.value)}
+                  label="All Resolutions"
+                >
+                  {allResolutions.map(r => (
+                    <option key={r} value={r}>{r}</option>
                   ))}
                 </FilterSelect>
-
-                <FilterSelect
-                  value={statusFilter}
-                  onChange={e => setStatusFilter(e.target.value)}
-                  label="All Statuses"
-                >
-                  <option value="monitored">Monitored</option>
-                  <option value="unmonitored">Unmonitored</option>
-                  <option value="downloaded">Downloaded</option>
-                  <option value="downloading">Downloading</option>
-                  <option value="missing">Missing</option>
-                </FilterSelect>
-
-                {viewMode === 'shows' && (
-                  <FilterSelect
-                    value={tmdbStatusFilter}
-                    onChange={e => setTmdbStatusFilter(e.target.value)}
-                    label="Show: All"
-                  >
-                    <option value="Returning Series">Returning Series</option>
-                    <option value="Ended">Ended</option>
-                    <option value="Canceled">Canceled</option>
-                    <option value="In Production">In Production</option>
-                  </FilterSelect>
-                )}
-
-                <FilterSelect
-                  value={watchedFilter}
-                  onChange={e => setWatchedFilter(e.target.value)}
-                  label="Watched: All"
-                >
-                  <option value="watched">Watched</option>
-                  <option value="unwatched">Unwatched</option>
-                </FilterSelect>
-
-                {allQualities.length > 0 && (
-                  <FilterSelect
-                    value={qualityFilter}
-                    onChange={e => setQualityFilter(e.target.value)}
-                    label="All Qualities"
-                  >
-                    {allQualities.map(q => (
-                      <option key={q} value={q}>{q}</option>
-                    ))}
-                  </FilterSelect>
-                )}
-
-                {allResolutions.length > 0 && (
-                  <FilterSelect
-                    value={resolutionFilter}
-                    onChange={e => setResolutionFilter(e.target.value)}
-                    label="All Resolutions"
-                  >
-                    {allResolutions.map(r => (
-                      <option key={r} value={r}>{r}</option>
-                    ))}
-                  </FilterSelect>
-                )}
-
-                {allCodecs.length > 0 && (
-                  <FilterSelect
-                    value={codecFilter}
-                    onChange={e => setCodecFilter(e.target.value)}
-                    label="All Codecs"
-                  >
-                    {allCodecs.map(c => (
-                      <option key={c} value={c}>{c}</option>
-                    ))}
-                  </FilterSelect>
-                )}
-
-                {allGenres.length > 0 && (
-                  <MultiFilterSelect
-                    values={genreFilter}
-                    onChange={setGenreFilter}
-                    label="All Genres"
-                    className="col-span-2 sm:col-span-1 lg:col-span-auto"
-                  >
-                    {allGenres.map(g => (
-                      <option key={g} value={g}>{g}</option>
-                    ))}
-                  </MultiFilterSelect>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Active Filter Chips */}
-          {activeFilterCount > 0 && (
-            <div className="flex flex-wrap items-center gap-1.5 px-4 pb-4">
-              {activeFilters.map(f => (
-                <span
-                  key={f.key}
-                  className="inline-flex items-center gap-1 text-xs font-medium bg-cyan-500/10 text-cyan-300 border border-cyan-500/20 px-2 py-0.5 rounded-full"
-                >
-                  {f.label}
-                  <button onClick={() => clearFilter(f.key)} className="hover:text-white transition-colors">
-                    <X className="w-3 h-3" />
-                  </button>
-                </span>
-              ))}
-              {activeFilterCount > 1 && (
-                <button
-                  onClick={clearAllFilters}
-                  className="inline-flex items-center gap-1 text-xs font-semibold text-slate-400 hover:text-rose-400 bg-slate-800/60 hover:bg-rose-500/10 px-2 py-0.5 rounded-full border border-white/5 hover:border-rose-500/20 transition-all ml-1"
-                >
-                  <RotateCcw className="w-3 h-3" /> Clear all
-                </button>
               )}
-              <span className="text-xs text-slate-500 ml-auto">
-                {displayItems.length} item{displayItems.length !== 1 ? 's' : ''}
-              </span>
-            </div>
-          )}
 
-        </div>
-        
-        <div className="p-4 relative min-h-[calc(100vh-200px)]">
+              {allCodecs.length > 0 && (
+                <FilterSelect
+                  value={codecFilter}
+                  onChange={e => setCodecFilter(e.target.value)}
+                  label="All Codecs"
+                >
+                  {allCodecs.map(c => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </FilterSelect>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Active Filter Chips */}
+        {activeFilterCount > 0 && (
+          <div className="flex flex-wrap items-center gap-1.5 pt-1">
+            {activeFilters.map(f => (
+              <span
+                key={f.key}
+                className="inline-flex items-center gap-1 text-xs font-medium bg-cyan-500/10 text-cyan-300 border border-cyan-500/20 px-2 py-0.5 rounded-full"
+              >
+                {f.label}
+                <button onClick={() => clearFilter(f.key)} className="hover:text-white transition-colors">
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            ))}
+            {activeFilterCount > 1 && (
+              <button
+                onClick={clearAllFilters}
+                className="inline-flex items-center gap-1 text-xs font-semibold text-slate-400 hover:text-rose-400 bg-slate-800/60 hover:bg-rose-500/10 px-2 py-0.5 rounded-full border border-white/5 hover:border-rose-500/20 transition-all ml-1"
+              >
+                <RotateCcw className="w-3 h-3" /> Clear all
+              </button>
+            )}
+            <span className="text-xs text-slate-500 ml-auto">
+              {displayItems.length} item{displayItems.length !== 1 ? 's' : ''}
+            </span>
+          </div>
+        )}
+      </div>
+      
+      <div className="relative min-h-[calc(100vh-200px)] pt-2">
         
         <BulkActions
           selectedIds={selectedIds}
@@ -1021,7 +986,7 @@ export default function Dashboard() {
         />
 
         {loading && (
-          <div className="absolute inset-0 z-30 bg-slate-50 dark:bg-slate-950 text-slate-400">
+          <div className="absolute inset-0 z-30 bg-slate-50 dark:bg-[#0a1320] text-slate-400">
             <div className="sticky top-[40vh] flex flex-col items-center justify-center gap-4">
               <div className="w-8 h-8 border-2 border-cyan-500/50 border-t-cyan-400 rounded-full animate-spin" />
               <p className="text-sm font-medium">Loading data...</p>
@@ -1470,7 +1435,6 @@ export default function Dashboard() {
         {/* Infinite Scroll Observer Target */}
         <div ref={loadMoreRef} className="w-full h-4" />
         
-        </div>
       </div>
 
       {searchModalOpen && searchMediaId && (

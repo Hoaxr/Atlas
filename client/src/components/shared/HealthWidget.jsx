@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Activity, Database, HardDrive, Cpu, Clock } from 'lucide-react';
+import { Database, HardDrive, Cpu, Clock } from 'lucide-react';
 import api from '../../lib/api';
 import { formatSize } from '../../lib/format';
 
@@ -25,27 +25,9 @@ export default function HealthWidget() {
       .finally(() => setLoading(false));
   }, []);
 
-  const allPathsOk = data?.paths?.every(p => p.accessible) ?? true;
-
   return (
-    <div className="rounded-2xl border border-white/10 bg-slate-900/50 overflow-hidden mb-6">
-      {/* Header */}
-      <div className="w-full flex items-center justify-between px-5 py-3.5 border-b border-white/5 bg-slate-800/20">
-        <div className="flex items-center gap-2.5">
-          <div className={`p-1.5 rounded-lg ${allPathsOk ? 'bg-emerald-500/10 text-emerald-400' : 'bg-amber-500/10 text-amber-400'}`}>
-            <Activity className="w-4 h-4" />
-          </div>
-          <span className="text-sm font-bold text-slate-200">System Health</span>
-          {data && !allPathsOk && (
-            <span className="text-xs bg-amber-500/15 text-amber-400 border border-amber-500/20 px-2 py-0.5 rounded-full font-medium">
-              Path issue
-            </span>
-          )}
-        </div>
-      </div>
-
-      <div className="px-5 py-4">
-        {loading ? (
+    <div className="glass-panel rounded-2xl border border-white/10 p-4 sm:p-5">
+      {loading ? (
           <p className="text-sm text-slate-500 text-center py-4 animate-pulse">Loading health data…</p>
         ) : !data ? (
           <p className="text-sm text-red-400 text-center py-4">Failed to load health data</p>
@@ -94,7 +76,6 @@ export default function HealthWidget() {
             </div>
           </div>
         )}
-      </div>
     </div>
   );
 }

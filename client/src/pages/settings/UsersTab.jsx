@@ -1,15 +1,46 @@
 import { useState, useEffect, useMemo } from 'react';
-import { createPortal } from 'react-dom';
 import api from '../../lib/api';
 import useWebSocket from '../../lib/useWebSocket';
 import {
-  Users, UserPlus, Trash2, Shield, User, Loader2, Edit, X,
-  CheckSquare, Square, Search, Mail, Download,
-  UserCog, ShieldAlert, Clock, LogIn
+  Users, UserPlus, Trash2, Shield, User, Edit,
+  Search, Mail, Download,
+  UserCog, ShieldAlert, Clock
 } from 'lucide-react';
 import { customAlert, customConfirm } from '../../utils/alerts';
 import CustomSelect from '../../components/shared/CustomSelect';
 import PasswordInput from '../../components/shared/PasswordInput';
+import Button from '../../components/shared/Button';
+import ModalShell from '../../components/shared/ModalShell';
+import ToggleRow from '../../components/shared/ToggleRow';
+import { SettingsSection, SettingsHeader, SettingsLabel, SettingsHelper } from '../../components/settings/layout';
+
+// Visual tokens shared with the other settings tabs — keep in sync
+const PANEL_CLASS = 'glass-panel rounded-2xl p-5 sm:p-6 border border-white/10 shadow-sm';
+const INPUT_CLASS = 'w-full bg-[#0c1624] border border-[#1c2d46] rounded-xl px-4 py-2.5 text-sm text-slate-200 focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/50 transition-colors placeholder:text-slate-600';
+const LABEL_CLASS = 'block text-xs sm:text-sm font-medium text-slate-300 mb-1.5 flex items-center gap-1.5';
+const CARD_CLASS = 'rounded-xl bg-[#101e31] border border-[#1c2d46] hover:border-[#274063] transition-colors';
+const BADGE_CLASS = 'inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold uppercase tracking-wider border whitespace-nowrap shrink-0';
+
+const STAT_ACCENTS = {
+  cyan: 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20',
+  rose: 'bg-rose-500/10 text-rose-400 border-rose-500/20',
+  indigo: 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20',
+  amber: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
+};
+
+function StatCard({ icon: Icon, accent = 'cyan', value, label }) {
+  return (
+    <div className={`flex items-center gap-3 p-3.5 ${CARD_CLASS}`}>
+      <div className={`p-2 rounded-lg border shrink-0 ${STAT_ACCENTS[accent] || STAT_ACCENTS.cyan}`}>
+        <Icon className="w-4 h-4" />
+      </div>
+      <div className="min-w-0">
+        <p className="text-xl sm:text-2xl font-bold font-display text-slate-100 leading-none">{value}</p>
+        <p className="text-xs text-slate-400 mt-1 truncate">{label}</p>
+      </div>
+    </div>
+  );
+}
 
 const roleOptions = [
   { label: 'User (Request Portal Only)', value: 'user' },
@@ -73,7 +104,10 @@ export default function UsersTab() {
     password: '',
     email: '',
     role: 'user',
-    autoCreateMedia: false
+    autoCreateMedia: false,
+    request_limit: '',
+    can_request: true,
+    can_download: true
   });
 
   const [editingUser, setEditingUser] = useState(null);
@@ -116,9 +150,6 @@ export default function UsersTab() {
     );
   }, [users, search]);
 
-  const admins = useMemo(() => filteredUsers.filter(u => u.role === 'admin'), [filteredUsers]);
-  const regularUsers = useMemo(() => filteredUsers.filter(u => u.role === 'user'), [filteredUsers]);
-
   const stats = useMemo(() => ({
     total: users.length,
     admins: users.filter(u => u.role === 'admin').length,
@@ -130,7 +161,19 @@ export default function UsersTab() {
     e.preventDefault();
     setAdding(true);
     try {
-      const res = await api.post('/users', newUser);
+      const payload = {
+        username: newUser.username,
+        password: newUser.password,
+        email: newUser.email,
+        role: newUser.role,
+        autoCreateMedia: newUser.autoCreateMedia,
+        request_limit: newUser.request_limit !== '' ? parseInt(newUser.request_limit, 10) : null,
+        permissions: {
+          can_request: newUser.can_request,
+          can_download: newUser.can_download
+        }
+      };
+      const res = await api.post('/users', payload);
       customAlert(res.data.message);
 
       const provision = res.data.data.provisionResults;
@@ -144,7 +187,10 @@ export default function UsersTab() {
         }
       }
 
-      setNewUser({ username: '', password: '', email: '', role: 'user', autoCreateMedia: false });
+      setNewUser({
+        username: '', password: '', email: '', role: 'user', autoCreateMedia: false,
+        request_limit: '', can_request: true, can_download: true
+      });
       fetchUsers();
     } catch (err) {
       customAlert(err.response?.data?.message || 'Failed to create user');
@@ -187,7 +233,14 @@ export default function UsersTab() {
       const payload = {
         username: editingUser.username,
         email: editingUser.email,
-        role: editingUser.role
+        role: editingUser.role,
+        request_limit: editingUser.request_limit !== '' && editingUser.request_limit !== null
+          ? parseInt(editingUser.request_limit, 10)
+          : null,
+        permissions: {
+          can_request: editingUser.can_request !== false,
+          can_download: editingUser.can_download !== false
+        }
       };
       if (editingUser.password) {
         payload.password = editingUser.password;
@@ -204,102 +257,100 @@ export default function UsersTab() {
     }
   };
 
-  function UserCard({ user, isAdmin }) {
+  function UserRow({ user }) {
     const originStyle = getOriginStyle(user.origin);
     const avatarColor = getAvatarColor(user.username);
     const createdDate = user.created_at ? formatDate(user.created_at) : null;
     const lastLogin = user.last_login ? formatDate(user.last_login) : null;
+    const isAdmin = user.role === 'admin';
 
     return (
-      <div className="group flex gap-3 sm:gap-4 p-4 rounded-xl bg-slate-900/30 border border-white/5 hover:border-white/10 hover:bg-slate-900/50 transition-all duration-200">
-        {/* Avatar */}
-        <div className={`relative shrink-0 w-10 h-10 rounded-full ${avatarColor} flex items-center justify-center shadow-lg shadow-black/20`}>
-          <span className="text-sm font-bold text-white">{getInitials(user.username)}</span>
-          <span className={`absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border-2 border-slate-900 ${user.online ? 'bg-emerald-500' : 'bg-slate-600'}`} title={user.online ? 'Online' : 'Offline'} />
+      <div className="flex items-center gap-3 px-4 py-3 hover:bg-[#101e31]/60 transition-colors">
+        {/* User */}
+        <div className="flex items-center gap-3 min-w-0 flex-1">
+          <div className={`relative shrink-0 w-9 h-9 rounded-lg ${avatarColor} flex items-center justify-center shadow-sm`}>
+            <span className="text-xs font-bold text-white">{getInitials(user.username)}</span>
+            <span className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-[#0c1626] ${user.online ? 'bg-emerald-500' : 'bg-slate-600'}`} title={user.online ? 'Online' : 'Offline'} />
+          </div>
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-slate-100 truncate">{user.username}</p>
+            {user.email ? (
+              <p className="text-xs text-slate-400 truncate">{user.email}</p>
+            ) : (
+              <p className="text-xs italic text-slate-500">No email</p>
+            )}
+          </div>
         </div>
 
-        {/* Content */}
-        <div className="flex-1 min-w-0 space-y-1.5">
-          {/* Top row: username + role + origin + actions */}
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="font-semibold text-white truncate">{user.username}</span>
-            {isAdmin ? (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/15 text-rose-400 border border-rose-500/20 uppercase tracking-wider shrink-0">
-                <Shield className="w-2.5 h-2.5" /> Admin
-              </span>
-            ) : (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-500/15 text-indigo-400 border border-indigo-500/20 uppercase tracking-wider shrink-0">
-                <User className="w-2.5 h-2.5" /> User
-              </span>
-            )}
-            <div className={`shrink-0 text-[10px] font-bold px-2.5 py-1 rounded-md border ${originStyle.bg} ${originStyle.text} ${originStyle.border} uppercase tracking-wider`}>
-              {originStyle.label}
-            </div>
-            <div className="shrink-0 flex items-center gap-1.5 ml-auto opacity-60 group-hover:opacity-100 transition-opacity">
-              <button
-                onClick={() => setEditingUser({ ...user, password: '' })}
-                className="p-2 rounded-lg bg-cyan-500/10 text-cyan-400 hover:bg-cyan-500/20 hover:text-cyan-300 transition-all"
-                title="Edit user"
-              >
-                <Edit className="w-3.5 h-3.5" />
-              </button>
-              <button
-                onClick={() => handleDeleteUser(user.id, user.username)}
-                className="p-2 rounded-lg bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 hover:text-rose-300 transition-all"
-                title="Delete user"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-              </button>
-            </div>
+        {/* Role + origin */}
+        <div className="hidden sm:flex flex-wrap items-center gap-1.5 w-44 shrink-0">
+          {isAdmin ? (
+            <span className={`${BADGE_CLASS} bg-rose-500/10 text-rose-400 border-rose-500/20`}>
+              <Shield className="w-2.5 h-2.5" /> Admin
+            </span>
+          ) : (
+            <span className={`${BADGE_CLASS} bg-cyan-500/10 text-cyan-400 border-cyan-500/20`}>
+              <User className="w-2.5 h-2.5" /> User
+            </span>
+          )}
+          <div className={`${BADGE_CLASS} ${originStyle.bg} ${originStyle.text} ${originStyle.border}`}>
+            {originStyle.label}
           </div>
+          {!isAdmin && user.permissions?.can_request === false && (
+            <span className={`${BADGE_CLASS} bg-rose-500/10 text-rose-400 border-rose-500/20`}>
+              No Requests
+            </span>
+          )}
+          {!isAdmin && user.request_limit !== null && user.request_limit !== undefined && (
+            <span className={`${BADGE_CLASS} bg-cyan-500/10 text-cyan-400 border-cyan-500/20`}>
+              {user.request_limit} req/wk
+            </span>
+          )}
+        </div>
 
-          {/* Bottom row: email + dates */}
-          <div className="flex flex-wrap items-center gap-3 text-xs text-slate-400">
-            {user.email ? (
-              <span className="flex items-center gap-1">
-                <Mail className="w-3 h-3 shrink-0" /> {user.email}
-              </span>
-            ) : (
-              <span className="italic text-slate-500">No email</span>
-            )}
-            <span className="flex items-center gap-1 shrink-0" title="Last login">
-              <LogIn className="w-3 h-3" /> {lastLogin || 'N/A'}
-            </span>
-            <span className="flex items-center gap-1 shrink-0" title="Created">
-              <Clock className="w-3 h-3" /> {createdDate || 'N/A'}
-            </span>
-          </div>
+        {/* Created */}
+        <div className="hidden md:block w-28 shrink-0 text-xs text-slate-400 truncate">{createdDate || '—'}</div>
+
+        {/* Last login */}
+        <div className="hidden lg:block w-28 shrink-0 text-xs text-slate-400 truncate">{lastLogin || '—'}</div>
+
+        {/* Actions */}
+        <div className="shrink-0 flex items-center justify-end gap-2 sm:w-[150px]">
+          <Button
+            size="sm"
+            variant="secondary"
+            icon={Edit}
+            onClick={() => setEditingUser({
+              ...user,
+              password: '',
+              request_limit: user.request_limit !== null && user.request_limit !== undefined ? String(user.request_limit) : '',
+              can_request: user.permissions?.can_request !== false,
+              can_download: user.permissions?.can_download !== false
+            })}
+          >
+            Edit
+          </Button>
+          <Button
+            size="sm"
+            variant="danger"
+            icon={Trash2}
+            onClick={() => handleDeleteUser(user.id, user.username)}
+          >
+            Delete
+          </Button>
         </div>
       </div>
     );
   }
 
-  function UserListSection({ title, icon, iconColor, users, isAdmin, emptyMessage }) {
+  function UserListHeader() {
     return (
-      <div>
-        <div className="flex items-center gap-2 mb-4">
-          <div className={`p-1.5 rounded-lg ${iconColor}/10`}>
-            {icon}
-          </div>
-          <h3 className="text-lg font-bold text-slate-200">{title}</h3>
-          <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${iconColor}/15 ${iconColor} border border-white/5`}>
-            {users.length}
-          </span>
-        </div>
-        {users.length > 0 ? (
-          <div className="space-y-2">
-            {users.map(user => (
-              <UserCard key={user.id} user={user} isAdmin={isAdmin} />
-            ))}
-          </div>
-        ) : (
-          <div className="flex flex-col items-center justify-center py-12 text-center">
-            <div className={`p-3 rounded-full ${iconColor}/10 mb-3`}>
-              {icon}
-            </div>
-            <p className="text-sm text-slate-500">{emptyMessage}</p>
-          </div>
-        )}
+      <div className="hidden sm:flex items-center gap-3 px-4 py-2.5 bg-[#15243b] border-b border-[#1c2d46] text-[11px] font-bold uppercase tracking-wider text-slate-300">
+        <span className="flex-1">User</span>
+        <span className="w-44 shrink-0">Role</span>
+        <span className="hidden md:block w-28 shrink-0">Created</span>
+        <span className="hidden lg:block w-28 shrink-0">Last Login</span>
+        <span className="w-[150px] shrink-0 text-right">Actions</span>
       </div>
     );
   }
@@ -307,317 +358,282 @@ export default function UsersTab() {
   if (loading) return null;
 
   return (
-    <div className="space-y-8 animate-fade-in max-w-5xl mx-auto">
+    <div className="w-full space-y-6 animate-fade-in">
       {/* Stats Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <div className="glass-panel rounded-xl p-4 border border-white/5">
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-cyan-500/10">
-              <Users className="w-4 h-4 text-cyan-400" />
-            </div>
-            <div>
-              <p className="text-2xl font-black text-slate-200">{stats.total}</p>
-              <p className="text-[11px] text-slate-500 font-medium uppercase tracking-wider">Total Users</p>
-            </div>
-          </div>
-        </div>
-        <div className="glass-panel rounded-xl p-4 border border-white/5">
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-rose-500/10">
-              <Shield className="w-4 h-4 text-rose-400" />
-            </div>
-            <div>
-              <p className="text-2xl font-black text-slate-200">{stats.admins}</p>
-              <p className="text-[11px] text-slate-500 font-medium uppercase tracking-wider">Admins</p>
-            </div>
-          </div>
-        </div>
-        <div className="glass-panel rounded-xl p-4 border border-white/5">
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-indigo-500/10">
-              <User className="w-4 h-4 text-indigo-400" />
-            </div>
-            <div>
-              <p className="text-2xl font-black text-slate-200">{stats.users}</p>
-              <p className="text-[11px] text-slate-500 font-medium uppercase tracking-wider">Regular Users</p>
-            </div>
-          </div>
-        </div>
-        <div className="glass-panel rounded-xl p-4 border border-white/5">
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-amber-500/10">
-              <Download className="w-4 h-4 text-amber-400" />
-            </div>
-            <div>
-              <p className="text-2xl font-black text-slate-200">{stats.imported}</p>
-              <p className="text-[11px] text-slate-500 font-medium uppercase tracking-wider">Imported</p>
-            </div>
-          </div>
-        </div>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+        <StatCard icon={Users} accent="cyan" value={stats.total} label="Total Users" />
+        <StatCard icon={Shield} accent="rose" value={stats.admins} label="Admins" />
+        <StatCard icon={User} accent="indigo" value={stats.users} label="Regular Users" />
+        <StatCard icon={Download} accent="amber" value={stats.imported} label="Imported" />
       </div>
 
       {/* Create User Panel */}
-      <div className="glass-panel p-6 rounded-2xl border border-white/10">
-        <div className="flex items-start justify-between mb-6">
-          <div>
-            <h2 className="text-xl font-bold text-slate-200 flex items-center gap-2">
-              <UserPlus className="w-5 h-5 text-cyan-400" /> Create User
-            </h2>
-            <p className="text-xs text-slate-500 mt-1">Create new users with role-based access. Users can be provisioned in connected media servers automatically.</p>
-          </div>
-        </div>
+      <SettingsSection>
+        <SettingsHeader
+          title="Create User"
+          icon={UserPlus}
+          description="Create new users with role-based access. Users can be provisioned in connected media servers automatically."
+        />
         <form onSubmit={handleAddUser} className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-slate-400 flex items-center gap-1.5">
-                <UserPlus className="w-3.5 h-3.5 text-cyan-400" /> Username <span className="text-rose-400">*</span>
-              </label>
+            <div>
+              <SettingsLabel title={<span className="flex items-center gap-1.5"><UserPlus className="w-3.5 h-3.5 text-cyan-400" /> Username</span>} required />
               <input
                 type="text"
                 required
                 value={newUser.username}
                 onChange={(e) => setNewUser({...newUser, username: e.target.value})}
-                className="w-full bg-slate-900/50 border border-slate-700/50 rounded-xl px-4 py-2.5 text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/20 transition-all"
+                className={INPUT_CLASS}
                 placeholder="Enter username"
               />
             </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-slate-400 flex items-center gap-1.5">
-                <ShieldAlert className="w-3.5 h-3.5 text-cyan-400" /> Password <span className="text-rose-400">*</span>
-              </label>
+            <div>
+              <SettingsLabel title={<span className="flex items-center gap-1.5"><ShieldAlert className="w-3.5 h-3.5 text-cyan-400" /> Password</span>} required />
               <PasswordInput
                 required
                 value={newUser.password}
                 onChange={(e) => setNewUser({...newUser, password: e.target.value})}
-                className="w-full bg-slate-900/50 border border-slate-700/50 rounded-xl px-4 py-2.5 text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/20 transition-all"
+                className={INPUT_CLASS}
                 placeholder="Min. 8 characters"
               />
             </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-slate-400 flex items-center gap-1.5">
-                <Mail className="w-3.5 h-3.5 text-cyan-400" /> Email
-              </label>
+            <div>
+              <SettingsLabel title={<span className="flex items-center gap-1.5"><Mail className="w-3.5 h-3.5 text-cyan-400" /> Email</span>} />
               <input
                 type="email"
                 value={newUser.email}
                 onChange={(e) => setNewUser({...newUser, email: e.target.value})}
-                className="w-full bg-slate-900/50 border border-slate-700/50 rounded-xl px-4 py-2.5 text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/20 transition-all"
+                className={INPUT_CLASS}
                 placeholder="Required for Plex invites"
               />
-              <p className="text-[11px] text-slate-600">Make sure the user has a Plex account</p>
+              <SettingsHelper text="Make sure the user has a Plex account" />
             </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-slate-400 flex items-center gap-1.5">
-                <UserCog className="w-3.5 h-3.5 text-cyan-400" /> Role
-              </label>
+            <div>
+              <SettingsLabel title={<span className="flex items-center gap-1.5"><UserCog className="w-3.5 h-3.5 text-cyan-400" /> Role</span>} />
               <CustomSelect
                 value={newUser.role}
                 onChange={(e) => setNewUser({...newUser, role: e.target.value})}
                 options={roleOptions}
               />
             </div>
-          </div>
-
-          <div className="bg-slate-900/30 rounded-xl border border-white/5 p-1">
-            <label className="flex items-start gap-3 cursor-pointer p-3 rounded-lg hover:bg-slate-800/30 transition-colors group">
-              <div className="mt-0.5">
-                <input
-                  type="checkbox"
-                  checked={newUser.autoCreateMedia}
-                  onChange={(e) => setNewUser({...newUser, autoCreateMedia: e.target.checked})}
-                  className="sr-only"
-                />
-                {newUser.autoCreateMedia
-                  ? <CheckSquare className="w-5 h-5 text-cyan-400" />
-                  : <Square className="w-5 h-5 text-slate-600 group-hover:text-slate-500 transition-colors" />}
-              </div>
+            {newUser.role !== 'admin' && (
               <div>
-                <p className="text-sm font-medium text-slate-300 group-hover:text-cyan-400 transition-colors">Auto-create in Media Servers</p>
-                <p className="text-xs text-slate-600 mt-0.5">Automatically create/invite this user in Jellyfin, Emby, and/or Plex</p>
+                <SettingsLabel title={<span className="flex items-center gap-1.5"><Clock className="w-3.5 h-3.5 text-cyan-400" /> Weekly Request Quota</span>} />
+                <input
+                  type="number"
+                  min="0"
+                  value={newUser.request_limit}
+                  onChange={(e) => setNewUser({...newUser, request_limit: e.target.value})}
+                  className={INPUT_CLASS}
+                  placeholder="Leave blank for unlimited"
+                />
+                <SettingsHelper text="Max requests per rolling 7 days" />
               </div>
-            </label>
+            )}
           </div>
 
-          <div className="flex justify-end border-t border-white/5 pt-5">
-            <button
+          {/* Permission toggles */}
+          <div className={`grid grid-cols-1 gap-3 ${newUser.role === 'admin' ? '' : 'md:grid-cols-3'}`}>
+            {newUser.role !== 'admin' && (
+              <>
+                <ToggleRow
+                  checked={newUser.can_request}
+                  onChange={() => setNewUser({...newUser, can_request: !newUser.can_request})}
+                  title="Allow Requests"
+                  description="Let this user submit new movie and show requests."
+                />
+                <ToggleRow
+                  checked={newUser.can_download}
+                  onChange={() => setNewUser({...newUser, can_download: !newUser.can_download})}
+                  title="Allow Downloads"
+                  description="Let this user send approved requests to your download clients."
+                />
+              </>
+            )}
+            <ToggleRow
+              checked={newUser.autoCreateMedia}
+              onChange={() => setNewUser({...newUser, autoCreateMedia: !newUser.autoCreateMedia})}
+              title="Auto-create in Media Servers"
+              description="Automatically create/invite this user in Jellyfin, Emby, and/or Plex."
+            />
+          </div>
+
+          <div className="flex justify-end pt-2">
+            <Button
               type="submit"
-              disabled={adding || !newUser.username || !newUser.password}
-              className="bg-cyan-500 hover:bg-cyan-400 text-slate-900 px-6 py-2.5 rounded-xl font-bold transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2 shadow-lg shadow-cyan-500/20"
+              variant="primary"
+              icon={UserPlus}
+              loading={adding}
+              disabled={!newUser.username || !newUser.password}
             >
-              {adding && <Loader2 className="w-4 h-4 animate-spin" />}
               {adding ? 'Creating...' : 'Create User'}
-            </button>
+            </Button>
           </div>
         </form>
-      </div>
+      </SettingsSection>
 
       {/* User List Panel */}
-      <div className="glass-panel p-6 rounded-2xl border border-white/10">
-        {/* Header bar */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-          <div>
-            <h2 className="text-xl font-bold text-slate-200 flex items-center gap-2">
-              <Users className="w-5 h-5 text-indigo-400" /> All Users
-            </h2>
-            <p className="text-xs text-slate-500 mt-0.5">{filteredUsers.length} of {users.length} user{users.length !== 1 ? 's' : ''}</p>
-          </div>
-          <div className="flex items-center gap-3">
+      <SettingsSection>
+        <SettingsHeader
+          title="All Users"
+          icon={Users}
+          description={`${filteredUsers.length} of ${users.length} user${users.length !== 1 ? 's' : ''}`}
+        >
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3 w-full">
             {/* Search */}
-            <div className="relative">
+            <div className="relative w-full sm:w-56">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
               <input
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search users..."
-                className="w-full sm:w-52 bg-slate-900/50 border border-slate-700/50 rounded-xl pl-10 pr-4 py-2 text-base text-slate-200 placeholder-slate-600 focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/20 transition-all"
+                className={`${INPUT_CLASS} pl-10`}
               />
             </div>
-            <button
+            <Button
+              variant="secondary"
+              icon={Download}
+              loading={importing}
               onClick={handleImportUsers}
-              disabled={importing}
-              className="bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 px-4 py-2 rounded-xl font-bold transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2 text-sm border border-indigo-500/10 hover:border-indigo-500/20"
+              className="shrink-0 w-fit"
             >
-              {importing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-              {importing ? 'Importing...' : 'Import'}
-            </button>
+              {importing ? 'Importing...' : 'Import from Media Servers'}
+            </Button>
           </div>
-        </div>
+        </SettingsHeader>
 
-        {/* Admins section */}
-        <div className="mb-8">
-          <UserListSection
-            title="Administrators"
-            icon={<Shield className="w-4 h-4 text-rose-400" />}
-            iconColor="text-rose-400"
-            users={admins}
-            isAdmin={true}
-            emptyMessage="No administrators found."
-          />
-        </div>
-
-        {/* Divider */}
-        {admins.length > 0 && regularUsers.length > 0 && (
-          <div className="relative mb-8">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-white/5" />
+        {/* Users list */}
+        <div className="rounded-xl border border-[#1c2d46] bg-[#0c1626]/90 overflow-hidden">
+          <UserListHeader />
+          {filteredUsers.length === 0 ? (
+            <div className="py-10 px-4 text-center text-xs sm:text-sm text-slate-400">
+              {search ? 'No users match your search.' : 'No users yet. Create one above or import from your media servers.'}
             </div>
-            <div className="relative flex justify-center">
-              <span className="bg-slate-800 px-3 text-xs text-slate-600">Users</span>
+          ) : (
+            <div className="divide-y divide-[#1c2d46]/70">
+              {filteredUsers.map(user => (
+                <UserRow key={user.id} user={user} />
+              ))}
             </div>
-          </div>
-        )}
-
-        {/* Regular users section */}
-        <UserListSection
-          title="Managed Users"
-          icon={<User className="w-4 h-4 text-indigo-400" />}
-          iconColor="text-indigo-400"
-          users={regularUsers}
-          isAdmin={false}
-          emptyMessage={search ? 'No users match your search.' : 'No users yet. Create one above or import from your media servers.'}
-        />
-      </div>
+          )}
+        </div>
+      </SettingsSection>
 
       {/* Edit User Modal */}
-      {editingUser && createPortal(
-        <div className="fixed inset-0 z-40 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-fade-in" onClick={() => setEditingUser(null)}>
-          <div className="bg-slate-900 border border-white/10 rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl shadow-black/40" onClick={(e) => e.stopPropagation()}>
-            {/* Header */}
-            <div className="flex items-center justify-between p-6 border-b border-white/5 bg-gradient-to-r from-slate-900 to-slate-800/50">
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-xl bg-cyan-500/10">
-                  <Edit className="w-5 h-5 text-cyan-400" />
-                </div>
-                <div>
-                  <h2 className="text-lg font-bold text-white">Edit User</h2>
-                  <p className="text-xs text-slate-500">{editingUser.username}</p>
-                </div>
+      <ModalShell
+        open={!!editingUser}
+        onClose={() => setEditingUser(null)}
+        size="lg"
+        icon={<Edit className="w-5 h-5 text-cyan-400" />}
+        title="Edit User"
+      >
+        {editingUser && (
+          <form onSubmit={handleUpdateUser} className="space-y-5">
+            <div className="flex items-center gap-4 p-4 rounded-xl bg-[#101e31] border border-[#1c2d46]">
+              <div className={`w-12 h-12 rounded-xl shrink-0 ${getAvatarColor(editingUser.username)} flex items-center justify-center shadow-sm`}>
+                <span className="text-lg font-bold text-white">{getInitials(editingUser.username)}</span>
               </div>
-              <button
-                onClick={() => setEditingUser(null)}
-                className="p-2 rounded-lg text-slate-500 hover:text-white hover:bg-slate-800 transition-all"
-              >
-                <X className="w-4 h-4" />
-              </button>
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-slate-200 truncate">{editingUser.username}</p>
+                <p className="text-xs text-slate-400 truncate">
+                  {editingUser.role === 'admin' ? 'Administrator' : 'User'}
+                  {editingUser.email ? ` · ${editingUser.email}` : ''}
+                </p>
+              </div>
             </div>
 
-            <form onSubmit={handleUpdateUser} className="p-6 space-y-5">
-              <div className="flex items-center gap-4 mb-4 p-4 rounded-xl bg-slate-800/30 border border-white/5">
-                <div className={`w-12 h-12 rounded-full ${getAvatarColor(editingUser.username)} flex items-center justify-center shadow-lg shadow-black/20`}>
-                  <span className="text-lg font-bold text-white">{getInitials(editingUser.username)}</span>
-                </div>
-                <div>
-                  <p className="text-sm font-semibold text-slate-200">{editingUser.username}</p>
-                  <p className="text-xs text-slate-500">
-                    {editingUser.role === 'admin' ? 'Administrator' : 'User'}
-                    {editingUser.email ? ` · ${editingUser.email}` : ''}
-                  </p>
-                </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <SettingsLabel title="Username" required />
+                <input
+                  type="text"
+                  required
+                  value={editingUser.username}
+                  onChange={(e) => setEditingUser({...editingUser, username: e.target.value})}
+                  className={INPUT_CLASS}
+                />
+              </div>
+              <div>
+                <SettingsLabel title="Password" />
+                <PasswordInput
+                  value={editingUser.password}
+                  onChange={(e) => setEditingUser({...editingUser, password: e.target.value})}
+                  className={INPUT_CLASS}
+                  placeholder="Leave blank to keep current"
+                />
+              </div>
+              <div>
+                <SettingsLabel title="Email" />
+                <input
+                  type="email"
+                  value={editingUser.email || ''}
+                  onChange={(e) => setEditingUser({...editingUser, email: e.target.value})}
+                  className={INPUT_CLASS}
+                  placeholder="user@example.com"
+                />
+              </div>
+              <div>
+                <SettingsLabel title="Role" />
+                <CustomSelect
+                  value={editingUser.role}
+                  onChange={(e) => setEditingUser({...editingUser, role: e.target.value})}
+                  options={roleOptions}
+                />
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-slate-400">Username <span className="text-rose-400">*</span></label>
-                  <input
-                    type="text"
-                    required
-                    value={editingUser.username}
-                    onChange={(e) => setEditingUser({...editingUser, username: e.target.value})}
-                    className="w-full bg-slate-800/50 border border-slate-700/50 rounded-xl px-4 py-2.5 text-sm text-slate-200 focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/20 transition-all"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-slate-400">Password</label>
-                  <PasswordInput
-                    value={editingUser.password}
-                    onChange={(e) => setEditingUser({...editingUser, password: e.target.value})}
-                    className="w-full bg-slate-800/50 border border-slate-700/50 rounded-xl px-4 py-2.5 text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/20 transition-all"
-                    placeholder="Leave blank to keep current"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-slate-400">Email</label>
-                  <input
-                    type="email"
-                    value={editingUser.email || ''}
-                    onChange={(e) => setEditingUser({...editingUser, email: e.target.value})}
-                    className="w-full bg-slate-800/50 border border-slate-700/50 rounded-xl px-4 py-2.5 text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/20 transition-all"
-                    placeholder="user@example.com"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-slate-400">Role</label>
-                  <CustomSelect
-                    value={editingUser.role}
-                    onChange={(e) => setEditingUser({...editingUser, role: e.target.value})}
-                    options={roleOptions}
-                  />
-                </div>
-              </div>
+              {editingUser.role !== 'admin' && (
+                <>
+                  <div>
+                    <SettingsLabel title={<span className="flex items-center gap-1.5"><Clock className="w-3.5 h-3.5 text-cyan-400" /> Weekly Request Quota</span>} />
+                    <input
+                      type="number"
+                      min="0"
+                      value={editingUser.request_limit ?? ''}
+                      onChange={(e) => setEditingUser({...editingUser, request_limit: e.target.value})}
+                      className={INPUT_CLASS}
+                      placeholder="Leave blank for unlimited"
+                    />
+                    <SettingsHelper text="Max requests per rolling 7 days" />
+                  </div>
+                  <div className="sm:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <ToggleRow
+                      checked={editingUser.can_request !== false}
+                      onChange={() => setEditingUser({...editingUser, can_request: editingUser.can_request === false})}
+                      title="Allow Requests"
+                      description="Let this user submit new movie and show requests."
+                    />
+                    <ToggleRow
+                      checked={editingUser.can_download !== false}
+                      onChange={() => setEditingUser({...editingUser, can_download: editingUser.can_download === false})}
+                      title="Allow Downloads"
+                      description="Let this user send approved requests to your download clients."
+                    />
+                  </div>
+                </>
+              )}
+            </div>
 
-              <div className="flex justify-end gap-3 pt-3 border-t border-white/5">
-                <button
-                  type="button"
-                  onClick={() => setEditingUser(null)}
-                  className="px-5 py-2.5 rounded-xl font-medium text-slate-400 hover:text-white hover:bg-slate-800 transition-all"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={updating || !editingUser.username}
-                  className="bg-cyan-500 hover:bg-cyan-400 text-slate-900 px-6 py-2.5 rounded-xl font-bold transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2 shadow-lg shadow-cyan-500/20"
-                >
-                  {updating && <Loader2 className="w-4 h-4 animate-spin" />}
-                  {updating ? 'Saving...' : 'Save Changes'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>,
-        document.body
-      )}
+            <div className="flex justify-end gap-2.5 pt-1">
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => setEditingUser(null)}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                variant="primary"
+                disabled={!editingUser.username}
+                loading={updating}
+              >
+                {updating ? 'Saving...' : 'Save Changes'}
+              </Button>
+            </div>
+          </form>
+        )}
+      </ModalShell>
     </div>
   );
 }

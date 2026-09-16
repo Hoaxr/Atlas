@@ -24,22 +24,31 @@ export default function MediaRow({ title, items, badgeText, isTrending = false, 
   return (
     <div className="mb-10 group/row relative">
       <div className="flex justify-between items-center mb-4">
-        <h2 className="text-xl font-bold text-slate-200 flex items-center space-x-2">
-          <span className="bg-gradient-to-r from-orange-400 to-pink-500 text-transparent bg-clip-text">
+        <h2 className="text-xl font-bold text-slate-100 flex items-center space-x-3">
+          <span className="w-1.5 h-5 bg-sky-400 rounded-full shrink-0" />
+          <span className="text-slate-100 font-bold font-display tracking-tight text-xl">
             {title}
           </span>
           {badgeText && (
-            <span className="hidden sm:inline text-xs font-normal text-slate-500 bg-slate-900 px-2 py-1 rounded-md ml-4 border border-white/5">
+            <span className="hidden sm:inline-flex items-center text-[11px] font-medium text-sky-400 bg-sky-500/10 border border-sky-500/20 px-2.5 py-0.5 rounded-full">
               {badgeText}
             </span>
           )}
         </h2>
-        <div className="flex gap-2">
-           <button onClick={() => scroll('left')} className="p-2 bg-slate-900/50 hover:bg-slate-800 rounded-full text-slate-400 hover:text-white transition-colors border border-white/5 backdrop-blur-sm">
-             <ChevronLeft className="w-5 h-5" />
+        <div className="flex items-center gap-2">
+           <button
+             onClick={() => scroll('left')}
+             className="w-8 h-8 rounded-full flex items-center justify-center bg-[#101e31] hover:bg-[#16273f] text-slate-100 hover:text-white transition-colors border border-[#1c2d46] hover:border-slate-600 shadow-sm"
+             aria-label="Scroll left"
+           >
+             <ChevronLeft className="w-4 h-4" />
            </button>
-           <button onClick={() => scroll('right')} className="p-2 bg-slate-900/50 hover:bg-slate-800 rounded-full text-slate-400 hover:text-white transition-colors border border-white/5 backdrop-blur-sm">
-             <ChevronRight className="w-5 h-5" />
+           <button
+             onClick={() => scroll('right')}
+             className="w-8 h-8 rounded-full flex items-center justify-center bg-[#101e31] hover:bg-[#16273f] text-slate-100 hover:text-white transition-colors border border-[#1c2d46] hover:border-slate-600 shadow-sm"
+             aria-label="Scroll right"
+           >
+             <ChevronRight className="w-4 h-4" />
            </button>
         </div>
       </div>

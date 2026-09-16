@@ -1036,7 +1036,6 @@ const runMusicSearchCycle = async () => {
 
   console.log(`[MusicSearch] Searching for ${missingAlbums.length} missing albums...`);
   const indexerService = require('./indexerService');
-  const downloadClientService = require('./downloadClientService');
   let grabbed = 0;
 
   for (const album of missingAlbums) {

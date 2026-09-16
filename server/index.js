@@ -43,7 +43,7 @@ const downloadClientService = require('./services/downloadClientService');
 const errorHandler = require('./middleware/errorHandler');
 const eventBus = require('./services/eventBus');
 const presenceTracker = require('./services/presenceTracker');
-const { getSetting } = require('./utils/settings');
+const { isAuthEnabled } = require('./utils/settings');
 const fs = require('fs');
 const authMiddleware = require('./middleware/authMiddleware');
 const requireAdmin = require('./middleware/requireAdmin');
@@ -131,10 +131,14 @@ wss.on('connection', (ws, req) => {
       } catch { /* ignore */ }
     };
     eventBus.on('event', onEvent);
+    setTimeout(() => {
+      broadcastLayoutUpdate(false, ws);
+      broadcastTorrentsUpdate(ws);
+    }, 50);
   };
 
   try {
-    const authEnabled = getSetting('authEnabled') !== 'false';
+    const authEnabled = isAuthEnabled();
     if (!authEnabled) {
       setupAuth();
     }
@@ -197,36 +201,59 @@ telegramBotService.init();
 simklService.init();
 // Notification and Media Server services auto-init in constructor
 
-// ── Layout push broadcast — replaces client-side 3s polling ──
-// Sends stats, torrents, issues, and pending request count to all
-// authenticated clients every 3 seconds via WebSocket.
-const broadcastLayoutUpdate = () => {
-  if (wss.clients.size === 0) return;
+// ── Layout push broadcast — diff-driven with fallback heartbeat ──
+// Sends counts when state changes or on event triggers; avoids no-op churn.
+let _lastLayoutCounts = null;
+let _lastLayoutMsg = null;
+
+const getFreshLayoutData = () => {
+  const moviesCount = db.prepare('SELECT COUNT(*) as c FROM movies').get().c;
+  const showsCount  = db.prepare('SELECT COUNT(*) as c FROM shows').get().c;
+  let musicCount = 0;
   try {
-    // Lightweight stats (just counts, no heavy aggregation)
-    const moviesCount = db.prepare('SELECT COUNT(*) as c FROM movies').get().c;
-    const showsCount  = db.prepare('SELECT COUNT(*) as c FROM shows').get().c;
-    let musicCount = 0;
-    try {
-      musicCount = db.prepare('SELECT COUNT(*) as c FROM music_artists').get()?.c || 0;
-    } catch { /* tables might not exist yet */ }
-    const pendingCount = db.prepare("SELECT COUNT(*) as c FROM requests WHERE status = 'pending'").get().c;
+    musicCount = db.prepare('SELECT COUNT(*) as c FROM music_artists').get()?.c || 0;
+  } catch { /* tables might not exist yet */ }
+  const pendingCount = db.prepare("SELECT COUNT(*) as c FROM requests WHERE status = 'pending'").get().c;
 
-    const payload = {
-      type: 'LAYOUT_UPDATE',
-      data: {
-        movies: moviesCount,
-        shows: showsCount,
-        music: musicCount,
-        pendingRequests: pendingCount,
-        // torrents + client stats + issues are async — only include if we have fresh data
+  return {
+    movies: moviesCount,
+    shows: showsCount,
+    music: musicCount,
+    pendingRequests: pendingCount,
+  };
+};
+
+const broadcastLayoutUpdate = (force = false, targetWs = null) => {
+  if (wss.clients.size === 0 && !targetWs) return;
+  try {
+    const freshCounts = getFreshLayoutData();
+    const countsChanged = !_lastLayoutCounts ||
+      _lastLayoutCounts.movies !== freshCounts.movies ||
+      _lastLayoutCounts.shows !== freshCounts.shows ||
+      _lastLayoutCounts.music !== freshCounts.music ||
+      _lastLayoutCounts.pendingRequests !== freshCounts.pendingRequests;
+
+    if (countsChanged || !_lastLayoutMsg) {
+      _lastLayoutCounts = freshCounts;
+      _lastLayoutMsg = JSON.stringify({
+        type: 'LAYOUT_UPDATE',
+        data: _lastLayoutCounts,
+      });
+    }
+
+    if (targetWs) {
+      if (targetWs.readyState === 1 && targetWs._userId) {
+        try { targetWs.send(_lastLayoutMsg); } catch { /* ignore */ }
       }
-    };
+      return;
+    }
 
-    const msg = JSON.stringify(payload);
+    // If counts have not changed and force was not requested, skip sending
+    if (!countsChanged && !force) return;
+
     wss.clients.forEach((ws) => {
       if (ws.readyState === 1 && ws._userId) {
-        try { ws.send(msg); } catch { /* ignore */ }
+        try { ws.send(_lastLayoutMsg); } catch { /* ignore */ }
       }
     });
   } catch (err) {
@@ -242,15 +269,46 @@ let _cachedTorrents = [];
 let _cachedClientStats = { dl_info_speed: 0, up_info_speed: 0 };
 let _clientConnected = false;
 
-const broadcastTorrentsUpdate = async () => {
-  if (wss.clients.size === 0) return;
+const broadcastTorrentsUpdate = async (targetWs = null) => {
+  if (wss.clients.size === 0 && !targetWs) return;
   try {
+    if (targetWs && _cachedTorrents && _cachedTorrents.length > 0) {
+      const payload = {
+        type: 'TORRENTS_UPDATE',
+        data: {
+          torrents: _cachedTorrents,
+          clientStats: {
+            dl_info_speed: _cachedClientStats.dl_info_speed,
+            up_info_speed: _cachedClientStats.up_info_speed,
+            free_space: _cachedClientStats.free_space,
+            ...(Number.isFinite(_cachedClientStats.dl_info_data) ? { dl_info_data: _cachedClientStats.dl_info_data } : {}),
+            ...(Number.isFinite(_cachedClientStats.up_info_data) ? { up_info_data: _cachedClientStats.up_info_data } : {}),
+          },
+          clientConnected: _clientConnected,
+        }
+      };
+      if (targetWs.readyState === 1 && targetWs._userId) {
+        try { targetWs.send(JSON.stringify(payload)); } catch { /* ignore */ }
+      }
+      return;
+    }
+
     const [torrents, stats] = await Promise.allSettled([
       downloadClientService.getTorrents().catch(() => []),
       downloadClientService.getTransferInfo().catch(() => null)
     ]);
     
-    _cachedTorrents = torrents.status === 'fulfilled' ? torrents.value : [];
+    let rawTorrents = torrents.status === 'fulfilled' ? torrents.value : [];
+    try {
+      const hideCompleted = db.prepare('SELECT value FROM settings WHERE key = ?').get('hideCompletedDownloads');
+      if (!hideCompleted || hideCompleted.value !== 'false') {
+        _cachedTorrents = rawTorrents.filter(t => t.progress < 100 && t.state !== 'stalledUP' && t.state !== 'uploading');
+      } else {
+        _cachedTorrents = rawTorrents;
+      }
+    } catch {
+      _cachedTorrents = rawTorrents;
+    }
     _cachedClientStats = (stats.status === 'fulfilled' && stats.value) ? stats.value : _cachedClientStats;
     _clientConnected = stats.status === 'fulfilled' && stats.value !== null;
 
@@ -272,6 +330,13 @@ const broadcastTorrentsUpdate = async () => {
     };
 
     const msg = JSON.stringify(payload);
+    if (targetWs) {
+      if (targetWs.readyState === 1 && targetWs._userId) {
+        try { targetWs.send(msg); } catch { /* ignore */ }
+      }
+      return;
+    }
+
     wss.clients.forEach((ws) => {
       if (ws.readyState === 1 && ws._userId) {
         try { ws.send(msg); } catch { /* ignore */ }
@@ -299,8 +364,14 @@ const startPolling = (fn, interval) => {
 
 // Event-driven broadcast triggers on library/request updates
 eventBus.on('event', (data) => {
-  if (['MOVIE_ADDED', 'SHOW_ADDED', 'REQUEST_CREATED', 'REQUEST_UPDATED'].includes(data.type)) {
-    broadcastLayoutUpdate();
+  if ([
+    'MOVIE_ADDED', 'MOVIE_DELETED',
+    'SHOW_ADDED', 'SHOW_DELETED',
+    'MEDIA_DELETED',
+    'REQUEST_CREATED', 'REQUEST_UPDATED', 'REQUEST_DELETED',
+    'MUSIC_ARTIST_ADDED', 'MUSIC_ARTIST_DELETED'
+  ].includes(data?.type)) {
+    broadcastLayoutUpdate(true);
   }
 });
 
@@ -436,7 +507,7 @@ app.get('/api/images/:type/:tmdbId/poster', async (req, res) => {
 
   if (!isAuthenticated) {
     try {
-      const authEnabled = getSetting('authEnabled') !== 'false';
+      const authEnabled = isAuthEnabled();
       if (!authEnabled) {
         isAuthenticated = true;
       }
@@ -561,7 +632,7 @@ process.on('uncaughtException', (err) => {
 });
 
 server.listen(PORT, () => {
-  console.log(`[Backend] Server op poort ${PORT}`);
+  console.log(`[Backend] Server running on port ${PORT}`);
   cleanupWorker.start();
   notificationService.sendNotification('Atlas', 'Atlas Media Manager has started successfully.', { title: '' });
 });

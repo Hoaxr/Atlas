@@ -1,70 +1,97 @@
 import { useState, useEffect } from 'react';
-import { Folder, FolderOpen, ChevronRight, Home, Loader2, Check, X } from 'lucide-react';
+import { Folder, FolderOpen, ChevronRight, Home, Loader2, Check, HardDrive, ArrowUp } from 'lucide-react';
 import api from '../lib/api';
 import ModalShell from './shared/ModalShell';
 import InlineError from './shared/InlineError';
 
-export default function FolderBrowserModal({ open, onClose, onSelect, itemId, itemType = 'movies' }) {
-  const [currentPath, setCurrentPath] = useState(null);
+export default function FolderBrowserModal({
+  open,
+  onClose,
+  onSelect,
+  itemId = null,
+  itemType = 'movies',
+  initialPath = '',
+  mode = itemId ? 'item' : 'filesystem',
+  title = mode === 'filesystem' ? 'Browse Server Folders' : 'Import Folder',
+  description = mode === 'filesystem' ? 'Select a folder on your server to use as a root folder.' : ''
+}) {
+  const isFilesystem = mode === 'filesystem';
+  const [currentPath, setCurrentPath] = useState(initialPath || null);
   const [entries, setEntries] = useState([]);
   const [parentPath, setParentPath] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [breadcrumbs, setBreadcrumbs] = useState([]);
   const [selectedPath, setSelectedPath] = useState(null);
+  const [manualInput, setManualInput] = useState(initialPath || '');
   const [importing, setImporting] = useState(false);
   const [error, setError] = useState(null);
-
-  useEffect(() => {
-    if (open) {
-      setCurrentPath(null);
-      setEntries([]);
-      setParentPath(null);
-      setBreadcrumbs([]);
-      setSelectedPath(null);
-      setError(null);
-      fetchDirectory(null);
-    }
-    // Only (re)fetch when the modal opens; fetchDirectory reads stable props
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
 
   const fetchDirectory = async (dirPath) => {
     setLoading(true);
     setError(null);
     try {
-      const params = dirPath ? `?path=${encodeURIComponent(dirPath)}` : '';
-      const res = await api.get(`/library/${itemType}/${itemId}/browse${params}`);
-      if (res.data.status === 'success') {
-        setEntries(res.data.data);
-        setParentPath(res.data.parent);
-        setCurrentPath(dirPath);
-
-        if (dirPath) {
-          const parts = dirPath.split('/').filter(Boolean);
-          const crumbs = parts.map((part, i) => ({
-            name: part,
-            path: '/' + parts.slice(0, i + 1).join('/'),
-          }));
-          setBreadcrumbs(crumbs);
-        } else {
-          setBreadcrumbs([]);
+      if (isFilesystem) {
+        const res = await api.get('/library/filesystem/browse', {
+          params: dirPath ? { path: dirPath } : {}
+        });
+        if (res.data.status === 'success') {
+          const { currentPath: actualPath, parentPath: parent, directories: dirs } = res.data.data;
+          setCurrentPath(actualPath);
+          setManualInput(actualPath);
+          setParentPath(parent);
+          setEntries((dirs || []).map(d => ({ name: d.name || d, path: d.path || (actualPath.replace(/\/$/, '') + '/' + (d.name || d)) })));
+          setSelectedPath(actualPath);
+        }
+      } else {
+        const params = dirPath ? `?path=${encodeURIComponent(dirPath)}` : '';
+        const res = await api.get(`/library/${itemType}/${itemId}/browse${params}`);
+        if (res.data.status === 'success') {
+          setEntries(res.data.data || []);
+          setParentPath(res.data.parent);
+          setCurrentPath(dirPath);
         }
       }
-    } catch {
-      setError('Failed to browse directory');
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to browse directory');
     } finally {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (open) {
+      setCurrentPath(initialPath || null);
+      setEntries([]);
+      setParentPath(null);
+      setSelectedPath(null);
+      setManualInput(initialPath || '');
+      setError(null);
+      fetchDirectory(initialPath || null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, initialPath]);
 
   const navigateTo = (dirPath) => {
     setSelectedPath(dirPath);
     fetchDirectory(dirPath);
   };
 
-  const handleImport = async () => {
+  const handleManualSubmit = (e) => {
+    e.preventDefault();
+    if (manualInput.trim()) {
+      navigateTo(manualInput.trim());
+    }
+  };
+
+  const handleConfirm = async () => {
     const targetPath = selectedPath || currentPath;
     if (!targetPath) return;
+
+    if (isFilesystem) {
+      onSelect(targetPath);
+      onClose();
+      return;
+    }
+
     setImporting(true);
     setError(null);
     try {
@@ -82,109 +109,136 @@ export default function FolderBrowserModal({ open, onClose, onSelect, itemId, it
 
   if (!open) return null;
 
-  return (
-    <ModalShell open={open} onClose={onClose} size="lg" noHeader noFloatingClose className="max-h-[80vh]">
-        {/* Header */}
-        <div className="flex items-center justify-between p-5 border-b border-white/10">
-          <div className="flex items-center gap-3">
-            <FolderOpen className="w-5 h-5 text-amber-400" />
-            <h2 id="folder-browser-title" className="text-lg font-bold text-slate-200">Import Folder</h2>
-          </div>
-          <button onClick={onClose} className="p-1.5 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition-colors">
-            <X className="w-5 h-5" />
-          </button>
-        </div>
+  const breadcrumbs = currentPath
+    ? currentPath.split('/').filter(Boolean).map((part, i, arr) => ({
+        name: part,
+        path: '/' + arr.slice(0, i + 1).join('/'),
+      }))
+    : [];
 
-        {/* Breadcrumbs */}
-        {breadcrumbs.length > 0 && (
-          <div className="flex items-center gap-1 px-5 py-2 bg-slate-800/50 border-b border-white/5 overflow-x-auto text-xs">
+  return (
+    <ModalShell
+      open={open}
+      onClose={onClose}
+      title={title}
+      description={description}
+      size="lg"
+      className="max-h-[85vh]"
+    >
+      <div className="space-y-3">
+        {/* Manual path input (filesystem mode) */}
+        {isFilesystem && (
+          <form onSubmit={handleManualSubmit} className="flex gap-2">
+            <input
+              type="text"
+              value={manualInput}
+              onChange={(e) => setManualInput(e.target.value)}
+              placeholder="/data/media"
+              className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-xs font-mono text-slate-100 placeholder-slate-500 focus:outline-none focus:border-cyan-500"
+            />
             <button
-              onClick={() => navigateTo(null)}
-              className="flex items-center gap-1 text-slate-400 hover:text-white transition-colors shrink-0"
+              type="submit"
+              disabled={loading || !manualInput.trim()}
+              className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-medium transition-colors disabled:opacity-50"
             >
-              <Home className="w-3 h-3" />
+              Go
             </button>
-            {breadcrumbs.map((crumb, i) => (
-              <span key={crumb.path} className="flex items-center gap-1 shrink-0">
-                <ChevronRight className="w-3 h-3 text-slate-600" />
-                <button
-                  onClick={() => navigateTo(crumb.path)}
-                  className={`hover:text-white transition-colors truncate max-w-[150px] ${
-                    i === breadcrumbs.length - 1 ? 'text-cyan-400 font-medium' : 'text-slate-400'
-                  }`}
-                >
-                  {crumb.name}
-                </button>
-              </span>
-            ))}
-          </div>
+          </form>
         )}
 
-        {/* Directory listing */}
-        <div className="flex-1 overflow-y-auto p-2">
-          {loading ? (
-            <div className="flex items-center justify-center py-16 text-slate-400 gap-2">
-              <Loader2 className="w-5 h-5 animate-spin" />
-              Loading...
-            </div>
-          ) : error ? (
-            <div className="px-5 py-4"><InlineError message={error} compact /></div>
-          ) : entries.length === 0 ? (
-            <div className="text-center py-16 text-slate-500 text-sm">
-              {currentPath ? 'No subdirectories found.' : 'No library paths configured.'}
-            </div>
-          ) : (
-            entries.map((entry) => (
+        {/* Breadcrumbs */}
+        <div className="flex items-center gap-1.5 px-3 py-2 bg-slate-950/60 rounded-lg border border-slate-800 overflow-x-auto text-xs font-mono text-slate-300">
+          <button
+            onClick={() => navigateTo(isFilesystem ? '/' : null)}
+            className="hover:text-cyan-400 p-0.5 rounded transition-colors flex items-center gap-1"
+            title="Root"
+          >
+            {isFilesystem ? <HardDrive className="w-3.5 h-3.5 text-cyan-400" /> : <Home className="w-3.5 h-3.5 text-cyan-400" />}
+            <span>/</span>
+          </button>
+          {breadcrumbs.map((crumb, idx) => (
+            <span key={crumb.path} className="flex items-center gap-1 shrink-0">
+              <ChevronRight className="w-3 h-3 text-slate-600" />
               <button
-                key={entry.path}
-                onClick={() => navigateTo(entry.path)}
-                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-colors ${
-                  selectedPath === entry.path
-                    ? 'bg-cyan-500/10 border border-cyan-500/30 text-cyan-300'
-                    : 'hover:bg-slate-800/50 text-slate-300 border border-transparent'
+                onClick={() => navigateTo(crumb.path)}
+                className={`hover:text-white transition-colors truncate max-w-[150px] ${
+                  idx === breadcrumbs.length - 1 ? 'text-cyan-400 font-bold' : 'text-slate-400'
                 }`}
               >
-                {selectedPath === entry.path ? (
-                  <FolderOpen className="w-4 h-4 text-cyan-400 shrink-0" />
-                ) : (
-                  <Folder className="w-4 h-4 text-slate-500 shrink-0" />
-                )}
-                <span className="truncate text-sm">{entry.name}</span>
-                {selectedPath === entry.path && (
-                  <Check className="w-4 h-4 text-cyan-400 ml-auto shrink-0" />
-                )}
+                {crumb.name}
               </button>
-            ))
+            </span>
+          ))}
+        </div>
+
+        {/* Directory Listing */}
+        <div className="max-h-64 overflow-y-auto rounded-xl border border-slate-800 bg-slate-950/40 p-1 divide-y divide-slate-800/40">
+          {loading ? (
+            <div className="flex items-center justify-center py-12 text-slate-400 gap-2">
+              <Loader2 className="w-5 h-5 animate-spin text-cyan-400" />
+              <span className="text-xs">Loading directories...</span>
+            </div>
+          ) : error ? (
+            <div className="p-3"><InlineError message={error} compact /></div>
+          ) : entries.length === 0 ? (
+            <div className="text-center py-12 text-slate-500 text-xs">
+              {currentPath ? 'No subdirectories found in this folder.' : 'No directories available.'}
+            </div>
+          ) : (
+            entries.map((entry) => {
+              const isSelected = selectedPath === entry.path;
+              return (
+                <button
+                  key={entry.path}
+                  onClick={() => navigateTo(entry.path)}
+                  className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-left transition-colors ${
+                    isSelected
+                      ? 'bg-cyan-500/15 text-cyan-300 font-medium'
+                      : 'hover:bg-slate-800/60 text-slate-300'
+                  }`}
+                >
+                  {isSelected ? (
+                    <FolderOpen className="w-4 h-4 text-cyan-400 shrink-0" />
+                  ) : (
+                    <Folder className="w-4 h-4 text-slate-500 shrink-0" />
+                  )}
+                  <span className="truncate text-xs font-mono">{entry.name}</span>
+                  {isSelected && <Check className="w-3.5 h-3.5 text-cyan-400 ml-auto shrink-0" />}
+                </button>
+              );
+            })
           )}
         </div>
 
-        {/* Footer */}
-        <div className="flex items-center justify-between p-4 border-t border-white/10 bg-slate-800/30">
+        {/* Footer Actions */}
+        <div className="flex items-center justify-between pt-2">
           <button
-            onClick={() => parentPath !== null ? navigateTo(parentPath) : fetchDirectory(null)}
+            onClick={() => parentPath !== null ? navigateTo(parentPath) : (isFilesystem ? navigateTo('/') : fetchDirectory(null))}
             disabled={parentPath === null && breadcrumbs.length === 0}
-            className="text-xs text-slate-400 hover:text-white transition-colors disabled:opacity-30"
+            className="flex items-center gap-1 text-xs text-slate-400 hover:text-white transition-colors disabled:opacity-30"
           >
-            ← Parent folder
+            <ArrowUp className="w-3.5 h-3.5" />
+            Up a folder
           </button>
           <button
-            onClick={handleImport}
-            disabled={!selectedPath && !currentPath && entries.length === 0 || importing}
-            className="flex items-center gap-2 bg-cyan-500 hover:bg-cyan-400 disabled:bg-slate-700 disabled:text-slate-500 text-slate-950 font-bold px-5 py-2 rounded-xl transition-colors text-sm"
+            onClick={handleConfirm}
+            disabled={(!selectedPath && !currentPath) || importing}
+            className="flex items-center gap-1.5 bg-cyan-600 hover:bg-cyan-500 disabled:bg-slate-800 disabled:text-slate-500 text-white font-medium px-4 py-2 rounded-lg transition-colors text-xs"
           >
             {importing ? (
               <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                Importing...
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                Processing...
               </>
             ) : (
               <>
-                <FolderOpen className="w-4 h-4" />
-                Import This Folder
+                <Check className="w-3.5 h-3.5" />
+                {isFilesystem ? 'Select Folder' : 'Import Folder'}
               </>
             )}
           </button>
         </div>
+      </div>
     </ModalShell>
   );
 }

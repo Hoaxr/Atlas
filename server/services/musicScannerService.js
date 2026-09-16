@@ -16,16 +16,37 @@ const musicLibraryService = require('./musicLibraryService');
 const musicMetadataService = require('./musicMetadataService');
 const imageService = require('./imageService');
 
+const MAX_CUE_CACHE = 200;
 const cueFolderCache = new Map();
 
+const setCueCache = (folderPath, val) => {
+  if (cueFolderCache.has(folderPath)) {
+    cueFolderCache.delete(folderPath);
+  } else if (cueFolderCache.size >= MAX_CUE_CACHE) {
+    const oldest = cueFolderCache.keys().next().value;
+    cueFolderCache.delete(oldest);
+  }
+  cueFolderCache.set(folderPath, val);
+};
+
+const clearCueCache = () => {
+  cueFolderCache.clear();
+};
+
 const parseCueSheetForFolder = async (folderPath) => {
-  if (cueFolderCache.has(folderPath)) return cueFolderCache.get(folderPath);
+  if (cueFolderCache.has(folderPath)) {
+    const val = cueFolderCache.get(folderPath);
+    // Refresh LRU order
+    cueFolderCache.delete(folderPath);
+    cueFolderCache.set(folderPath, val);
+    return val;
+  }
 
   try {
     const files = await fsp.readdir(folderPath);
     const cueFile = files.find(f => f.toLowerCase().endsWith('.cue'));
     if (!cueFile) {
-      cueFolderCache.set(folderPath, null);
+      setCueCache(folderPath, null);
       return null;
     }
 
@@ -50,10 +71,10 @@ const parseCueSheetForFolder = async (folderPath) => {
       }
     }
 
-    cueFolderCache.set(folderPath, tracks);
+    setCueCache(folderPath, tracks);
     return tracks;
   } catch {
-    cueFolderCache.set(folderPath, null);
+    setCueCache(folderPath, null);
     return null;
   }
 };
@@ -126,44 +147,63 @@ const scanMusicLibrary = async (onProgress = null, checkCancelled = null) => {
       // Discover all top-level artist directories under this music root (even if completely empty)
       try {
         const dirEntries = await fsp.readdir(libPath.path, { withFileTypes: true });
-        for (const entry of dirEntries) {
-          if (!entry.isDirectory()) continue;
+        const selectArtistByFolder = db.prepare('SELECT id, name, folder_path, mbid FROM music_artists WHERE folder_path = ? LIMIT 1');
+        const selectArtistByName = db.prepare(`
+          SELECT id, name, folder_path, mbid FROM music_artists
+          WHERE name LIKE ? COLLATE NOCASE OR sort_name LIKE ? COLLATE NOCASE
+          LIMIT 1
+        `);
+        const updateArtistFolder = db.prepare('UPDATE music_artists SET folder_path = ? WHERE id = ?');
+        const insertArtist = db.prepare(`
+          INSERT INTO music_artists (name, sort_name, genres, status, monitored, folder_path, quality_profile_id)
+          VALUES (?, ?, '[]', 'monitored', 1, ?, ?)
+        `);
+
+        // Batch discovery in groups of 50 inside transactions with event-loop yields
+        const entriesToProcess = dirEntries.filter(entry => {
+          if (!entry.isDirectory()) return false;
           const folderName = entry.name.trim();
-          if (!folderName) continue;
-          if (isIgnoredMusicDir(folderName)) continue;
-          if (folderName.startsWith('@') || folderName.startsWith('$') || /^lost\+found$/i.test(folderName)) continue;
+          if (!folderName) return false;
+          if (isIgnoredMusicDir(folderName)) return false;
+          if (folderName.startsWith('@') || folderName.startsWith('$') || /^lost\+found$/i.test(folderName)) return false;
+          return true;
+        });
 
-          const artistFolder = path.join(libPath.path, folderName);
+        const BATCH_SIZE = 50;
+        for (let b = 0; b < entriesToProcess.length; b += BATCH_SIZE) {
+          const batch = entriesToProcess.slice(b, b + BATCH_SIZE);
+          db.transaction(() => {
+            for (const entry of batch) {
+              const folderName = entry.name.trim();
+              const artistFolder = path.join(libPath.path, folderName);
 
-          // Check if artist already exists in DB
-          let existingArtist = db.prepare('SELECT id, name, folder_path, mbid FROM music_artists WHERE folder_path = ? LIMIT 1').get(artistFolder);
-          if (!existingArtist) {
-            existingArtist = db.prepare(`
-              SELECT id, name, folder_path, mbid FROM music_artists
-              WHERE name LIKE ? COLLATE NOCASE OR sort_name LIKE ? COLLATE NOCASE
-              LIMIT 1
-            `).get(folderName, folderName);
-            if (existingArtist && (!existingArtist.folder_path || !fs.existsSync(existingArtist.folder_path))) {
-              try {
-                db.prepare('UPDATE music_artists SET folder_path = ? WHERE id = ?').run(artistFolder, existingArtist.id);
-                existingArtist.folder_path = artistFolder;
-              } catch { /* ignore */ }
+              // Check if artist already exists in DB
+              let existingArtist = selectArtistByFolder.get(artistFolder);
+              if (!existingArtist) {
+                existingArtist = selectArtistByName.get(folderName, folderName);
+                if (existingArtist && (!existingArtist.folder_path || !fs.existsSync(existingArtist.folder_path))) {
+                  try {
+                    updateArtistFolder.run(artistFolder, existingArtist.id);
+                    existingArtist.folder_path = artistFolder;
+                  } catch { /* ignore */ }
+                }
+              }
+
+              if (!existingArtist) {
+                try {
+                  const info = insertArtist.run(folderName, folderName, artistFolder, defaultProfileId);
+                  touchedArtistIds.add(info.lastInsertRowid);
+                  results.addedArtistsCount++;
+                  console.log(`[MusicScanner] Discovered new artist folder (including empty): "${folderName}" (${artistFolder})`);
+                } catch (err) {
+                  console.warn(`[MusicScanner] Failed to insert artist folder ${folderName}:`, err.message);
+                }
+              }
             }
-          }
+          })();
 
-          if (!existingArtist) {
-            try {
-              const insertArtist = db.prepare(`
-                INSERT INTO music_artists (name, sort_name, genres, status, monitored, folder_path, quality_profile_id)
-                VALUES (?, ?, '[]', 'monitored', 1, ?, ?)
-              `).run(folderName, folderName, artistFolder, defaultProfileId);
-              const newId = insertArtist.lastInsertRowid;
-              touchedArtistIds.add(newId);
-              results.addedArtistsCount++;
-              console.log(`[MusicScanner] Discovered new artist folder (including empty): "${folderName}" (${artistFolder})`);
-            } catch (err) {
-              console.warn(`[MusicScanner] Failed to insert artist folder ${folderName}:`, err.message);
-            }
+          if (b + BATCH_SIZE < entriesToProcess.length) {
+            await new Promise(r => setImmediate(r));
           }
         }
       } catch (err) {
@@ -648,6 +688,8 @@ const scanMusicLibrary = async (onProgress = null, checkCancelled = null) => {
   try {
     require('../routes/library/system').invalidateStatsCache();
   } catch { /* ignore */ }
+
+  clearCueCache();
 
   return results;
 };

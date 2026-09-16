@@ -1,7 +1,9 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, forwardRef } from 'react';
+import { motion } from 'framer-motion';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { VirtuosoGrid } from 'react-virtuoso';
 import {
-  Music2, Search, Plus, LayoutGrid, List, Disc, Mic2, FileAudio,
+  Music as MusicIcon, Search, Plus, LayoutGrid, List, Disc, Mic2, FileAudio,
   CheckCircle2, AlertCircle, Loader2, ChevronRight, X,
   Play, Pause, Sparkles, Filter, RotateCcw,
   CheckSquare, Square, Trash2, Eye, EyeOff,
@@ -15,16 +17,18 @@ import { useAudioPlayer } from '../context/AudioPlayerContext';
 import AddArtistModal from '../components/music/AddArtistModal';
 import ManualSearchModal from '../components/ManualSearchModal';
 import AlbumCard from '../components/music/AlbumCard';
-import StickyBar from '../components/shared/StickyBar';
 import EmptyState from '../components/shared/EmptyState';
-import { useStickyBar } from '../lib/useStickyBar';
 import { FilterSelect } from '../components/shared/FilterSelect';
 
 export default function Music() {
   const navigate = useNavigate();
-  const { headerRef, stickyVisible } = useStickyBar();
   const searchInputRef = useRef(null);
   const [searchParams, setSearchParams] = useSearchParams();
+
+  const [scrollElement, setScrollElement] = useState(null);
+  useEffect(() => {
+    setScrollElement(document.querySelector('main'));
+  }, []);
 
   // Audio player hook
   const { playTrack, playAlbum, currentTrack, isPlaying, togglePlay } = useAudioPlayer();
@@ -92,6 +96,28 @@ export default function Music() {
     localStorage.setItem('atlas_music_poster_size', String(clamped));
   };
 
+  const gridComponents = useMemo(() => ({
+    List: forwardRef(({ style, children, ...props }, ref) => (
+      <div
+        ref={ref}
+        {...props}
+        style={{
+          ...style,
+          display: 'grid',
+          gridTemplateColumns: `repeat(auto-fill, minmax(var(--poster-size, ${posterSize}px), 1fr))`,
+          gap: '1rem',
+        }}
+      >
+        {children}
+      </div>
+    )),
+    Item: ({ children, ...props }) => (
+      <div {...props} className="w-full h-full">
+        {children}
+      </div>
+    ),
+  }), [posterSize]);
+
   // Fetch data
   const fetchData = async () => {
     setLoading(true);
@@ -131,12 +157,6 @@ export default function Music() {
   useEffect(() => {
     fetchData();
   }, []);
-
-  useEffect(() => {
-    if (!stickyVisible && query) {
-      searchInputRef.current?.focus();
-    }
-  }, [stickyVisible, query]);
 
   // Batch actions
   const toggleSelectAlbum = (id) => {
@@ -277,12 +297,13 @@ export default function Music() {
   };
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
       {/* ── Header ──────────────────────────────────────────────────────────── */}
-      <div ref={headerRef} className="flex items-start sm:items-center justify-between gap-3">
+      <div className="flex items-center justify-between gap-4">
         <div className="min-w-0">
           <h1 className="text-xl sm:text-3xl font-black text-slate-800 dark:text-slate-100 flex items-center gap-2 sm:gap-3 !mb-0">
-            <Music2 className="w-6 h-6 sm:w-8 sm:h-8 text-cyan-400 shrink-0" /> <span className="truncate">Music</span>
+            <MusicIcon className="w-6 h-6 sm:w-8 sm:h-8 text-cyan-400 shrink-0" />
+            <span className="truncate">Music</span>
           </h1>
           <p className="text-xs sm:text-base text-slate-400 mt-0.5 sm:mt-1 hidden sm:block !mb-0">
             Your tracked and imported media collection.
@@ -290,7 +311,7 @@ export default function Music() {
         </div>
 
         {/* View Toggle + Search + Add Actions */}
-        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+        <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
           <div className="relative w-full max-w-xs hidden sm:block">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none" />
             <input
@@ -299,7 +320,7 @@ export default function Music() {
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder={`Search ${activeTab}...`}
-              className="w-full bg-slate-900 border border-white/10 text-slate-200 text-sm rounded-lg pl-9 pr-8 py-2 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500/50 placeholder-slate-500 transition-all"
+              className="w-full bg-slate-900 border border-slate-800 text-slate-200 text-sm rounded-lg pl-9 pr-8 py-1.5 focus:outline-none focus:ring-2 focus:ring-cyan-500/30 focus:border-cyan-500/50 placeholder-slate-500 transition-colors"
             />
             {query && (
               <button
@@ -312,30 +333,46 @@ export default function Music() {
             )}
           </div>
 
-          <div className="flex bg-slate-900 rounded-lg p-1 border border-white/10 shrink-0">
+          <div className="relative flex items-center bg-[#101e31] p-1 rounded-xl border border-[#1c2d46] shadow-inner select-none shrink-0">
             <button
+              type="button"
               onClick={() => setLayout('grid')}
-              className={`p-1.5 rounded-md transition-colors ${
-                layoutMode === 'grid' ? 'bg-slate-700 text-white shadow-sm' : 'text-slate-400 hover:text-white'
+              className={`relative h-8 px-3 flex items-center justify-center rounded-lg text-xs font-semibold transition-colors duration-150 ${
+                layoutMode === 'grid' ? 'text-slate-950 font-bold' : 'text-slate-100 hover:text-white'
               }`}
               title="Grid View"
             >
-              <LayoutGrid className="w-4 h-4" />
+              {layoutMode === 'grid' && (
+                <motion.div
+                  layoutId="music-view-slider"
+                  className="absolute inset-0 rounded-lg bg-gradient-to-b from-[#38a7f4] to-[#2291ea] shadow-sm"
+                  transition={{ type: 'spring', stiffness: 500, damping: 35 }}
+                />
+              )}
+              <LayoutGrid className={`relative z-10 w-4 h-4 transition-colors duration-150 ${layoutMode === 'grid' ? 'text-slate-950' : 'text-slate-100'}`} />
             </button>
             <button
+              type="button"
               onClick={() => setLayout('list')}
-              className={`p-1.5 rounded-md transition-colors ${
-                layoutMode === 'list' ? 'bg-slate-700 text-white shadow-sm' : 'text-slate-400 hover:text-white'
+              className={`relative h-8 px-3 flex items-center justify-center rounded-lg text-xs font-semibold transition-colors duration-150 ${
+                layoutMode === 'list' ? 'text-slate-950 font-bold' : 'text-slate-100 hover:text-white'
               }`}
               title="List View"
             >
-              <List className="w-4 h-4" />
+              {layoutMode === 'list' && (
+                <motion.div
+                  layoutId="music-view-slider"
+                  className="absolute inset-0 rounded-lg bg-gradient-to-b from-[#38a7f4] to-[#2291ea] shadow-sm"
+                  transition={{ type: 'spring', stiffness: 500, damping: 35 }}
+                />
+              )}
+              <List className={`relative z-10 w-4 h-4 transition-colors duration-150 ${layoutMode === 'list' ? 'text-slate-950' : 'text-slate-100'}`} />
             </button>
           </div>
 
           <button
             onClick={() => setAddArtistOpen(true)}
-            className="flex items-center gap-1.5 px-3 py-2 bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 rounded-xl text-xs sm:text-sm font-bold transition-all shrink-0"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-cyan-500 hover:bg-cyan-400 text-slate-950 rounded-lg text-xs sm:text-sm font-semibold transition-colors shrink-0 shadow-sm"
             title="Add Music"
           >
             <Plus className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> <span className="hidden sm:inline">Add Music</span>
@@ -343,19 +380,11 @@ export default function Music() {
         </div>
       </div>
 
-      <StickyBar
-        visible={stickyVisible}
-        searchQuery={query}
-        onSearchChange={setQuery}
-        searchPlaceholder={`Search ${activeTab}...`}
-        showSearch
-      />
-
       {/* Banner if no music mounts configured */}
       {!loading && musicPaths.length === 0 && (
-        <div className="rounded-2xl p-3.5 bg-amber-500/10 border border-amber-500/25 flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-fade-in">
+        <div className="rounded-xl p-3.5 bg-amber-500/10 border border-amber-500/20 flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-fade-in">
           <div className="flex items-center gap-3">
-            <div className="p-2 rounded-xl bg-amber-500/15 text-amber-400 shrink-0">
+            <div className="p-2 rounded-lg bg-amber-500/15 text-amber-400 shrink-0">
               <AlertCircle className="w-5 h-5" />
             </div>
             <div>
@@ -367,7 +396,7 @@ export default function Music() {
           </div>
           <button
             onClick={() => navigate('/settings?tab=library')}
-            className="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-amber-500 hover:bg-amber-400 text-slate-950 transition-colors shrink-0 shadow-lg shadow-amber-500/20"
+            className="px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-amber-500 hover:bg-amber-400 text-slate-950 transition-colors shrink-0 shadow-sm"
           >
             Configure in Settings
           </button>
@@ -376,12 +405,12 @@ export default function Music() {
 
       {/* ── Floating Batch Action Bar ────────────────────────────────────────── */}
       {selectMode && selectedAlbumIds.size > 0 && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-30 bg-slate-900/95 border border-cyan-500/40 px-4 py-2.5 rounded-2xl shadow-2xl backdrop-blur-xl flex items-center gap-3 animate-fade-in">
-          <span className="text-xs font-bold text-cyan-300">
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-30 bg-slate-900 border border-slate-800 px-4 py-2 rounded-xl shadow-2xl shadow-black/60 flex items-center gap-3 animate-fade-in">
+          <span className="text-xs font-bold text-cyan-400">
             {selectedAlbumIds.size} selected
           </span>
 
-          <div className="h-4 w-px bg-white/10" />
+          <div className="h-4 w-px bg-slate-800" />
 
           <button
             onClick={() => handleBatchAction('search')}
@@ -395,7 +424,7 @@ export default function Music() {
           <button
             onClick={() => handleBatchAction('monitor')}
             disabled={batchProcessing}
-            className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 flex items-center gap-1 transition-colors"
+            className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-750 text-slate-200 flex items-center gap-1 transition-colors"
           >
             <Eye className="w-3.5 h-3.5 text-cyan-400" />
             Monitor
@@ -404,7 +433,7 @@ export default function Music() {
           <button
             onClick={() => handleBatchAction('unmonitor')}
             disabled={batchProcessing}
-            className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 flex items-center gap-1 transition-colors"
+            className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-750 text-slate-200 flex items-center gap-1 transition-colors"
           >
             <EyeOff className="w-3.5 h-3.5 text-slate-400" />
             Unmonitor
@@ -417,7 +446,7 @@ export default function Music() {
               }
             }}
             disabled={batchProcessing}
-            className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30 flex items-center gap-1 transition-colors"
+            className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 flex items-center gap-1 transition-colors"
           >
             <Trash2 className="w-3.5 h-3.5" />
             Delete
@@ -433,50 +462,50 @@ export default function Music() {
       )}
 
       {/* ── Main Content Container ────────────────────────────────────────── */}
-      <div className="glass-panel rounded-2xl min-h-[100vh]">
+      <div className="bg-slate-900/70 border border-slate-800/80 rounded-xl shadow-sm min-h-[100vh]">
         {/* Filter Bar Header */}
-        <div className="border-b border-cyan-500/30 bg-slate-900/50 rounded-t-2xl">
+        <div className="border-b border-slate-800/80 bg-slate-900/90 rounded-t-xl">
           {/* Main Controls Row */}
-          <div className="flex items-center gap-1.5 sm:gap-2 p-2.5 sm:p-4 pb-2 sm:pb-3 justify-between flex-wrap sm:flex-nowrap">
+          <div className="flex items-center gap-1.5 sm:gap-2 p-2.5 sm:p-3 justify-between flex-wrap sm:flex-nowrap">
             {/* Left side: Sub-tabs, Sort & Filters */}
             <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 flex-1 flex-wrap">
               {/* Sub-tabs */}
-              <div className="flex items-center p-1 rounded-xl bg-slate-900/80 border border-white/5 shrink-0">
+              <div className="flex items-center p-0.5 rounded-lg bg-slate-900 border border-slate-800 shrink-0">
                 <button
                   onClick={() => setTab('artists')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
+                  className={`px-2.5 py-1.5 rounded-md text-xs font-medium flex items-center gap-1.5 transition-colors ${
                     activeTab === 'artists'
-                      ? 'bg-cyan-500 text-slate-950 shadow-md font-bold'
+                      ? 'bg-slate-800 text-cyan-400 shadow-sm'
                       : 'text-slate-400 hover:text-slate-200'
                   }`}
                 >
                   <Mic2 className="w-3.5 h-3.5" />
                   <span>Artists</span>
-                  <span className="text-[10px] opacity-75">({artists.length})</span>
+                  <span className="text-[10px] opacity-75 font-mono">({artists.length})</span>
                 </button>
                 <button
                   onClick={() => setTab('albums')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
+                  className={`px-2.5 py-1.5 rounded-md text-xs font-medium flex items-center gap-1.5 transition-colors ${
                     activeTab === 'albums'
-                      ? 'bg-cyan-500 text-slate-950 shadow-md font-bold'
+                      ? 'bg-slate-800 text-cyan-400 shadow-sm'
                       : 'text-slate-400 hover:text-slate-200'
                   }`}
                 >
                   <Disc className="w-3.5 h-3.5" />
                   <span>Albums</span>
-                  <span className="text-[10px] opacity-75">({albums.length})</span>
+                  <span className="text-[10px] opacity-75 font-mono">({albums.length})</span>
                 </button>
                 <button
                   onClick={() => setTab('tracks')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
+                  className={`px-2.5 py-1.5 rounded-md text-xs font-medium flex items-center gap-1.5 transition-colors ${
                     activeTab === 'tracks'
-                      ? 'bg-cyan-500 text-slate-950 shadow-md font-bold'
+                      ? 'bg-slate-800 text-cyan-400 shadow-sm'
                       : 'text-slate-400 hover:text-slate-200'
                   }`}
                 >
                   <FileAudio className="w-3.5 h-3.5" />
                   <span>Tracks</span>
-                  <span className="text-[10px] opacity-75">({tracks.length})</span>
+                  <span className="text-[10px] opacity-75 font-mono">({tracks.length})</span>
                 </button>
               </div>
 
@@ -534,10 +563,10 @@ export default function Music() {
                     if (selectMode) setSelectedAlbumIds(new Set());
                     setSelectMode(!selectMode);
                   }}
-                  className={`p-2 rounded-xl border text-xs font-medium flex items-center gap-1.5 transition-colors shrink-0 ${
+                  className={`p-1.5 rounded-lg border text-xs font-medium flex items-center gap-1.5 transition-colors shrink-0 ${
                     selectMode
-                      ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40'
-                      : 'bg-slate-900/50 text-slate-400 border-white/5 hover:bg-slate-800/50 hover:text-slate-200'
+                      ? 'bg-cyan-500/15 text-cyan-400 border-cyan-500/30'
+                      : 'bg-slate-900 text-slate-400 border-slate-800 hover:bg-slate-800 hover:text-slate-200'
                   }`}
                   title="Toggle Select Mode"
                 >
@@ -547,7 +576,7 @@ export default function Music() {
               )}
 
               {layoutMode === 'grid' && activeTab !== 'tracks' && (
-                <div className="flex items-center gap-1 sm:gap-2 bg-slate-900/60 border border-white/5 px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-xl shrink-0">
+                <div className="flex items-center gap-1 sm:gap-2 bg-slate-900 border border-slate-800 px-2 sm:px-2.5 py-1 rounded-lg shrink-0">
                   <button
                     type="button"
                     onClick={() => updatePosterSize(Math.max(120, posterSize - 20))}
@@ -702,22 +731,27 @@ export default function Music() {
                 />
               ) : layoutMode === 'grid' ? (
                 <div
-                  className="grid gap-4"
-                  style={{
-                    gridTemplateColumns: `repeat(auto-fill, minmax(${posterSize}px, 1fr))`
-                  }}
+                  className="relative z-20"
+                  style={{ '--poster-size': `${posterSize}px` }}
                 >
-                  {filteredAlbums.map((album) => (
-                    <AlbumCard
-                      key={album.id}
-                      album={album}
-                      subtitleMode="artist"
-                      selectMode={selectMode}
-                      isSelected={selectedAlbumIds.has(album.id)}
-                      onToggleSelect={toggleSelectAlbum}
-                      onManualSearch={setManualSearchAlbum}
-                    />
-                  ))}
+                  <VirtuosoGrid
+                    customScrollParent={scrollElement}
+                    overscan={2000}
+                    initialItemCount={Math.min(40, filteredAlbums.length)}
+                    data={filteredAlbums}
+                    components={gridComponents}
+                    itemContent={(_index, album) => (
+                      <AlbumCard
+                        key={album.id}
+                        album={album}
+                        subtitleMode="artist"
+                        selectMode={selectMode}
+                        isSelected={selectedAlbumIds.has(album.id)}
+                        onToggleSelect={toggleSelectAlbum}
+                        onManualSearch={setManualSearchAlbum}
+                      />
+                    )}
+                  />
                 </div>
               ) : (
                 /* Albums List View */
@@ -873,132 +907,137 @@ export default function Music() {
                 />
               ) : layoutMode === 'grid' ? (
                 <div
-                  className="grid gap-4"
-                  style={{
-                    gridTemplateColumns: `repeat(auto-fill, minmax(${posterSize}px, 1fr))`
-                  }}
+                  className="relative z-20"
+                  style={{ '--poster-size': `${posterSize}px` }}
                 >
-                  {filteredArtists.map((artist) => {
-                    const imgUrl = artist.image_url || artistImageUrl(artist);
-                    const downloadedAlbums = artist.downloaded_albums || 0;
-                    const totalAlbums = artist.album_count || 0;
-                    const partialAlbums = artist.partial_albums || 0;
-                    const isComplete = totalAlbums > 0 && downloadedAlbums >= totalAlbums && partialAlbums === 0;
-                    const isPartial = !isComplete && (downloadedAlbums > 0 || partialAlbums > 0);
-                    const isBusy = artistActionId === artist.id;
+                  <VirtuosoGrid
+                    customScrollParent={scrollElement}
+                    overscan={2000}
+                    initialItemCount={Math.min(40, filteredArtists.length)}
+                    data={filteredArtists}
+                    components={gridComponents}
+                    itemContent={(_index, artist) => {
+                      const imgUrl = artist.image_url || artistImageUrl(artist);
+                      const downloadedAlbums = artist.downloaded_albums || 0;
+                      const totalAlbums = artist.album_count || 0;
+                      const partialAlbums = artist.partial_albums || 0;
+                      const isComplete = totalAlbums > 0 && downloadedAlbums >= totalAlbums && partialAlbums === 0;
+                      const isPartial = !isComplete && (downloadedAlbums > 0 || partialAlbums > 0);
+                      const isBusy = artistActionId === artist.id;
 
-                    return (
-                      <div
-                        key={artist.id}
-                        role="button"
-                        tabIndex={0}
-                        aria-label={`View ${artist.name}`}
-                        onClick={() => navigate(`/music/artists/${artist.id}`)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' || e.key === ' ') {
-                            e.preventDefault();
-                            navigate(`/music/artists/${artist.id}`);
-                          }
-                        }}
-                        className="group relative glass-panel interactive-glow-card rounded-xl overflow-hidden cursor-pointer flex flex-col hover:scale-[1.02] transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 hover:shadow-[0_0_30px_-5px_rgba(6,182,212,0.25)] hover:border-cyan-500/40"
-                      >
-                        {/* Artist photo (square) */}
-                        <div className="w-full aspect-square relative bg-slate-800 flex-shrink-0 overflow-hidden">
-                          {/* Placeholder icon shown behind the image / when it fails */}
-                          <div className="absolute inset-0 flex items-center justify-center text-slate-700/60 pointer-events-none">
-                            <Mic2 className="w-10 h-10 stroke-[1.5]" />
-                          </div>
+                      return (
+                        <div
+                          key={artist.id}
+                          role="button"
+                          tabIndex={0}
+                          aria-label={`View ${artist.name}`}
+                          onClick={() => navigate(`/music/artists/${artist.id}`)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault();
+                              navigate(`/music/artists/${artist.id}`);
+                            }
+                          }}
+                          className="group relative glass-panel interactive-glow-card rounded-xl overflow-hidden cursor-pointer flex flex-col hover:scale-[1.02] transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 hover:shadow-[0_0_30px_-5px_rgba(6,182,212,0.25)] hover:border-cyan-500/40"
+                        >
+                          {/* Artist photo (square) */}
+                          <div className="w-full aspect-square relative bg-slate-800 flex-shrink-0 overflow-hidden">
+                            {/* Placeholder icon shown behind the image / when it fails */}
+                            <div className="absolute inset-0 flex items-center justify-center text-slate-700/60 pointer-events-none">
+                              <Mic2 className="w-10 h-10 stroke-[1.5]" />
+                            </div>
 
-                          {/* Top-left: monitor toggle */}
-                          <div className="absolute top-1.5 sm:top-2 left-1.5 sm:left-2 z-20">
-                            <button
-                              onClick={(e) => { e.stopPropagation(); e.preventDefault(); handleArtistMonitorToggle(artist); }}
-                              className="w-6 h-6 sm:w-8 sm:h-8 rounded-full bg-slate-900/80 hover:bg-slate-800 transition-colors shadow-lg flex items-center justify-center group/mon"
-                              title={artist.monitored ? 'Unmonitor' : 'Monitor'}
-                              aria-label={artist.monitored ? 'Unmonitor artist' : 'Monitor artist'}
-                            >
-                              {artist.monitored ? (
-                                <Bookmark className="w-3.5 h-3.5 sm:w-5 sm:h-5 text-emerald-500 fill-emerald-500 group-hover/mon:text-rose-400 group-hover/mon:fill-transparent" />
-                              ) : (
-                                <Bookmark className="w-3.5 h-3.5 sm:w-5 sm:h-5 text-rose-400 group-hover/mon:text-emerald-400" />
-                              )}
-                            </button>
-                          </div>
-
-                          {/* Top-right: manual search */}
-                          <div className="absolute top-1.5 sm:top-2 right-1.5 sm:right-2 z-20">
-                            <button
-                              onClick={(e) => { e.stopPropagation(); e.preventDefault(); handleArtistSearch(artist); }}
-                              disabled={isBusy}
-                              className="w-6 h-6 sm:w-8 sm:h-8 rounded-full bg-slate-900/80 hover:bg-cyan-500/20 transition-colors shadow-lg flex items-center justify-center text-cyan-400 disabled:opacity-60"
-                              title="Search missing albums"
-                              aria-label="Search missing albums"
-                            >
-                              {isBusy ? <Loader2 className="w-3.5 h-3.5 sm:w-5 sm:h-5 animate-spin" /> : <Search className="w-3.5 h-3.5 sm:w-5 sm:h-5" />}
-                            </button>
-                          </div>
-
-                          {/* Bottom-left status badge */}
-                          <div className={`absolute bottom-1.5 sm:bottom-2 left-1.5 sm:left-2 z-20 flex items-center gap-1 px-1.5 sm:px-2 py-0.5 sm:py-1 bg-slate-950/80 backdrop-blur rounded-md border shadow-lg ${
-                            isComplete ? 'border-emerald-500/30' : isPartial ? 'border-amber-500/30' : 'border-rose-500/30'
-                          }`}>
-                            {isComplete ? (
-                              <>
-                                <CheckCircle2 className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-emerald-400" />
-                                <span className="text-[9px] sm:text-[10px] font-bold text-emerald-400">Complete</span>
-                              </>
-                            ) : (
-                              <>
-                                <AlertCircle className={`w-2.5 h-2.5 sm:w-3 sm:h-3 ${isPartial ? 'text-amber-400' : 'text-rose-400'}`} />
-                                <span className={`text-[9px] sm:text-[10px] font-bold ${isPartial ? 'text-amber-400' : 'text-rose-400'}`}>
-                                  {isPartial ? 'Partial' : 'Missing'}
-                                </span>
-                              </>
-                            )}
-                          </div>
-
-                          {imgUrl ? (
-                            <img
-                              src={imgUrl}
-                              alt=""
-                              onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                              className="w-full h-full object-cover relative z-10"
-                            />
-                          ) : null}
-                        </div>
-
-                        {/* Info bar */}
-                        <div className="p-2 sm:p-3 w-full flex-1 flex flex-col justify-center bg-gradient-to-b from-slate-800/95 to-slate-900/95 border-t border-white/10 group-hover:border-cyan-500/30 transition-colors">
-                          <div className="flex items-center justify-between gap-2">
-                            <h3 className="font-semibold text-xs sm:text-sm text-slate-100 group-hover:text-cyan-400 transition-colors truncate tracking-wide flex-1" title={artist.name}>
-                              {artist.name}
-                            </h3>
-                            {totalAlbums > 0 && (
-                              <span
-                                className={`flex items-center gap-1 px-1.5 sm:px-2 py-0.5 rounded-md border flex-shrink-0 ${
-                                  downloadedAlbums === 0 && partialAlbums === 0
-                                    ? 'bg-slate-500/10 border-slate-500/20 text-slate-400'
-                                    : isComplete
-                                      ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-300'
-                                      : 'bg-amber-500/10 border-amber-500/20 text-amber-300'
-                                }`}
-                                title={
-                                  downloadedAlbums > 0 || partialAlbums > 0
-                                    ? `${downloadedAlbums} of ${totalAlbums} albums fully downloaded${partialAlbums > 0 ? ` (${partialAlbums} partial)` : ''}`
-                                    : `${totalAlbums} albums`
-                                }
+                            {/* Top-left: monitor toggle */}
+                            <div className="absolute top-1.5 sm:top-2 left-1.5 sm:left-2 z-20">
+                              <button
+                                onClick={(e) => { e.stopPropagation(); e.preventDefault(); handleArtistMonitorToggle(artist); }}
+                                className="w-6 h-6 sm:w-8 sm:h-8 rounded-full bg-slate-900/80 hover:bg-slate-800 transition-colors shadow-lg flex items-center justify-center group/mon"
+                                title={artist.monitored ? 'Unmonitor' : 'Monitor'}
+                                aria-label={artist.monitored ? 'Unmonitor artist' : 'Monitor artist'}
                               >
-                                <Disc className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
-                                <span className="text-[10px] sm:text-[11px] font-bold">
-                                  {downloadedAlbums > 0 || partialAlbums > 0 ? `${downloadedAlbums}/${totalAlbums}` : totalAlbums}
+                                {artist.monitored ? (
+                                  <Bookmark className="w-3.5 h-3.5 sm:w-5 sm:h-5 text-emerald-500 fill-emerald-500 group-hover/mon:text-rose-400 group-hover/mon:fill-transparent" />
+                                ) : (
+                                  <Bookmark className="w-3.5 h-3.5 sm:w-5 sm:h-5 text-rose-400 group-hover/mon:text-emerald-400" />
+                                )}
+                              </button>
+                            </div>
+
+                            {/* Top-right: manual search */}
+                            <div className="absolute top-1.5 sm:top-2 right-1.5 sm:right-2 z-20">
+                              <button
+                                onClick={(e) => { e.stopPropagation(); e.preventDefault(); handleArtistSearch(artist); }}
+                                disabled={isBusy}
+                                className="w-6 h-6 sm:w-8 sm:h-8 rounded-full bg-slate-900/80 hover:bg-cyan-500/20 transition-colors shadow-lg flex items-center justify-center text-cyan-400 disabled:opacity-60"
+                                title="Search missing albums"
+                                aria-label="Search missing albums"
+                              >
+                                {isBusy ? <Loader2 className="w-3.5 h-3.5 sm:w-5 sm:h-5 animate-spin" /> : <Search className="w-3.5 h-3.5 sm:w-5 sm:h-5" />}
+                              </button>
+                            </div>
+
+                            {/* Bottom-left status badge */}
+                            <div className={`absolute bottom-1.5 sm:bottom-2 left-1.5 sm:left-2 z-20 flex items-center gap-1 px-1.5 sm:px-2 py-0.5 sm:py-1 bg-slate-950/80 backdrop-blur rounded-md border shadow-lg ${
+                              isComplete ? 'border-emerald-500/30' : isPartial ? 'border-amber-500/30' : 'border-rose-500/30'
+                            }`}>
+                              {isComplete ? (
+                                <>
+                                  <CheckCircle2 className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-emerald-400" />
+                                  <span className="text-[9px] sm:text-[10px] font-bold text-emerald-400">Complete</span>
+                                </>
+                              ) : (
+                                <>
+                                  <AlertCircle className={`w-2.5 h-2.5 sm:w-3 sm:h-3 ${isPartial ? 'text-amber-400' : 'text-rose-400'}`} />
+                                  <span className={`text-[9px] sm:text-[10px] font-bold ${isPartial ? 'text-amber-400' : 'text-rose-400'}`}>
+                                    {isPartial ? 'Partial' : 'Missing'}
+                                  </span>
+                                </>
+                              )}
+                            </div>
+
+                            {imgUrl ? (
+                              <img
+                                src={imgUrl}
+                                alt=""
+                                onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                                className="w-full h-full object-cover relative z-10"
+                              />
+                            ) : null}
+                          </div>
+
+                          {/* Info bar */}
+                          <div className="p-2 sm:p-3 w-full flex-1 flex flex-col justify-center bg-gradient-to-b from-slate-800/95 to-slate-900/95 border-t border-white/10 group-hover:border-cyan-500/30 transition-colors">
+                            <div className="flex items-center justify-between gap-2">
+                              <h3 className="font-semibold text-xs sm:text-sm text-slate-100 group-hover:text-cyan-400 transition-colors truncate tracking-wide flex-1" title={artist.name}>
+                                {artist.name}
+                              </h3>
+                              {totalAlbums > 0 && (
+                                <span
+                                  className={`flex items-center gap-1 px-1.5 sm:px-2 py-0.5 rounded-md border flex-shrink-0 ${
+                                    downloadedAlbums === 0 && partialAlbums === 0
+                                      ? 'bg-slate-500/10 border-slate-500/20 text-slate-400'
+                                      : isComplete
+                                        ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-300'
+                                        : 'bg-amber-500/10 border-amber-500/20 text-amber-300'
+                                  }`}
+                                  title={
+                                    downloadedAlbums > 0 || partialAlbums > 0
+                                      ? `${downloadedAlbums} of ${totalAlbums} albums fully downloaded${partialAlbums > 0 ? ` (${partialAlbums} partial)` : ''}`
+                                      : `${totalAlbums} albums`
+                                  }
+                                >
+                                  <Disc className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
+                                  <span className="text-[10px] sm:text-[11px] font-bold">
+                                    {downloadedAlbums > 0 || partialAlbums > 0 ? `${downloadedAlbums}/${totalAlbums}` : totalAlbums}
+                                  </span>
                                 </span>
-                              </span>
-                            )}
+                              )}
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    );
-                  })}
+                      );
+                    }}
+                  />
                 </div>
               ) : (
                 /* Artists List View */

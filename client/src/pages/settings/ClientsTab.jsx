@@ -3,62 +3,68 @@ import api from '../../lib/api';
 import { customAlert } from '../../utils/alerts';
 import CustomSelect from '../../components/shared/CustomSelect';
 import PasswordInput from '../../components/shared/PasswordInput';
+import Button from '../../components/shared/Button';
+import { SettingsSection, SettingsHeader, SettingsGroup, SettingsLabel, SettingsHelper } from '../../components/settings/layout';
+import ToggleRow from '../../components/shared/ToggleRow';
 
-export default function ClientsTab({ clients, newClient, setNewClient, clientStatuses, handleAddEntity, handleDeleteEntity, settings, setSettings, handleSave }) {
+export default function ClientsTab({ clients, newClient, setNewClient, clientStatuses, handleAddEntity, handleDeleteEntity, settings, setSettings }) {
   return (
-    <div className="max-w-5xl mx-auto space-y-8 animate-fade-in">
-      <h2 className="text-2xl font-bold text-emerald-400 flex items-center gap-2">
-        <Download className="w-7 h-7" /> Download Clients
-      </h2>
-      <div className="glass-panel p-6 rounded-2xl border border-white/10 space-y-6 mb-8 shadow-xl relative overflow-hidden">
-        <h3 className="font-bold text-lg text-slate-200">Global Preferences</h3>
-        <p className="text-xs text-slate-500">Configure global download behavior, cleanup rules, and remote path mappings for your download clients.</p>
+    <div className="w-full space-y-6 animate-fade-in">
+      <div>
+        <h2 className="text-lg sm:text-xl font-bold font-display text-slate-100 flex items-center gap-2.5 mb-1.5">
+          <Download className="w-5 h-5 text-cyan-400 shrink-0" /> Download Clients
+        </h2>
+        <p className="text-xs sm:text-sm text-slate-400 leading-relaxed">
+          Manage your download clients and global download preferences.
+        </p>
+      </div>
+
+      {/* Global Preferences */}
+      <SettingsSection>
+        <SettingsHeader 
+          title="Download Preferences" 
+          icon={Download}
+          description="Configure global download behavior, cleanup rules, and remote path mappings."
+        />
         
-        <div className="space-y-4">
-          <label className="flex items-start gap-3 cursor-pointer p-4 rounded-xl bg-slate-900/50 border border-white/5 hover:border-emerald-500/30 transition-colors group">
-            <div className="mt-0.5">
-              <input type="checkbox" className="sr-only" checked={settings?.hideCompletedDownloads || false} onChange={e => setSettings({...settings, hideCompletedDownloads: e.target.checked})} />
-              {settings?.hideCompletedDownloads ? <CheckSquare className="w-5 h-5 text-emerald-400" /> : <Square className="w-5 h-5 text-slate-500" />}
-            </div>
-            <div>
-              <p className="text-sm font-bold text-slate-200 group-hover:text-emerald-400 transition-colors">Hide Completed Downloads from UI</p>
-              <p className="text-xs text-slate-400 mt-1">Hides 100% completed/seeding torrents from the Downloads page.</p>
-            </div>
-          </label>
+        <div className="space-y-3">
+          <ToggleRow
+            checked={settings?.hideCompletedDownloads || false}
+            onChange={e => setSettings({...settings, hideCompletedDownloads: e.target.checked})}
+            title="Hide Completed Downloads from UI"
+            description="Hides 100% completed/seeding torrents from the Downloads page."
+          />
           
-          <label className="flex items-start gap-3 cursor-pointer p-4 rounded-xl bg-slate-900/50 border border-white/5 hover:border-emerald-500/30 transition-colors group">
-            <div className="mt-0.5">
-              <input type="checkbox" className="sr-only" checked={settings?.removeCompletedDownloads || false} onChange={e => setSettings({...settings, removeCompletedDownloads: e.target.checked})} />
-              {settings?.removeCompletedDownloads ? <CheckSquare className="w-5 h-5 text-emerald-400" /> : <Square className="w-5 h-5 text-slate-500" />}
-            </div>
-            <div>
-              <p className="text-sm font-bold text-slate-200 group-hover:text-emerald-400 transition-colors">Remove Torrents When Finished</p>
-              <p className="text-xs text-slate-400 mt-1">Automatically tells your download client to remove the torrent once Atlas has imported it.</p>
-            </div>
-          </label>
+          <ToggleRow
+            checked={settings?.removeCompletedDownloads || false}
+            onChange={e => setSettings({...settings, removeCompletedDownloads: e.target.checked})}
+            title="Remove Torrents When Finished"
+            description="Automatically tells your download client to remove the torrent once Atlas has imported it."
+          />
 
           {settings?.removeCompletedDownloads && (
-            <label className="flex items-start gap-3 cursor-pointer p-4 rounded-xl bg-red-900/20 border border-red-500/20 hover:border-red-500/40 transition-colors group ml-8">
-              <div className="mt-0.5">
-                <input type="checkbox" className="sr-only" checked={settings?.deleteTorrentFiles || false} onChange={e => setSettings({...settings, deleteTorrentFiles: e.target.checked})} />
-                {settings?.deleteTorrentFiles ? <CheckSquare className="w-5 h-5 text-red-500" /> : <Square className="w-5 h-5 text-red-900/50" />}
-              </div>
-              <div>
-                <p className="text-sm font-bold text-slate-200 group-hover:text-red-400 transition-colors">Also Delete Files (Warning)</p>
-                <p className="text-xs text-red-400/80 mt-1">Permanently deletes the original downloaded file from the torrent folder. This will stop the torrent from seeding, but cleans up your downloads directory regardless of whether you use hardlinks or copies.</p>
-              </div>
-            </label>
+            <div className="ml-4 sm:ml-6">
+              <ToggleRow
+                checked={settings?.deleteTorrentFiles || false}
+                onChange={e => setSettings({...settings, deleteTorrentFiles: e.target.checked})}
+                title="Also Delete Files (Warning)"
+                description="Permanently deletes the original downloaded file from the torrent folder. Stops seeding but cleans up storage."
+                className="!bg-rose-950/20 !border-rose-900/40 hover:!border-rose-800/60"
+              />
+            </div>
           )}
           
-          <div className="p-4 rounded-xl bg-slate-900/50 border border-white/5 mt-6">
-            <h4 className="text-sm font-bold text-slate-200 mb-2">Remote Path Mapping</h4>
-            <p className="text-xs text-slate-400 mb-4">If your download client runs on a different machine or inside Docker, Atlas needs to know how to map the client's path to a local path.</p>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="p-4 rounded-xl bg-[#101e31] border border-[#1c2d46] mt-4 space-y-3">
+            <div>
+              <h4 className="text-sm font-bold font-display text-slate-200 mb-0.5">Remote Path Mapping</h4>
+              <p className="text-xs text-slate-400">If your download client runs on a different machine or inside Docker, Atlas needs to map the reported path to a local mount.</p>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1">Remote Path (e.g. /downloads/)</label>
+                <SettingsLabel title="Remote Path (e.g. /downloads/)" />
                 <input 
                   type="text" 
-                  className="glass-input w-full text-sm py-2" 
+                  className="w-full bg-[#0c1624] border border-[#1c2d46] rounded-xl px-4 py-2.5 text-sm text-slate-200 focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/50 transition-colors placeholder:text-slate-600" 
                   value={(settings?.downloadPathMapping || ['', ''])[0]} 
                   onChange={e => {
                     const newMapping = [...(settings?.downloadPathMapping || ['', ''])];
@@ -69,10 +75,10 @@ export default function ClientsTab({ clients, newClient, setNewClient, clientSta
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1">Local Path (e.g. /data/downloads/)</label>
+                <SettingsLabel title="Local Path (e.g. /data/downloads/)" />
                 <input 
                   type="text" 
-                  className="glass-input w-full text-sm py-2" 
+                  className="w-full bg-[#0c1624] border border-[#1c2d46] rounded-xl px-4 py-2.5 text-sm text-slate-200 focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/50 transition-colors placeholder:text-slate-600" 
                   value={(settings?.downloadPathMapping || ['', ''])[1]} 
                   onChange={e => {
                     const newMapping = [...(settings?.downloadPathMapping || ['', ''])];
@@ -88,42 +94,39 @@ export default function ClientsTab({ clients, newClient, setNewClient, clientSta
               onClick={async () => {
                 try {
                   const res = await api.get('/settings/clients/detect-mapping');
-                  if (res.data.status === 'success' && res.data.data) {
-                    setSettings({...settings, downloadPathMapping: res.data.data});
-                    if (res.data.guessed) {
-                      customAlert('Could not probe the client directly — applied a best-guess mapping, please verify: ' + res.data.data.join(' → '));
-                    } else {
-                      customAlert('Mapping detected: ' + res.data.data.join(' → '), 'success');
-                    }
+                  if (res.data?.status === 'success' && res.data.data) {
+                    const { remotePath, localPath } = res.data.data;
+                    setSettings({ ...settings, downloadPathMapping: [remotePath, localPath] });
+                    customAlert(`Auto-detected mapping: ${remotePath} → ${localPath}`, 'success');
                   } else {
-                    customAlert('Could not detect mapping — set it manually', 'error');
+                    customAlert(res.data?.message || 'Could not auto-detect path mapping', 'info');
                   }
                 } catch {
-                  customAlert('Detection failed', 'error');
+                  customAlert('Failed to auto-detect path mapping', 'error');
                 }
               }}
-              className="text-xs text-cyan-400 hover:text-cyan-300 underline mt-2"
+              className="text-xs text-cyan-400 hover:text-cyan-300 font-semibold underline pt-1 inline-block"
             >
-              Auto-detect mapping
+              Auto-detect path mapping
             </button>
           </div>
         </div>
-        <div className="flex justify-end">
-          <button onClick={handleSave} className="px-8 py-3 font-bold text-cyan-400 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 rounded-xl transition-all flex items-center justify-center gap-2 w-full sm:w-auto mx-auto sm:mx-0 shadow-[0_0_15px_rgba(6,182,212,0.15)] disabled:opacity-50">
-            <Save className="w-5 h-5" /> Save Changes
-          </button>
-        </div>      </div>
+      </SettingsSection>
       
-      <div className="glass-panel p-8 rounded-2xl border border-white/10 space-y-6 mb-8 shadow-xl relative z-10">
-        <h3 className="font-bold text-lg text-slate-200">Add New Client</h3>
-        <p className="text-xs text-slate-500">Add a download client for Atlas to send downloads to.</p>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      {/* Add New Client */}
+      <SettingsSection>
+        <SettingsHeader 
+          title="Add Download Client" 
+          icon={Plus}
+          description="Add a torrent or Usenet client for Atlas to dispatch download packages to."
+        />
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
-            <label className="block text-sm font-medium text-slate-400 mb-2">Name</label>
-            <input type="text" placeholder="e.g. My Downloader" className="glass-input w-full" value={newClient.name} onChange={e => setNewClient({...newClient, name: e.target.value})} />
+            <SettingsLabel title="Name" />
+            <input type="text" placeholder="e.g. My Downloader" className="w-full bg-[#0c1624] border border-[#1c2d46] rounded-xl px-4 py-2.5 text-sm text-slate-200 focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/50 transition-colors placeholder:text-slate-600" value={newClient.name} onChange={e => setNewClient({...newClient, name: e.target.value})} />
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-400 mb-2">Type</label>
+            <SettingsLabel title="Type" />
             <CustomSelect
               value={newClient.type || 'qbittorrent'}
               onChange={(e) => setNewClient({...newClient, type: e.target.value})}
@@ -138,62 +141,80 @@ export default function ClientsTab({ clients, newClient, setNewClient, clientSta
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-400 mb-2">Host URL</label>
-            <input type="text" placeholder="e.g. http://localhost" className="glass-input w-full" value={newClient.host} onChange={e => setNewClient({...newClient, host: e.target.value})} />
+            <SettingsLabel title="Host URL" />
+            <input type="text" placeholder="e.g. http://localhost" className="w-full bg-[#0c1624] border border-[#1c2d46] rounded-xl px-4 py-2.5 text-sm text-slate-200 focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/50 transition-colors placeholder:text-slate-600" value={newClient.host} onChange={e => setNewClient({...newClient, host: e.target.value})} />
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-400 mb-2">Port</label>
-            <input type="number" placeholder="e.g. 8080" className="glass-input w-full" value={newClient.port} onChange={e => setNewClient({...newClient, port: parseInt(e.target.value)})} />
+            <SettingsLabel title="Port" />
+            <input type="number" placeholder="e.g. 8080" className="w-full bg-[#0c1624] border border-[#1c2d46] rounded-xl px-4 py-2.5 text-sm text-slate-200 focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/50 transition-colors placeholder:text-slate-600" value={newClient.port} onChange={e => setNewClient({...newClient, port: parseInt(e.target.value)})} />
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-400 mb-2">Username</label>
-            <input type="text" placeholder="Username" className="glass-input w-full" value={newClient.username} onChange={e => setNewClient({...newClient, username: e.target.value})} />
+            <SettingsLabel title="Username" />
+            <input type="text" placeholder="Username" className="w-full bg-[#0c1624] border border-[#1c2d46] rounded-xl px-4 py-2.5 text-sm text-slate-200 focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/50 transition-colors placeholder:text-slate-600" value={newClient.username} onChange={e => setNewClient({...newClient, username: e.target.value})} />
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-400 mb-2">Password</label>
-            <PasswordInput placeholder="Password" className="glass-input w-full" value={newClient.password} onChange={e => setNewClient({...newClient, password: e.target.value})} />
+            <SettingsLabel title="Password" />
+            <PasswordInput placeholder="Password" className="w-full bg-[#0c1624] border border-[#1c2d46] rounded-xl px-4 py-2.5 text-sm text-slate-200 focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/50 transition-colors placeholder:text-slate-600" value={newClient.password} onChange={e => setNewClient({...newClient, password: e.target.value})} />
           </div>
-          <div className="flex items-end">
-            <button onClick={() => {
-              if (!newClient.name?.trim()) {
-                customAlert('Please enter a name for the download client.', 'error');
-                return;
-              }
-              if (!newClient.host?.trim()) {
-                customAlert('Please enter a host URL (e.g. http://localhost).', 'error');
-                return;
-              }
-              handleAddEntity('clients', newClient);
-            }} className="w-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold py-3 px-4 rounded-xl flex justify-center items-center gap-2 shadow-lg shadow-emerald-500/20 transition-all">
-              <Plus className="w-5 h-5" /> Add Client
-            </button>
+          <div className="flex items-end md:col-span-3">
+            <Button
+              variant="primary"
+              onClick={() => {
+                if (!newClient.name?.trim()) {
+                  customAlert('Please enter a name for the download client.', 'error');
+                  return;
+                }
+                if (!newClient.host?.trim()) {
+                  customAlert('Please enter a host URL (e.g. http://localhost).', 'error');
+                  return;
+                }
+                handleAddEntity('clients', newClient);
+              }}
+              icon={Plus}
+            >
+              Add Client
+            </Button>
           </div>
         </div>
-      </div>
+      </SettingsSection>
 
-      <div className="space-y-4">
-        {clients.length === 0 ? <p className="text-slate-500 italic p-4 text-center">No clients configured yet.</p> : clients.map(c => (
-          <div key={c.id} className="flex justify-between items-center glass-panel p-5 rounded-2xl border border-white/5 hover:border-emerald-500/30 transition-colors group shadow-lg">
-            <div>
-              <div className="flex items-center gap-2">
-                <p className="text-base font-bold text-slate-200">{c.name}</p>
-                <span className="text-xs bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded-full">{c.type}</span>
-                {clientStatuses[c.id] === 'live' && (
-                  <span className="text-[10px] font-bold uppercase tracking-wider bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded-full flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span> Live
-                  </span>
-                )}
-                {clientStatuses[c.id] === 'offline' && (
-                  <span className="text-[10px] font-bold uppercase tracking-wider bg-red-500/20 text-red-400 border border-red-500/30 px-2 py-0.5 rounded-full flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-red-400"></span> Offline
-                  </span>
-                )}
-              </div>
-              <p className="text-sm text-slate-500 mt-1">{c.host}:{c.port}</p>
-            </div>
-            <button onClick={() => handleDeleteEntity('clients', c.id)} className="text-red-400 hover:text-red-300 p-2"><Trash2 className="w-5 h-5" /></button>
+      {/* Existing Clients List */}
+      <div className="space-y-3">
+        {clients.length === 0 ? (
+          <div className="glass-panel rounded-2xl p-8 text-center border border-white/10">
+            <p className="text-xs text-slate-400 font-medium">No download clients configured yet.</p>
           </div>
-        ))}
+        ) : (
+          clients.map(c => (
+            <div key={c.id} className="flex justify-between items-center rounded-xl border border-[#1c2d46] bg-[#101e31] p-4 transition-colors hover:border-[#274063]">
+              <div className="flex items-center gap-3">
+                <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{
+                  backgroundColor: clientStatuses[c.id] === 'live' ? '#34d399' : clientStatuses[c.id] === 'offline' ? '#f87171' : '#64748b'
+                }} />
+                <div>
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm font-semibold text-slate-200">{c.name}</p>
+                    <span className="text-[10px] font-semibold text-slate-400 bg-slate-800/80 px-2 py-0.5 rounded-md border border-slate-700/60 uppercase">{c.type}</span>
+                    {clientStatuses[c.id] === 'live' && (
+                      <span className="text-[10px] font-semibold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-md border border-emerald-500/20">Live</span>
+                    )}
+                    {clientStatuses[c.id] === 'offline' && (
+                      <span className="text-[10px] font-semibold text-rose-400 bg-rose-500/10 px-2 py-0.5 rounded-md border border-rose-500/20">Offline</span>
+                    )}
+                  </div>
+                  <p className="text-xs text-slate-500 font-mono mt-0.5">{c.host}:{c.port}</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => handleDeleteEntity('clients', c.id)} 
+                className="text-slate-500 hover:text-rose-400 p-2 rounded-lg hover:bg-rose-500/10 transition-colors"
+                title="Remove client"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            </div>
+          ))
+        )}
       </div>
     </div>
   );

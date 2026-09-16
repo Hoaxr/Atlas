@@ -150,6 +150,7 @@ export default function MovieDetails() {
       }
     } catch (err) {
       console.error('Failed to update quality profile', err);
+      customAlert('Failed to update quality profile', 'error');
     } finally {
       setUpdatingQuality(false);
     }
@@ -301,7 +302,7 @@ export default function MovieDetails() {
         <div className="flex items-center justify-between">
           <button
             onClick={() => navigate('/movies')}
-            className="inline-flex items-center gap-2 px-3 sm:px-4 py-2 bg-slate-800/70 hover:bg-slate-700/80 text-slate-300 hover:text-white rounded-xl border border-white/10 hover:border-white/20 transition-all duration-200 text-sm font-medium backdrop-blur-xl shrink-0"
+            className="inline-flex items-center gap-2 px-3.5 py-1.5 bg-slate-900/80 hover:bg-slate-800 text-slate-200 rounded-lg border border-slate-800 hover:border-slate-700 transition-colors text-sm font-medium shrink-0"
           >
             <ArrowLeft className="w-4 h-4" /> Back
           </button>
@@ -311,7 +312,7 @@ export default function MovieDetails() {
             <button
               onClick={refreshAll}
               disabled={isRefreshing}
-              className="p-2.5 bg-slate-800/70 hover:bg-slate-700/80 rounded-xl transition-colors text-slate-300 hover:text-cyan-400 disabled:opacity-40 border border-white/10 backdrop-blur-xl"
+              className="p-2 bg-slate-900/80 hover:bg-slate-800 rounded-lg transition-colors text-slate-300 hover:text-cyan-400 disabled:opacity-40 border border-slate-800"
               title="Refresh metadata"
             >
               <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
@@ -319,15 +320,15 @@ export default function MovieDetails() {
             <div ref={mobileDeleteMenuRef} className="relative">
               <button
                 onClick={() => setMobileDeleteMenuOpen(!mobileDeleteMenuOpen)}
-                className="p-2.5 bg-red-500/10 hover:bg-red-500/20 rounded-xl transition-colors text-red-400 border border-red-500/20 hover:border-red-500/30 backdrop-blur-xl"
+                className="p-2 bg-rose-500/10 hover:bg-rose-500/20 rounded-lg transition-colors text-rose-400 border border-rose-500/20"
                 title="Delete movie"
               >
                 <Trash2 className="w-4 h-4" />
               </button>
               {mobileDeleteMenuOpen && (
-                <div className="absolute left-1/2 -translate-x-1/2 top-full mt-2 w-60 bg-slate-800 border border-white/10 rounded-2xl shadow-2xl z-50 overflow-hidden backdrop-blur-xl">
-                  <div className="px-4 py-3 border-b border-white/5">
-                    <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Remove from Library</p>
+                <div className="absolute left-1/2 -translate-x-1/2 top-full mt-2 w-60 bg-slate-900 border border-slate-800 rounded-xl shadow-2xl shadow-black/60 z-50 overflow-hidden">
+                  <div className="px-4 py-2.5 border-b border-slate-800">
+                    <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Remove from Library</p>
                   </div>
                   <button
                     onClick={async () => {
@@ -341,15 +342,15 @@ export default function MovieDetails() {
                         customAlert(err.response?.data?.message || 'Failed to remove movie.', 'error');
                       }
                     }}
-                    className="w-full flex items-center gap-3 px-4 py-3 text-sm text-red-400 hover:bg-red-500/10 transition-colors text-left"
+                    className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-rose-400 hover:bg-rose-500/10 transition-colors text-left"
                   >
                     <Trash2 className="w-4 h-4 shrink-0" />
                     <div>
-                      <p className="font-semibold">Delete + Files</p>
-                      <p className="text-xs text-slate-500">Remove from library and delete files</p>
+                      <p className="font-semibold text-xs">Delete + Files</p>
+                      <p className="text-[11px] text-slate-500">Remove from library and delete files</p>
                     </div>
                   </button>
-                  <div className="border-t border-white/5" />
+                  <div className="border-t border-slate-800" />
                   <button
                     onClick={async () => {
                       setMobileDeleteMenuOpen(false);
@@ -362,12 +363,12 @@ export default function MovieDetails() {
                         customAlert(err.response?.data?.message || 'Failed to remove movie.', 'error');
                       }
                     }}
-                    className="w-full flex items-center gap-3 px-4 py-3 text-sm text-slate-300 hover:bg-white/5 transition-colors text-left"
+                    className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-slate-300 hover:bg-slate-800/60 transition-colors text-left"
                   >
                     <X className="w-4 h-4 shrink-0" />
                     <div>
-                      <p className="font-semibold">Remove Only</p>
-                      <p className="text-xs text-slate-500">Remove from library, keep files</p>
+                      <p className="font-semibold text-xs">Remove Only</p>
+                      <p className="text-[11px] text-slate-500">Remove from library, keep files</p>
                     </div>
                   </button>
                 </div>
@@ -379,7 +380,7 @@ export default function MovieDetails() {
             <button
               onClick={() => prevId && navigate(`/movies/${prevId}`)}
               disabled={!prevId}
-              className="p-2.5 bg-slate-800/70 hover:bg-slate-700/80 text-slate-300 hover:text-white rounded-xl border border-white/10 hover:border-white/20 transition-all duration-200 disabled:opacity-25 disabled:cursor-not-allowed backdrop-blur-xl"
+              className="p-2 bg-slate-900/80 hover:bg-slate-800 text-slate-300 hover:text-white rounded-lg border border-slate-800 hover:border-slate-700 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
               title="Previous movie"
             >
               <ChevronLeft className="w-4 h-4" />
@@ -387,7 +388,7 @@ export default function MovieDetails() {
             <button
               onClick={() => nextId && navigate(`/movies/${nextId}`)}
               disabled={!nextId}
-              className="p-2.5 bg-slate-800/70 hover:bg-slate-700/80 text-slate-300 hover:text-white rounded-xl border border-white/10 hover:border-white/20 transition-all duration-200 disabled:opacity-25 disabled:cursor-not-allowed backdrop-blur-xl"
+              className="p-2 bg-slate-900/80 hover:bg-slate-800 text-slate-300 hover:text-white rounded-lg border border-slate-800 hover:border-slate-700 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
               title="Next movie"
             >
               <ChevronRight className="w-4 h-4" />
@@ -396,13 +397,13 @@ export default function MovieDetails() {
         </div>
 
         {/* ── Main Card ── */}
-        <div className="bg-slate-900/50 backdrop-blur-2xl rounded-3xl border border-white/10 shadow-2xl shadow-black/50 p-4 sm:p-6 lg:p-7">
+        <div className="bg-slate-900/80 border border-slate-800 rounded-xl shadow-xl shadow-black/50 p-4 sm:p-6 lg:p-7">
           <div className="flex flex-col md:flex-row gap-6 lg:gap-8 items-start">
 
             {/* ─── Left: Poster Column ─── */}
             <div className="w-full max-w-[280px] mx-auto md:max-w-none md:w-[260px] lg:w-[280px] shrink-0 flex flex-col gap-3">
               {/* Poster */}
-              <div className="relative group rounded-2xl overflow-hidden shadow-2xl border border-white/10 aspect-[2/3]">
+              <div className="relative group rounded-lg overflow-hidden shadow-lg border border-slate-800 aspect-[2/3]">
                 <img
                   src={posterUrl('movies', movie.tmdb_id, movie.poster_path)}
                   alt={movie.title}

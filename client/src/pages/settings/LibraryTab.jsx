@@ -5,6 +5,8 @@ import { customAlert } from '../../utils/alerts';
 import { useOutsideClick } from '../../lib/useOutsideClick';
 import DuplicateSection from './DuplicateSection';
 import CustomSelect from '../../components/shared/CustomSelect';
+import ToggleRow from '../../components/shared/ToggleRow';
+import { SettingsSection, SettingsHeader, SettingsGroup, SettingsLabel, SettingsHelper } from '../../components/settings/layout';
 
 const SCAN_MODES = [
   { value: 'full',      label: 'Full Scan',       desc: 'Everything — movies, TV shows, music, metadata' },
@@ -20,7 +22,7 @@ const SCAN_MODES = [
 export default function LibraryTab({
   paths, newPath, newPathType, setNewPath, setNewPathType, handleAddPath, fetchPaths,
   handleScan, handleStopScan, isScanning, scanProgress, scanResults,
-  isStaleResults, setScanResults, setIsStaleResults, settings, setSettings, handleSave
+  isStaleResults, setScanResults, setIsStaleResults, settings, setSettings
 }) {
   const data = scanResults || scanProgress;
   const [scanMode, setScanMode] = useState('full');
@@ -28,59 +30,68 @@ export default function LibraryTab({
   const modeMenuRef = useOutsideClick(() => setModeMenuOpen(false), modeMenuOpen);
 
   return (
-    <div className="max-w-5xl mx-auto space-y-8 animate-fade-in">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <h2 className="text-2xl font-bold text-blue-400 flex items-center gap-2">
-          <FolderTree className="w-7 h-7" /> Library & Root Folders
+    <div className="w-full space-y-6 animate-fade-in">
+      <div>
+        <h2 className="text-lg sm:text-xl font-bold font-display text-slate-100 flex items-center gap-2.5 mb-1.5">
+          <FolderTree className="w-5 h-5 text-cyan-400 shrink-0" /> Library Management
         </h2>
-        <div className="flex items-center gap-2">
-          <div className="relative flex" ref={modeMenuRef}>
-            <button 
-              onClick={() => handleScan(scanMode)}
-              disabled={isScanning}
-              className="bg-blue-500 hover:bg-blue-400 text-white font-bold py-2 px-4 rounded-l-xl flex items-center gap-2 transition-colors disabled:opacity-50"
-            >
-              {isScanning ? <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div> : <RefreshCw className="w-4 h-4" />}
-              {isScanning ? 'Scanning...' : 'Scan Now'}
-            </button>
-            <button
-              onClick={() => setModeMenuOpen(!modeMenuOpen)}
-              disabled={isScanning}
-              className="bg-blue-600 hover:bg-blue-500 text-white font-bold py-2 px-2 rounded-r-xl flex items-center transition-colors disabled:opacity-50 border-l border-blue-400/30"
-              title="Scan mode"
-            >
-              <ChevronDown className={`w-4 h-4 transition-transform ${modeMenuOpen ? 'rotate-180' : ''}`} />
-            </button>
-            {modeMenuOpen && (
-              <div className="absolute right-0 top-full mt-2 w-64 bg-slate-800 border border-white/10 rounded-xl shadow-xl z-50 overflow-hidden">
-                <div className="px-4 py-2.5 border-b border-white/10 text-xs font-bold text-slate-400 uppercase tracking-wider">Scan Mode</div>
-                {SCAN_MODES.map(m => (
-                  <button
-                    key={m.value}
-                    onClick={() => { setScanMode(m.value); setModeMenuOpen(false); }}
-                    className={`w-full text-left px-4 py-2.5 hover:bg-white/5 transition-colors flex flex-col ${scanMode === m.value ? 'bg-blue-500/10' : ''}`}
-                  >
-                    <span className={`text-sm font-medium ${scanMode === m.value ? 'text-blue-400' : 'text-slate-200'}`}>
-                      {scanMode === m.value && '● '}{m.label}
-                    </span>
-                    <span className="text-xs text-slate-500 mt-0.5">{m.desc}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-          {isScanning && (
-            <button
-              onClick={handleStopScan}
-              className="bg-red-500/20 hover:bg-red-500/30 text-red-400 border border-red-500/30 font-bold py-2 px-4 rounded-xl flex items-center gap-2 transition-colors"
-            >
-              Stop
-            </button>
-          )}
-        </div>
+        <p className="text-xs sm:text-sm text-slate-400 leading-relaxed">
+          Configure root folders, library scanning, and automatic media deletion preferences.
+        </p>
       </div>
 
-      <p className="text-xs text-slate-500 mb-6">Configure the folders where Atlas moves your completed downloads. Atlas will scan these folders to build your library.</p>
+      <SettingsSection>
+        <SettingsHeader
+          title="Library & Root Folders"
+          icon={FolderTree}
+          description="Configure the folders where Atlas moves your completed downloads. Atlas will scan these folders to build your library."
+        >
+          <div className="flex items-center gap-2">
+            <div className="relative flex" ref={modeMenuRef}>
+              <button 
+                onClick={() => handleScan(scanMode)}
+                disabled={isScanning}
+                className="bg-blue-500 hover:bg-blue-400 text-white font-bold py-2 px-4 rounded-l-xl flex items-center gap-2 transition-colors disabled:opacity-50"
+              >
+                {isScanning ? <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div> : <RefreshCw className="w-4 h-4" />}
+                {isScanning ? 'Scanning...' : 'Scan Now'}
+              </button>
+              <button
+                onClick={() => setModeMenuOpen(!modeMenuOpen)}
+                disabled={isScanning}
+                className="bg-blue-600 hover:bg-blue-500 text-white font-bold py-2 px-2 rounded-r-xl flex items-center transition-colors disabled:opacity-50 border-l border-blue-400/30"
+                title="Scan mode"
+              >
+                <ChevronDown className={`w-4 h-4 transition-transform ${modeMenuOpen ? 'rotate-180' : ''}`} />
+              </button>
+              {modeMenuOpen && (
+                <div className="absolute right-0 top-full mt-2 w-64 bg-slate-800 border border-white/10 rounded-xl shadow-xl z-50 overflow-hidden">
+                  <div className="px-4 py-2.5 border-b border-white/10 text-xs font-bold text-slate-400 uppercase tracking-wider">Scan Mode</div>
+                  {SCAN_MODES.map(m => (
+                    <button
+                      key={m.value}
+                      onClick={() => { setScanMode(m.value); setModeMenuOpen(false); }}
+                      className={`w-full text-left px-4 py-2.5 hover:bg-white/5 transition-colors flex flex-col ${scanMode === m.value ? 'bg-blue-500/10' : ''}`}
+                    >
+                      <span className={`text-sm font-medium ${scanMode === m.value ? 'text-blue-400' : 'text-slate-200'}`}>
+                        {scanMode === m.value && '● '}{m.label}
+                      </span>
+                      <span className="text-xs text-slate-500 mt-0.5">{m.desc}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            {isScanning && (
+              <button
+                onClick={handleStopScan}
+                className="bg-red-500/20 hover:bg-red-500/30 text-red-400 border border-red-500/30 font-bold py-2 px-4 rounded-xl flex items-center gap-2 transition-colors"
+              >
+                Stop
+              </button>
+            )}
+          </div>
+        </SettingsHeader>
       
       {(scanProgress || scanResults) && (
         <div className="glass-panel p-6 rounded-2xl border border-white/10 space-y-3 mb-6 shadow-xl relative overflow-hidden">
@@ -342,91 +353,59 @@ export default function LibraryTab({
           ))}
         </div>
       </div>
+    </SettingsSection>
 
       {settings && (
-        <div className="space-y-6 pt-6 border-t border-white/5">
-          <div className="flex items-center justify-between">
-            <h3 className="text-xl font-bold text-slate-200">Media Management</h3>
-            <button
-              onClick={handleSave}
-              className="bg-blue-600 hover:bg-blue-500 text-white font-bold py-2 px-6 rounded-xl transition-all shadow-lg hover:shadow-blue-500/25 active:scale-95"
-            >
-              Save Settings
-            </button>
-          </div>
+        <SettingsSection>
+          <SettingsHeader
+            title="Media Management"
+            icon={Disc}
+          />
           <div className="space-y-4">
-            <label className="flex items-start gap-3 cursor-pointer p-4 rounded-xl bg-slate-900/50 border border-white/5 hover:border-blue-500/30 transition-colors group">
-              <div className="mt-0.5">
-                <input type="checkbox" className="sr-only" checked={settings?.autoDeleteWatchedEnabled || false} onChange={e => setSettings({...settings, autoDeleteWatchedEnabled: e.target.checked})} />
-                <div className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out ${settings?.autoDeleteWatchedEnabled ? 'bg-blue-500' : 'bg-slate-700'}`}>
-                  <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${settings?.autoDeleteWatchedEnabled ? 'translate-x-5' : 'translate-x-0'}`} />
-                </div>
-              </div>
-              <div>
-                <p className="text-sm font-bold text-slate-200 group-hover:text-blue-400 transition-colors">Auto-Delete Watched Media</p>
-                <p className="text-xs text-slate-400 mt-1">Automatically delete media files from disk after they have been watched.</p>
-              </div>
-            </label>
+            <ToggleRow
+              checked={settings?.autoDeleteWatchedEnabled || false}
+              onChange={e => setSettings({...settings, autoDeleteWatchedEnabled: e.target.checked})}
+              title="Auto-Delete Watched Media"
+              description="Automatically delete media files from disk after they have been watched."
+            />
 
             {settings?.autoDeleteWatchedEnabled && (
-              <div className="ml-8 p-4 rounded-xl bg-blue-900/10 border border-blue-500/20">
-                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Delay (Days)</label>
+              <div className="ml-4 sm:ml-6 p-4 rounded-xl bg-cyan-900/10 border border-cyan-500/20">
+                <SettingsLabel title="Delay (Days)" />
                 <input
                   type="number"
                   min="0"
                   value={settings.autoDeleteWatchedDays || ''}
                   onChange={(e) => setSettings({ ...settings, autoDeleteWatchedDays: e.target.value })}
                   placeholder="e.g. 7"
-                  className="w-full sm:w-64 bg-slate-800/50 border border-slate-700 rounded-xl px-4 py-2.5 text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all"
+                  className="w-full sm:w-64 bg-[#0c1624] border border-[#1c2d46] rounded-xl px-4 py-2.5 text-slate-200 focus:outline-none focus:ring-1 focus:ring-cyan-500/50 focus:border-cyan-500/50 transition-colors text-sm"
                 />
-                <p className="text-[11px] text-slate-500 mt-2">Wait this many days after the media is watched before deleting it.</p>
+                <SettingsHelper text="Wait this many days after the media is watched before deleting it." />
               </div>
             )}
 
             {/* Music Import & Tagging Options */}
             <div className="pt-4 border-t border-white/5 space-y-3">
-              <h4 className="text-sm font-bold text-slate-300 flex items-center gap-2">
+              <h4 className="text-sm font-bold font-display text-slate-200 flex items-center gap-2">
                 <Disc className="w-4 h-4 text-cyan-400" /> Music Import & Tagging
               </h4>
 
-              <label className="flex items-start gap-3 cursor-pointer p-4 rounded-xl bg-slate-900/50 border border-white/5 hover:border-cyan-500/30 transition-colors group">
-                <div className="mt-0.5">
-                  <input
-                    type="checkbox"
-                    className="sr-only"
-                    checked={settings?.writeMusicMetadata !== 'false' && settings?.writeMusicMetadata !== false}
-                    onChange={e => setSettings({ ...settings, writeMusicMetadata: String(e.target.checked) })}
-                  />
-                  <div className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out ${(settings?.writeMusicMetadata !== 'false' && settings?.writeMusicMetadata !== false) ? 'bg-cyan-500' : 'bg-slate-700'}`}>
-                    <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${(settings?.writeMusicMetadata !== 'false' && settings?.writeMusicMetadata !== false) ? 'translate-x-5' : 'translate-x-0'}`} />
-                  </div>
-                </div>
-                <div>
-                  <p className="text-sm font-bold text-slate-200 group-hover:text-cyan-400 transition-colors">Embed metadata tags into audio files</p>
-                  <p className="text-xs text-slate-400 mt-1">Write artist, album, track, year, and cover art tags directly into FLAC / MP3 files during import.</p>
-                </div>
-              </label>
+              <ToggleRow
+                checked={settings?.writeMusicMetadata !== 'false' && settings?.writeMusicMetadata !== false}
+                onChange={e => setSettings({ ...settings, writeMusicMetadata: String(e.target.checked) })}
+                title="Embed metadata tags into audio files"
+                description="Write artist, album, track, year, and cover art tags directly into FLAC / MP3 files during import."
+              />
 
-              <label className="flex items-start gap-3 cursor-pointer p-4 rounded-xl bg-slate-900/50 border border-white/5 hover:border-cyan-500/30 transition-colors group">
-                <div className="mt-0.5">
-                  <input
-                    type="checkbox"
-                    className="sr-only"
-                    checked={settings?.musicMonitorNewReleases !== 'false' && settings?.musicMonitorNewReleases !== false}
-                    onChange={e => setSettings({ ...settings, musicMonitorNewReleases: String(e.target.checked) })}
-                  />
-                  <div className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out ${(settings?.musicMonitorNewReleases !== 'false' && settings?.musicMonitorNewReleases !== false) ? 'bg-cyan-500' : 'bg-slate-700'}`}>
-                    <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${(settings?.musicMonitorNewReleases !== 'false' && settings?.musicMonitorNewReleases !== false) ? 'translate-x-5' : 'translate-x-0'}`} />
-                  </div>
-                </div>
-                <div>
-                  <p className="text-sm font-bold text-slate-200 group-hover:text-cyan-400 transition-colors">Automatically monitor new releases</p>
-                  <p className="text-xs text-slate-400 mt-1">When MusicBrainz detects newly released albums from your tracked artists, automatically flag them for search.</p>
-                </div>
-              </label>
+              <ToggleRow
+                checked={settings?.musicMonitorNewReleases !== 'false' && settings?.musicMonitorNewReleases !== false}
+                onChange={e => setSettings({ ...settings, musicMonitorNewReleases: String(e.target.checked) })}
+                title="Automatically monitor new releases"
+                description="When MusicBrainz detects newly released albums from your tracked artists, automatically flag them for search."
+              />
             </div>
           </div>
-        </div>
+        </SettingsSection>
       )}
 
       <DuplicateSection />

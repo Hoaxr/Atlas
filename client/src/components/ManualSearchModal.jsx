@@ -94,9 +94,9 @@ export default function ManualSearchModal({ mediaId, mediaType, season, title, o
     <ModalShell open onClose={onClose} size="2xl" noHeader noPadding noFloatingClose>
       <div className="flex flex-col max-h-[85vh]">
         {/* Header */}
-        <div className="flex items-center justify-between p-4 sm:p-5 border-b border-white/10 shrink-0">
+        <div className="flex items-center justify-between p-4 sm:p-5 border-b border-slate-800 shrink-0 bg-slate-900/90">
           <div className="flex items-center gap-3 min-w-0 pr-2">
-            <div className="p-2 rounded-xl bg-cyan-500/10 text-cyan-400 shrink-0">
+            <div className="p-2 rounded-lg bg-cyan-500/10 text-cyan-400 shrink-0">
               <Search className="w-5 h-5" />
             </div>
             <div className="min-w-0">
@@ -104,7 +104,7 @@ export default function ManualSearchModal({ mediaId, mediaType, season, title, o
               <p className="text-xs text-slate-400 mt-0.5 truncate">{title}</p>
             </div>
           </div>
-          <button onClick={onClose} className="p-2 rounded-xl hover:bg-white/5 text-slate-400 hover:text-white transition-colors shrink-0" aria-label="Close">
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition-colors shrink-0" aria-label="Close">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -130,20 +130,20 @@ export default function ManualSearchModal({ mediaId, mediaType, season, title, o
           )}
 
           {!loading && results.length > 0 && (
-            <div className="space-y-2.5">
-              <p className="text-xs text-slate-500 mb-2.5">{results.length} result{results.length !== 1 ? 's' : ''} found — sorted by seeders</p>
+            <div className="space-y-2">
+              <p className="text-xs text-slate-500 mb-2">{results.length} result{results.length !== 1 ? 's' : ''} found — sorted by seeders</p>
               {results.map((r, idx) => {
                 const quality = parseQuality(r.title);
                 const isMagnet = (r.link || '').startsWith('magnet:');
                 return (
                   <div
                     key={r.guid || r.link || `${r.title}-${idx}`}
-                    className="p-3 sm:p-3.5 rounded-xl bg-slate-800/60 border border-white/5 hover:border-white/10 hover:bg-slate-800 transition-all space-y-2.5 group"
+                    className="p-3 sm:p-3.5 rounded-xl bg-slate-900/60 border border-slate-800 hover:border-slate-700 hover:bg-slate-900 transition-all space-y-2.5 group"
                   >
                     {/* Top Row: Quality + Title + Desktop Grab Button */}
                     <div className="flex items-start gap-2.5 sm:gap-3 min-w-0">
                       {/* Quality badge */}
-                      <span className={`shrink-0 text-[11px] sm:text-xs font-bold px-2 py-0.5 rounded-md bg-slate-900/80 border border-white/5 text-center mt-0.5 ${qualityColor(quality)}`}>
+                      <span className={`shrink-0 text-[11px] sm:text-xs font-semibold px-2 py-0.5 rounded-md bg-slate-950 border border-slate-800 text-center mt-0.5 ${qualityColor(quality)}`}>
                         {quality}
                       </span>
 
@@ -158,7 +158,7 @@ export default function ManualSearchModal({ mediaId, mediaType, season, title, o
                       <button
                         onClick={() => handleGrab(r, idx)}
                         disabled={grabbing !== null}
-                        className="hidden sm:flex shrink-0 items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-bold text-xs shadow-md shadow-cyan-500/10 active:scale-[0.98] transition-all disabled:opacity-50"
+                        className="hidden sm:flex shrink-0 items-center gap-1.5 px-3 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-medium text-xs transition-colors disabled:opacity-50"
                       >
                         {grabbing === idx ? (
                           <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -170,7 +170,7 @@ export default function ManualSearchModal({ mediaId, mediaType, season, title, o
                     </div>
 
                     {/* Bottom Row: Metadata info line + Mobile Grab Button */}
-                    <div className="flex items-center justify-between gap-2 pt-1 border-t border-white/5 sm:border-0 sm:pt-0">
+                    <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-800/60 sm:border-0 sm:pt-0">
                       <div className="flex items-center gap-2 sm:gap-3 flex-wrap text-[11px] text-slate-400 min-w-0">
                         <span className="flex items-center gap-1 text-slate-500">
                           {isMagnet ? <Magnet className="w-3 h-3" /> : <HardDrive className="w-3 h-3" />}
@@ -181,12 +181,12 @@ export default function ManualSearchModal({ mediaId, mediaType, season, title, o
                             {formatSize(r.size)}
                           </span>
                         )}
-                        <span className="flex items-center gap-1 text-emerald-400 font-semibold">
+                        <span className="flex items-center gap-1 text-emerald-400 font-medium">
                           <Users className="w-3 h-3" />
                           {r.seeders ?? '?'}
                         </span>
                         {r.indexer && (
-                          <span className="text-slate-400 truncate max-w-[120px] bg-slate-900/60 px-1.5 py-0.5 rounded border border-white/5 text-[10px]">
+                          <span className="text-slate-400 truncate max-w-[120px] bg-slate-950 px-1.5 py-0.5 rounded-md border border-slate-800 text-[10px]">
                             {r.indexer}
                           </span>
                         )}
@@ -196,7 +196,7 @@ export default function ManualSearchModal({ mediaId, mediaType, season, title, o
                       <button
                         onClick={() => handleGrab(r, idx)}
                         disabled={grabbing !== null}
-                        className="sm:hidden shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-bold text-xs shadow-md shadow-cyan-500/20 active:scale-[0.98] transition-all disabled:opacity-50"
+                        className="sm:hidden shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-medium text-xs transition-colors disabled:opacity-50"
                       >
                         {grabbing === idx ? (
                           <Loader2 className="w-3 h-3 animate-spin" />

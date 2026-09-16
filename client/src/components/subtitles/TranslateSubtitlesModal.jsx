@@ -94,17 +94,17 @@ export default function TranslateSubtitlesModal({
     <ModalShell open={open} onClose={onClose} size="lg" noHeader noPadding noFloatingClose>
       <div className="flex flex-col max-h-[85vh]">
         {/* Header */}
-        <div className="p-5 border-b border-white/5 flex items-center justify-between shrink-0 bg-slate-900/60">
+        <div className="p-5 border-b border-slate-800 flex items-center justify-between shrink-0 bg-slate-900/90">
           <div>
             <h3 className="text-lg font-bold text-slate-100 flex items-center gap-2">
-              <Sparkles className="w-5 h-5 text-pink-400" />
+              <Sparkles className="w-5 h-5 text-cyan-400" />
               Translate Subtitles
             </h3>
             <p className="text-xs text-slate-400 mt-1 truncate max-w-[450px]">
               {title}
             </p>
           </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-white p-1 rounded-lg transition-colors">
+          <button onClick={onClose} className="text-slate-400 hover:text-white p-1.5 rounded-lg hover:bg-slate-800 transition-colors">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -113,7 +113,7 @@ export default function TranslateSubtitlesModal({
         <div className="p-6 overflow-y-auto space-y-6 flex-1">
           {/* Source Subtitle Track */}
           <div>
-            <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">
+            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">
               Source Subtitle Track
             </label>
             {existingTracks.length === 0 ? (
@@ -125,7 +125,7 @@ export default function TranslateSubtitlesModal({
               <select
                 value={selectedSourceTrack || ''}
                 onChange={(e) => setSelectedSourceTrack(e.target.value)}
-                className="w-full bg-slate-800/80 border border-white/10 rounded-xl px-3.5 py-2.5 text-sm text-slate-200 focus:outline-none focus:border-pink-500/50"
+                className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3.5 py-2 text-sm text-slate-200 focus:outline-none focus:border-cyan-500"
               >
                 {existingTracks.map(t => (
                   <option key={t.filePath} value={t.filePath}>
@@ -139,7 +139,7 @@ export default function TranslateSubtitlesModal({
           {/* Target Languages Multi-select */}
           <div>
             <div className="flex items-center justify-between mb-2">
-              <label className="block text-xs font-bold uppercase tracking-wider text-slate-400">
+              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400">
                 Translate into Target Languages
               </label>
               <span className="text-[11px] text-slate-500">
@@ -158,13 +158,13 @@ export default function TranslateSubtitlesModal({
                     onClick={() => handleToggleLang(lang.name)}
                     className={`p-3 rounded-xl border text-left transition-all flex flex-col justify-between ${
                       isSelected
-                        ? 'bg-pink-500/15 border-pink-500/40 text-pink-200 shadow-md shadow-pink-500/5'
-                        : 'bg-slate-800/40 border-white/5 text-slate-400 hover:border-white/15 hover:text-slate-200'
+                        ? 'bg-cyan-500/10 border-cyan-500/40 text-cyan-200'
+                        : 'bg-slate-900/60 border-slate-800 text-slate-400 hover:border-slate-700 hover:text-slate-200'
                     }`}
                   >
                     <div className="flex items-center justify-between w-full mb-1">
                       <span className="font-semibold text-sm">{lang.name}</span>
-                      <span className="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-slate-800/80 border border-white/10 text-slate-400">
+                      <span className="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded-md bg-slate-950 border border-slate-800 text-slate-400">
                         {lang.code}
                       </span>
                     </div>
@@ -176,7 +176,7 @@ export default function TranslateSubtitlesModal({
                       ) : (
                         <span className="text-slate-500">Not present</span>
                       )}
-                      {isSelected && <CheckCircle2 className="w-3.5 h-3.5 text-pink-400 ml-auto" />}
+                      {isSelected && <CheckCircle2 className="w-3.5 h-3.5 text-cyan-400 ml-auto" />}
                     </div>
                   </button>
                 );
@@ -190,7 +190,7 @@ export default function TranslateSubtitlesModal({
               className={`p-4 rounded-xl border transition-colors cursor-pointer select-none flex items-start gap-3 ${
                 retranslate
                   ? 'bg-amber-500/15 border-amber-500/30 text-amber-200'
-                  : 'bg-slate-800/60 border-white/10 text-slate-300'
+                  : 'bg-slate-900/80 border-slate-800 text-slate-300'
               }`}
               onClick={() => setRetranslate(!retranslate)}
             >
@@ -210,13 +210,13 @@ export default function TranslateSubtitlesModal({
 
           {/* Translation Provider */}
           <div>
-            <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">
+            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">
               Translation Provider
             </label>
             <select
               value={provider}
               onChange={(e) => setProvider(e.target.value)}
-              className="w-full bg-slate-800/80 border border-white/10 rounded-xl px-3.5 py-2.5 text-sm text-slate-200 focus:outline-none focus:border-pink-500/50"
+              className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3.5 py-2 text-sm text-slate-200 focus:outline-none focus:border-cyan-500"
             >
               <option value="gemini">Gemini AI (High quality, uses Gemini API key)</option>
               <option value="deepseek">DeepSeek AI (Accurate & affordable)</option>
@@ -226,7 +226,7 @@ export default function TranslateSubtitlesModal({
         </div>
 
         {/* Footer */}
-        <div className="p-4 border-t border-white/5 bg-slate-900/60 flex items-center justify-between shrink-0">
+        <div className="p-4 border-t border-slate-800 bg-slate-900/90 flex items-center justify-between shrink-0">
           <button
             onClick={onClose}
             className="px-4 py-2 text-sm font-medium text-slate-400 hover:text-white transition-colors"
@@ -236,7 +236,7 @@ export default function TranslateSubtitlesModal({
           <button
             onClick={handleStartTranslation}
             disabled={loading || selectedTargetLangs.length === 0 || !selectedSourceTrack || (hasExistingConflict && !retranslate)}
-            className="px-6 py-2.5 text-sm font-bold bg-pink-500 text-white rounded-xl hover:bg-pink-400 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-pink-500/20 flex items-center gap-2"
+            className="px-5 py-2 text-sm font-medium bg-cyan-600 text-white rounded-lg hover:bg-cyan-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
           >
             {loading ? (
               <>

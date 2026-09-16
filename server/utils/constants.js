@@ -24,7 +24,7 @@ const CODE_TO_LANG = {
 };
 
 // Broadcast intervals (milliseconds) — server → client push
-const LAYOUT_PUSH_INTERVAL = 3_000;
+const LAYOUT_PUSH_INTERVAL = 15_000;
 const TORRENTS_PUSH_INTERVAL = 5_000;
 
 module.exports = {

@@ -407,26 +407,39 @@ router.get('/history', async (req, res) => {
       LIMIT ? OFFSET ?
     `).all(limit, offset);
 
-    // Resolve missing titles/posters asynchronously for external watch history items
+    // Resolve missing titles/posters asynchronously for external watch history items with request-level deduplication
     const tmdbService = require('../services/tmdbService');
-    const enrichedHistory = await Promise.all(history.map(async (item) => {
-      if ((item.type === 'movie' && !item.movie_title) || ((item.type === 'episode' || item.type === 'show') && !item.show_title)) {
+    const tmdbCache = new Map();
+    const getCachedTmdb = (type, tmdbId) => {
+      const key = `${type}:${tmdbId}`;
+      if (tmdbCache.has(key)) return tmdbCache.get(key);
+      const promise = (async () => {
         try {
-          if (item.type === 'movie') {
-            const tmdbData = await tmdbService.getMovieById(item.tmdb_id);
-            if (tmdbData) {
-              item.movie_title = tmdbData.title;
-              item.movie_poster = tmdbData.poster_path;
-            }
+          if (type === 'movie') {
+            return await tmdbService.getMovieById(tmdbId);
           } else {
-            const tmdbData = await tmdbService.getShowById(item.tmdb_id);
-            if (tmdbData) {
-              item.show_title = tmdbData.name || tmdbData.title;
-              item.show_poster = tmdbData.poster_path;
-            }
+            return await tmdbService.getShowById(tmdbId);
           }
         } catch {
-          // ignore lookup errors
+          return null;
+        }
+      })();
+      tmdbCache.set(key, promise);
+      return promise;
+    };
+
+    const enrichedHistory = await Promise.all(history.map(async (item) => {
+      const isMovie = item.type === 'movie';
+      if ((isMovie && !item.movie_title) || (!isMovie && !item.show_title)) {
+        const tmdbData = await getCachedTmdb(isMovie ? 'movie' : 'show', item.tmdb_id);
+        if (tmdbData) {
+          if (isMovie) {
+            item.movie_title = tmdbData.title;
+            item.movie_poster = tmdbData.poster_path;
+          } else {
+            item.show_title = tmdbData.name || tmdbData.title;
+            item.show_poster = tmdbData.poster_path;
+          }
         }
       }
       return item;

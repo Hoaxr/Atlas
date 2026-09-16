@@ -34,31 +34,33 @@ export const FilterSelect = memo(function FilterSelect({ value, onChange, label,
 
   const selected = options.find(o => String(o.value) === String(value)) || options[0] || { value: 'all', label };
 
+  const isActive = isOpen || (hideAll ? (value && value !== '') : (value && value !== 'all'));
+
   return (
     <div className={`relative ${className}`} ref={ref}>
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className={`w-full flex items-center justify-between gap-1.5 text-xs font-medium px-3 py-2 rounded-xl border transition-colors ${
-          isOpen || value !== 'all'
-            ? 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30'
-            : 'bg-slate-900/50 text-slate-400 border-white/5 hover:bg-slate-800/50 hover:text-slate-200 shadow-[inset_0_1px_3px_rgba(0,0,0,0.4)]'
+        className={`w-full flex items-center justify-between gap-3.5 sm:gap-4 text-xs sm:text-sm font-medium px-3.5 py-2 rounded-xl border transition-colors ${
+          isActive
+            ? 'bg-[#0d2b51] text-[#e7ecf6] border-[#1b4273] shadow-sm'
+            : 'bg-[#101e31] text-slate-300 border-[#1c2d46] hover:border-slate-600 hover:text-white'
         }`}
       >
         <span className="truncate">{selected.label}</span>
-        <ChevronDown className={`w-3 h-3 shrink-0 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+        <ChevronDown className={`w-3.5 h-3.5 shrink-0 transition-transform ${isActive ? 'text-[#aac6dd]' : 'text-slate-400'} ${isOpen ? 'rotate-180' : ''}`} />
       </button>
 
       {isOpen && (
-        <div className="absolute left-0 top-full mt-1 w-48 max-w-[calc(100vw-2rem)] bg-slate-800 border border-white/10 rounded-xl shadow-xl z-[60] overflow-hidden py-1 max-h-64 overflow-y-auto custom-scrollbar">
+        <div className="absolute left-0 top-full mt-1.5 w-48 max-w-[calc(100vw-2rem)] bg-[#0e1a2b] border border-[#1c2d46] rounded-xl shadow-xl shadow-black/50 z-[60] overflow-hidden py-1 max-h-64 overflow-y-auto custom-scrollbar">
           {options.map(opt => (
             <button
               key={opt.value}
               type="button"
-              className={`w-full text-left px-4 py-2.5 text-sm flex items-center justify-between transition-colors ${
+              className={`w-full text-left px-3.5 py-2 text-sm flex items-center justify-between transition-colors ${
                 String(value) === String(opt.value)
-                  ? 'bg-emerald-500/20 text-emerald-400 font-medium'
-                  : 'text-slate-300 hover:bg-slate-700 hover:text-slate-200'
+                  ? 'bg-[#0d2b51] text-[#e7ecf6] font-medium'
+                  : 'text-slate-300 hover:bg-[#16273d] hover:text-white'
               }`}
               onClick={() => {
                 onChange({ target: { value: opt.value } });
@@ -66,7 +68,7 @@ export const FilterSelect = memo(function FilterSelect({ value, onChange, label,
               }}
             >
               <span className="truncate">{opt.label}</span>
-              {String(value) === String(opt.value) && <Check className="w-4 h-4 text-emerald-400 shrink-0" />}
+              {String(value) === String(opt.value) && <Check className="w-4 h-4 text-[#aac6dd] shrink-0" />}
             </button>
           ))}
         </div>
@@ -96,38 +98,39 @@ export const MultiFilterSelect = memo(function MultiFilterSelect({ values, onCha
   });
 
   const selectedCount = values.length;
+  const isMultiActive = isOpen || selectedCount > 0;
   
   return (
     <div className={`relative ${className}`} ref={ref}>
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className={`w-full flex items-center justify-between gap-1.5 text-xs font-medium px-3 py-2 rounded-xl border transition-colors ${
-          isOpen || selectedCount > 0
-            ? 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30'
-            : 'bg-slate-900/50 text-slate-400 border-white/5 hover:bg-slate-800/50 hover:text-slate-200 shadow-[inset_0_1px_3px_rgba(0,0,0,0.4)]'
+        className={`w-full flex items-center justify-between gap-3.5 sm:gap-4 text-xs sm:text-sm font-medium px-3.5 py-2 rounded-xl border transition-colors ${
+          isMultiActive
+            ? 'bg-[#0d2b51] text-[#e7ecf6] border-[#1b4273] shadow-sm'
+            : 'bg-[#101e31] text-slate-300 border-[#1c2d46] hover:border-slate-600 hover:text-white'
         }`}
       >
         <span className="truncate">{label} {selectedCount > 0 && `(${selectedCount})`}</span>
-        <ChevronDown className={`w-3 h-3 shrink-0 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+        <ChevronDown className={`w-3.5 h-3.5 shrink-0 transition-transform ${isMultiActive ? 'text-[#aac6dd]' : 'text-slate-400'} ${isOpen ? 'rotate-180' : ''}`} />
       </button>
 
       {isOpen && (
-        <div className="absolute left-0 top-full mt-1 w-56 max-w-[calc(100vw-2rem)] max-h-64 overflow-y-auto bg-slate-800 border border-white/10 rounded-xl shadow-xl z-[60] py-1 custom-scrollbar">
+        <div className="absolute left-0 top-full mt-1.5 w-56 max-w-[calc(100vw-2rem)] max-h-64 overflow-y-auto bg-[#0e1a2b] border border-[#1c2d46] rounded-xl shadow-xl shadow-black/50 z-[60] py-1.5 custom-scrollbar">
           {options.map(opt => {
             const isSelected = values.includes(opt.value);
             return (
               <label
                 key={opt.value}
-                className={`w-full text-left px-4 py-2.5 text-sm flex items-center justify-between transition-colors cursor-pointer ${
+                className={`w-full text-left px-3.5 py-2 text-sm flex items-center justify-between transition-colors cursor-pointer ${
                   isSelected
-                    ? 'bg-emerald-500/20 text-emerald-400 font-medium'
-                    : 'text-slate-300 hover:bg-slate-700 hover:text-slate-200'
+                    ? 'bg-[#0d2b51]/60 text-white font-medium'
+                    : 'text-slate-300 hover:bg-[#16273d] hover:text-white'
                 }`}
               >
-                <div className="flex items-center gap-2">
-                  <div className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${isSelected ? 'bg-emerald-500/30 border-emerald-500/50' : 'bg-slate-900 border-slate-600/50'}`}>
-                    {isSelected && <Check className="w-3 h-3 text-emerald-400" />}
+                <div className="flex items-center gap-2.5">
+                  <div className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${isSelected ? 'bg-[#0d2b51] border-[#1b4273]' : 'bg-slate-900 border-slate-700/80'}`}>
+                    {isSelected && <Check className="w-3 h-3 text-[#e7ecf6]" />}
                   </div>
                   <span className="truncate">{opt.label}</span>
                 </div>
