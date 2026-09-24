@@ -638,8 +638,9 @@ router.post('/scan/retry-paths', async (req, res, next) => {
 
 router.get('/calendar', async (req, res, next) => {
   try {
-    // Use canonical air_date and release_date aligned with official TMDB schedules
-    const shiftSql = 'e.air_date';
+    const { getAirDateShiftDays } = require('../../utils/airDate');
+    const shift = getAirDateShiftDays();
+    const shiftSql = shift === 0 ? 'e.air_date' : `date(e.air_date, '+${shift} days')`;
     const shiftSqlM = 'm.release_date';
 
     const upcoming = db.prepare(`

@@ -3,7 +3,7 @@ const path = require('path');
 const fs = require('fs');
 const fsp = require('fs/promises');
 const db = require('../config/database');
-const { getAiredCutoffSql } = require('../utils/airDate');
+const { getAiredCutoffSql, localizeAirDate } = require('../utils/airDate');
 const indexerService = require('./indexerService');
 const downloadClientService = require('./downloadClientService');
 const taskRegistry = require('./taskRegistry');
@@ -172,7 +172,7 @@ const runSearchCycle = async () => {
         AND e.monitored = 1
         AND s.monitored = 1
         AND (e.next_search_at IS NULL OR e.next_search_at <= datetime('now'))
-        AND (e.air_date IS NOT NULL AND date(e.air_date) <= date('now', 'localtime'))
+        AND (e.air_date IS NOT NULL AND date(e.air_date) <= ${getAiredCutoffSql()})
     `).all();
 
     monitoredEpisodes.forEach(e => {
@@ -245,7 +245,7 @@ const runSearchCycle = async () => {
 
         // Prevent premature searches on unreleased / unaired episodes
         if (ep.air_date) {
-          const epDateOnly = ep.air_date.split('T')[0];
+          const epDateOnly = localizeAirDate(ep.air_date).split('T')[0];
           const todayDateOnly = new Intl.DateTimeFormat('en-CA').format(new Date());
           if (epDateOnly > todayDateOnly) {
             const next = calculateNextSearchAt(ep, 'episode', { isDownloaded: (ep.status === 'downloaded' || hasFile), isCutoffMet: false });

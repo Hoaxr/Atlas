@@ -6,7 +6,7 @@ const fsp = require('fs/promises');
 const path = require('path');
 const axios = require('axios');
 const db = require('../../config/database');
-const { getAiredCutoffSql } = require('../../utils/airDate');
+const { getAiredCutoffSql, localizeAirDate } = require('../../utils/airDate');
 const libraryService = require('../../services/libraryService');
 const indexerService = require('../../services/indexerService');
 const downloadClientService = require('../../services/downloadClientService');
@@ -378,6 +378,7 @@ router.get('/shows/:id/episodes', async (req, res, next) => {
     // Episodes that don't have a file_path still need empty subtitles array
     const episodesWithSubtitles = episodes.map(ep => ({
       ...ep,
+      air_date: localizeAirDate(ep.air_date),
       watched: isWatchedSyncEnabled() ? ep.watched : (ep.watched || 0),
       subtitles: ep.subtitles || []
     }));
@@ -917,7 +918,7 @@ router.post('/episodes/:id/auto-search', async (req, res, next) => {
     }
 
     if (episode.air_date) {
-      const epDateOnly = episode.air_date.split('T')[0];
+      const epDateOnly = localizeAirDate(episode.air_date).split('T')[0];
       const todayDateOnly = new Intl.DateTimeFormat('en-CA').format(new Date());
       if (epDateOnly > todayDateOnly && req.query.force !== 'true') {
         return res.status(400).json({ status: 'error', message: `Episode has not aired yet (air date: ${epDateOnly}). Automatic search skipped to avoid fake releases.` });
