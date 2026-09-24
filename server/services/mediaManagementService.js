@@ -401,7 +401,7 @@ const resetDownloadsNotInClient = async (torrentList) => {
 
   // Recalculate status for music albums that were marked as downloading
   const downloadingAlbums = db.prepare(`
-    SELECT al.*, a.name as artist_name 
+    SELECT al.*, a.name as artist_name, a.monitored as artist_monitored 
     FROM music_albums al 
     JOIN music_artists a ON a.id = al.artist_id 
     WHERE al.status = 'downloading'
@@ -415,7 +415,8 @@ const resetDownloadsNotInClient = async (torrentList) => {
       if (album.folder_path && fs.existsSync(album.folder_path)) {
         db.prepare("UPDATE music_albums SET status = 'downloaded' WHERE id = ?").run(album.id);
       } else {
-        db.prepare("UPDATE music_albums SET status = 'monitored' WHERE id = ?").run(album.id);
+        const resetStatus = (album.monitored === 1 && album.artist_monitored === 1) ? 'monitored' : 'unmonitored';
+        db.prepare("UPDATE music_albums SET status = ? WHERE id = ?").run(resetStatus, album.id);
       }
     }
   }

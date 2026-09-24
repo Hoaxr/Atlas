@@ -221,10 +221,11 @@ const syncArtistAlbums = async (artistId, releaseGroups) => {
 
       try {
         const profileId = artist.quality_profile_id || 1;
+        const artistMonitored = artist.monitored ? 1 : 0;
         const insertRes = db.prepare(`
           INSERT INTO music_albums (
             mbid, artist_id, title, release_date, year, album_type, status, monitored, quality_profile_id
-          ) VALUES (?, ?, ?, ?, ?, ?, 'monitored', 1, ?)
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).run(
           rg.mbid,
           artistId,
@@ -232,6 +233,8 @@ const syncArtistAlbums = async (artistId, releaseGroups) => {
           rg.releaseDate,
           rg.year,
           rg.albumType || 'Album',
+          artistMonitored ? 'monitored' : 'unmonitored',
+          artistMonitored,
           profileId
         );
 
@@ -239,7 +242,7 @@ const syncArtistAlbums = async (artistId, releaseGroups) => {
           id: insertRes.lastInsertRowid,
           mbid: rg.mbid,
           title: rg.title,
-          status: 'monitored'
+          status: artistMonitored ? 'monitored' : 'unmonitored'
         });
       } catch {
         // Unique constraint or duplicate
@@ -333,6 +336,22 @@ const updateArtist = (id, updates) => {
   if (sets.length === 0) return;
   params.push(id);
   db.prepare(`UPDATE music_artists SET ${sets.join(', ')} WHERE id = ?`).run(...params);
+
+  // If monitored status was updated, cascade to all albums and tracks for this artist
+  if (updates.monitored !== undefined) {
+    const isMonitored = updates.monitored === true || updates.monitored === 1 || updates.monitored === '1' ? 1 : 0;
+    db.prepare('UPDATE music_albums SET monitored = ? WHERE artist_id = ?').run(isMonitored, id);
+    if (!isMonitored) {
+      db.prepare("UPDATE music_albums SET status = 'unmonitored' WHERE artist_id = ? AND status = 'monitored'").run(id);
+    } else {
+      db.prepare("UPDATE music_albums SET status = 'monitored' WHERE artist_id = ? AND status = 'unmonitored'").run(id);
+    }
+    db.prepare(`
+      UPDATE music_tracks 
+      SET monitored = ? 
+      WHERE album_id IN (SELECT id FROM music_albums WHERE artist_id = ?)
+    `).run(isMonitored, id);
+  }
 };
 
 const deleteArtist = async (id, deleteFiles = false) => {
@@ -504,7 +523,12 @@ const getMusicStats = () => {
   const albumCount = db.prepare('SELECT COUNT(*) as count FROM music_albums').get()?.count || 0;
   const trackCount = db.prepare('SELECT COUNT(*) as count FROM music_tracks').get()?.count || 0;
   const downloadedAlbums = db.prepare("SELECT COUNT(*) as count FROM music_albums WHERE status = 'downloaded'").get()?.count || 0;
-  const missingAlbums = db.prepare("SELECT COUNT(*) as count FROM music_albums WHERE monitored = 1 AND status = 'monitored'").get()?.count || 0;
+  const missingAlbums = db.prepare(`
+    SELECT COUNT(*) as count 
+    FROM music_albums al 
+    JOIN music_artists a ON a.id = al.artist_id 
+    WHERE a.monitored = 1 AND al.monitored = 1 AND al.status = 'monitored'
+  `).get()?.count || 0;
   const totalSize = db.prepare('SELECT COALESCE(SUM(file_size), 0) as total FROM music_tracks').get()?.total || 0;
 
   const qualityDist = db.prepare(`
@@ -531,7 +555,7 @@ const getMissingAlbums = () =>
     SELECT al.*, a.name as artist_name
     FROM music_albums al
     JOIN music_artists a ON a.id = al.artist_id
-    WHERE al.monitored = 1 AND al.status = 'monitored'
+    WHERE a.monitored = 1 AND al.monitored = 1 AND al.status = 'monitored'
     ORDER BY a.name COLLATE NOCASE ASC, al.year ASC
   `).all();
 

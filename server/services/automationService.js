@@ -635,7 +635,9 @@ const runMissingFilesCheck = async () => {
       ).get(albumId);
       if (!remainingDownloaded || remainingDownloaded.cnt === 0) {
         // Don't reset albums that are actively downloading — only reset fully-downloaded ones whose files went missing
-        db.prepare("UPDATE music_albums SET status = 'monitored' WHERE id = ? AND status NOT IN ('downloading', 'monitored')").run(albumId);
+        const albumRow = db.prepare("SELECT al.monitored, a.monitored as artist_monitored FROM music_albums al JOIN music_artists a ON a.id = al.artist_id WHERE al.id = ?").get(albumId);
+        const resetStatus = (albumRow?.monitored === 1 && albumRow?.artist_monitored === 1) ? 'monitored' : 'unmonitored';
+        db.prepare("UPDATE music_albums SET status = ? WHERE id = ? AND status NOT IN ('downloading', 'monitored')").run(resetStatus, albumId);
       }
     }
   }
@@ -1028,7 +1030,7 @@ const runMusicSearchCycle = async () => {
     SELECT al.*, a.name as artist_name
     FROM music_albums al
     JOIN music_artists a ON a.id = al.artist_id
-    WHERE al.monitored = 1 AND al.status = 'monitored'
+    WHERE a.monitored = 1 AND al.monitored = 1 AND al.status = 'monitored'
     LIMIT 10
   `).all();
 

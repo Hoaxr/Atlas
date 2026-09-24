@@ -1398,6 +1398,28 @@ const MIGRATIONS = [
         db.exec("ALTER TABLE users ADD COLUMN permissions TEXT DEFAULT '{}';");
       }
     }
+  },
+  {
+    id: 47,
+    name: 'unmonitor_albums_of_unmonitored_artists',
+    run: (db) => {
+      db.prepare(`
+        UPDATE music_albums
+        SET monitored = 0,
+            status = CASE WHEN status = 'monitored' THEN 'unmonitored' ELSE status END
+        WHERE artist_id IN (SELECT id FROM music_artists WHERE monitored = 0);
+      `).run();
+      db.prepare(`
+        UPDATE music_tracks
+        SET monitored = 0,
+            status = CASE WHEN status = 'monitored' THEN 'unmonitored' ELSE status END
+        WHERE album_id IN (
+          SELECT al.id FROM music_albums al
+          JOIN music_artists a ON al.artist_id = a.id
+          WHERE a.monitored = 0
+        );
+      `).run();
+    }
   }
 ];
 
