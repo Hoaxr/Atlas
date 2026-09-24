@@ -123,8 +123,6 @@ const refreshShowData = async (id) => {
             const ext = path.extname(item.name).toLowerCase();
             if (['.mp4', '.mkv', '.avi', '.mov', '.wmv'].includes(ext)) {
               const stats = await fsp.stat(fullPath);
-              totalSize += stats.size;
-              
               const match = item.name.match(/[sS](\d+)[eE](\d+)/) || item.name.match(/(?:^|[ .-])(\d{1,2})x(\d{2})(?:[ .-]|$)/);
               if (match) {
                 const s = parseInt(match[1], 10);
@@ -165,16 +163,33 @@ const refreshShowData = async (id) => {
                   } catch { /* ignore */ }
                 }
 
+                let accepted = false;
                 const saveEpisodes = db.transaction((startEp, endEp) => {
                   for (let ep = startEp; ep <= endEp; ep++) {
+                    const existingEp = db.prepare('SELECT file_path, scene_name, file_size FROM episodes WHERE show_id = ? AND season_number = ? AND episode_number = ?').get(show.id, s, ep);
+                    if (existingEp?.file_path) {
+                      const isCurrentConflict = /(_\d{6}|\(\d+\)|_copy)\b/i.test(item.name);
+                      const isExistingConflict = /(_\d{6}|\(\d+\)|_copy)\b/i.test(existingEp.scene_name || existingEp.file_path);
+                      if (isCurrentConflict && !isExistingConflict) {
+                        continue;
+                      }
+                      if (!isCurrentConflict && isExistingConflict) {
+                        totalSize -= (existingEp.file_size || 0);
+                      }
+                    }
+
                     db.prepare(`
                       UPDATE episodes 
                       SET status = 'downloaded', file_path = ?, file_size = ?, scene_name = ?, resolution = ?, codec = ?, audio = ?
                       WHERE show_id = ? AND season_number = ? AND episode_number = ?
                     `).run(fullPath, stats.size, item.name, resolution, codec, audio, show.id, s, ep);
+                    accepted = true;
                   }
                 });
                 saveEpisodes(firstE, lastE);
+                if (accepted) {
+                  totalSize += stats.size;
+                }
               }
             }
           }

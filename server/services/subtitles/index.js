@@ -65,7 +65,10 @@ const getProviderLangs = () => {
 
 // Defensive: providerLangs/langCode values originate from settings — strip anything
 // path-like (slashes, dots, traversal sequences) before interpolating into filesystem paths.
-const sanitizeLangCode = (code) => String(code || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+const sanitizeLangCode = (code) => {
+  const clean = String(code || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  return clean || 'en';
+};
 
 // Legacy subtitle files often use hyphenated locale codes (zh-CN, pt-BR) that
 // sanitizeLangCode strips — accept both variants when checking existence.

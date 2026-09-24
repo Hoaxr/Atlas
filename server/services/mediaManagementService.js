@@ -722,9 +722,11 @@ const importMovie = async (torrent, movie) => {
         if (isSubtitleFile(entry)) {
           const entryBase = path.basename(entry, subExt);
           if (entryBase === baseVideoName || entryBase.startsWith(`${baseVideoName}.`)) {
-            const subLangSuffix = entryBase.startsWith(`${baseVideoName}.`) ? entryBase.substring(baseVideoName.length) : '';
+            let subLangSuffix = entryBase.startsWith(`${baseVideoName}.`) ? entryBase.substring(baseVideoName.length) : '';
+            subLangSuffix = subLangSuffix.replace(/^\.+|\.+$/g, '');
+            const subName = subLangSuffix ? `${fileName}.${subLangSuffix}${subExt}` : `${fileName}${subExt}`;
             const srcSubPath = path.join(videoDir, entry);
-            const destSubPath = path.join(destFolder, `${fileName}${subLangSuffix}${subExt}`);
+            const destSubPath = path.join(destFolder, subName);
             try {
               if (fs.existsSync(destSubPath)) await fs.promises.unlink(destSubPath).catch(() => {});
               await fs.promises.link(srcSubPath, destSubPath).catch(async () => {
@@ -936,14 +938,37 @@ const importEpisode = async (torrent, episode) => {
     
     const destFile = path.join(destFolder, `${fileName}${ext}`);
     
+    // Check if any existing file for this episode (video or subtitle) exists on disk
+    let existingFilesInDest = [];
+    if (fs.existsSync(destFolder)) {
+      try {
+        existingFilesInDest = await fs.promises.readdir(destFolder);
+      } catch { /* ignore */ }
+    }
+
+    const epMatchRegex = new RegExp(`(?:s${s}e${e}|\\b${episode.season_number}x${e}\\b)`, 'i');
+    const hasExistingForEp = existingFilesInDest.some(f => epMatchRegex.test(f));
+
     const isRedownload = Boolean(
       (episode.file_path && fs.existsSync(episode.file_path)) ||
-      fs.existsSync(destFile)
+      fs.existsSync(destFile) ||
+      hasExistingForEp
     );
     
+    // 1. Delete old tracked file if different from destFile
     if (episode.file_path && episode.file_path !== destFile && fs.existsSync(episode.file_path)) {
       console.log(`[MediaManagement] Deleting old file at ${episode.file_path}.`);
       await fs.promises.unlink(episode.file_path).catch(() => {});
+    }
+
+    // 2. Clean up any obsolete video files for this exact episode in destFolder (e.g. prior episode titles like "Episode 2.mkv", conflict copies, or older releases)
+    for (const existing of existingFilesInDest) {
+      const fullExistingPath = path.join(destFolder, existing);
+      if (fullExistingPath === destFile) continue;
+      if (isVideoFile(existing) && epMatchRegex.test(existing)) {
+        console.log(`[MediaManagement] Removing obsolete episode video file: ${fullExistingPath}`);
+        await fs.promises.unlink(fullExistingPath).catch(() => {});
+      }
     }
 
     if (fs.existsSync(destFile)) {
@@ -951,20 +976,15 @@ const importEpisode = async (torrent, episode) => {
       await fs.promises.unlink(destFile);
     }
 
-    // Purge old subtitles for this episode if redownloading another release
+    // 3. Purge old subtitles for this episode if redownloading another release
     if (isRedownload && fs.existsSync(destFolder)) {
       try {
-        const existingFiles = await fs.promises.readdir(destFolder);
-        const epMatch1 = `s${s}e${e}`.toLowerCase();
-        const epMatch2 = `${episode.season_number}x${e}`.toLowerCase();
-        for (const existing of existingFiles) {
-          if (isSubtitleFile(existing)) {
-            const lower = existing.toLowerCase();
-            if (lower.includes(epMatch1) || lower.includes(epMatch2)) {
-              const oldSubPath = path.join(destFolder, existing);
-              console.log(`[MediaManagement] Purging obsolete episode subtitle from previous release: ${oldSubPath}`);
-              await fs.promises.unlink(oldSubPath).catch(() => {});
-            }
+        const remainingFiles = await fs.promises.readdir(destFolder);
+        for (const existing of remainingFiles) {
+          if (isSubtitleFile(existing) && epMatchRegex.test(existing)) {
+            const oldSubPath = path.join(destFolder, existing);
+            console.log(`[MediaManagement] Purging obsolete episode subtitle from previous release: ${oldSubPath}`);
+            await fs.promises.unlink(oldSubPath).catch(() => {});
           }
         }
       } catch { /* ignore */ }
@@ -1003,11 +1023,10 @@ const importEpisode = async (torrent, episode) => {
           const entryBase = path.basename(entry, subExt);
           if (entryBase === baseVideoName || entryBase.startsWith(`${baseVideoName}.`)) {
             let subLangSuffix = entryBase.startsWith(`${baseVideoName}.`) ? entryBase.substring(baseVideoName.length) : '';
-            if (subLangSuffix.startsWith('.') && fileName.endsWith('.')) {
-              subLangSuffix = subLangSuffix.substring(1);
-            }
+            subLangSuffix = subLangSuffix.replace(/^\.+|\.+$/g, '');
+            const subName = subLangSuffix ? `${fileName}.${subLangSuffix}${subExt}` : `${fileName}${subExt}`;
             const srcSubPath = path.join(videoDir, entry);
-            const destSubPath = path.join(destFolder, `${fileName}${subLangSuffix}${subExt}`);
+            const destSubPath = path.join(destFolder, subName);
             try {
               if (fs.existsSync(destSubPath)) await fs.promises.unlink(destSubPath).catch(() => {});
               await fs.promises.link(srcSubPath, destSubPath).catch(async () => {
