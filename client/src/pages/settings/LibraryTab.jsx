@@ -22,12 +22,20 @@ const SCAN_MODES = [
 export default function LibraryTab({
   paths, newPath, newPathType, setNewPath, setNewPathType, handleAddPath, fetchPaths,
   handleScan, handleStopScan, isScanning, scanProgress, scanResults,
-  isStaleResults, setScanResults, setIsStaleResults, settings, setSettings
+  isStaleResults, setScanResults, setIsStaleResults, settings, setSettings, onNavigateTab
 }) {
   const data = scanResults || scanProgress;
   const [scanMode, setScanMode] = useState('full');
   const [modeMenuOpen, setModeMenuOpen] = useState(false);
   const modeMenuRef = useOutsideClick(() => setModeMenuOpen(false), modeMenuOpen);
+
+  const onScanClick = (mode) => {
+    if (!settings?.tmdbApiKey && mode !== 'music' && mode !== 'subtitles') {
+      customAlert('TMDB API Key is required to scan movies and TV shows. Please configure it in Connections.', 'error');
+      return;
+    }
+    handleScan(mode);
+  };
 
   return (
     <div className="w-full space-y-6 animate-fade-in">
@@ -40,6 +48,29 @@ export default function LibraryTab({
         </p>
       </div>
 
+      {!settings?.tmdbApiKey && (
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-300">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <AlertCircle className="w-5 h-5 text-amber-400 shrink-0" />
+            <div>
+              <p className="text-sm font-semibold text-amber-200">TMDB API Key is required for scanning</p>
+              <p className="text-xs text-amber-300/80">
+                Atlas needs a free TMDB API key to identify your movies and TV shows and download metadata.
+              </p>
+            </div>
+          </div>
+          {onNavigateTab && (
+            <button
+              type="button"
+              onClick={() => onNavigateTab('connections')}
+              className="px-3.5 py-1.5 rounded-xl text-xs font-semibold text-amber-950 bg-amber-400 hover:bg-amber-300 transition-colors shrink-0 w-fit"
+            >
+              Configure in Connections
+            </button>
+          )}
+        </div>
+      )}
+
       <SettingsSection>
         <SettingsHeader
           title="Library & Root Folders"
@@ -49,7 +80,7 @@ export default function LibraryTab({
           <div className="flex items-center gap-2">
             <div className="relative flex" ref={modeMenuRef}>
               <button 
-                onClick={() => handleScan(scanMode)}
+                onClick={() => onScanClick(scanMode)}
                 disabled={isScanning}
                 className="bg-blue-500 hover:bg-blue-400 text-white font-bold py-2 px-4 rounded-l-xl flex items-center gap-2 transition-colors disabled:opacity-50"
               >

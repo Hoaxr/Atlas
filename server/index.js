@@ -596,6 +596,17 @@ const shutdown = (signal) => {
   watcherService.stopPolling();
   cleanupWorker.stop();
   
+  // Close active WebSockets and HTTP connections immediately so server.close doesn't hang
+  try {
+    for (const client of wss.clients) {
+      client.terminate();
+    }
+    wss.close();
+  } catch { /* ignore */ }
+  if (typeof server.closeAllConnections === 'function') {
+    server.closeAllConnections();
+  }
+
   // Close HTTP server (stops accepting new connections)
   server.close(() => {
     console.log('[Backend] HTTP server closed.');
@@ -610,11 +621,11 @@ const shutdown = (signal) => {
     process.exit(0);
   });
   
-  // Force exit after 10s if graceful shutdown hangs
+  // Force exit after 3s if graceful shutdown hangs
   setTimeout(() => {
     console.error('[Backend] Forced shutdown after timeout.');
     process.exit(1);
-  }, 10000);
+  }, 3000).unref();
 };
 process.on('SIGTERM', () => shutdown('SIGTERM'));
 process.on('SIGINT', () => shutdown('SIGINT'));
@@ -629,6 +640,13 @@ process.on('unhandledRejection', (reason) => {
 });
 process.on('uncaughtException', (err) => {
   console.error('[Backend] Uncaught exception:', err?.stack || err);
+});
+
+server.on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error(`[FATAL] Port ${PORT} is already in use. Exiting.`);
+    process.exit(1);
+  }
 });
 
 server.listen(PORT, () => {

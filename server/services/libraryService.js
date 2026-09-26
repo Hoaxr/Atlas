@@ -3,7 +3,7 @@ const { getAiredCutoffSql } = require('../utils/airDate');
 const tmdbService = require('./tmdbService');
 const fs = require('fs');
 const path = require('path');
-const { getNamingConfig, sanitizeTitle } = require('./mediaManagementService');
+const { getNamingConfig, sanitizeTitle, formatSeriesFolder } = require('./mediaManagementService');
 const { isWatchedSyncEnabled } = require('../utils/settings');
 const eventBus = require('./eventBus');
 const imageService = require('./imageService');
@@ -325,7 +325,7 @@ const addShow = async (tmdbId, rootFolderPath = null, monitorLevel = 'all') => {
         || libraryRoot.toLowerCase().includes('tv') || libraryRoot.toLowerCase().includes('show');
       const config = getNamingConfig();
       
-      const folderName = sanitizeTitle(showDetails.name, config);
+      const folderName = formatSeriesFolder(showDetails.name, year, config);
 
       const destFolder = isDedicatedPath 
         ? path.join(libraryRoot, folderName) 

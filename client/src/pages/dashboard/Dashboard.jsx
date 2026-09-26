@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { VirtuosoGrid } from 'react-virtuoso';
 import api from '../../lib/api';
-import { Activity, Film, Tv, Search, CheckCircle2, AlertCircle, Bookmark, LayoutGrid, List, Star, ArrowRight, Zap, Eye, EyeOff, X, RotateCcw, Filter as FilterIcon, CheckSquare, Square, Columns, Plus } from 'lucide-react';
+import { Activity, Film, Tv, Search, CheckCircle2, AlertCircle, Bookmark, LayoutGrid, List, Star, ArrowRight, Zap, Eye, EyeOff, X, RotateCcw, Filter as FilterIcon, CheckSquare, Square, Columns, Plus, ArrowUpDown, Tag, Layers, CircleDot } from 'lucide-react';
 import { customAlert, customConfirm } from '../../utils/alerts';
 import { cachedMovies, cachedShows, setCachedMovies, setCachedShows } from '../../lib/libraryCache';
 import { parseResolution, parseCodec } from '../../lib/format';
@@ -689,13 +689,18 @@ export default function Dashboard() {
 
       {/* Main Controls & Filters Row */}
       <div className="space-y-3">
-        <div className="flex flex-wrap items-center justify-between gap-2.5 sm:gap-3">
-          <div className="flex flex-wrap items-center gap-2 sm:gap-2.5 min-w-0 flex-1">
+        <div className="flex items-center justify-between gap-2 sm:gap-3">
+          {/* Filters: Icon buttons on mobile, full text pills on desktop */}
+          <div className="flex items-center gap-1.5 sm:gap-2.5 min-w-0">
             <FilterSelect
               value={sort}
               onChange={e => setSort(e.target.value)}
               label="Recently Added"
               hideAll
+              defaultValue="added_desc"
+              icon={ArrowUpDown}
+              mobileIconOnly
+              title="Sort"
               className="shrink-0"
             >
               <option value="added_desc">Recently Added</option>
@@ -712,6 +717,9 @@ export default function Dashboard() {
                 values={genreFilter}
                 onChange={setGenreFilter}
                 label="All Genres"
+                icon={Tag}
+                mobileIconOnly
+                title="Genres"
                 className="shrink-0"
               >
                 {allGenres.map(g => (
@@ -725,6 +733,9 @@ export default function Dashboard() {
                 value={qualityFilter}
                 onChange={e => setQualityFilter(e.target.value)}
                 label="All Quality"
+                icon={Layers}
+                mobileIconOnly
+                title="Quality"
                 className="shrink-0"
               >
                 {allQualities.map(q => (
@@ -737,6 +748,9 @@ export default function Dashboard() {
               value={statusFilter}
               onChange={e => setStatusFilter(e.target.value)}
               label="All Status"
+              icon={CircleDot}
+              mobileIconOnly
+              title="Status"
               className="shrink-0"
             >
               <option value="monitored">Monitored</option>
@@ -748,140 +762,195 @@ export default function Dashboard() {
 
             <button
               onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
-              className={`flex items-center gap-1.5 text-xs sm:text-sm font-medium px-3.5 py-2 rounded-xl border transition-colors shrink-0 ${
+              title="Filters"
+              aria-label="Filters"
+              className={`relative w-9 h-9 sm:w-auto sm:h-auto p-0 sm:px-3.5 sm:py-2 flex items-center justify-center gap-1.5 text-xs sm:text-sm font-medium rounded-xl border transition-colors shrink-0 ${
                 showAdvancedFilters || activeFilterCount > 0
                   ? 'bg-[#0d2b51] text-[#e7ecf6] border-[#1b4273] shadow-sm'
                   : 'bg-[#101e31] text-slate-300 border-[#1c2d46] hover:border-slate-600 hover:text-white'
               }`}
             >
-              <FilterIcon className="w-3.5 h-3.5 shrink-0" />
-              <span>Filters</span>
+              <FilterIcon className={`w-4 h-4 sm:w-3.5 sm:h-3.5 shrink-0 ${showAdvancedFilters || activeFilterCount > 0 ? 'text-cyan-400' : 'text-slate-400'}`} />
+              <span className="hidden sm:inline">Filters</span>
               {activeFilterCount > 0 && (
-                <span className="bg-sky-500 text-slate-950 rounded-full px-1.5 py-0.2 text-[10px] font-bold ml-0.5">
+                <span className="absolute -top-1 -right-1 sm:static sm:top-auto sm:right-auto bg-cyan-500 text-slate-950 rounded-full min-w-[16px] h-4 sm:min-w-0 sm:h-auto sm:px-1.5 sm:py-0.2 text-[10px] font-bold flex items-center justify-center sm:ml-0.5 shadow-sm">
                   {activeFilterCount}
                 </span>
               )}
             </button>
           </div>
 
-          <div className="flex items-center gap-4 sm:gap-5 shrink-0 ml-auto">
-            {/* Grid / List toggle + column picker */}
-            <div className="relative flex items-center bg-[#101e31] p-1 rounded-xl border border-[#1c2d46] shadow-inner select-none shrink-0">
-              <button
-                type="button"
-                onClick={() => setViewStyle('grid')}
-                className={`relative h-8 px-3.5 flex items-center justify-center rounded-lg text-xs font-semibold transition-colors duration-150 ${
-                  viewStyle === 'grid' ? 'text-slate-950 font-bold' : 'text-slate-100 hover:text-white'
-                }`}
-                title="Grid View"
-              >
-                {viewStyle === 'grid' && (
-                  <motion.div
-                    layoutId="dashboard-view-slider"
-                    className="absolute inset-0 rounded-lg bg-gradient-to-b from-[#38a7f4] to-[#2291ea] shadow-sm"
-                    transition={{ type: 'spring', stiffness: 500, damping: 35 }}
-                  />
-                )}
-                <LayoutGrid className={`relative z-10 w-4 h-4 transition-colors duration-150 ${viewStyle === 'grid' ? 'text-slate-950' : 'text-slate-100'}`} />
-              </button>
-              <button
-                type="button"
-                onClick={() => setViewStyle('list')}
-                className={`relative h-8 px-3.5 flex items-center justify-center rounded-lg text-xs font-semibold transition-colors duration-150 ${
-                  viewStyle === 'list' ? 'text-slate-950 font-bold' : 'text-slate-100 hover:text-white'
-                }`}
-                title="List View"
-              >
-                {viewStyle === 'list' && (
-                  <motion.div
-                    layoutId="dashboard-view-slider"
-                    className="absolute inset-0 rounded-lg bg-gradient-to-b from-[#38a7f4] to-[#2291ea] shadow-sm"
-                    transition={{ type: 'spring', stiffness: 500, damping: 35 }}
-                  />
-                )}
-                <List className={`relative z-10 w-4 h-4 transition-colors duration-150 ${viewStyle === 'list' ? 'text-slate-950' : 'text-slate-100'}`} />
-              </button>
+          {/* Right side: View controls + desktop count */}
+          <div className="flex items-center justify-end gap-3 sm:gap-5 shrink-0 ml-auto">
+            {/* Desktop-only item count */}
+            <span className="text-xs text-slate-400 font-medium hidden sm:inline truncate">
+              {displayItems.length} {displayItems.length === 1 ? (viewMode === 'movies' ? 'movie' : 'show') : (viewMode === 'movies' ? 'movies' : 'shows')}
+            </span>
 
-              {viewStyle === 'list' && (
-                <div ref={columnsMenuRef} className="relative ml-0.5 flex items-center pr-0.5">
-                  <div className="w-px h-4 bg-[#1c2d46] mx-1" />
-                  <button
-                    onClick={() => setColumnsMenuOpen(!columnsMenuOpen)}
-                    className={`p-1.5 rounded-lg transition-colors ${
-                      columnsMenuOpen ? 'bg-[#16273f] text-cyan-400 font-medium shadow-sm' : 'text-slate-100 hover:text-white'
-                    }`}
-                    title="Table Columns"
-                    aria-label="Table Columns"
-                    aria-expanded={columnsMenuOpen}
-                  >
-                    <Columns className="w-4 h-4" />
-                  </button>
-                  {columnsMenuOpen && (
-                    <div className="absolute right-0 top-full mt-2 w-48 bg-[#0e1a2b] border border-[#1c2d46] rounded-xl shadow-xl shadow-black/40 z-[60] overflow-hidden">
-                      <div className="px-3.5 py-2 border-b border-[#1c2d46] text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Columns</div>
-                      <div className="p-1.5 flex flex-col gap-0.5">
-                        {columnOrder.filter(col => {
-                          const def = COLUMN_DEFS[col];
-                          if (!def) return false;
-                          if (col === 'seasons' && viewMode !== 'shows') return false;
-                          if (col === 'episodes' && viewMode !== 'shows') return false;
-                          if (col === 'subtitles' && viewMode !== 'movies') return false;
-                          return true;
-                        }).map(col => (
-                          <label key={col} className="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg hover:bg-slate-800/60 cursor-pointer transition-colors group" onClick={(e) => { e.preventDefault(); setTableColumns(prev => ({ ...prev, [col]: !prev[col] })); }}>
-                            {tableColumns[col] ? (
-                              <div className="w-4 h-4 rounded bg-cyan-500/15 border border-cyan-500/40 flex items-center justify-center">
-                                <CheckSquare className="w-3.5 h-3.5 text-cyan-400" />
-                              </div>
-                            ) : (
-                              <div className="w-4 h-4 rounded bg-slate-900 border border-slate-700/60 group-hover:border-slate-600 transition-colors" />
-                            )}
-                            <span className="text-xs text-slate-300 capitalize select-none group-hover:text-white transition-colors">{col}</span>
-                          </label>
-                        ))}
-                      </div>
-                    </div>
+            <div className="flex items-center gap-4 sm:gap-5 shrink-0 ml-auto sm:ml-0">
+              {/* Grid / List toggle + column picker */}
+              <div className="relative flex items-center bg-[#101e31] p-1 rounded-xl border border-[#1c2d46] shadow-inner select-none shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setViewStyle('grid')}
+                  className={`relative h-8 px-3.5 flex items-center justify-center rounded-lg text-xs font-semibold transition-colors duration-150 ${
+                    viewStyle === 'grid' ? 'text-slate-950 font-bold' : 'text-slate-100 hover:text-white'
+                  }`}
+                  title="Grid View"
+                >
+                  {viewStyle === 'grid' && (
+                    <motion.div
+                      layoutId="dashboard-view-slider"
+                      className="absolute inset-0 rounded-lg bg-gradient-to-b from-[#38a7f4] to-[#2291ea] shadow-sm"
+                      transition={{ type: 'spring', stiffness: 500, damping: 35 }}
+                    />
                   )}
+                  <LayoutGrid className={`relative z-10 w-4 h-4 transition-colors duration-150 ${viewStyle === 'grid' ? 'text-slate-950' : 'text-slate-100'}`} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewStyle('list')}
+                  className={`relative h-8 px-3.5 flex items-center justify-center rounded-lg text-xs font-semibold transition-colors duration-150 ${
+                    viewStyle === 'list' ? 'text-slate-950 font-bold' : 'text-slate-100 hover:text-white'
+                  }`}
+                  title="List View"
+                >
+                  {viewStyle === 'list' && (
+                    <motion.div
+                      layoutId="dashboard-view-slider"
+                      className="absolute inset-0 rounded-lg bg-gradient-to-b from-[#38a7f4] to-[#2291ea] shadow-sm"
+                      transition={{ type: 'spring', stiffness: 500, damping: 35 }}
+                    />
+                  )}
+                  <List className={`relative z-10 w-4 h-4 transition-colors duration-150 ${viewStyle === 'list' ? 'text-slate-950' : 'text-slate-100'}`} />
+                </button>
+
+                {viewStyle === 'list' && (
+                  <div ref={columnsMenuRef} className="relative ml-0.5 flex items-center pr-0.5">
+                    <div className="w-px h-4 bg-[#1c2d46] mx-1" />
+                    <button
+                      onClick={() => setColumnsMenuOpen(!columnsMenuOpen)}
+                      className={`p-1.5 rounded-lg transition-colors ${
+                        columnsMenuOpen ? 'bg-[#16273f] text-cyan-400 font-medium shadow-sm' : 'text-slate-100 hover:text-white'
+                      }`}
+                      title="Table Columns"
+                      aria-label="Table Columns"
+                      aria-expanded={columnsMenuOpen}
+                    >
+                      <Columns className="w-4 h-4" />
+                    </button>
+                    {columnsMenuOpen && (
+                      <div className="absolute right-0 top-full mt-2 w-48 bg-[#0e1a2b] border border-[#1c2d46] rounded-xl shadow-xl shadow-black/40 z-[60] overflow-hidden">
+                        <div className="px-3.5 py-2 border-b border-[#1c2d46] text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Columns</div>
+                        <div className="p-1.5 flex flex-col gap-0.5">
+                          {columnOrder.filter(col => {
+                            const def = COLUMN_DEFS[col];
+                            if (!def) return false;
+                            if (col === 'seasons' && viewMode !== 'shows') return false;
+                            if (col === 'episodes' && viewMode !== 'shows') return false;
+                            if (col === 'subtitles' && viewMode !== 'movies') return false;
+                            return true;
+                          }).map(col => (
+                            <label key={col} className="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg hover:bg-slate-800/60 cursor-pointer transition-colors group" onClick={(e) => { e.preventDefault(); setTableColumns(prev => ({ ...prev, [col]: !prev[col] })); }}>
+                              {tableColumns[col] ? (
+                                <div className="w-4 h-4 rounded bg-cyan-500/15 border border-cyan-500/40 flex items-center justify-center">
+                                  <CheckSquare className="w-3.5 h-3.5 text-cyan-400" />
+                                </div>
+                              ) : (
+                                <div className="w-4 h-4 rounded bg-slate-900 border border-slate-700/60 group-hover:border-slate-600 transition-colors" />
+                              )}
+                              <span className="text-xs text-slate-300 capitalize select-none group-hover:text-white transition-colors">{col}</span>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Poster Size Slider Control (Grid View only, hidden on mobile) */}
+              {viewStyle === 'grid' && (
+                <div className="hidden sm:flex items-center gap-2.5 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setPosterSize(prev => Math.max(90, prev - 15))}
+                    className="text-slate-100 hover:text-white transition-colors"
+                    title="Smaller posters"
+                  >
+                    <LayoutGrid className="w-4 h-4" />
+                  </button>
+                  <input
+                    type="range"
+                    min="90"
+                    max="240"
+                    step="5"
+                    value={posterSize}
+                    onChange={e => setPosterSize(Number(e.target.value))}
+                    onDoubleClick={() => setPosterSize(180)}
+                    title={`Poster size: ${posterSize}px`}
+                    style={{
+                      background: `linear-gradient(to right, #38a7f4 0%, #38a7f4 ${sliderPercent}%, #101e31 ${sliderPercent}%, #101e31 100%)`
+                    }}
+                    className="w-20 sm:w-28 md:w-32 h-1.5 rounded-full appearance-none cursor-pointer border border-[#1c2d46] [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3.5 [&::-webkit-slider-thumb]:h-3.5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-[#42a8f8] [&::-webkit-slider-thumb]:shadow-md [&::-webkit-slider-thumb]:cursor-pointer [&::-moz-range-thumb]:w-3.5 [&::-moz-range-thumb]:h-3.5 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-[#42a8f8] [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:cursor-pointer"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setPosterSize(prev => Math.min(240, prev + 15))}
+                    className="text-slate-100 hover:text-white transition-colors"
+                    title="Larger posters"
+                  >
+                    <LayoutGrid className="w-4 h-4" />
+                  </button>
                 </div>
               )}
             </div>
-
-            {/* Poster Size Slider Control (Grid View only) */}
-            {viewStyle === 'grid' && (
-              <div className="flex items-center gap-2.5 shrink-0">
-                <button
-                  type="button"
-                  onClick={() => setPosterSize(prev => Math.max(90, prev - 15))}
-                  className="text-slate-100 hover:text-white transition-colors"
-                  title="Smaller posters"
-                >
-                  <LayoutGrid className="w-4 h-4" />
-                </button>
-                <input
-                  type="range"
-                  min="90"
-                  max="240"
-                  step="5"
-                  value={posterSize}
-                  onChange={e => setPosterSize(Number(e.target.value))}
-                  onDoubleClick={() => setPosterSize(180)}
-                  title={`Poster size: ${posterSize}px`}
-                  style={{
-                    background: `linear-gradient(to right, #38a7f4 0%, #38a7f4 ${sliderPercent}%, #101e31 ${sliderPercent}%, #101e31 100%)`
-                  }}
-                  className="w-20 sm:w-28 md:w-32 h-1.5 rounded-full appearance-none cursor-pointer border border-[#1c2d46] [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3.5 [&::-webkit-slider-thumb]:h-3.5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-[#42a8f8] [&::-webkit-slider-thumb]:shadow-md [&::-webkit-slider-thumb]:cursor-pointer [&::-moz-range-thumb]:w-3.5 [&::-moz-range-thumb]:h-3.5 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-[#42a8f8] [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:cursor-pointer"
-                />
-                <button
-                  type="button"
-                  onClick={() => setPosterSize(prev => Math.min(240, prev + 15))}
-                  className="text-slate-100 hover:text-white transition-colors"
-                  title="Larger posters"
-                >
-                  <LayoutGrid className="w-4 h-4" />
-                </button>
-              </div>
-            )}
           </div>
+        </div>
+
+        {/* Mobile secondary bar: item count & poster resize slider */}
+        <div className="flex sm:hidden items-center justify-between gap-3 px-0.5 pt-0.5">
+          <span className="text-xs text-slate-400 font-medium truncate">
+            {displayItems.length} {displayItems.length === 1 ? (viewMode === 'movies' ? 'movie' : 'show') : (viewMode === 'movies' ? 'movies' : 'shows')}
+          </span>
+
+          {viewStyle === 'grid' && (
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => setPosterSize(prev => Math.max(90, prev - 15))}
+                className="p-1 text-slate-400 hover:text-white transition-colors"
+                title="Smaller posters"
+                aria-label="Smaller posters"
+              >
+                <LayoutGrid className="w-3.5 h-3.5" />
+              </button>
+              <input
+                type="range"
+                min="90"
+                max="240"
+                step="5"
+                value={posterSize}
+                onChange={e => setPosterSize(Number(e.target.value))}
+                onDoubleClick={() => setPosterSize(180)}
+                title={`Poster size: ${posterSize}px`}
+                aria-label="Poster size"
+                style={{
+                  background: `linear-gradient(to right, #38a7f4 0%, #38a7f4 ${sliderPercent}%, #101e31 ${sliderPercent}%, #101e31 100%)`
+                }}
+                className="w-28 xs:w-32 h-1.5 rounded-full appearance-none cursor-pointer border border-[#1c2d46] [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-[#42a8f8] [&::-webkit-slider-thumb]:shadow-md [&::-webkit-slider-thumb]:cursor-pointer [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-[#42a8f8] [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:cursor-pointer"
+              />
+              <button
+                type="button"
+                onClick={() => setPosterSize(prev => Math.min(240, prev + 15))}
+                className="p-1 text-slate-400 hover:text-white transition-colors"
+                title="Larger posters"
+                aria-label="Larger posters"
+              >
+                <LayoutGrid className="w-4.5 h-4.5" />
+              </button>
+            </div>
+          )}
         </div>
 
         {showAdvancedFilters && (

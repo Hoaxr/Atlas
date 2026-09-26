@@ -82,7 +82,7 @@ export default function NamingTab({ settings, setSettings }) {
 
   const previewSeasonFolder = fillTvTags(settings?.seasonFolderFormat, 'Season {Season Number}');
   const previewEpisodeFile = fillTvTags(settings?.standardEpisodeFormat, '{Show Title} - S{Season}E{Episode} - {Episode Title}');
-  const previewSeriesFolder = fillTvTags(settings?.seriesFolderFormat, previewShow);
+  const previewSeriesFolder = fillTvTags(settings?.seriesFolderFormat, '{Show Title} ({Release Year})');
   const previewTvPath = `/media/tv/${previewSeriesFolder}/${previewSeasonFolder}/${previewEpisodeFile}.mkv`;
 
   const previewArtist = (settings?.musicArtistFolderFormat || '{Artist Name}').replace(/{Artist Name}/gi, 'Daft Punk');

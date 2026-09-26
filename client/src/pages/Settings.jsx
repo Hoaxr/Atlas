@@ -74,13 +74,21 @@ export default function Settings() {
     return 'general';
   });
 
+  const navigateToTab = (tabId) => {
+    const resolved = LEGACY_TAB_ALIASES[tabId] || tabId;
+    if (SETTINGS_GROUPS.some(g => g.tabs.some(t => t.id === resolved))) {
+      setActiveTab(resolved);
+      setSearchParams({ tab: resolved });
+    }
+  };
+
   useEffect(() => {
     const tabParam = searchParams.get('tab');
     const resolved = LEGACY_TAB_ALIASES[tabParam] || tabParam;
-    if (resolved && resolved !== activeTab && SETTINGS_GROUPS.some(g => g.tabs.some(t => t.id === resolved))) {
+    if (resolved && SETTINGS_GROUPS.some(g => g.tabs.some(t => t.id === resolved))) {
       setActiveTab(resolved);
     }
-  }, [searchParams, activeTab]);
+  }, [searchParams]);
 
   const [settings, setSettings] = useState({
     authEnabled: false,
@@ -105,6 +113,7 @@ export default function Settings() {
     renameEpisodes: true,
     standardEpisodeFormat: '{Show Title} - S{Season}E{Episode} - {Episode Title}',
     seasonFolderFormat: 'Season {Season Number}',
+    seriesFolderFormat: '{Show Title} ({Release Year})',
     musicArtistFolderFormat: '{Artist Name}',
     musicAlbumFolderFormat: '{Album Title} ({Year})',
     musicTrackFileFormat: '{TrackNumber:00} - {Track Title}',
@@ -115,7 +124,23 @@ export default function Settings() {
     deleteTorrentFiles: false,
     hideCompletedDownloads: true,
     downloadPathMapping: ['', ''],
-    autoDeleteWatchedDays: ''
+    autoDeleteWatchedDays: '',
+    plexUrl: '',
+    plexToken: '',
+    jellyfinUrl: '',
+    jellyfinApiKey: '',
+    embyUrl: '',
+    embyApiKey: '',
+    autoWatchUser: '',
+    discordWebhookUrl: '',
+    telegramBotToken: '',
+    telegramChatId: '',
+    pushoverAppToken: '',
+    pushoverUserKey: '',
+    notifyOnGrab: false,
+    notifyOnDownload: false,
+    notifyOnPlaybackStart: false,
+    notifyOnRequest: false
   });
   const [paths, setPaths] = useState([]);
   const [indexers, setIndexers] = useState([]);
@@ -317,6 +342,7 @@ export default function Settings() {
           renameEpisodes: res.data.data.renameEpisodes ?? true,
           standardEpisodeFormat: res.data.data.standardEpisodeFormat || '{Show Title} - S{Season}E{Episode} - {Episode Title}',
           seasonFolderFormat: res.data.data.seasonFolderFormat || 'Season {Season Number}',
+          seriesFolderFormat: res.data.data.seriesFolderFormat || '{Show Title} ({Release Year})',
           musicArtistFolderFormat: res.data.data.musicArtistFolderFormat || '{Artist Name}',
           musicAlbumFolderFormat: res.data.data.musicAlbumFolderFormat || '{Album Title} ({Year})',
           musicTrackFileFormat: res.data.data.musicTrackFileFormat || '{TrackNumber:00} - {Track Title}',
@@ -326,7 +352,23 @@ export default function Settings() {
           deleteTorrentFiles: res.data.data.deleteTorrentFiles ?? false,
           hideCompletedDownloads: res.data.data.hideCompletedDownloads ?? true,
           downloadPathMapping: Array.isArray(res.data.data.downloadPathMapping) ? res.data.data.downloadPathMapping : ['', ''],
-          defaultQualityProfileId: res.data.data.defaultQualityProfileId || null
+          defaultQualityProfileId: res.data.data.defaultQualityProfileId || null,
+          plexUrl: res.data.data.plexUrl || '',
+          plexToken: res.data.data.plexToken || '',
+          jellyfinUrl: res.data.data.jellyfinUrl || '',
+          jellyfinApiKey: res.data.data.jellyfinApiKey || '',
+          embyUrl: res.data.data.embyUrl || '',
+          embyApiKey: res.data.data.embyApiKey || '',
+          autoWatchUser: res.data.data.autoWatchUser || '',
+          discordWebhookUrl: res.data.data.discordWebhookUrl || '',
+          telegramBotToken: res.data.data.telegramBotToken || '',
+          telegramChatId: res.data.data.telegramChatId || '',
+          pushoverAppToken: res.data.data.pushoverAppToken || '',
+          pushoverUserKey: res.data.data.pushoverUserKey || '',
+          notifyOnGrab: res.data.data.notifyOnGrab === 'true',
+          notifyOnDownload: res.data.data.notifyOnDownload === 'true',
+          notifyOnPlaybackStart: res.data.data.notifyOnPlaybackStart === 'true',
+          notifyOnRequest: res.data.data.notifyOnRequest === 'true'
         });
         setIndexers(res.data.data.indexers || []);
         setClients(res.data.data.clients || []);
@@ -400,6 +442,7 @@ export default function Settings() {
         renameEpisodes: settings.renameEpisodes,
         standardEpisodeFormat: settings.standardEpisodeFormat,
         seasonFolderFormat: settings.seasonFolderFormat,
+        seriesFolderFormat: settings.seriesFolderFormat,
         musicArtistFolderFormat: settings.musicArtistFolderFormat,
         musicAlbumFolderFormat: settings.musicAlbumFolderFormat,
         musicTrackFileFormat: settings.musicTrackFileFormat
@@ -438,14 +481,19 @@ export default function Settings() {
       if (payload.authEnabled !== undefined) {
         payload.authEnabled = payload.authEnabled.toString();
       }
+      if (payload.notifyOnGrab !== undefined) payload.notifyOnGrab = payload.notifyOnGrab.toString();
+      if (payload.notifyOnDownload !== undefined) payload.notifyOnDownload = payload.notifyOnDownload.toString();
+      if (payload.notifyOnPlaybackStart !== undefined) payload.notifyOnPlaybackStart = payload.notifyOnPlaybackStart.toString();
+      if (payload.notifyOnRequest !== undefined) payload.notifyOnRequest = payload.notifyOnRequest.toString();
       await api.post('/settings', payload);
       invalidateSettingsCache();
       customAlert('Settings saved!', 'success');
       if (settings.simklWatchedSync && settings.simklAccessToken) {
         api.post('/tasks/simkl_watched_sync/run').catch(() => {});
       }
-    } catch {
-      customAlert('Failed to save settings.', 'error');
+    } catch (err) {
+      const msg = err.response?.data?.errors?.join(', ') || err.response?.data?.message || 'Failed to save settings.';
+      customAlert(msg, 'error');
     }
   };
 
@@ -615,9 +663,7 @@ export default function Settings() {
                 type="button"
                 onClick={() => {
                   if (currentGroup.id !== group.id) {
-                    const nextTab = group.tabs[0].id;
-                    setActiveTab(nextTab);
-                    setSearchParams({ tab: nextTab });
+                    navigateToTab(group.tabs[0].id);
                   }
                 }}
                 className={`relative px-4 sm:px-5 py-2 flex items-center justify-center gap-2 rounded-lg text-xs sm:text-sm font-bold tracking-tight whitespace-nowrap transition-colors duration-150 ${
@@ -660,8 +706,7 @@ export default function Settings() {
                   key={tab.id}
                   type="button"
                   onClick={() => {
-                    setActiveTab(tab.id);
-                    setSearchParams({ tab: tab.id });
+                    navigateToTab(tab.id);
                   }}
                   className={`relative flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-medium whitespace-nowrap transition-colors duration-150 ${
                     isTabActive
@@ -710,7 +755,14 @@ export default function Settings() {
             keyStatuses={keyStatuses}
           />
         )}
-        {(activeTab === 'general' || activeTab === 'security') && <GeneralTab settings={settings} setSettings={setSettings} onNavigateTab={setActiveTab} />}
+        {(activeTab === 'general' || activeTab === 'security') && (
+          <GeneralTab
+            settings={settings}
+            setSettings={setSettings}
+            onNavigateTab={navigateToTab}
+            handleSave={handleSave}
+          />
+        )}
         {activeTab === 'users' && <UsersTab />}
 
         {activeTab === 'indexers' && (
@@ -789,7 +841,7 @@ export default function Settings() {
             handleAddPath={handleAddPath} fetchPaths={fetchPaths}
             handleScan={handleScan} handleStopScan={handleStopScan} isScanning={isScanning} scanProgress={scanProgress}
             scanResults={scanResults} isStaleResults={isStaleResults} setScanResults={setScanResults} setIsStaleResults={setIsStaleResults}
-            settings={settings} setSettings={setSettings}
+            settings={settings} setSettings={setSettings} onNavigateTab={navigateToTab}
           />
         )}
       </div>

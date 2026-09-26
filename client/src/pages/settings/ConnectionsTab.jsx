@@ -10,6 +10,7 @@ import ToggleRow from '../../components/shared/ToggleRow';
 export default function ConnectionsTab({
   settings,
   setSettings,
+  handleSave: _parentHandleSave,
   simklDeviceCode,
   simklUserCode,
   simklVerificationUrl,
@@ -19,21 +20,22 @@ export default function ConnectionsTab({
   keyStatuses
 }) {
   const [localSettings, setLocalSettings] = useState({
-    plexUrl: '',
-    plexToken: '',
-    jellyfinUrl: '',
-    jellyfinApiKey: '',
-    embyUrl: '',
-    embyApiKey: '',
-    autoWatchUser: '',
-    discordWebhookUrl: '',
-    telegramBotToken: '',
-    telegramChatId: '',
-    pushoverAppToken: '',
-    pushoverUserKey: '',
-    notifyOnGrab: false,
-    notifyOnDownload: false,
-    notifyOnPlaybackStart: false
+    plexUrl: settings?.plexUrl || '',
+    plexToken: settings?.plexToken || '',
+    jellyfinUrl: settings?.jellyfinUrl || '',
+    jellyfinApiKey: settings?.jellyfinApiKey || '',
+    embyUrl: settings?.embyUrl || '',
+    embyApiKey: settings?.embyApiKey || '',
+    autoWatchUser: settings?.autoWatchUser || '',
+    discordWebhookUrl: settings?.discordWebhookUrl || '',
+    telegramBotToken: settings?.telegramBotToken || '',
+    telegramChatId: settings?.telegramChatId || '',
+    pushoverAppToken: settings?.pushoverAppToken || '',
+    pushoverUserKey: settings?.pushoverUserKey || '',
+    notifyOnGrab: settings?.notifyOnGrab || false,
+    notifyOnDownload: settings?.notifyOnDownload || false,
+    notifyOnPlaybackStart: settings?.notifyOnPlaybackStart || false,
+    notifyOnRequest: settings?.notifyOnRequest || false
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -64,7 +66,7 @@ export default function ConnectionsTab({
       const res = await api.get('/settings');
       if (res.data.status === 'success') {
         const data = res.data.data;
-        setLocalSettings({
+        const newVals = {
           plexUrl: data.plexUrl || '',
           plexToken: data.plexToken || '',
           jellyfinUrl: data.jellyfinUrl || '',
@@ -81,7 +83,14 @@ export default function ConnectionsTab({
           notifyOnDownload: data.notifyOnDownload === 'true',
           notifyOnPlaybackStart: data.notifyOnPlaybackStart === 'true',
           notifyOnRequest: data.notifyOnRequest === 'true'
-        });
+        };
+        setLocalSettings(newVals);
+        if (setSettings) {
+          setSettings(prev => ({
+            ...prev,
+            ...newVals
+          }));
+        }
         
         // Auto test configured media servers
         if (data.plexUrl && data.plexToken) testMediaServer('plex', data.plexUrl, data.plexToken, true);
@@ -171,6 +180,12 @@ export default function ConnectionsTab({
           ...(plexUrl ? { plexUrl } : {})
         };
         setLocalSettings(updatedSettings);
+        if (setSettings) {
+          setSettings(prev => ({
+            ...prev,
+            ...updatedSettings
+          }));
+        }
         setPlexOAuth({ loading: false, pinId: null, code: null, authUrl: null, polling: false });
 
         if (plexUrl) {
@@ -245,25 +260,29 @@ export default function ConnectionsTab({
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
+    const val = type === 'checkbox' ? checked : value;
     setLocalSettings(prev => ({
       ...prev,
-      [name]: type === 'checkbox' ? checked : value
+      [name]: val
     }));
+    if (setSettings) {
+      setSettings(prev => ({
+        ...prev,
+        [name]: val
+      }));
+    }
   };
 
   const handleSave = async () => {
     setSaving(true);
     try {
-      // Save media server and notification settings
+      // Save media server, tracked users, notifications, and API settings in one request
       await api.post('/settings', {
         ...localSettings,
-        notifyOnGrab: localSettings.notifyOnGrab.toString(),
-        notifyOnDownload: localSettings.notifyOnDownload.toString(),
-        notifyOnPlaybackStart: localSettings.notifyOnPlaybackStart.toString(),
-        notifyOnRequest: localSettings.notifyOnRequest.toString()
-      });
-      // Also save parent API settings (TMDB key, Simkl keys, etc.)
-      await api.post('/settings', {
+        notifyOnGrab: localSettings.notifyOnGrab?.toString(),
+        notifyOnDownload: localSettings.notifyOnDownload?.toString(),
+        notifyOnPlaybackStart: localSettings.notifyOnPlaybackStart?.toString(),
+        notifyOnRequest: localSettings.notifyOnRequest?.toString(),
         tmdbApiKey: typeof settings?.tmdbApiKey === 'string' && settings.tmdbApiKey.startsWith('***')
           ? undefined
           : settings?.tmdbApiKey,
@@ -272,10 +291,12 @@ export default function ConnectionsTab({
           : settings?.simklClientId,
         simklWatchedSync: settings?.simklWatchedSync,
       });
-      customAlert('Connection settings saved');
+      if (fetchSettings) fetchSettings();
+      customAlert('Connection settings saved', 'success');
     } catch (err) {
       console.error(err);
-      customAlert('Failed to save settings');
+      const msg = err.response?.data?.errors?.join(', ') || err.response?.data?.message || 'Failed to save settings';
+      customAlert(msg, 'error');
     } finally {
       setSaving(false);
     }
@@ -321,13 +342,24 @@ export default function ConnectionsTab({
 
   return (
     <div className="space-y-6 w-full animate-fade-in">
-      <div>
-        <h2 className="text-lg sm:text-xl font-bold font-display text-slate-100 flex items-center gap-2.5 mb-1.5">
-          <Link className="w-5 h-5 text-cyan-400 shrink-0" /> Connections
-        </h2>
-        <p className="text-xs sm:text-sm text-slate-400 leading-relaxed">
-          Connect Atlas to your media servers, tracking lists, and metadata providers.
-        </p>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h2 className="text-lg sm:text-xl font-bold font-display text-slate-100 flex items-center gap-2.5 mb-1.5">
+            <Link className="w-5 h-5 text-cyan-400 shrink-0" /> Connections
+          </h2>
+          <p className="text-xs sm:text-sm text-slate-400 leading-relaxed">
+            Connect Atlas to your media servers, tracking lists, and metadata providers.
+          </p>
+        </div>
+        <Button
+          variant="primary"
+          icon={Save}
+          disabled={saving}
+          onClick={handleSave}
+          className="shrink-0 w-fit"
+        >
+          {saving ? 'Saving...' : 'Save Changes'}
+        </Button>
       </div>
 
       {/* ── API's & Integrations ── */}

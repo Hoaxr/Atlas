@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Shield, Save, CheckSquare, Square, Globe, Sliders, Users, ArrowRight } from 'lucide-react';
+import Button from '../../components/shared/Button';
 import CustomSelect from '../../components/shared/CustomSelect';
 import ToggleRow from '../../components/shared/ToggleRow';
 import BackupTab from './BackupTab';
@@ -33,7 +34,7 @@ const LANDING_PAGE_OPTIONS = [
   { value: '/downloads', label: 'Activity / Downloads' }
 ];
 
-export default function GeneralTab({ settings, setSettings, onNavigateTab }) {
+export default function GeneralTab({ settings, setSettings, onNavigateTab, handleSave }) {
   const [landingPage, setLandingPage] = useState(() => localStorage.getItem('atlas_landing_page') || '/tracker');
 
   const handleChange = (e) => {
@@ -51,7 +52,17 @@ export default function GeneralTab({ settings, setSettings, onNavigateTab }) {
         title="General Settings" 
         icon={Sliders}
         description="Configure authentication, regional timing, application preferences, and database backups."
-      />
+      >
+        {handleSave && (
+          <Button
+            variant="primary"
+            icon={Save}
+            onClick={handleSave}
+          >
+            Save Changes
+          </Button>
+        )}
+      </SettingsHeader>
 
       {/* Authentication */}
       <SettingsSection>

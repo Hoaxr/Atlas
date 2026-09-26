@@ -6,7 +6,7 @@ import PasswordInput from '../../components/shared/PasswordInput';
 import Button from '../../components/shared/Button';
 import { SettingsSection, SettingsHeader, SettingsGroup, SettingsLabel, SettingsHelper } from '../../components/settings/layout';
 
-export default function IndexersTab({ settings, setSettings }) {
+export default function IndexersTab({ settings, setSettings, handleSave }) {
   const [isTesting, setIsTesting] = useState(false);
   const [testResult, setTestResult] = useState(null);
 

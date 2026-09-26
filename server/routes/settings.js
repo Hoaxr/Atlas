@@ -44,6 +44,7 @@ router.get('/', (req, res, next) => {
     const renameEpisodes = getSetting('renameEpisodes') !== 'false';
     const standardEpisodeFormat = getSetting('standardEpisodeFormat') || '{Show Title} - S{Season}E{Episode} - {Episode Title}';
     const seasonFolderFormat = getSetting('seasonFolderFormat') || 'Season {Season Number}';
+    const seriesFolderFormat = getSetting('seriesFolderFormat') || '{Show Title} ({Release Year})';
     
     // Download Client Preferences
     const removeCompletedDownloads = getSetting('removeCompletedDownloads') === 'true'; // default false
@@ -80,7 +81,7 @@ router.get('/', (req, res, next) => {
         geminiApiKey: mask(geminiApiKey),
         deepseekApiKey: mask(deepseekApiKey),
         claudeApiKey: mask(claudeApiKey),
-        prowlarrUrl: isAdmin ? prowlarrUrl : '',
+        prowlarrUrl: isAdmin ? (prowlarrUrl || '') : '',
         prowlarrApiKey: mask(prowlarrApiKey),
         translationProvider,
         targetLang,
@@ -98,6 +99,7 @@ router.get('/', (req, res, next) => {
         renameEpisodes,
         standardEpisodeFormat,
         seasonFolderFormat,
+        seriesFolderFormat,
         musicArtistFolderFormat: getSetting('musicArtistFolderFormat') || '{Artist Name}',
         musicAlbumFolderFormat: getSetting('musicAlbumFolderFormat') || '{Album Title} ({Year})',
         musicTrackFileFormat: getSetting('musicTrackFileFormat') || '{TrackNumber:00} - {Track Title}',
@@ -113,17 +115,17 @@ router.get('/', (req, res, next) => {
         profiles,
         libraryPaths,
         authEnabled: getSetting('authEnabled') || 'false',
-        authUsername: isAdmin ? getSetting('authUsername') : '',
+        authUsername: isAdmin ? (getSetting('authUsername') || '') : '',
         timezone: getSetting('timezone') || '',
-        plexUrl: isAdmin ? getSetting('plexUrl') : '',
+        plexUrl: isAdmin ? (getSetting('plexUrl') || '') : '',
         plexToken: mask(getSetting('plexToken')),
-        jellyfinUrl: isAdmin ? getSetting('jellyfinUrl') : '',
+        jellyfinUrl: isAdmin ? (getSetting('jellyfinUrl') || '') : '',
         jellyfinApiKey: mask(getSetting('jellyfinApiKey')),
-        embyUrl: isAdmin ? getSetting('embyUrl') : '',
+        embyUrl: isAdmin ? (getSetting('embyUrl') || '') : '',
         embyApiKey: mask(getSetting('embyApiKey')),
         discordWebhookUrl: mask(getSetting('discordWebhookUrl')),
         telegramBotToken: mask(getSetting('telegramBotToken')),
-        telegramChatId: isAdmin ? getSetting('telegramChatId') : '',
+        telegramChatId: isAdmin ? (getSetting('telegramChatId') || '') : '',
         notifyOnGrab: getSetting('notifyOnGrab') || 'false',
         notifyOnDownload: getSetting('notifyOnDownload') || 'false',
         notifyOnPlaybackStart: getSetting('notifyOnPlaybackStart') || 'false',
@@ -131,7 +133,7 @@ router.get('/', (req, res, next) => {
         pushoverAppToken: mask(getSetting('pushoverAppToken')),
         pushoverUserKey: mask(getSetting('pushoverUserKey')),
         autoDeleteWatchedEnabled: getSetting('autoDeleteWatchedEnabled') === 'true',
-        autoDeleteWatchedDays: getSetting('autoDeleteWatchedDays'),
+        autoDeleteWatchedDays: getSetting('autoDeleteWatchedDays') || '',
         autoWatchUser: isAdmin ? (getSetting('autoWatchUser') || '') : ''
       }
     });
@@ -168,17 +170,18 @@ const SETTING_SCHEMA = {
   renameEpisodes:           { type: 'boolean' },
   standardEpisodeFormat:    { type: 'string' },
   seasonFolderFormat:       { type: 'string' },
+  seriesFolderFormat:       { type: 'string' },
   musicArtistFolderFormat:  { type: 'string' },
   musicAlbumFolderFormat:   { type: 'string' },
   musicTrackFileFormat:     { type: 'string' },
-  writeMusicMetadata:       { type: 'string' },
+  writeMusicMetadata:       { type: 'boolean' },
   musicImportMode:          { type: 'string' },
-  musicMonitorNewReleases:  { type: 'string' },
+  musicMonitorNewReleases:  { type: 'boolean' },
   removeCompletedDownloads: { type: 'boolean' },
   deleteTorrentFiles:       { type: 'boolean' },
   hideCompletedDownloads:   { type: 'boolean' },
   downloadPathMapping:      { type: 'json' },
-  authEnabled:              { type: 'string' },
+  authEnabled:              { type: 'boolean' },
   authUsername:             { type: 'string' },
   plexUrl:                  { type: 'url' },
   plexToken:                { type: 'apiKey' },
@@ -220,19 +223,21 @@ const validateAndTransform = (key, value) => {
   }
 
   if (schema.type === 'url') {
-    if (value !== '' && !isValidUrl(value)) return { valid: false, reason: `${key}: must be a valid URL` };
+    if (!value || value === '') return { valid: true, transformed: '' };
+    if (!isValidUrl(value)) return { valid: false, reason: `${key}: must be a valid URL` };
     return { valid: true, transformed: value };
   }
 
   if (schema.type === 'webhookUrl') {
     // Secret-bearing value: never let a masked placeholder overwrite the real URL
     if (isMasked(value)) return { valid: false, skip: true };
-    if (value !== '' && !isValidUrl(value)) return { valid: false, reason: `${key}: must be a valid URL` };
+    if (!value || value === '') return { valid: true, transformed: '' };
+    if (!isValidUrl(value)) return { valid: false, reason: `${key}: must be a valid URL` };
     return { valid: true, transformed: value };
   }
 
   if (schema.type === 'boolean') {
-    return { valid: true, transformed: value ? 'true' : 'false' };
+    return { valid: true, transformed: (value === true || value === 'true') ? 'true' : 'false' };
   }
 
   if (schema.type === 'json') {
@@ -245,13 +250,14 @@ const validateAndTransform = (key, value) => {
   }
 
   if (schema.type === 'string') {
-    if (schema.allowed && !schema.allowed.includes(value)) {
+    const strVal = String(value ?? '');
+    if (schema.allowed && !schema.allowed.includes(strVal)) {
       return { valid: false, reason: `${key}: must be one of: ${schema.allowed.join(', ')}` };
     }
-    return { valid: true, transformed: value };
+    return { valid: true, transformed: strVal };
   }
 
-  return { valid: true, transformed: value };
+  return { valid: true, transformed: String(value ?? '') };
 };
 
 router.post('/', async (req, res, next) => {
@@ -281,11 +287,11 @@ router.post('/', async (req, res, next) => {
         "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value"
       );
       db.transaction(() => {
-        for (const [key, val] of settingsToWrite) upsertSetting.run(key, val);
+        for (const [key, val] of settingsToWrite) upsertSetting.run(key, String(val ?? ''));
       })();
       // Sync to the in-memory settings cache
       const { setSetting: setSettingFn } = require('../utils/settings');
-      for (const [key, val] of settingsToWrite) setSettingFn(key, val);
+      for (const [key, val] of settingsToWrite) setSettingFn(key, String(val ?? ''));
     }
 
     if (errors.length === 0 && body.timezone !== undefined) {

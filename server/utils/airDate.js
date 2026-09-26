@@ -20,6 +20,10 @@ const getUserTimezone = () => {
 const invalidateTimezoneCache = () => {
   cachedTz = null;
   cachedShift = null;
+  try {
+    const { invalidateSettingsCache } = require('./settings');
+    invalidateSettingsCache();
+  } catch { /* ignore */ }
 };
 
 const _tzOffsetMinutes = (zone, utcMillis) => {

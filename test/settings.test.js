@@ -52,6 +52,18 @@ test('Settings System & Masking Rules', async (t) => {
     assert.strictEqual(colonReplacement, 'delete');
   });
 
+  await t.test('seriesFolderFormat default resolves to "{Show Title} ({Release Year})"', () => {
+    db.prepare('DELETE FROM settings WHERE key = ?').run('seriesFolderFormat');
+    invalidateSettingsCache();
+    const seriesFolderFormat = getSetting('seriesFolderFormat') || '{Show Title} ({Release Year})';
+    assert.strictEqual(seriesFolderFormat, '{Show Title} ({Release Year})');
+
+    const { formatSeriesFolder, getNamingConfig } = require('../server/services/mediaManagementService');
+    const config = getNamingConfig();
+    assert.strictEqual(formatSeriesFolder('Breaking Bad', 2008, config), 'Breaking Bad (2008)');
+    assert.strictEqual(formatSeriesFolder('Lost', null, config), 'Lost');
+  });
+
   await t.test('Settings cache and persistence lifecycle', () => {
     setSetting(testKey, 'atlas_test_value_1');
     assert.strictEqual(getSetting(testKey), 'atlas_test_value_1');

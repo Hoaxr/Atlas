@@ -25,7 +25,8 @@ const getNamingConfig = () => {
     standardMovieFormat: getSetting('standardMovieFormat') || '{Movie Title} ({Release Year})',
     renameEpisodes: getSetting('renameEpisodes') !== 'false',
     standardEpisodeFormat: getSetting('standardEpisodeFormat') || '{Show Title} - S{Season}E{Episode} - {Episode Title}',
-    seasonFolderFormat: getSetting('seasonFolderFormat') || 'Season {Season Number}'
+    seasonFolderFormat: getSetting('seasonFolderFormat') || 'Season {Season Number}',
+    seriesFolderFormat: getSetting('seriesFolderFormat') || '{Show Title} ({Release Year})'
   };
 };
 
@@ -50,6 +51,19 @@ const sanitizeTitle = (title, config) => {
 
   // Strip trailing dots and spaces to protect SMB/NFS/Windows filesystems
   return sanitized.trim().replace(/\s+/g, ' ').replace(/[.\s]+$/, '');
+};
+
+const formatSeriesFolder = (title, year, config) => {
+  const format = config.seriesFolderFormat || '{Show Title} ({Release Year})';
+  const sanitizedTitle = sanitizeTitle(title, config);
+  let formatted = format
+    .replace(/{Show Title}/gi, sanitizedTitle)
+    .replace(/{Series Title}/gi, sanitizedTitle)
+    .replace(/{Release Year}/gi, year ? String(year) : '')
+    .trim()
+    .replace(/\(\s*\)/g, '')
+    .trim();
+  return formatted || sanitizedTitle;
 };
 
 
@@ -909,7 +923,8 @@ const importEpisode = async (torrent, episode) => {
     const s = episode.season_number.toString().padStart(2, '0');
     const e = episode.episode_number.toString().padStart(2, '0');
     
-    const showFolder = sanitizeTitle(episode.show_title, config);
+    const showRow = db.prepare('SELECT folder_path, title, year FROM shows WHERE id = ?').get(episode.show_id);
+    const showFolder = formatSeriesFolder(episode.show_title, showRow?.year, config);
     let fileName = `${showFolder} - S${s}E${e}`;
     
     if (config.renameEpisodes) {
@@ -930,7 +945,6 @@ const importEpisode = async (torrent, episode) => {
     
     if (!seasonFolder) seasonFolder = `Season ${s}`;
 
-    const showRow = db.prepare('SELECT folder_path FROM shows WHERE id = ?').get(episode.show_id);
     const destFolder = (showRow && showRow.folder_path && path.isAbsolute(showRow.folder_path))
       ? path.join(showRow.folder_path, seasonFolder)
       : (isDedicatedPath ? path.join(libraryRoot, showFolder, seasonFolder) : path.join(libraryRoot, 'TV Shows', showFolder, seasonFolder));
@@ -1296,5 +1310,6 @@ module.exports = {
   init,
   getNamingConfig,
   sanitizeTitle,
+  formatSeriesFolder,
   resetDownloadsNotInClient
 };
