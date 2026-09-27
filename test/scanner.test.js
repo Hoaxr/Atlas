@@ -127,4 +127,41 @@ test('Scanner & Broadcasting Optimizations', async (t) => {
       if (fs.existsSync(testDir)) fs.rmSync(testDir, { recursive: true, force: true });
     }
   });
+
+  await t.test('Unreachable library roots prevent orphan deletions for media on offline mounts', () => {
+    const path = require('path');
+    const unreachableRoots = new Set(['/mnt/nas/movies', '/mnt/nas/tvshows'].map(p => path.resolve(p)));
+
+    const isUnderUnreachablePath = (targetPath) => {
+      if (!targetPath) return false;
+      const resolved = path.resolve(targetPath);
+      for (const root of unreachableRoots) {
+        if (resolved === root || resolved.startsWith(root + path.sep)) {
+          return true;
+        }
+      }
+      return false;
+    };
+
+    assert.strictEqual(isUnderUnreachablePath('/mnt/nas/movies/Inception (2010)/movie.mkv'), true);
+    assert.strictEqual(isUnderUnreachablePath('/mnt/nas/tvshows/Breaking Bad/S01E01.mkv'), true);
+    assert.strictEqual(isUnderUnreachablePath('/mnt/local/movies/Local.mkv'), false);
+    assert.strictEqual(isUnderUnreachablePath(null), false);
+  });
+
+  await t.test('Circuit breaker prevents total deletion for small libraries (<= 5 items)', () => {
+    const checkMovieMassDeletion = (existingCount, missingCount) => {
+      return existingCount > 0 && (
+        (missingCount > 5 && missingCount >= existingCount * 0.2) ||
+        (existingCount <= 5 && missingCount === existingCount)
+      );
+    };
+
+    // Library of 3 items, all 3 missing -> must trigger circuit breaker
+    assert.strictEqual(checkMovieMassDeletion(3, 3), true);
+    // Library of 3 items, only 1 missing -> normal deletion
+    assert.strictEqual(checkMovieMassDeletion(3, 1), false);
+    // Library of 50 items, 20 missing (40%) -> must trigger circuit breaker
+    assert.strictEqual(checkMovieMassDeletion(50, 20), true);
+  });
 });

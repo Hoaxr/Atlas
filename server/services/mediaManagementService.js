@@ -401,8 +401,11 @@ const matchSeasonPackToTorrent = (torrent, showTitle, seasonNumber) => {
 const resetDownloadsNotInClient = async (torrentList) => {
   let list = torrentList;
   if (!list) {
+    const clients = downloadClientService.getAllClients();
+    if (clients.length === 0) return; // No clients configured, don't reset state
+
     try {
-      list = await downloadClientService.getTorrents();
+      list = await downloadClientService.getTorrents(null, { throwOnAllFailed: true });
       if (!Array.isArray(list)) return;
     } catch (err) {
       console.warn('[MediaManagement] Cannot fetch torrents to reset state — aborting reset:', err.message);
@@ -530,7 +533,7 @@ const runMediaManagement = async () => {
   try {
     let torrentList;
     try {
-      torrentList = await downloadClientService.getTorrents() || [];
+      torrentList = await downloadClientService.getTorrents(null, { throwOnAllFailed: true }) || [];
     } catch (clientErr) {
       console.warn('[MediaManagement] Download client unreachable — skipping this run:', clientErr.message);
       return 'skipped';

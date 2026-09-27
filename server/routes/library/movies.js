@@ -190,7 +190,8 @@ router.delete('/:id/files/:filename', async (req, res, next) => {
       }
       // Update database — clear the file reference only if the deleted file is the primary movie file
       if (movie.file_path && path.basename(movie.file_path) === safeFilename) {
-        db.prepare("UPDATE movies SET file_path = NULL, file_size = 0, status = 'monitored' WHERE id = ?").run(req.params.id);
+        db.prepare("UPDATE movies SET file_path = NULL, file_size = 0, subtitles = '[]', status = 'monitored' WHERE id = ?").run(req.params.id);
+        invalidateStats();
       } else if (movie.file_path) {
         try {
           const langs = await scanSubtitleLangs(movie.file_path);

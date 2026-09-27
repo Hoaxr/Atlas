@@ -6,6 +6,8 @@ let requestId = 1;
 // Cookie cache keyed by client endpoint — re-authenticated only on auth failure
 const sessions = new Map();
 const sessionKey = (client) => `${client.host}:${client.port}`;
+const lastErrorLog = new Map();
+const ERROR_LOG_COOLDOWN = 60 * 1000;
 
 const rpcCall = (client, method, params = []) => {
   return {
@@ -17,14 +19,26 @@ const rpcCall = (client, method, params = []) => {
 };
 
 const login = async (client) => {
+  const key = sessionKey(client);
   try {
     const response = await http({
       ...rpcCall(client, 'auth.login', [client.password])
     });
-    if (response.data?.result) return response.headers['set-cookie']?.[0];
+    if (response.data?.result) {
+      if (lastErrorLog.has(key)) {
+        console.log(`[Deluge] Connection restored to ${client.host}:${client.port}`);
+        lastErrorLog.delete(key);
+      }
+      return response.headers['set-cookie']?.[0];
+    }
     return null;
   } catch (err) {
-    console.error('Deluge login failed:', err.message);
+    const now = Date.now();
+    const last = lastErrorLog.get(key) || 0;
+    if (now - last > ERROR_LOG_COOLDOWN) {
+      console.warn(`[Deluge] Login/connect failed (${client.host}:${client.port}): ${err.message}`);
+      lastErrorLog.set(key, now);
+    }
     return null;
   }
 };

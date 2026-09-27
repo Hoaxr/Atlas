@@ -118,7 +118,10 @@ const enrichTorrents = (torrents) => {
   });
 };
 
-const getTorrents = async (clientId = null) => {
+const lastFetchWarn = new Map();
+const WARN_COOLDOWN = 60 * 1000; // 60 seconds
+
+const getTorrents = async (clientId = null, options = {}) => {
   let clients = [];
   if (clientId) {
     const c = getClient(clientId);
@@ -127,6 +130,9 @@ const getTorrents = async (clientId = null) => {
     clients = getAllClients();
   }
   if (clients.length === 0) return [];
+
+  let failedCount = 0;
+  let lastError = null;
 
   const results = await Promise.allSettled(
     clients.map(async (client) => {
@@ -140,11 +146,23 @@ const getTorrents = async (clientId = null) => {
           clientName: t.clientName || clientName
         }));
       } catch (err) {
-        console.warn(`[DownloadClient] Failed to fetch torrents from client ${client.name || client.type} (id=${client.id}):`, err.message);
+        failedCount++;
+        lastError = err;
+        const key = `${client.id}:${client.type}`;
+        const now = Date.now();
+        const last = lastFetchWarn.get(key) || 0;
+        if (now - last > WARN_COOLDOWN) {
+          console.warn(`[DownloadClient] Failed to fetch torrents from client ${client.name || client.type} (id=${client.id}):`, err.message);
+          lastFetchWarn.set(key, now);
+        }
         return [];
       }
     })
   );
+
+  if (options.throwOnAllFailed && clients.length > 0 && failedCount === clients.length) {
+    throw new Error(`All download clients (${clients.length}) are unreachable: ${lastError?.message || 'unknown error'}`);
+  }
 
   const allTorrents = [];
   for (const res of results) {

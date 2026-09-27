@@ -124,6 +124,22 @@ const doScan = async (mode = 'full') => {
     // Build a quick lookup set of all file paths on disk (for orphan detection)
     const filesOnDisk = new Set(allFiles.map(f => f.path));
 
+    // Collect unreachable library roots so media residing on an offline drive is NEVER deleted or reset
+    const unreachableRoots = new Set(
+      (scanProgress.unreachablePaths || []).map(u => path.resolve(u.path))
+    );
+
+    const isUnderUnreachablePath = (targetPath) => {
+      if (!targetPath) return false;
+      const resolved = path.resolve(targetPath);
+      for (const root of unreachableRoots) {
+        if (resolved === root || resolved.startsWith(root + path.sep)) {
+          return true;
+        }
+      }
+      return false;
+    };
+
     // Clean up orphaned items — movies/shows whose files were manually deleted
     scanProgress.currentPhase = 'Checking for removed files...';
     let removedCount = 0;
@@ -134,9 +150,11 @@ const doScan = async (mode = 'full') => {
       const moviesToUpdate = [];
       for (const m of existingMovies) {
         if (scanProgress.cancelled) throw new Error('Scan cancelled by user');
+        if (isUnderUnreachablePath(m.file_path)) continue;
         if (filesOnDisk.has(m.file_path)) continue;
         try { await fs.access(m.file_path); continue; } catch { /* file gone */ }
         const parentDir = path.dirname(m.file_path);
+        if (isUnderUnreachablePath(parentDir)) continue;
         try { await fs.access(parentDir); } catch {
           moviesToDelete.push({ id: m.id, title: m.title, parentDir });
           removedCount++;
@@ -147,11 +165,19 @@ const doScan = async (mode = 'full') => {
       }
       
       // Circuit breaker: do not delete or unmonitor movies en masse if drive is unreachable
-      if (existingMovies.length > 0 && moviesToDelete.length > 5 && moviesToDelete.length >= existingMovies.length * 0.2) {
+      const massMovieDeletion = existingMovies.length > 0 && (
+        (moviesToDelete.length > 5 && moviesToDelete.length >= existingMovies.length * 0.2) ||
+        (existingMovies.length <= 5 && moviesToDelete.length === existingMovies.length)
+      );
+      if (massMovieDeletion) {
         console.error(`[Scanner] Circuit breaker triggered! ${moviesToDelete.length}/${existingMovies.length} movies appear missing (folder deleted). Aborting movie deletion to protect library.`);
         moviesToDelete.length = 0;
       }
-      if (existingMovies.length > 0 && (moviesToDelete.length + moviesToUpdate.length) > 10 && (moviesToDelete.length + moviesToUpdate.length) >= existingMovies.length * 0.5) {
+      const massMovieUpdate = existingMovies.length > 0 && (
+        ((moviesToDelete.length + moviesToUpdate.length) > 10 && (moviesToDelete.length + moviesToUpdate.length) >= existingMovies.length * 0.5) ||
+        (existingMovies.length <= 10 && (moviesToDelete.length + moviesToUpdate.length) === existingMovies.length)
+      );
+      if (massMovieUpdate) {
         console.error(`[Scanner] Circuit breaker triggered! Over 50% of movies (${moviesToDelete.length + moviesToUpdate.length}/${existingMovies.length}) appear missing. Aborting movie updates/deletions to protect library.`);
         moviesToDelete.length = 0;
         moviesToUpdate.length = 0;
@@ -179,6 +205,7 @@ const doScan = async (mode = 'full') => {
       const hasDownloadedEpStmt = db.prepare("SELECT 1 FROM episodes WHERE show_id = ? AND file_path IS NOT NULL LIMIT 1");
       for (const s of existingShows) {
         if (scanProgress.cancelled) throw new Error('Scan cancelled by user');
+        if (isUnderUnreachablePath(s.folder_path)) continue;
         const stillExists = allFiles.some(f => f.path.startsWith(s.folder_path + path.sep));
         if (stillExists) continue;
         try { await fs.access(s.folder_path); continue; } catch { /* gone */ }
@@ -193,7 +220,11 @@ const doScan = async (mode = 'full') => {
       }
       
       // Circuit breaker: do not delete shows en masse if drive is unreachable
-      if (existingShows.length > 0 && showsToDelete.length > 5 && showsToDelete.length >= existingShows.length * 0.2) {
+      const massShowDeletion = existingShows.length > 0 && (
+        (showsToDelete.length > 5 && showsToDelete.length >= existingShows.length * 0.2) ||
+        (existingShows.length <= 5 && showsToDelete.length === existingShows.length)
+      );
+      if (massShowDeletion) {
         console.error(`[Scanner] Circuit breaker triggered! ${showsToDelete.length}/${existingShows.length} shows appear missing. Aborting show deletion to protect library.`);
         showsToDelete.length = 0;
       }
@@ -215,13 +246,18 @@ const doScan = async (mode = 'full') => {
       const orphanEpisodes = [];
       for (const ep of existingEpisodes) {
         if (scanProgress.cancelled) throw new Error('Scan cancelled by user');
+        if (isUnderUnreachablePath(ep.file_path)) continue;
         if (filesOnDisk.has(ep.file_path)) continue;
         try { await fs.access(ep.file_path); continue; } catch { /* file gone */ }
         orphanEpisodes.push(ep.id);
       }
 
       // Circuit breaker for orphan episodes
-      if (existingEpisodes.length > 0 && orphanEpisodes.length > 20 && orphanEpisodes.length >= existingEpisodes.length * 0.5) {
+      const massEpReset = existingEpisodes.length > 0 && (
+        (orphanEpisodes.length > 20 && orphanEpisodes.length >= existingEpisodes.length * 0.5) ||
+        (existingEpisodes.length <= 20 && orphanEpisodes.length === existingEpisodes.length)
+      );
+      if (massEpReset) {
         console.error(`[Scanner] Circuit breaker triggered! Over 50% of episodes (${orphanEpisodes.length}/${existingEpisodes.length}) appear missing. Aborting episode status resets to protect library.`);
         orphanEpisodes.length = 0;
       }

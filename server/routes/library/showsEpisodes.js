@@ -18,7 +18,7 @@ const { getMediaMetadata, parseAudioFromFileName } = require('../../utils/videoU
 const { isWatchedSyncEnabled, getSubtitlesInDir, extractLang, translateSrt, LANG_CODE } = require('./helpers');
 const simklService = require('../../services/simklService');
 const imageService = require('../../services/imageService');
-const { syncEpisodeSubtitles } = require('../../services/subtitles/sync');
+const { syncEpisodeSubtitles, invalidateStats } = require('../../services/subtitles/sync');
 
 router.post('/shows/:id/watched', async (req, res, next) => {
   try {
@@ -584,6 +584,9 @@ router.delete('/episodes/:id/subs/:code', async (req, res, next) => {
       return res.status(404).json({ status: 'error', message: `No "${req.params.code}" subtitle found for this episode` });
     }
 
+    await syncEpisodeSubtitles(episode.id, episode.file_path);
+    invalidateStats();
+
     res.json({ status: 'success', message: `Deleted "${req.params.code}" subtitle` });
   } catch (err) {
     next(err);
@@ -901,10 +904,25 @@ router.delete('/episodes/:id/file', async (req, res, next) => {
 
     if (deleteFiles && episode.file_path) {
       await fsp.unlink(episode.file_path).catch(() => {});
+      try {
+        const parsed = path.parse(episode.file_path);
+        const dir = parsed.dir;
+        const entries = await fsp.readdir(dir);
+        const subExts = ['.srt', '.sub', '.vtt', '.ass', '.ssa', '.smi', '.idx'];
+        for (const entry of entries) {
+          if (entry.startsWith(parsed.name)) {
+            const ext = path.extname(entry).toLowerCase();
+            if (subExts.includes(ext) || ext === '.nfo') {
+              await fsp.unlink(path.join(dir, entry)).catch(() => {});
+            }
+          }
+        }
+      } catch { /* ignore */ }
     }
 
-    db.prepare('UPDATE episodes SET file_path = NULL, scene_name = NULL, file_size = NULL, status = ? WHERE id = ?')
+    db.prepare("UPDATE episodes SET file_path = NULL, scene_name = NULL, file_size = NULL, subtitles = '[]', status = ? WHERE id = ?")
       .run('missing', req.params.id);
+    invalidateStats();
     res.json({ status: 'success', message: 'Episode file removed' });
   } catch (error) {
     next(error);

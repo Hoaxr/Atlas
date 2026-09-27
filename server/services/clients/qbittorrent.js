@@ -7,15 +7,28 @@ const http = axios.create({ timeout: 10000 });
 const sessions = new Map();
 const sessionKey = (client) => `${client.host}:${client.port}`;
 
+const lastErrorLog = new Map();
+const ERROR_LOG_COOLDOWN = 60 * 1000; // Log at most once per minute per host:port
+
 const login = async (client) => {
+  const key = sessionKey(client);
   try {
     const response = await http.post(`${client.host}:${client.port}/api/v2/auth/login`,
       `username=${encodeURIComponent(client.username)}&password=${encodeURIComponent(client.password)}`,
       { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
     );
+    if (lastErrorLog.has(key)) {
+      console.log(`[qBittorrent] Connection restored to ${client.host}:${client.port}`);
+      lastErrorLog.delete(key);
+    }
     return response.headers['set-cookie'] ? response.headers['set-cookie'][0] : null;
   } catch (err) {
-    console.error('qBittorrent login failed:', err.message);
+    const now = Date.now();
+    const last = lastErrorLog.get(key) || 0;
+    if (now - last > ERROR_LOG_COOLDOWN) {
+      console.warn(`[qBittorrent] Login/connect failed (${client.host}:${client.port}): ${err.message}`);
+      lastErrorLog.set(key, now);
+    }
     return null;
   }
 };
