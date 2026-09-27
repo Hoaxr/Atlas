@@ -1442,6 +1442,24 @@ const MIGRATIONS = [
         );
       `).run();
     }
+  },
+  {
+    id: 48,
+    name: 'cleanup_orphan_watch_progress_and_unwatched_timestamps',
+    run: (db) => {
+      db.prepare("UPDATE episodes SET watched_at = NULL WHERE watched = 0 AND watched_at IS NOT NULL;").run();
+      db.prepare("UPDATE movies SET watched_at = NULL WHERE watched = 0 AND watched_at IS NOT NULL;").run();
+      db.prepare(`
+        UPDATE episodes
+        SET watch_progress = 0
+        WHERE show_id IN (
+          SELECT show_id FROM episodes GROUP BY show_id HAVING SUM(watched) = 0
+        )
+        AND show_id NOT IN (
+          SELECT s.id FROM shows s JOIN watch_history w ON s.tmdb_id = w.tmdb_id
+        );
+      `).run();
+    }
   }
 ];
 

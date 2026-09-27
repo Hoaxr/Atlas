@@ -4,6 +4,7 @@ import { ThisWeekCard } from '../components/tracker/ThisWeekCard';
 import { useNavigate } from 'react-router-dom';
 import api from '../lib/api';
 import useWebSocket from '../lib/useWebSocket';
+import toast from 'react-hot-toast';
 import { 
   Clock, Film, Tv, Play, ChevronRight, ChevronLeft, Trash2, Undo2, 
   Calendar, CheckCircle2, TrendingUp, Zap
@@ -332,6 +333,27 @@ const Tracker = () => {
     }
   };
 
+  const handleDismissUpNext = async (itemKey, item, type) => {
+    try {
+      setUpNextEpisodes(prev => prev.filter(ep => {
+        const key = ep._type === 'episode' ? `ep-${ep.episode_id}` : `movie-${ep.id}`;
+        return key !== itemKey;
+      }));
+      await api.post('/tracker/dismiss', {
+        id: type === 'episode' ? item.episode_id : item.id,
+        tmdbId: item.tmdb_id,
+        type: type,
+        season: item.season_number,
+        episode: item.episode_number
+      });
+      api.get('/tracker/stats').then(res => setStats(res.data.stats)).catch(() => {});
+    } catch (err) {
+      console.error('Failed to dismiss up next item', err);
+      toast.error('Failed to remove from Continue Watching');
+      fetchData();
+    }
+  };
+
   // Group history chronologically by day with summaries
   const groupedHistory = useMemo(() => {
     const todayStr = new Date().toLocaleDateString('en-CA');
@@ -556,6 +578,7 @@ const Tracker = () => {
                 item={ep}
                 type={ep._type}
                 onMarkWatched={handleMarkWatched}
+                onDismiss={handleDismissUpNext}
               />
             ))}
           </div>

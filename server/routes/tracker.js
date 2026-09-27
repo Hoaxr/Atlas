@@ -578,6 +578,7 @@ router.get('/up-next', (req, res) => {
       LEFT JOIN ShowMax shm ON sf.show_id = shm.show_id
       LEFT JOIN TotalCount tc ON sf.show_id = tc.show_id
       WHERE sf.rn = 1
+        AND (COALESCE(wc.watched_episodes, 0) > 0 OR COALESCE(sf.watch_progress, 0) > 0)
       ORDER BY sf.show_title
       LIMIT 20
     `).all(EPISODE_AVG);
@@ -586,6 +587,54 @@ router.get('/up-next', (req, res) => {
   } catch (error) {
     console.error('[Tracker] /up-next error:', error);
     res.status(500).json({ error: 'Failed to fetch up-next' });
+  }
+});
+
+// Dismiss an item from "Continue Watching"
+router.post('/dismiss', async (req, res) => {
+  const { id, tmdbId, type, season, episode } = req.body;
+  if (!type && !id && !tmdbId) return res.status(400).json({ error: 'Missing parameters' });
+
+  try {
+    if (type === 'movie') {
+      if (id) {
+        db.prepare('UPDATE movies SET watch_progress = 0 WHERE id = ?').run(id);
+      }
+      if (tmdbId) {
+        db.prepare('UPDATE movies SET watch_progress = 0 WHERE tmdb_id = ?').run(tmdbId);
+      }
+    } else {
+      const sNum = season !== undefined ? parseInt(season, 10) : null;
+      const eNum = episode !== undefined ? parseInt(episode, 10) : null;
+
+      if (id) {
+        db.prepare('UPDATE episodes SET watch_progress = 0 WHERE id = ?').run(id);
+        const ep = db.prepare('SELECT show_id FROM episodes WHERE id = ?').get(id);
+        if (ep) {
+          const watchedCount = db.prepare('SELECT COUNT(*) as count FROM episodes WHERE show_id = ? AND watched = 1').get(ep.show_id);
+          if (!watchedCount || watchedCount.count === 0) {
+            db.prepare('UPDATE episodes SET watch_progress = 0 WHERE show_id = ?').run(ep.show_id);
+          }
+        }
+      } else if (tmdbId) {
+        const show = db.prepare('SELECT id FROM shows WHERE tmdb_id = ?').get(tmdbId);
+        if (show) {
+          if (sNum !== null && eNum !== null) {
+            db.prepare('UPDATE episodes SET watch_progress = 0 WHERE show_id = ? AND season_number = ? AND episode_number = ?').run(show.id, sNum, eNum);
+          }
+          const watchedCount = db.prepare('SELECT COUNT(*) as count FROM episodes WHERE show_id = ? AND watched = 1').get(show.id);
+          if (!watchedCount || watchedCount.count === 0) {
+            db.prepare('UPDATE episodes SET watch_progress = 0 WHERE show_id = ?').run(show.id);
+          }
+        }
+      }
+    }
+
+    invalidateStatsCache();
+    res.json({ success: true });
+  } catch (error) {
+    console.error('[Tracker] /dismiss error:', error);
+    res.status(500).json({ error: 'Failed to dismiss item' });
   }
 });
 
@@ -631,7 +680,7 @@ router.post('/mark-watched', async (req, res) => {
           db.prepare('INSERT INTO watch_history (tmdb_id, type, watched_at, runtime, user_id) VALUES (?, ?, ?, ?, ?)').run(tmdbId, 'movie', watchedAt, movie ? movie.runtime : null, userId);
         }
         if (movie) {
-          db.prepare('UPDATE movies SET watched = 1, watched_at = ? WHERE id = ?').run(watchedAt, movie.id);
+          db.prepare('UPDATE movies SET watched = 1, watched_at = ?, watch_progress = 0 WHERE id = ?').run(watchedAt, movie.id);
         }
       } else if (type === 'episode') {
         const show = db.prepare('SELECT id FROM shows WHERE tmdb_id = ?').get(tmdbId);
@@ -679,15 +728,19 @@ router.post('/mark-unwatched', async (req, res) => {
   try {
     if (type === 'movie') {
       db.prepare('DELETE FROM watch_history WHERE tmdb_id = ? AND type = ?').run(tmdbId, 'movie');
-      db.prepare('UPDATE movies SET watched = 0, watched_at = NULL WHERE tmdb_id = ?').run(tmdbId);
+      db.prepare('UPDATE movies SET watched = 0, watched_at = NULL, watch_progress = 0 WHERE tmdb_id = ?').run(tmdbId);
     } else if (type === 'episode') {
       const sNum = parseInt(season, 10);
       const eNum = parseInt(episode, 10);
       db.prepare('DELETE FROM watch_history WHERE tmdb_id = ? AND type = ? AND season_number = ? AND episode_number = ?').run(tmdbId, 'episode', sNum, eNum);
       const show = db.prepare('SELECT id FROM shows WHERE tmdb_id = ?').get(tmdbId);
       if (show) {
-        db.prepare('UPDATE episodes SET watched = 0, watched_at = NULL WHERE show_id = ? AND season_number = ? AND episode_number = ?').run(show.id, sNum, eNum);
-        db.prepare('UPDATE shows SET watched = 0 WHERE id = ?').run(show.id);
+        db.prepare('UPDATE episodes SET watched = 0, watched_at = NULL, watch_progress = 0 WHERE show_id = ? AND season_number = ? AND episode_number = ?').run(show.id, sNum, eNum);
+        const watchedCount = db.prepare('SELECT COUNT(*) as count FROM episodes WHERE show_id = ? AND watched = 1').get(show.id);
+        if (!watchedCount || watchedCount.count === 0) {
+          db.prepare('UPDATE episodes SET watch_progress = 0 WHERE show_id = ?').run(show.id);
+          db.prepare('UPDATE shows SET watched = 0 WHERE id = ?').run(show.id);
+        }
       }
     }
 
@@ -701,9 +754,6 @@ router.post('/mark-unwatched', async (req, res) => {
 
     invalidateStatsCache();
     res.json({ success: true });
-  } catch (error) {
-    console.error('[Tracker] /mark-unwatched error:', error);
-    res.status(500).json({ error: 'Failed to mark unwatched' });
   }
 });
 

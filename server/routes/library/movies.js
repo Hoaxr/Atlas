@@ -597,9 +597,13 @@ const simklService = require('../../services/simklService');
 
 router.post('/:id/watched', async (req, res, next) => {
   try {
-    const { watched } = req.body;
+    const isWatched = !!watched;
     const watchedAt = new Date().toISOString();
-    db.prepare(`UPDATE movies SET watched = ?, watched_at = ?${watched ? ', watch_progress = 0' : ''} WHERE id = ?`).run(watched ? 1 : 0, watchedAt, req.params.id);
+    if (isWatched) {
+      db.prepare('UPDATE movies SET watched = 1, watched_at = ?, watch_progress = 0 WHERE id = ?').run(watchedAt, req.params.id);
+    } else {
+      db.prepare('UPDATE movies SET watched = 0, watched_at = NULL, watch_progress = 0 WHERE id = ?').run(req.params.id);
+    }
     const movie = db.prepare('SELECT tmdb_id, runtime FROM movies WHERE id = ?').get(req.params.id);
     
     if (movie?.tmdb_id) {

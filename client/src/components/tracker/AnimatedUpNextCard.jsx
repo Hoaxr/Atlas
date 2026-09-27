@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import toast from 'react-hot-toast';
-import { CheckCircle2, Check, Tv, Film } from 'lucide-react';
+import { CheckCircle2, Check, Tv, Film, X } from 'lucide-react';
 import { tmdbImgUrl } from '../../lib/posterUrl';
 
 const formatRuntime = (minutes) => {
@@ -17,7 +17,7 @@ const formatRuntime = (minutes) => {
 // 8-12 burst particles for celebration
 const PARTICLE_ANGLES = Array.from({ length: 10 }, (_, i) => (i * 36 * Math.PI) / 180);
 
-export function AnimatedUpNextCard({ item, type, onMarkWatched }) {
+export function AnimatedUpNextCard({ item, type, onMarkWatched, onDismiss }) {
   const navigate = useNavigate();
   const [animState, setAnimState] = useState('idle'); // 'idle' | 'animating' | 'exiting'
 
@@ -38,6 +38,15 @@ export function AnimatedUpNextCard({ item, type, onMarkWatched }) {
       navigate(`/movies/${item.id}`);
     } else if (tmdbId) {
       navigate(`/${isEpisode ? 'shows' : 'movies'}/${tmdbId}`);
+    }
+  };
+
+  const handleDismiss = (e) => {
+    e.stopPropagation();
+    if (animState !== 'idle') return;
+    setAnimState('exiting');
+    if (onDismiss) {
+      onDismiss(itemKey, item, type);
     }
   };
 
@@ -143,6 +152,20 @@ export function AnimatedUpNextCard({ item, type, onMarkWatched }) {
         <span className="absolute top-2 left-2 sm:top-3 sm:left-3 px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-full text-[9px] sm:text-[10px] font-bold uppercase tracking-wider bg-cyan-600/80 text-white backdrop-blur-md shadow">
           {isEpisode ? `S${item.season_number} E${item.episode_number}` : 'Movie'}
         </span>
+
+        {/* DISMISS / REMOVE BUTTON */}
+        {onDismiss && !isCompleted && (
+          <motion.button
+            onClick={handleDismiss}
+            whileHover={{ scale: 1.1 }}
+            whileTap={{ scale: 0.9 }}
+            className="absolute top-2 right-2 sm:top-3 sm:right-3 z-20 p-1 sm:p-1.5 rounded-full bg-slate-900/80 hover:bg-rose-500 text-slate-300 hover:text-white border border-white/10 backdrop-blur-md transition-all duration-200 shadow-md opacity-80 sm:opacity-0 group-hover:opacity-100 focus:opacity-100 cursor-pointer"
+            title="Remove from Continue Watching"
+            aria-label="Remove from Continue Watching"
+          >
+            <X className="w-3 h-3 sm:w-3.5 sm:h-3.5 stroke-[2.5]" />
+          </motion.button>
+        )}
 
         {/* RUNTIME PILL (bottom-left of poster) */}
         {item.runtime && (

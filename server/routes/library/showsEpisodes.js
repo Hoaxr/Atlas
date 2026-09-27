@@ -25,11 +25,12 @@ router.post('/shows/:id/watched', async (req, res, next) => {
     const { watched } = req.body;
     const isWatched = !!watched;
     const watchedAt = new Date().toISOString();
-    const updateEpSql = isWatched
-      ? 'UPDATE episodes SET watched = ?, watched_at = ?, watch_progress = 0 WHERE show_id = ?'
-      : 'UPDATE episodes SET watched = ?, watched_at = ? WHERE show_id = ?';
     db.prepare('UPDATE shows SET watched = ? WHERE id = ?').run(isWatched ? 1 : 0, req.params.id);
-    db.prepare(updateEpSql).run(isWatched ? 1 : 0, watchedAt, req.params.id);
+    if (isWatched) {
+      db.prepare('UPDATE episodes SET watched = 1, watched_at = ?, watch_progress = 0 WHERE show_id = ?').run(watchedAt, req.params.id);
+    } else {
+      db.prepare('UPDATE episodes SET watched = 0, watched_at = NULL, watch_progress = 0 WHERE show_id = ?').run(req.params.id);
+    }
     const show = db.prepare('SELECT tmdb_id FROM shows WHERE id = ?').get(req.params.id);
     if (show?.tmdb_id) {
       if (isWatched) {
@@ -1025,10 +1026,17 @@ router.post('/shows/:id/seasons/:season/watched', async (req, res, next) => {
     const { watched } = req.body;
     const isWatched = watched === undefined ? true : !!watched;
     const watchedAt = new Date().toISOString();
-    const updateSeasonSql = isWatched
-      ? 'UPDATE episodes SET watched = ?, watched_at = ?, watch_progress = 0 WHERE show_id = ? AND season_number = ?'
-      : 'UPDATE episodes SET watched = ?, watched_at = ? WHERE show_id = ? AND season_number = ?';
-    const result = db.prepare(updateSeasonSql).run(isWatched ? 1 : 0, watchedAt, req.params.id, req.params.season);
+    let result;
+    if (isWatched) {
+      result = db.prepare('UPDATE episodes SET watched = 1, watched_at = ?, watch_progress = 0 WHERE show_id = ? AND season_number = ?').run(watchedAt, req.params.id, req.params.season);
+    } else {
+      result = db.prepare('UPDATE episodes SET watched = 0, watched_at = NULL, watch_progress = 0 WHERE show_id = ? AND season_number = ?').run(req.params.id, req.params.season);
+      const remainingWatched = db.prepare('SELECT COUNT(*) as count FROM episodes WHERE show_id = ? AND watched = 1').get(req.params.id);
+      if (!remainingWatched || remainingWatched.count === 0) {
+        db.prepare('UPDATE shows SET watched = 0 WHERE id = ?').run(req.params.id);
+        db.prepare('UPDATE episodes SET watch_progress = 0 WHERE show_id = ?').run(req.params.id);
+      }
+    }
 
     const show = db.prepare('SELECT tmdb_id FROM shows WHERE id = ?').get(req.params.id);
     if (show?.tmdb_id) {
@@ -1064,10 +1072,22 @@ router.post('/episodes/:id/watched', async (req, res, next) => {
     const ep = db.prepare('SELECT e.*, s.tmdb_id as show_tmdb_id FROM episodes e JOIN shows s ON e.show_id = s.id WHERE e.id = ?').get(req.params.id);
     if (!ep) return res.status(404).json({ status: 'error', message: 'Episode not found' });
 
-    const updateSql = isWatched
-      ? 'UPDATE episodes SET watched = ?, watched_at = ?, watch_progress = 0 WHERE id = ?'
-      : 'UPDATE episodes SET watched = ?, watched_at = ? WHERE id = ?';
-    db.prepare(updateSql).run(isWatched ? 1 : 0, watchedAt, req.params.id);
+    if (isWatched) {
+      db.prepare('UPDATE episodes SET watched = 1, watched_at = ?, watch_progress = 0 WHERE id = ?').run(watchedAt, req.params.id);
+      const allWatched = db.prepare('SELECT COUNT(*) as total, SUM(watched) as watched_count FROM episodes WHERE show_id = ? AND season_number > 0').get(ep.show_id);
+      if (allWatched && allWatched.total > 0 && allWatched.total === allWatched.watched_count) {
+        db.prepare('UPDATE shows SET watched = 1 WHERE id = ?').run(ep.show_id);
+      }
+    } else {
+      db.prepare('UPDATE episodes SET watched = 0, watched_at = NULL, watch_progress = 0 WHERE id = ?').run(req.params.id);
+      const remainingWatched = db.prepare('SELECT COUNT(*) as count FROM episodes WHERE show_id = ? AND watched = 1').get(ep.show_id);
+      if (!remainingWatched || remainingWatched.count === 0) {
+        db.prepare('UPDATE shows SET watched = 0 WHERE id = ?').run(ep.show_id);
+        db.prepare('UPDATE episodes SET watch_progress = 0 WHERE show_id = ?').run(ep.show_id);
+      } else {
+        db.prepare('UPDATE shows SET watched = 0 WHERE id = ?').run(ep.show_id);
+      }
+    }
 
     if (ep.show_tmdb_id) {
       if (isWatched) {
