@@ -754,6 +754,9 @@ router.post('/mark-unwatched', async (req, res) => {
 
     invalidateStatsCache();
     res.json({ success: true });
+  } catch (error) {
+    console.error('[Tracker] /mark-unwatched error:', error);
+    res.status(500).json({ error: 'Failed to mark unwatched' });
   }
 });
 
