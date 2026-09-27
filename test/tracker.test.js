@@ -216,4 +216,103 @@ test('Tracker & Continue Watching System', async (t) => {
     assert.strictEqual(movie.watched_at, null);
     assert.strictEqual(movie.watch_progress, 0);
   });
+
+  await t.test('watcherService.shouldTrackUser strictly restricts tracking to admin or configured users', () => {
+    const watcherService = require('../server/services/watcherService');
+    const { setSetting } = require('../server/utils/settings');
+
+    // Ensure test users exist
+    db.prepare("INSERT OR IGNORE INTO users (id, username, password, role) VALUES (77771, 'test_admin', 'hash', 'admin')").run();
+    db.prepare("INSERT OR IGNORE INTO users (id, username, password, role) VALUES (77772, 'other_member', 'hash', 'user')").run();
+
+    try {
+      // 1. With empty autoWatchUser setting:
+      setSetting('autoWatchUser', '');
+      setSetting('authUsername', '');
+
+      assert.strictEqual(watcherService.shouldTrackUser('test_admin'), true, 'Admin user should be tracked when autoWatchUser is empty');
+      assert.strictEqual(watcherService.shouldTrackUser('other_member'), false, 'Non-admin household user should NOT be tracked when autoWatchUser is empty');
+      assert.strictEqual(watcherService.shouldTrackUser('unknown_user'), false, 'Unknown user should NOT be tracked when autoWatchUser is empty');
+      assert.strictEqual(watcherService.shouldTrackUser(null), false, 'Null user should NOT be tracked');
+      assert.strictEqual(watcherService.shouldTrackUser(''), false, 'Empty user should NOT be tracked');
+
+      // 2. With specific autoWatchUser configured:
+      setSetting('autoWatchUser', 'custom_tracked, someone_else');
+      assert.strictEqual(watcherService.shouldTrackUser('custom_tracked'), true);
+      assert.strictEqual(watcherService.shouldTrackUser('someone_else'), true);
+      assert.strictEqual(watcherService.shouldTrackUser('test_admin'), false, 'Admin not in explicit list should NOT be tracked');
+      assert.strictEqual(watcherService.shouldTrackUser('other_member'), false);
+
+      // 3. With wildcard '*'
+      setSetting('autoWatchUser', '*');
+      assert.strictEqual(watcherService.shouldTrackUser('other_member'), true);
+      assert.strictEqual(watcherService.shouldTrackUser('random_user'), true);
+    } finally {
+      setSetting('autoWatchUser', '');
+      db.prepare('DELETE FROM users WHERE id IN (77771, 77772)').run();
+    }
+  });
+
+  await t.test('cleanUntrackedWatchHistory purges entries from untracked users while preserving tracked users', () => {
+    const watcherService = require('../server/services/watcherService');
+    const { setSetting } = require('../server/utils/settings');
+
+    // Setup users
+    db.prepare("INSERT OR IGNORE INTO users (id, username, password, role) VALUES (77771, 'test_admin', 'hash', 'admin')").run();
+    db.prepare("INSERT OR IGNORE INTO users (id, username, password, role) VALUES (77772, 'other_member', 'hash', 'user')").run();
+
+    setSetting('autoWatchUser', '');
+    setSetting('authUsername', 'test_admin');
+
+    const trackedShowId = 888891;
+    const trackedTmdbId = 9999991;
+    const untrackedShowId = 888892;
+    const untrackedTmdbId = 9999992;
+
+    // Create test shows
+    db.prepare("INSERT INTO shows (id, tmdb_id, title, status, watched) VALUES (?, ?, 'Tracked Show', 'continuing', 1)").run(trackedShowId, trackedTmdbId);
+    db.prepare("INSERT INTO shows (id, tmdb_id, title, status, watched) VALUES (?, ?, 'Untracked Show', 'continuing', 1)").run(untrackedShowId, untrackedTmdbId);
+
+    // Create test episodes marked as watched
+    db.prepare("INSERT INTO episodes (id, show_id, season_number, episode_number, title, status, watched, watch_progress, watched_at) VALUES (99891, ?, 1, 1, 'Ep 1', 'downloaded', 1, 100, '2026-09-27T10:00:00Z')").run(trackedShowId);
+    db.prepare("INSERT INTO episodes (id, show_id, season_number, episode_number, title, status, watched, watch_progress, watched_at) VALUES (99892, ?, 1, 1, 'Ep 1', 'downloaded', 1, 100, '2026-09-27T10:00:00Z')").run(untrackedShowId);
+
+    // Add watch history entries
+    db.prepare("INSERT INTO watch_history (tmdb_id, type, season_number, episode_number, watched_at, user_id) VALUES (?, 'episode', 1, 1, '2026-09-27T10:00:00Z', 77771)").run(trackedTmdbId);
+    db.prepare("INSERT INTO watch_history (tmdb_id, type, season_number, episode_number, watched_at, user_id) VALUES (?, 'episode', 1, 1, '2026-09-27T10:00:00Z', 77772)").run(untrackedTmdbId);
+
+    // Add play_history entries
+    db.prepare("INSERT INTO play_history (user, title, type, created_at) VALUES ('test_admin', 'Tracked Show - S01E01', 'episode', '2026-09-27 10:00:00')").run();
+    db.prepare("INSERT INTO play_history (user, title, type, created_at) VALUES ('other_member', 'Untracked Show - S01E01', 'episode', '2026-09-27 10:00:00')").run();
+
+    try {
+      const result = watcherService.cleanUntrackedWatchHistory();
+      assert.strictEqual(result.cleaned >= 1, true, 'Should have cleaned at least 1 untracked watch entry');
+
+      // Tracked episode must remain watched
+      const trackedEp = db.prepare('SELECT watched, watched_at FROM episodes WHERE id = 99891').get();
+      assert.strictEqual(trackedEp.watched, 1);
+      assert.ok(trackedEp.watched_at);
+      const trackedWh = db.prepare("SELECT * FROM watch_history WHERE tmdb_id = ? AND type = 'episode'").get(trackedTmdbId);
+      assert.ok(trackedWh, 'Tracked watch history entry must still exist');
+
+      // Untracked episode must be unmarked
+      const untrackedEp = db.prepare('SELECT watched, watched_at, watch_progress FROM episodes WHERE id = 99892').get();
+      assert.strictEqual(untrackedEp.watched, 0);
+      assert.strictEqual(untrackedEp.watched_at, null);
+      assert.strictEqual(untrackedEp.watch_progress, 0);
+      const untrackedWh = db.prepare("SELECT * FROM watch_history WHERE tmdb_id = ? AND type = 'episode'").get(untrackedTmdbId);
+      assert.strictEqual(untrackedWh, undefined, 'Untracked watch history entry must be deleted');
+    } finally {
+      // Clean up
+      db.prepare('DELETE FROM play_history WHERE user IN (?, ?)').run('test_admin', 'other_member');
+      db.prepare('DELETE FROM watch_history WHERE tmdb_id IN (?, ?)').run(trackedTmdbId, untrackedTmdbId);
+      db.prepare('DELETE FROM episodes WHERE show_id IN (?, ?)').run(trackedShowId, untrackedShowId);
+      db.prepare('DELETE FROM shows WHERE id IN (?, ?)').run(trackedShowId, untrackedShowId);
+      db.prepare('DELETE FROM users WHERE id IN (77771, 77772)').run();
+      setSetting('autoWatchUser', '');
+      setSetting('authUsername', '');
+    }
+  });
 });
+

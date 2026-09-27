@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { BellRing, Save, CheckSquare, Square, Link, Loader2, Key } from 'lucide-react';
+import { BellRing, Save, CheckSquare, Square, Link, Loader2, Key, Trash2, UserCheck } from 'lucide-react';
 import api from '../../lib/api';
 import { customAlert, customConfirm } from '../../utils/alerts';
 import PasswordInput from '../../components/shared/PasswordInput';
@@ -42,6 +42,8 @@ export default function ConnectionsTab({
   const [simklPulling, setSimklPulling] = useState(false);
   const [testStatuses, setTestStatuses] = useState({ plex: null, jellyfin: null, emby: null });
   const [testingMedia, setTestingMedia] = useState({ plex: false, jellyfin: false, emby: false });
+  const [detectedUsers, setDetectedUsers] = useState([]);
+  const [purgingUntracked, setPurgingUntracked] = useState(false);
     
   // Plex OAuth state
   const [plexOAuth, setPlexOAuth] = useState({
@@ -56,10 +58,56 @@ export default function ConnectionsTab({
 
   useEffect(() => {
     fetchConnectionsSettings();
+    fetchDetectedUsers();
     return () => { mountedRef.current = false; };
     // fetch once on mount; fetchConnectionsSettings reads only static config
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const fetchDetectedUsers = async () => {
+    try {
+      const res = await api.get('/watcher/stats');
+      if (res.data?.data?.topUsers) {
+        const users = res.data.data.topUsers.map(u => u.user).filter(Boolean);
+        if (mountedRef.current) setDetectedUsers(users);
+      }
+    } catch { /* ignore */ }
+  };
+
+  const handleAddTrackedUser = (username) => {
+    const currentList = localSettings.autoWatchUser
+      ? localSettings.autoWatchUser.split(',').map(s => s.trim()).filter(Boolean)
+      : [];
+    if (!currentList.includes(username)) {
+      const updated = [...currentList, username].join(', ');
+      setLocalSettings(prev => ({ ...prev, autoWatchUser: updated }));
+      if (setSettings) setSettings(prev => ({ ...prev, autoWatchUser: updated }));
+    }
+  };
+
+  const handlePurgeUntracked = async () => {
+    const ok = await customConfirm(
+      'This will remove watch history and unmark watched status for any media played by users other than your configured tracked user(s). Continue?',
+      {
+        title: 'Purge Untracked History?',
+        confirmText: 'Purge Now',
+        type: 'warning'
+      }
+    );
+    if (!ok) return;
+
+    setPurgingUntracked(true);
+    try {
+      const res = await api.post('/tracker/clean-untracked');
+      const count = res.data?.cleaned ?? 0;
+      customAlert(`Purged ${count} untracked watch history entries.`, 'success');
+      fetchDetectedUsers();
+    } catch (err) {
+      customAlert(err.response?.data?.error || err.message || 'Failed to purge untracked watch history', 'error');
+    } finally {
+      if (mountedRef.current) setPurgingUntracked(false);
+    }
+  };
 
   const fetchConnectionsSettings = async () => {
     try {
@@ -642,11 +690,23 @@ export default function ConnectionsTab({
 
           {/* Tracked Media Server User(s) */}
           <div className="p-4 sm:p-5 bg-[#101e31] rounded-xl border border-[#1c2d46] hover:border-[#274063] transition-colors space-y-3.5">
-            <div>
-              <h3 className="text-base font-bold font-display text-cyan-400">Tracked Media Server User(s)</h3>
-              <p className="text-xs text-slate-400 mt-1">
-                Only playback from these usernames on Plex/Jellyfin/Emby will update watch progress, auto-mark items as watched, and update your Tracker history. Leave blank to match your Atlas admin user, or enter * to track all users.
-              </p>
+            <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+              <div>
+                <h3 className="text-base font-bold font-display text-cyan-400">Tracked Media Server User(s)</h3>
+                <p className="text-xs text-slate-400 mt-1 max-w-xl">
+                  Only playback from these usernames on Plex/Jellyfin/Emby will update watch progress, auto-mark items as watched, and update your Tracker history. Leave blank to match your Atlas admin user, or enter * to track all users.
+                </p>
+              </div>
+              <Button
+                variant="danger"
+                size="sm"
+                onClick={handlePurgeUntracked}
+                loading={purgingUntracked}
+                icon={Trash2}
+                className="shrink-0 self-start text-xs py-1.5 px-3"
+              >
+                Purge Untracked History
+              </Button>
             </div>
             <div>
               <label className="block text-xs sm:text-sm font-medium text-slate-300 mb-1.5">
@@ -661,6 +721,26 @@ export default function ConnectionsTab({
                 className="w-full bg-[#0c1624] border border-[#1c2d46] rounded-xl px-4 py-2.5 text-sm text-slate-200 focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/50 transition-colors placeholder:text-slate-600"
               />
             </div>
+            {detectedUsers.length > 0 && (
+              <div className="pt-1">
+                <span className="text-[11px] font-medium text-slate-400 block mb-1.5">
+                  Detected users from media server activity (click to add):
+                </span>
+                <div className="flex flex-wrap gap-1.5">
+                  {detectedUsers.map(u => (
+                    <button
+                      key={u}
+                      type="button"
+                      onClick={() => handleAddTrackedUser(u)}
+                      className="text-xs px-2.5 py-1 rounded-lg bg-slate-800/80 hover:bg-cyan-500/20 hover:text-cyan-300 text-slate-300 border border-slate-700/60 hover:border-cyan-500/30 transition-all flex items-center gap-1 cursor-pointer"
+                    >
+                      <UserCheck className="w-3 h-3 text-cyan-400" />
+                      <span>{u}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </SettingsSection>

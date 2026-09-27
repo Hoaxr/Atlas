@@ -60,8 +60,105 @@ class WatcherService {
     this.recordedPlaySet = new Set(); // Track session+title already recorded in play_history
     this.recentPlaybackNotifications = new Map(); // Cooldown map: key = `${user}:${title}`, value = timestamp
     this.pollInterval = null;
-    this.startPolling();
-    setTimeout(() => this.backfillUnsyncedHistory(), 3000);
+
+    if (process.env.NODE_ENV !== 'test') {
+      this.startPolling();
+      const t1 = setTimeout(() => this.cleanUntrackedWatchHistory(), 1500);
+      t1.unref?.();
+      const t2 = setTimeout(() => this.backfillUnsyncedHistory(), 3000);
+      t2.unref?.();
+    }
+  }
+
+  cleanUntrackedWatchHistory() {
+    try {
+      const setting = getSetting('autoWatchUser');
+      if (setting && setting.trim() === '*') {
+        return { cleaned: 0 };
+      }
+
+      let allowedUsers = [];
+      if (setting && setting.trim() !== '') {
+        allowedUsers = setting.split(',').map(u => u.trim().toLowerCase()).filter(Boolean);
+      } else {
+        const authUsername = getSetting('authUsername');
+        if (authUsername && authUsername.trim() !== '') {
+          allowedUsers.push(authUsername.trim().toLowerCase());
+        }
+        const adminRows = db.prepare("SELECT username FROM users WHERE role = 'admin'").all();
+        for (const a of adminRows) {
+          if (a.username) allowedUsers.push(a.username.trim().toLowerCase());
+        }
+      }
+
+      if (allowedUsers.length === 0) return { cleaned: 0 };
+
+      const allPlays = db.prepare("SELECT * FROM play_history WHERE user IS NOT NULL").all();
+      const untrackedPlays = allPlays.filter(p => !allowedUsers.includes((p.user || '').trim().toLowerCase()));
+
+      const cleanTitle = (raw) => (raw || '').replace(/\s*\(\d{4}\)\s*$/, '').trim();
+      let cleanedCount = 0;
+
+      for (const play of untrackedPlays) {
+        if (!play.title) continue;
+
+        const alsoTracked = allPlays.some(p => p.title === play.title && allowedUsers.includes((p.user || '').trim().toLowerCase()));
+        if (alsoTracked) continue;
+
+        if (play.type === 'movie') {
+          const cleaned = cleanTitle(play.title);
+          const movie = db.prepare('SELECT id, tmdb_id FROM movies WHERE title = ? COLLATE NOCASE OR title = ? COLLATE NOCASE').get(play.title, cleaned);
+          if (movie?.tmdb_id) {
+            const del = db.prepare("DELETE FROM watch_history WHERE tmdb_id = ? AND type = 'movie'").run(movie.tmdb_id);
+            if (del.changes > 0) cleanedCount++;
+            db.prepare("UPDATE movies SET watched = 0, watched_at = NULL, watch_progress = 0 WHERE id = ?").run(movie.id);
+          }
+        } else if (play.type === 'episode') {
+          const match = play.title.match(/^(.*) - S(\d+)E(\d+)$/i);
+          if (match) {
+            const [, rawShowTitle, seasonStr, epStr] = match;
+            const sNum = parseInt(seasonStr, 10);
+            const eNum = parseInt(epStr, 10);
+            const cleanedShowTitle = cleanTitle(rawShowTitle);
+            const show = db.prepare('SELECT id, tmdb_id FROM shows WHERE title = ? COLLATE NOCASE OR title = ? COLLATE NOCASE').get(rawShowTitle, cleanedShowTitle);
+            if (show?.tmdb_id) {
+              const del = db.prepare("DELETE FROM watch_history WHERE tmdb_id = ? AND type = 'episode' AND season_number = ? AND episode_number = ?").run(show.tmdb_id, sNum, eNum);
+              if (del.changes > 0) cleanedCount++;
+              db.prepare("UPDATE episodes SET watched = 0, watched_at = NULL, watch_progress = 0 WHERE show_id = ? AND season_number = ? AND episode_number = ?").run(show.id, sNum, eNum);
+            }
+          }
+        }
+      }
+
+      // Also clean any watch_history entries directly assigned to untracked users
+      const allUsers = db.prepare("SELECT id, username FROM users").all();
+      for (const u of allUsers) {
+        if (!allowedUsers.includes((u.username || '').trim().toLowerCase())) {
+          const directDel = db.prepare("DELETE FROM watch_history WHERE user_id = ?").run(u.id);
+          if (directDel.changes > 0) cleanedCount += directDel.changes;
+        }
+      }
+
+      db.prepare(`
+        UPDATE shows
+        SET watched = 0
+        WHERE id NOT IN (SELECT DISTINCT show_id FROM episodes WHERE watched = 1);
+      `).run();
+
+      db.prepare(`
+        UPDATE episodes
+        SET watch_progress = 0
+        WHERE show_id NOT IN (SELECT DISTINCT show_id FROM episodes WHERE watched = 1);
+      `).run();
+
+      if (cleanedCount > 0) {
+        console.log(`[WatcherService] Cleaned ${cleanedCount} watch_history entries from untracked users`);
+      }
+      return { cleaned: cleanedCount };
+    } catch (err) {
+      console.error('[WatcherService] Failed cleanUntrackedWatchHistory:', err.message);
+      return { error: err.message };
+    }
   }
 
   async backfillUnsyncedHistory() {
@@ -70,8 +167,10 @@ class WatcherService {
       const cleanTitle = (raw) => (raw || '').replace(/\s*\(\d{4}\)\s*$/, '').trim();
 
       for (const play of recentPlays) {
-        if (!play.title) continue;
+        if (!play.title || !this.shouldTrackUser(play.user)) continue;
         const watchedAt = play.created_at ? (play.created_at.includes('T') ? play.created_at : play.created_at.replace(' ', 'T') + 'Z') : new Date().toISOString();
+        const userRow = play.user ? db.prepare('SELECT id FROM users WHERE username = ? COLLATE NOCASE').get(play.user) : null;
+        const userId = userRow?.id || null;
 
         if (play.type === 'movie') {
           const cleaned = cleanTitle(play.title);
@@ -93,7 +192,7 @@ class WatcherService {
             try {
               const existing = db.prepare('SELECT id FROM watch_history WHERE tmdb_id = ? AND type = ?').get(tmdbId, 'movie');
               if (!existing) {
-                db.prepare('INSERT INTO watch_history (tmdb_id, type, watched_at, runtime) VALUES (?, ?, ?, ?)').run(tmdbId, 'movie', watchedAt, runtime);
+                db.prepare('INSERT INTO watch_history (tmdb_id, type, watched_at, runtime, user_id) VALUES (?, ?, ?, ?, ?)').run(tmdbId, 'movie', watchedAt, runtime, userId);
                 console.log(`[WatcherService] Backfilled watch_history for movie "${play.title}" (TMDB: ${tmdbId})`);
               }
             } catch { /* ignore */ }
@@ -122,7 +221,7 @@ class WatcherService {
               try {
                 const existing = db.prepare('SELECT id FROM watch_history WHERE tmdb_id = ? AND type = ? AND season_number = ? AND episode_number = ?').get(tmdbId, 'episode', seasonNum, epNum);
                 if (!existing) {
-                  db.prepare('INSERT INTO watch_history (tmdb_id, type, season_number, episode_number, watched_at, runtime) VALUES (?, ?, ?, ?, ?, ?)').run(tmdbId, 'episode', seasonNum, epNum, watchedAt, null);
+                  db.prepare('INSERT INTO watch_history (tmdb_id, type, season_number, episode_number, watched_at, runtime, user_id) VALUES (?, ?, ?, ?, ?, ?, ?)').run(tmdbId, 'episode', seasonNum, epNum, watchedAt, null, userId);
                   console.log(`[WatcherService] Backfilled watch_history for episode "${play.title}" (TMDB: ${tmdbId})`);
                 }
               } catch { /* ignore */ }
@@ -146,8 +245,8 @@ class WatcherService {
     }
 
     // Default when autoWatchUser setting is empty:
-    // Match authUsername, any admin, or ANY registered user (incl. ones imported
-    // from Plex/Jellyfin/Emby) so household playback is tracked automatically.
+    // Match ONLY the admin user(s) or authUsername so household playback from other users
+    // is NOT tracked automatically.
     const authUsername = getSetting('authUsername');
     if (authUsername && authUsername.trim() !== '') {
       if (authUsername.trim().toLowerCase() === sessionUser.trim().toLowerCase()) {
@@ -156,8 +255,8 @@ class WatcherService {
     }
 
     try {
-      const knownUser = db.prepare('SELECT id FROM users WHERE username = ? COLLATE NOCASE').get(sessionUser.trim());
-      if (knownUser) return true;
+      const admin = db.prepare("SELECT id FROM users WHERE role = 'admin' AND username = ? COLLATE NOCASE").get(sessionUser.trim());
+      if (admin) return true;
     } catch { /* ignore */ }
 
     // If no users exist in DB yet, default to true
@@ -517,11 +616,13 @@ class WatcherService {
 
               if (tmdbId) {
                 try {
+                  const userRow = session.user ? db.prepare('SELECT id FROM users WHERE username = ? COLLATE NOCASE').get(session.user) : null;
+                  const userId = userRow?.id || null;
                   const existing = db.prepare('SELECT id FROM watch_history WHERE tmdb_id = ? AND type = ?').get(tmdbId, 'movie');
                   if (!existing) {
-                    db.prepare('INSERT INTO watch_history (tmdb_id, type, watched_at, runtime) VALUES (?, ?, ?, ?)').run(tmdbId, 'movie', watchedAt, runtime);
+                    db.prepare('INSERT INTO watch_history (tmdb_id, type, watched_at, runtime, user_id) VALUES (?, ?, ?, ?, ?)').run(tmdbId, 'movie', watchedAt, runtime, userId);
                   } else {
-                    db.prepare('UPDATE watch_history SET watched_at = ? WHERE id = ?').run(watchedAt, existing.id);
+                    db.prepare('UPDATE watch_history SET watched_at = ?, user_id = COALESCE(user_id, ?) WHERE id = ?').run(watchedAt, userId, existing.id);
                   }
                 } catch (err) {
                   console.error('[WatcherService] Failed to write watch_history for movie:', err.message);
@@ -571,11 +672,13 @@ class WatcherService {
 
                 if (tmdbId) {
                   try {
+                    const userRow = session.user ? db.prepare('SELECT id FROM users WHERE username = ? COLLATE NOCASE').get(session.user) : null;
+                    const userId = userRow?.id || null;
                     const existing = db.prepare('SELECT id FROM watch_history WHERE tmdb_id = ? AND type = ? AND season_number = ? AND episode_number = ?').get(tmdbId, 'episode', seasonNum, epNum);
                     if (!existing) {
-                      db.prepare('INSERT INTO watch_history (tmdb_id, type, season_number, episode_number, watched_at, runtime) VALUES (?, ?, ?, ?, ?, ?)').run(tmdbId, 'episode', seasonNum, epNum, watchedAt, epRuntime);
+                      db.prepare('INSERT INTO watch_history (tmdb_id, type, season_number, episode_number, watched_at, runtime, user_id) VALUES (?, ?, ?, ?, ?, ?, ?)').run(tmdbId, 'episode', seasonNum, epNum, watchedAt, epRuntime, userId);
                     } else {
-                      db.prepare('UPDATE watch_history SET watched_at = ? WHERE id = ?').run(watchedAt, existing.id);
+                      db.prepare('UPDATE watch_history SET watched_at = ?, user_id = COALESCE(user_id, ?) WHERE id = ?').run(watchedAt, userId, existing.id);
                     }
                   } catch (err) {
                     console.error('[WatcherService] Failed to write watch_history for episode:', err.message);

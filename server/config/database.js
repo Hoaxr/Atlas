@@ -1460,6 +1460,72 @@ const MIGRATIONS = [
         );
       `).run();
     }
+  },
+  {
+    id: 49,
+    name: 'purge_untracked_users_watch_history',
+    run: (db) => {
+      const settingRow = db.prepare("SELECT value FROM settings WHERE key = 'autoWatchUser'").get();
+      const authUserRow = db.prepare("SELECT value FROM settings WHERE key = 'authUsername'").get();
+      const adminUsers = db.prepare("SELECT username FROM users WHERE role = 'admin'").all().map(u => (u.username || '').toLowerCase());
+
+      let allowedUsers = [];
+      if (settingRow?.value && settingRow.value.trim() !== '') {
+        if (settingRow.value.trim() === '*') return;
+        allowedUsers = settingRow.value.split(',').map(u => u.trim().toLowerCase()).filter(Boolean);
+      } else {
+        if (authUserRow?.value) allowedUsers.push(authUserRow.value.trim().toLowerCase());
+        allowedUsers.push(...adminUsers);
+      }
+
+      if (allowedUsers.length === 0) return;
+
+      const allPlays = db.prepare("SELECT * FROM play_history WHERE user IS NOT NULL").all();
+      const untrackedPlays = allPlays.filter(p => !allowedUsers.includes((p.user || '').trim().toLowerCase()));
+
+      const cleanTitle = (raw) => (raw || '').replace(/\s*\(\d{4}\)\s*$/, '').trim();
+
+      for (const play of untrackedPlays) {
+        if (!play.title) continue;
+
+        const alsoTracked = allPlays.some(p => p.title === play.title && allowedUsers.includes((p.user || '').trim().toLowerCase()));
+        if (alsoTracked) continue;
+
+        if (play.type === 'movie') {
+          const cleaned = cleanTitle(play.title);
+          const movie = db.prepare('SELECT id, tmdb_id FROM movies WHERE title = ? COLLATE NOCASE OR title = ? COLLATE NOCASE').get(play.title, cleaned);
+          if (movie?.tmdb_id) {
+            db.prepare("DELETE FROM watch_history WHERE tmdb_id = ? AND type = 'movie'").run(movie.tmdb_id);
+            db.prepare("UPDATE movies SET watched = 0, watched_at = NULL, watch_progress = 0 WHERE id = ?").run(movie.id);
+          }
+        } else if (play.type === 'episode') {
+          const match = play.title.match(/^(.*) - S(\d+)E(\d+)$/i);
+          if (match) {
+            const [, rawShowTitle, seasonStr, epStr] = match;
+            const sNum = parseInt(seasonStr, 10);
+            const eNum = parseInt(epStr, 10);
+            const cleanedShowTitle = cleanTitle(rawShowTitle);
+            const show = db.prepare('SELECT id, tmdb_id FROM shows WHERE title = ? COLLATE NOCASE OR title = ? COLLATE NOCASE').get(rawShowTitle, cleanedShowTitle);
+            if (show?.tmdb_id) {
+              db.prepare("DELETE FROM watch_history WHERE tmdb_id = ? AND type = 'episode' AND season_number = ? AND episode_number = ?").run(show.tmdb_id, sNum, eNum);
+              db.prepare("UPDATE episodes SET watched = 0, watched_at = NULL, watch_progress = 0 WHERE show_id = ? AND season_number = ? AND episode_number = ?").run(show.id, sNum, eNum);
+            }
+          }
+        }
+      }
+
+      db.prepare(`
+        UPDATE shows
+        SET watched = 0
+        WHERE id NOT IN (SELECT DISTINCT show_id FROM episodes WHERE watched = 1);
+      `).run();
+
+      db.prepare(`
+        UPDATE episodes
+        SET watch_progress = 0
+        WHERE show_id NOT IN (SELECT DISTINCT show_id FROM episodes WHERE watched = 1);
+      `).run();
+    }
   }
 ];
 

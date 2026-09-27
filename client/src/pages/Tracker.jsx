@@ -7,7 +7,7 @@ import useWebSocket from '../lib/useWebSocket';
 import toast from 'react-hot-toast';
 import { 
   Clock, Film, Tv, Play, ChevronRight, ChevronLeft, Trash2, Undo2, 
-  Calendar, CheckCircle2, TrendingUp, Zap
+  Calendar, CheckCircle2, TrendingUp, Zap, Sparkles
 } from 'lucide-react';
 import { tmdbImgUrl } from '../lib/posterUrl';
 import StickyBar from '../components/shared/StickyBar';
@@ -225,7 +225,10 @@ const Tracker = () => {
         } else if (authUsername && authUsername.trim() !== '') {
           active = data.sessions.find(s => s.user && s.user.trim().toLowerCase() === authUsername.trim().toLowerCase()) || null;
         } else {
-          active = data.sessions[0] || null;
+          const currentUsername = (settingsRef.current?.authUsername || settingsRef.current?.username || '').trim().toLowerCase();
+          if (currentUsername) {
+            active = data.sessions.find(s => s.user && s.user.trim().toLowerCase() === currentUsername) || null;
+          }
         }
         setLiveSession(active);
       }
@@ -351,6 +354,22 @@ const Tracker = () => {
       console.error('Failed to dismiss up next item', err);
       toast.error('Failed to remove from Continue Watching');
       fetchData();
+    }
+  };
+
+  const handleCleanUntracked = async () => {
+    try {
+      const res = await api.post('/tracker/clean-untracked');
+      const count = res.data?.cleaned || 0;
+      if (count > 0) {
+        toast.success(`Removed ${count} entries from other users`);
+      } else {
+        toast.success('No entries from other users found');
+      }
+      await fetchData();
+    } catch (err) {
+      console.error('Failed to clean untracked history', err);
+      toast.error('Failed to clean untracked history');
     }
   };
 
@@ -626,9 +645,19 @@ const Tracker = () => {
             </h3>
             <p className="text-[11px] text-slate-400 mt-0.5 hidden sm:block">Chronological activity stream of watched movies & episodes</p>
           </div>
-          <span className="text-[11px] text-slate-400 font-mono bg-slate-950 px-2.5 py-1 rounded-md border border-slate-800 shrink-0">
-            {history.length} events
-          </span>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={handleCleanUntracked}
+              className="text-[11px] text-slate-400 hover:text-cyan-400 font-medium px-2 py-1 rounded-md bg-slate-800/60 hover:bg-slate-800 border border-slate-700/50 transition-colors flex items-center gap-1.5 cursor-pointer"
+              title="Remove watch history and progress from other users"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
+              <span className="hidden sm:inline">Clean Other Users</span>
+            </button>
+            <span className="text-[11px] text-slate-400 font-mono bg-slate-950 px-2.5 py-1 rounded-md border border-slate-800 shrink-0">
+              {history.length} events
+            </span>
+          </div>
         </div>
 
         {/* Vertical Timeline Container */}
