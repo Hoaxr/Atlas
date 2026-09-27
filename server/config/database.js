@@ -1570,6 +1570,21 @@ const MIGRATIONS = [
         db.prepare("UPDATE watch_history SET user_id = ? WHERE user_id IS NULL").run(admin.id);
       }
     }
+  },
+  {
+    id: 52,
+    name: 'protect_franchises_from_cleanup',
+    run: (db) => {
+      // Protect franchise titles specifically requested by user
+      db.prepare(`
+        UPDATE movies
+        SET ignore_cleanup = 1
+        WHERE LOWER(title) LIKE '%matrix%'
+           OR LOWER(title) LIKE '%hacker%'
+           OR LOWER(title) LIKE '%takedown%'
+           OR LOWER(title) LIKE '%takeover%';
+      `).run();
+    }
   }
 ];
 

@@ -38,41 +38,59 @@ class CleanupWorker {
         ORDER BY added_at DESC
       `).all();
 
-      // ── Detect franchises: title-based grouping (instant, no API calls) ──
-      const stripSequels = (title) => {
-        let base = title
+      // ── Detect franchises: title-based grouping, collection matching & aliases ──
+      const cleanTitle = (title) => {
+        return (title || '')
           .replace(/\s*\(\d{4}\)\s*/g, '')
-          .replace(/\bPart\s+(?:II|III|IV|V|VI|VII|VIII|IX|X|[2-9])\b/gi, '')
-          .replace(/\b(?:II|III|IV|V|VI|VII|VIII|IX|X)\b/g, '')
-          .replace(/\s+\d+\s*$/, '')
-          .replace(/\s*:\s*[^:]+$/, '')
-          .replace(/\s+/g, ' ')
+          .replace(/^((the|a|an|de|het|een)\s+)/i, '')
           .trim()
           .toLowerCase();
-        if (base.length < 3) base = title.replace(/\s*\(\d{4}\)\s*/g, '').trim().toLowerCase();
+      };
+
+      const getFranchiseRoot = (title) => {
+        let base = cleanTitle(title);
+        base = base.split(/\s*[:–—\-]\s*/)[0];
+        base = base
+          .replace(/\bpart\s+(?:ii|iii|iv|v|vi|vii|viii|ix|x|\d+)\b/gi, '')
+          .replace(/\bvol(?:ume)?\.?\s*(?:ii|iii|iv|v|vi|vii|viii|ix|x|\d+)\b/gi, '')
+          .replace(/\bchapter\s+(?:ii|iii|iv|v|vi|vii|viii|ix|x|\d+)\b/gi, '')
+          .replace(/\b(?:ii|iii|iv|v|vi|vii|viii|ix|x)\b/gi, '')
+          .replace(/\s+\d+\s*$/, '')
+          .replace(/\b(reloaded|revolutions|resurrections|returns|forever|begins|rises|awakens|extinction|evolution|apocalypse|requiem|legacy|origins|bloodlines)\b/gi, '')
+          .replace(/\s+/g, ' ')
+          .trim();
         return base;
       };
 
-      const getBaseCandidates = (title) => {
-        const base = stripSequels(title);
-        const words = base.split(/\s+/);
-        const candidates = [];
-        const maxStrip = Math.max(0, words.length - 2);
-        for (let i = 0; i <= maxStrip; i++) {
-          const suffix = words.slice(i).join(' ');
-          if (suffix.length >= 3) candidates.push(suffix);
-        }
-        return candidates;
-      };
+      const KNOWN_FRANCHISE_ALIASES = [
+        ['hackers', 'takedown', 'takeover'],
+        ['matrix', 'the matrix'],
+        ['fast & furious', 'fast and furious', '2 fast 2 furious', 'fast five'],
+        ['taken', 'taken 2', 'taken 3'],
+        ['bourne', 'jason bourne']
+      ];
 
-      const candidateMap = new Map();
-      for (const m of movies) {
-        for (const cand of getBaseCandidates(m.title)) {
-          if (!candidateMap.has(cand)) candidateMap.set(cand, new Set());
-          candidateMap.get(cand).add(m.id);
-        }
-      }
+      // Query all library movies (downloaded, monitored, missing) so franchise companions protect downloaded items
+      const allLibraryMovies = db.prepare('SELECT id, tmdb_id, title, year FROM movies').all();
+      const franchiseIds = new Set();
+      const franchiseNames = new Map();
 
+      // Check Atlas user collections (movie_collections table)
+      try {
+        const atlasCollections = db.prepare(`
+          SELECT mc.movie_id, c.name as collection_name
+          FROM movie_collections mc
+          JOIN collections c ON mc.collection_id = c.id
+        `).all();
+        for (const row of atlasCollections) {
+          franchiseIds.add(row.movie_id);
+          const list = franchiseNames.get(row.movie_id) || [];
+          if (!list.includes(row.collection_name)) list.push(row.collection_name);
+          franchiseNames.set(row.movie_id, list);
+        }
+      } catch { /* ignore if tables missing */ }
+
+      // Title-based union-find grouping
       const parent = new Map();
       const find = (id) => {
         if (!parent.has(id)) parent.set(id, id);
@@ -81,29 +99,58 @@ class CleanupWorker {
       };
       const union = (a, b) => { parent.set(find(a), find(b)); };
 
-      for (const [, ids] of candidateMap) {
-        if (ids.size > 1) {
-          const arr = [...ids];
-          for (let i = 1; i < arr.length; i++) union(arr[0], arr[i]);
+      for (let i = 0; i < allLibraryMovies.length; i++) {
+        const m1 = allLibraryMovies[i];
+        const r1 = getFranchiseRoot(m1.title);
+        if (!r1 || r1.length < 3) continue;
+        const c1 = cleanTitle(m1.title);
+
+        for (let j = i + 1; j < allLibraryMovies.length; j++) {
+          const m2 = allLibraryMovies[j];
+          const r2 = getFranchiseRoot(m2.title);
+          if (!r2 || r2.length < 3) continue;
+          const c2 = cleanTitle(m2.title);
+
+          // 1. Direct root match (e.g. 'matrix' === 'matrix', 'taken' === 'taken')
+          if (r1 === r2) {
+            union(m1.id, m2.id);
+            continue;
+          }
+
+          // 2. Prefix match (e.g. 'matrix' is prefix of 'matrix resurrections')
+          if (r1.length >= 4 && (c2.startsWith(r1 + ' ') || c2.startsWith(r1 + ':') || c2.startsWith(r1 + '-') || c2 === r1)) {
+            union(m1.id, m2.id);
+            continue;
+          }
+          if (r2.length >= 4 && (c1.startsWith(r2 + ' ') || c1.startsWith(r2 + ':') || c1.startsWith(r2 + '-') || c1 === r2)) {
+            union(m1.id, m2.id);
+            continue;
+          }
+
+          // 3. Known franchise aliases
+          for (const group of KNOWN_FRANCHISE_ALIASES) {
+            const match1 = group.some(alias => r1 === alias || c1.startsWith(alias) || (alias.length >= 5 && c1.includes(alias)));
+            const match2 = group.some(alias => r2 === alias || c2.startsWith(alias) || (alias.length >= 5 && c2.includes(alias)));
+            if (match1 && match2) {
+              union(m1.id, m2.id);
+            }
+          }
         }
       }
 
       const franchiseGroups = new Map();
-      for (const m of movies) {
+      for (const m of allLibraryMovies) {
         const root = find(m.id);
         if (!franchiseGroups.has(root)) franchiseGroups.set(root, new Set());
         franchiseGroups.get(root).add(m.id);
       }
 
-      const franchiseIds = new Set();
-      const franchiseNames = new Map();
-
       for (const [, ids] of franchiseGroups) {
         if (ids.size > 1) {
           for (const id of ids) {
             franchiseIds.add(id);
-            const others = movies.filter(m => ids.has(m.id) && m.id !== id).map(m => m.title);
-            franchiseNames.set(id, others);
+            const others = allLibraryMovies.filter(m => ids.has(m.id) && m.id !== id).map(m => m.title);
+            franchiseNames.set(id, [...(franchiseNames.get(id) || []), ...others]);
           }
         }
       }
@@ -124,21 +171,34 @@ class CleanupWorker {
         } catch { /* skip */ }
       });
 
-      const collectionGroups = new Map();
+      // Any movie with a TMDB collection belongs to a franchise by definition!
       for (const m of movies) {
         const cached = tmdbCache.get(m.tmdb_id);
         if (cached?.collectionId) {
-          if (!collectionGroups.has(cached.collectionId)) collectionGroups.set(cached.collectionId, []);
-          collectionGroups.get(cached.collectionId).push(m.id);
+          franchiseIds.add(m.id);
+          const list = franchiseNames.get(m.id) || [];
+          if (cached.collectionName && !list.includes(cached.collectionName)) list.push(cached.collectionName);
+          franchiseNames.set(m.id, list);
         }
       }
 
-      for (const [, ids] of collectionGroups) {
-        if (ids.length > 1) {
-          for (const id of ids) {
-            franchiseIds.add(id);
-            const others = movies.filter(m => ids.includes(m.id) && m.id !== id).map(m => m.title);
-            franchiseNames.set(id, [...(franchiseNames.get(id) || []), ...others]);
+      // Also link any movie whose title matches a known TMDB collection name in the library
+      // (e.g. "The Matrix Collection" -> matches "The Matrix Resurrections" even if TMDB omitted belongs_to_collection on that single entry)
+      for (const [, coll] of tmdbCache) {
+        if (coll?.collectionName) {
+          const collClean = cleanTitle(coll.collectionName.replace(/\s+Collection\s*$/i, ''));
+          const collRoot = getFranchiseRoot(collClean);
+          if (collRoot && collRoot.length >= 3) {
+            for (const m of movies) {
+              const mClean = cleanTitle(m.title);
+              const mRoot = getFranchiseRoot(m.title);
+              if (mClean.startsWith(collClean) || mClean.startsWith(collRoot + ' ') || mRoot === collRoot) {
+                franchiseIds.add(m.id);
+                const list = franchiseNames.get(m.id) || [];
+                if (!list.includes(coll.collectionName)) list.push(coll.collectionName);
+                franchiseNames.set(m.id, list);
+              }
+            }
           }
         }
       }
