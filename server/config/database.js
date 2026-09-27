@@ -9,18 +9,40 @@ if (!fs.existsSync(dbDir)) {
 
 const db = new DatabaseSync(path.join(dbDir, 'database.sqlite'));
 
+let transactionDepth = 0;
+
 db.transaction = function (fn) {
   return function (...args) {
-    db.exec('BEGIN TRANSACTION;');
+    const isOuter = transactionDepth === 0;
+    const savepointName = `sp_${transactionDepth}`;
+
+    if (isOuter) {
+      db.exec('BEGIN TRANSACTION;');
+    } else {
+      db.exec(`SAVEPOINT ${savepointName};`);
+    }
+
+    transactionDepth++;
     try {
       const result = fn.apply(this, args);
       if (result instanceof Promise) {
         throw new Error('Async transactions are not supported by the synchronous wrapper. Transaction rolled back immediately.');
       }
-      db.exec('COMMIT;');
+
+      transactionDepth--;
+      if (isOuter) {
+        db.exec('COMMIT;');
+      } else {
+        db.exec(`RELEASE SAVEPOINT ${savepointName};`);
+      }
       return result;
     } catch (err) {
-      db.exec('ROLLBACK;');
+      transactionDepth--;
+      if (isOuter) {
+        try { db.exec('ROLLBACK;'); } catch { /* ignore */ }
+      } else {
+        try { db.exec(`ROLLBACK TO SAVEPOINT ${savepointName};`); } catch { /* ignore */ }
+      }
       throw err;
     }
   };

@@ -150,14 +150,20 @@ class SubtitleTranslationQueue {
 
     const sourceDir = path.dirname(sourceFile);
     const sourceParsed = path.parse(sourceFile);
-    const baseClean = sourceParsed.name.replace(/\.[a-z]{2,3}$/i, '');
+    const baseClean = sourceParsed.name.replace(/\.[a-z]{2,3}$/i, '').replace(/\.+$/, '');
 
     const createdJobs = [];
 
     for (const lang of langs) {
-      const targetCode = LANG_TO_CODE[lang] || (typeof lang === 'string' && lang.length === 2 ? lang.toLowerCase() : 'nl');
-      const targetFileName = `${baseClean}.${targetCode}.srt`;
-      const targetFilePath = path.join(sourceDir, targetFileName);
+      const targetCode = (LANG_TO_CODE[lang] || (typeof lang === 'string' && lang.length === 2 ? lang.toLowerCase() : 'nl')).replace(/[^a-z0-9]/g, '') || 'nl';
+      let targetFileName = `${baseClean}.${targetCode}.srt`;
+      let targetFilePath = path.join(sourceDir, targetFileName);
+
+      // Guard against overwriting the source file if target resolves to the same path
+      if (path.resolve(targetFilePath) === path.resolve(sourceFile)) {
+        targetFileName = `${baseClean}.translated.${targetCode}.srt`;
+        targetFilePath = path.join(sourceDir, targetFileName);
+      }
 
       // Duplicate check: if file already exists and not retranslating, throw or skip
       if (fs.existsSync(targetFilePath) && !retranslate) {

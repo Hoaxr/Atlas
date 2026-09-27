@@ -13,6 +13,27 @@ const { decodeSubtitleBuffer } = require('./subtitles/parser');
 const { syncMovieSubtitles, syncEpisodeSubtitles } = require('./subtitles/sync');
 
 
+const cleanSrtContent = (text) => {
+  if (!text) return '';
+  let cleaned = String(text).trim();
+
+  // Strip Markdown code fence blocks (```srt ... ``` or ``` ...)
+  if (cleaned.startsWith('```')) {
+    cleaned = cleaned.replace(/^```[a-zA-Z0-9_-]*\r?\n/, '');
+  }
+  if (cleaned.endsWith('```')) {
+    cleaned = cleaned.replace(/\r?\n```\s*$/, '');
+  }
+
+  // Strip any AI conversational preamble before the first SRT sequence number
+  const cueStart = cleaned.search(/(?:^|\n)\s*1\s*\r?\n\s*\d{2}:\d{2}:\d{2}/);
+  if (cueStart > 0) {
+    cleaned = cleaned.substring(cueStart).trim();
+  }
+
+  return cleaned.trim() + '\n';
+};
+
 const translateWithGemini = async (text, targetLang, apiKey) => {
   const modelName = db.prepare("SELECT value FROM settings WHERE key = 'geminiModel'").get()?.value || 'gemini-2.5-flash';
   const genAI = new GoogleGenerativeAI(apiKey);
@@ -22,7 +43,7 @@ Keep the SRT formatting exactly the same (timestamps and sequence numbers). Do n
 
 ${text}`;
   const result = await model.generateContent(prompt);
-  return result.response.text();
+  return cleanSrtContent(result.response.text());
 };
 
 const translateWithGoogleTranslate = async (text, targetLang) => {
@@ -119,7 +140,7 @@ ${text}`;
     headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
     timeout: 60000
   });
-  return res.data.choices[0].message.content;
+  return cleanSrtContent(res.data.choices[0].message.content);
 };
 
 const translateWithClaude = async (text, targetLang, apiKey) => {
@@ -136,7 +157,7 @@ ${text}`;
     headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'Content-Type': 'application/json' },
     timeout: 60000
   });
-  return res.data.content[0].text;
+  return cleanSrtContent(res.data.content[0].text);
 };
 
 const { parseSubtitles, serializeSubtitles } = require('./subtitles/parser');
@@ -230,7 +251,9 @@ const translateSubtitles = async () => {
 
     // Determine target path from the found English subtitle name
     const enParsed = path.parse(enSub);
-    const targetSub = path.join(dir, `${enParsed.name.replace(/\.en$/, '')}.${langCode}.srt`);
+    const baseClean = enParsed.name.replace(/\.en$/i, '').replace(/\.+$/, '');
+    const safeLang = (String(langCode || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '')) || 'nl';
+    const targetSub = path.join(dir, `${baseClean}.${safeLang}.srt`);
     if (fs.existsSync(targetSub)) {
       try {
         const existingBuf = fs.readFileSync(targetSub);
@@ -250,12 +273,14 @@ const translateSubtitles = async () => {
 
     console.log(`[AITranslator] Translating subtitles for ${displayName} into ${targetLang} (via ${activeProvider})...`);
     
-    const translatedText = await translateWithProvider(enSrtContent, targetLang, {
+    const rawTranslated = await translateWithProvider(enSrtContent, targetLang, {
       provider: activeProvider,
       geminiApiKey: geminiApiKeyRow?.value,
       deepseekApiKey: deepseekApiKeyRow?.value,
       claudeApiKey: claudeApiKeyRow?.value
     });
+
+    const translatedText = cleanSrtContent(rawTranslated);
 
     if (!translatedText || translatedText.length < 10) {
       console.warn(`[AITranslator] Translation returned empty result for ${displayName} — skipping write`);

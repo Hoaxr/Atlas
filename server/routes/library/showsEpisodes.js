@@ -421,8 +421,10 @@ router.post('/episodes/:id/translate-subs', async (req, res, _next) => {
     if (!fs.existsSync(episode.file_path)) return res.status(400).json({ status: 'error', message: 'Episode file not found on disk' });
 
     const parsedPath = path.parse(episode.file_path);
-    const enSubPath = path.join(parsedPath.dir, `${parsedPath.name}.en.srt`);
-    const targetSubPath = path.join(parsedPath.dir, `${parsedPath.name}.${langCode}.srt`);
+    const cleanBaseName = parsedPath.name.replace(/\.+$/, '');
+    const safeLangCode = (String(langCode || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '')) || 'en';
+    const enSubPath = path.join(parsedPath.dir, `${cleanBaseName}.en.srt`);
+    const targetSubPath = path.join(parsedPath.dir, `${cleanBaseName}.${safeLangCode}.srt`);
 
     if (!fs.existsSync(enSubPath)) {
       return res.status(400).json({ status: 'error', message: 'No English subtitle found to translate. Download English subs first.' });
@@ -462,7 +464,9 @@ router.post('/episodes/:id/download-subs', async (req, res, _next) => {
     }
 
     const parsedPath = path.parse(episode.file_path);
-    const subPath = path.join(parsedPath.dir, `${parsedPath.name}.${langCode}.srt`);
+    const cleanBaseName = parsedPath.name.replace(/\.+$/, '');
+    const safeLangCode = (String(langCode || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '')) || 'en';
+    const subPath = path.join(parsedPath.dir, `${cleanBaseName}.${safeLangCode}.srt`);
 
     // If a direct URL is provided, download from there (used by SubDL unpack files)
     if (url) {
@@ -507,7 +511,7 @@ router.post('/episodes/:id/download-subs', async (req, res, _next) => {
 
     // If a SubSource subId is provided, download from the SubSource API
     if (provider === 'SubSource' && req.body.subId) {
-      const epSubPath = path.join(parsedPath.dir, `${parsedPath.name}.${langCode}.srt`);
+      const epSubPath = subPath;
       const subsourceApiKeyRow = db.prepare("SELECT value FROM settings WHERE key = 'subsourceApiKey'").get();
       if (!subsourceApiKeyRow?.value) {
         return res.status(400).json({ status: 'error', message: 'SubSource API key not set' });

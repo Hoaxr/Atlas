@@ -260,7 +260,7 @@ const validateAndTransform = (key, value) => {
   return { valid: true, transformed: String(value ?? '') };
 };
 
-router.post('/', async (req, res, next) => {
+router.post('/', requireAdmin, async (req, res, next) => {
   try {
     const body = req.body;
     const errors = [];
@@ -349,7 +349,7 @@ router.post('/', async (req, res, next) => {
   }
 });
 
-router.post('/prowlarr/test', async (req, res) => {
+router.post('/prowlarr/test', requireAdmin, async (req, res) => {
   try {
     const { url, apiKey } = req.body;
     if (!url || !apiKey) return res.status(400).json({ status: 'error', message: 'Missing URL or API Key' });
@@ -376,7 +376,7 @@ router.post('/prowlarr/test', async (req, res) => {
   }
 });
 
-router.post('/media-server/test', async (req, res) => {
+router.post('/media-server/test', requireAdmin, async (req, res) => {
   try {
     const { type, url, apiKey } = req.body;
     if (!type || !url || !apiKey) return res.status(400).json({ status: 'error', message: 'Missing type, URL, or API Key' });
@@ -446,7 +446,7 @@ function getPlexClientId() {
   return clientId;
 }
 
-router.post('/plex/pin', async (req, res, next) => {
+router.post('/plex/pin', requireAdmin, async (req, res, next) => {
   try {
     const clientId = getPlexClientId();
 
@@ -479,7 +479,7 @@ router.post('/plex/pin', async (req, res, next) => {
   }
 });
 
-router.get('/plex/pin/:pinId', async (req, res, next) => {
+router.get('/plex/pin/:pinId', requireAdmin, async (req, res, next) => {
   try {
     const clientId = getPlexClientId();
     const { pinId } = req.params;
@@ -568,7 +568,7 @@ router.get('/plex/pin/:pinId', async (req, res, next) => {
 });
 
 // Download Clients
-router.post('/clients', (req, res) => {
+router.post('/clients', requireAdmin, (req, res) => {
   const { name, host, port, username, password, type } = req.body;
   if (!name || typeof name !== 'string' || !name.trim()) {
     return res.status(400).json({ status: 'error', message: 'Client name is required' });
@@ -582,12 +582,12 @@ router.post('/clients', (req, res) => {
   res.json({ status: 'success', data: { id: result.lastInsertRowid } });
 });
 
-router.delete('/clients/:id', (req, res) => {
+router.delete('/clients/:id', requireAdmin, (req, res) => {
   db.prepare('DELETE FROM download_clients WHERE id = ?').run(req.params.id);
   res.json({ status: 'success' });
 });
 
-router.get('/clients/test', async (req, res) => {
+router.get('/clients/test', requireAdmin, async (req, res) => {
   try {
     const clients = db.prepare('SELECT * FROM download_clients').all();
     const statuses = {};
@@ -605,7 +605,7 @@ router.get('/clients/test', async (req, res) => {
   }
 });
 
-router.get('/clients/detect-mapping', async (req, res) => {
+router.get('/clients/detect-mapping', requireAdmin, async (req, res) => {
   try {
     const clients = db.prepare('SELECT * FROM download_clients').all();
     
@@ -721,7 +721,7 @@ router.get('/clients/detect-mapping', async (req, res) => {
 });
 
 // Quality Profiles
-router.post('/profiles', (req, res) => {
+router.post('/profiles', requireAdmin, (req, res) => {
   const { name, preferred_resolution, qualities, cutoff, upgrade_allowed, media_type } = req.body;
   const qStr = qualities ? JSON.stringify(qualities) : JSON.stringify(['1080p']);
   const result = db.prepare('INSERT INTO quality_profiles (name, preferred_resolution, qualities, cutoff, upgrade_allowed, media_type) VALUES (?, ?, ?, ?, ?, ?)').run(
@@ -730,7 +730,7 @@ router.post('/profiles', (req, res) => {
   res.json({ status: 'success', data: { id: result.lastInsertRowid } });
 });
 
-router.put('/profiles/:id', (req, res) => {
+router.put('/profiles/:id', requireAdmin, (req, res) => {
   const { name, preferred_resolution, qualities, cutoff, upgrade_allowed, media_type } = req.body;
   const qStr = qualities ? JSON.stringify(qualities) : JSON.stringify(['1080p']);
   db.prepare('UPDATE quality_profiles SET name = ?, preferred_resolution = ?, qualities = ?, cutoff = ?, upgrade_allowed = ?, media_type = ? WHERE id = ?').run(
@@ -739,7 +739,7 @@ router.put('/profiles/:id', (req, res) => {
   res.json({ status: 'success' });
 });
 
-router.delete('/profiles/:id', (req, res) => {
+router.delete('/profiles/:id', requireAdmin, (req, res) => {
   db.transaction(() => {
     db.prepare('DELETE FROM quality_profiles WHERE id = ?').run(req.params.id);
     db.prepare('UPDATE movies SET quality_profile_id = NULL WHERE quality_profile_id = ?').run(req.params.id);
@@ -1139,7 +1139,7 @@ router.get('/version', (req, res) => {
 });
 
 // Database Backup - download the SQLite database file
-router.get('/backup', (req, res, next) => {
+router.get('/backup', requireAdmin, (req, res, next) => {
   try {
     const dbPath = path.join(__dirname, '../data/database.sqlite');
     
@@ -1266,7 +1266,7 @@ router.get('/schedules', (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-router.post('/schedules', (req, res, next) => {
+router.post('/schedules', requireAdmin, (req, res, next) => {
   try {
     const { schedules } = req.body; // { taskId: cronString, ... }
     if (!schedules || typeof schedules !== 'object') {
@@ -1288,7 +1288,7 @@ router.post('/schedules', (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-router.post('/test-notification', async (req, res) => {
+router.post('/test-notification', requireAdmin, async (req, res) => {
   try {
     const notificationService = require('../services/notificationService');
     await notificationService.testNotification(req.body || {});

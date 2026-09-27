@@ -85,5 +85,30 @@ test('Scanner & Broadcasting Optimizations', async (t) => {
 
     const countAfterRollback = db.prepare(`SELECT COUNT(*) as cnt FROM ${testTable}`).get().cnt;
     assert.strictEqual(countAfterRollback, 120, 'Failed batch must be rolled back without partial commits');
+
+    // Test nested transaction support
+    db.transaction(() => {
+      insertStmt.run('outer_item');
+      db.transaction(() => {
+        insertStmt.run('inner_item');
+      })();
+    })();
+
+    const countAfterNested = db.prepare(`SELECT COUNT(*) as cnt FROM ${testTable}`).get().cnt;
+    assert.strictEqual(countAfterNested, 122, 'Nested transactions should both commit cleanly');
+
+    // Test nested transaction rollback propagates properly
+    assert.throws(() => {
+      db.transaction(() => {
+        insertStmt.run('outer_item_2');
+        db.transaction(() => {
+          insertStmt.run('inner_item_2');
+          throw new Error('Nested transaction abort');
+        })();
+      })();
+    });
+
+    const countAfterNestedAbort = db.prepare(`SELECT COUNT(*) as cnt FROM ${testTable}`).get().cnt;
+    assert.strictEqual(countAfterNestedAbort, 122, 'Nested abort should rollback all uncommitted changes');
   });
 });

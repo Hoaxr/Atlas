@@ -3,11 +3,12 @@ import { Navigate, Outlet } from 'react-router-dom';
 import api from '../../lib/api';
 import Spinner from '../shared/Spinner';
 
-export default function ProtectedRoute() {
+export default function ProtectedRoute({ adminOnly = false }) {
   const token = localStorage.getItem('atlas_token');
   const [authState, setAuthState] = useState({
     checking: true,
     allowed: !!token,
+    isAdmin: true,
   });
 
   useEffect(() => {
@@ -17,17 +18,37 @@ export default function ProtectedRoute() {
         if (!isMounted) return;
         if (res.data.status === 'success') {
           const { authEnabled } = res.data.data;
-          // If auth is disabled or user has token
-          if (!authEnabled || localStorage.getItem('atlas_token')) {
-            setAuthState({ checking: false, allowed: true });
+          let userRole = 'admin';
+          try {
+            const user = JSON.parse(localStorage.getItem('atlas_user'));
+            if (user?.role) userRole = user.role;
+          } catch { /* ignore */ }
+
+          if (!authEnabled) {
+            setAuthState({ checking: false, allowed: true, isAdmin: true });
+          } else if (localStorage.getItem('atlas_token')) {
+            setAuthState({
+              checking: false,
+              allowed: true,
+              isAdmin: userRole === 'admin',
+            });
           } else {
-            setAuthState({ checking: false, allowed: false });
+            setAuthState({ checking: false, allowed: false, isAdmin: false });
           }
         }
       })
       .catch(() => {
         if (!isMounted) return;
-        setAuthState({ checking: false, allowed: !!localStorage.getItem('atlas_token') });
+        let userRole = 'admin';
+        try {
+          const user = JSON.parse(localStorage.getItem('atlas_user'));
+          if (user?.role) userRole = user.role;
+        } catch { /* ignore */ }
+        setAuthState({
+          checking: false,
+          allowed: !!localStorage.getItem('atlas_token'),
+          isAdmin: userRole === 'admin',
+        });
       });
 
     return () => {
@@ -45,6 +66,10 @@ export default function ProtectedRoute() {
 
   if (!authState.allowed) {
     return <Navigate to="/login" replace />;
+  }
+
+  if (adminOnly && !authState.isAdmin) {
+    return <Navigate to="/portal" replace />;
   }
 
   return <Outlet />;

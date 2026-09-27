@@ -87,7 +87,7 @@ export default function TopBar({ user, activity, onOpenSearch, onOpenShortcuts, 
     : 'Admin';
 
   return (
-    <header className="h-16 shrink-0 flex items-center justify-between gap-3 sm:gap-4 px-4 sm:px-6 lg:px-8 bg-slate-100/90 dark:bg-[#101b2b] border-b border-slate-200 dark:border-slate-800/80 backdrop-blur-md relative z-40">
+    <header className="h-16 shrink-0 flex items-center justify-between gap-2.5 sm:gap-4 px-3 sm:px-6 lg:px-8 bg-slate-100/90 dark:bg-[#101b2b] border-b border-slate-200 dark:border-slate-800/80 backdrop-blur-md relative z-40 max-w-full overflow-hidden">
       <button
         onClick={() => window.dispatchEvent(new CustomEvent('atlas-toggle-sidebar'))}
         className="lg:hidden p-2 -ml-1 rounded-lg text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-100 hover:bg-slate-200/70 dark:hover:bg-slate-800/70 transition-colors shrink-0"
@@ -97,19 +97,20 @@ export default function TopBar({ user, activity, onOpenSearch, onOpenShortcuts, 
       </button>
 
       {/* Global search trigger */}
-      <div className="flex-1 max-w-xl md:max-w-2xl flex items-center bg-white dark:bg-[#101e31] border border-slate-200 dark:border-[#1c2d46] hover:border-slate-300 dark:hover:border-slate-600 rounded-xl px-3.5 sm:px-4 py-1.5 sm:py-2 transition-all shadow-sm group">
+      <div className="flex-1 min-w-0 max-w-xl md:max-w-2xl flex items-center bg-white dark:bg-[#101e31] border border-slate-200 dark:border-[#1c2d46] hover:border-slate-300 dark:hover:border-slate-600 rounded-xl px-2.5 sm:px-4 py-1.5 sm:py-2 transition-all shadow-sm group">
         <button
           type="button"
           onClick={onOpenSearch}
           aria-label="Find movies, shows, music, and more..."
-          className="flex items-center gap-3 min-w-0 flex-1 text-left py-0.5"
+          className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1 text-left py-0.5"
         >
           <Search className="w-4 h-4 text-slate-400 dark:text-slate-300 group-hover:text-white transition-colors shrink-0" />
-          <span className="truncate text-sm text-slate-500 dark:text-slate-200 font-normal">
-            Find movies, shows, music, and more...
+          <span className="truncate text-xs sm:text-sm text-slate-500 dark:text-slate-200 font-normal">
+            <span className="sm:hidden">Search...</span>
+            <span className="hidden sm:inline">Find movies, shows, music, and more...</span>
           </span>
         </button>
-        <div className="flex items-center gap-2 shrink-0 ml-2">
+        <div className="hidden sm:flex items-center gap-2 shrink-0 ml-2">
           <kbd
             onClick={onOpenSearch}
             className="hidden sm:inline-flex items-center gap-1 shrink-0 px-2 py-0.5 rounded-md bg-slate-100 dark:bg-[#18283e] border border-slate-200 dark:border-slate-700/60 text-[11px] font-medium text-slate-500 dark:text-slate-200 font-mono shadow-sm cursor-pointer"
@@ -129,14 +130,14 @@ export default function TopBar({ user, activity, onOpenSearch, onOpenShortcuts, 
       </div>
 
       {/* Action icons: donate, notifications, status, settings, account */}
-      <div className="ml-auto flex items-center gap-2 sm:gap-3 md:gap-4 shrink-0">
+      <div className="ml-auto flex items-center gap-1 sm:gap-3 md:gap-4 shrink-0">
         <a
           href="https://www.paypal.com/donate/?business=C5EDZZUFSMX4J&no_recurring=0&item_name=Thanks+for+the+coffee&currency_code=EUR"
           target="_blank"
           rel="noopener noreferrer"
           title="Donate"
           aria-label="Donate"
-          className="p-2 rounded-xl text-rose-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors flex items-center justify-center group"
+          className="hidden md:flex p-2 rounded-xl text-rose-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors items-center justify-center group"
         >
           <Heart className="w-5 h-5 text-rose-500 fill-rose-500 group-hover:scale-110 transition-transform duration-200" />
         </a>
@@ -237,7 +238,7 @@ export default function TopBar({ user, activity, onOpenSearch, onOpenShortcuts, 
           onClick={() => navigate('/status')}
           title="Status"
           aria-label="Status"
-          className="p-2 rounded-xl text-slate-500 dark:text-slate-300 hover:text-slate-800 dark:hover:text-white hover:bg-slate-200/70 dark:hover:bg-slate-800/60 transition-colors"
+          className="hidden sm:flex p-2 rounded-xl text-slate-500 dark:text-slate-300 hover:text-slate-800 dark:hover:text-white hover:bg-slate-200/70 dark:hover:bg-slate-800/60 transition-colors"
         >
           <Activity className="w-5 h-5" />
         </button>
@@ -247,7 +248,7 @@ export default function TopBar({ user, activity, onOpenSearch, onOpenShortcuts, 
           onClick={() => navigate('/settings')}
           title="Settings"
           aria-label="Settings"
-          className="p-2 rounded-xl text-slate-500 dark:text-slate-300 hover:text-slate-800 dark:hover:text-white hover:bg-slate-200/70 dark:hover:bg-slate-800/60 transition-colors"
+          className="hidden sm:flex p-2 rounded-xl text-slate-500 dark:text-slate-300 hover:text-slate-800 dark:hover:text-white hover:bg-slate-200/70 dark:hover:bg-slate-800/60 transition-colors"
         >
           <SlidersHorizontal className="w-5 h-5" />
         </button>
@@ -256,8 +257,8 @@ export default function TopBar({ user, activity, onOpenSearch, onOpenShortcuts, 
         <div className="h-6 w-px bg-slate-200 dark:bg-slate-700/60 mx-1 hidden sm:block" />
 
         {/* Account */}
-        <div className="flex items-center gap-2.5 py-1 px-1.5 sm:px-2 rounded-xl text-slate-700 dark:text-slate-200 shrink-0 ml-1">
-          <span className="w-9 h-9 rounded-full bg-blue-600 text-white text-xs font-bold flex items-center justify-center shrink-0 shadow-sm">
+        <div className="flex items-center gap-2 py-1 px-1 sm:px-2 rounded-xl text-slate-700 dark:text-slate-200 shrink-0">
+          <span className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-blue-600 text-white text-xs font-bold flex items-center justify-center shrink-0 shadow-sm">
             {initialsOf(displayName)}
           </span>
           <span className="hidden sm:flex flex-col text-left leading-tight max-w-[140px]">
@@ -276,7 +277,7 @@ export default function TopBar({ user, activity, onOpenSearch, onOpenShortcuts, 
           onClick={onLogout}
           title="Logout"
           aria-label="Logout"
-          className="p-2 rounded-xl text-slate-500 dark:text-slate-400 hover:text-rose-500 dark:hover:text-rose-400 hover:bg-rose-500/10 dark:hover:bg-rose-500/10 transition-colors shrink-0"
+          className="hidden sm:flex p-2 rounded-xl text-slate-500 dark:text-slate-400 hover:text-rose-500 dark:hover:text-rose-400 hover:bg-rose-500/10 dark:hover:bg-rose-500/10 transition-colors shrink-0"
         >
           <LogOut className="w-5 h-5" />
         </button>

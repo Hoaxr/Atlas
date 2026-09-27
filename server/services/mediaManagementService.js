@@ -66,6 +66,52 @@ const formatSeriesFolder = (title, year, config) => {
   return formatted || sanitizedTitle;
 };
 
+/**
+ * Resolves a clean, standardized destination path for companion subtitles (.srt/.vtt).
+ * Normalizes language codes, prevents "..srt", and strips duplicate numbering (e.g. .en.0.srt).
+ */
+const resolveCompanionSubPath = (destFolder, baseFileName, entry, baseVideoName) => {
+  const subExt = path.extname(entry).toLowerCase();
+  const entryBase = path.basename(entry, subExt);
+  if (entryBase !== baseVideoName && !entryBase.startsWith(`${baseVideoName}.`)) {
+    return null;
+  }
+
+  const cleanBase = String(baseFileName || '').replace(/\.+$/, '');
+  let rawSuffix = entryBase.startsWith(`${baseVideoName}.`)
+    ? entryBase.substring(baseVideoName.length)
+    : '';
+  rawSuffix = rawSuffix.toLowerCase().replace(/^\.+|\.+$/g, '').trim();
+
+  // Strip duplicate numbering at the end, e.g. "en.0", "en.1", "en_0", "en-1"
+  rawSuffix = rawSuffix.replace(/[._-]\d+$/, '');
+
+  // Detect forced flag
+  const isForced = rawSuffix.includes('forced');
+  const withoutForced = rawSuffix.replace(/[._-]?forced[._-]?/gi, '').replace(/^\.+|\.+$/g, '');
+
+  let lang = 'en';
+  if (withoutForced) {
+    if (withoutForced.includes('dutch') || withoutForced.includes('nederlands') || withoutForced === 'nld' || withoutForced === 'dut' || withoutForced === 'nl') {
+      lang = 'nl';
+    } else if (withoutForced.includes('english') || withoutForced === 'eng' || withoutForced === 'en') {
+      lang = 'en';
+    } else {
+      const match = withoutForced.match(/^([a-z]{2,3})/);
+      if (match) {
+        const { LANG_TO_CODE, CODE_TO_LANG } = require('../utils/constants');
+        const code = match[1];
+        if (LANG_TO_CODE && LANG_TO_CODE[code]) lang = LANG_TO_CODE[code];
+        else if (CODE_TO_LANG && CODE_TO_LANG[code]) lang = code;
+        else if (code.length === 2) lang = code;
+      }
+    }
+  }
+
+  const finalSuffix = isForced ? `${lang}.forced` : lang;
+  const subName = `${cleanBase}.${finalSuffix}${subExt}`.replace(/\.{2,}/g, '.');
+  return path.join(destFolder, subName);
+};
 
 // Find ALL video files in a directory tree — used for season pack imports
 const findAllVideoFiles = async (dirPath) => {
@@ -676,28 +722,24 @@ const importMovie = async (torrent, movie) => {
       fs.existsSync(destFile)
     );
 
-    // Clean up any existing video files and old subtitle files if redownloading a new release
-    if (fs.existsSync(destFolder)) {
+    // Clean up previous release's specific files if replacing an existing movie file
+    if (movie.file_path && movie.file_path !== destFile && fs.existsSync(movie.file_path)) {
+      console.log(`[MediaManagement] Removing old version file: ${movie.file_path}`);
+      await fs.promises.unlink(movie.file_path).catch(() => {});
+
+      // Clean old subtitles matching the old file's basename
       try {
-        const existingFiles = await fs.promises.readdir(destFolder);
-        for (const existing of existingFiles) {
-          if (isVideoFile(existing)) {
-            const oldPath = path.join(destFolder, existing);
-            console.log(`[MediaManagement] Removing old video file: ${oldPath}`);
-            await fs.promises.unlink(oldPath).catch(() => {});
-          } else if (isRedownload && isSubtitleFile(existing)) {
-            // Remove old release's subtitle files so new release gets fresh, correctly synced subtitles
-            const oldSubPath = path.join(destFolder, existing);
-            console.log(`[MediaManagement] Purging obsolete subtitle from previous release: ${oldSubPath}`);
-            await fs.promises.unlink(oldSubPath).catch(() => {});
+        const oldParsed = path.parse(movie.file_path);
+        const oldDir = oldParsed.dir;
+        if (fs.existsSync(oldDir)) {
+          const filesInOldDir = await fs.promises.readdir(oldDir);
+          for (const f of filesInOldDir) {
+            if (f.startsWith(oldParsed.name) && isSubtitleFile(f)) {
+              await fs.promises.unlink(path.join(oldDir, f)).catch(() => {});
+            }
           }
         }
-      } catch { /* ignore cleanup errors */ }
-    }
-    
-    if (movie.file_path && movie.file_path !== destFile && fs.existsSync(movie.file_path)) {
-      console.log(`[MediaManagement] Deleting old file at ${movie.file_path}.`);
-      await fs.promises.unlink(movie.file_path).catch(() => {});
+      } catch { /* ignore sidecar cleanup errors */ }
     }
 
     if (fs.existsSync(destFile)) {
@@ -711,8 +753,16 @@ const importMovie = async (torrent, movie) => {
       console.log(`[MediaManagement] Hardlink complete for ${movie.title}`);
     } catch (linkErr) {
       if (linkErr.code === 'EXDEV') {
-        console.log(`[MediaManagement] Cross-device link failed. Falling back to copy for ${movie.title}`);
-        await fs.promises.copyFile(videoFile.path, destFile);
+        console.log(`[MediaManagement] Cross-device link failed. Falling back to atomic copy for ${movie.title}`);
+        const partialDest = `${destFile}.partial`;
+        try {
+          if (fs.existsSync(partialDest)) await fs.promises.unlink(partialDest).catch(() => {});
+          await fs.promises.copyFile(videoFile.path, partialDest);
+          await fs.promises.rename(partialDest, destFile);
+        } catch (copyErr) {
+          if (fs.existsSync(partialDest)) await fs.promises.unlink(partialDest).catch(() => {});
+          throw copyErr;
+        }
         const shouldRemoveCompleted = db.prepare('SELECT value FROM settings WHERE key = ?').get('removeCompletedDownloads')?.value === 'true';
         if (shouldRemoveCompleted) {
           console.log(`[MediaManagement] Copy complete for ${movie.title}. Deleting original download file.`);
@@ -733,17 +783,13 @@ const importMovie = async (torrent, movie) => {
       const baseVideoName = path.basename(videoFile.path, ext);
       const dirEntries = await fs.promises.readdir(videoDir).catch(() => []);
       for (const entry of dirEntries) {
-        const subExt = path.extname(entry).toLowerCase();
         if (isSubtitleFile(entry)) {
-          const entryBase = path.basename(entry, subExt);
-          if (entryBase === baseVideoName || entryBase.startsWith(`${baseVideoName}.`)) {
-            let subLangSuffix = entryBase.startsWith(`${baseVideoName}.`) ? entryBase.substring(baseVideoName.length) : '';
-            subLangSuffix = subLangSuffix.replace(/^\.+|\.+$/g, '');
-            const subName = subLangSuffix ? `${fileName}.${subLangSuffix}${subExt}` : `${fileName}${subExt}`;
+          const destSubPath = resolveCompanionSubPath(destFolder, fileName, entry, baseVideoName);
+          if (destSubPath) {
+            // Avoid creating duplicate files if this language sub is already present
+            if (fs.existsSync(destSubPath)) continue;
             const srcSubPath = path.join(videoDir, entry);
-            const destSubPath = path.join(destFolder, subName);
             try {
-              if (fs.existsSync(destSubPath)) await fs.promises.unlink(destSubPath).catch(() => {});
               await fs.promises.link(srcSubPath, destSubPath).catch(async () => {
                 await fs.promises.copyFile(srcSubPath, destSubPath);
               });
@@ -905,10 +951,42 @@ const importEpisode = async (torrent, episode) => {
       }
     }
     
-    const videoFile = await findLargestVideoFile(contentPath);
+    let videoFile = null;
+    const contentStat = await fs.promises.stat(contentPath).catch(() => null);
+    if (contentStat && contentStat.isFile()) {
+      if (isVideoFile(contentPath)) {
+        videoFile = { path: contentPath, name: path.basename(contentPath), size: contentStat.size, dir: path.dirname(contentPath) };
+      }
+    } else if (contentStat && contentStat.isDirectory()) {
+      const allVideos = await findAllVideoFiles(contentPath);
+      if (allVideos.length === 1) {
+        const s = await fs.promises.stat(allVideos[0]).catch(() => null);
+        if (s) videoFile = { path: allVideos[0], name: path.basename(allVideos[0]), size: s.size, dir: path.dirname(allVideos[0]) };
+      } else if (allVideos.length > 1) {
+        // Multi-file release: find the video file that specifically matches this episode
+        for (const vPath of allVideos) {
+          const parsed = parseEpisodeFromFilename(vPath);
+          if (parsed) {
+            const matchesSeason = (parsed.season === episode.season_number);
+            const matchesEp = Array.isArray(parsed.episodes) && parsed.episodes.includes(episode.episode_number);
+            if (matchesSeason && matchesEp) {
+              const s = await fs.promises.stat(vPath).catch(() => null);
+              if (s) {
+                videoFile = { path: vPath, name: path.basename(vPath), size: s.size, dir: path.dirname(vPath) };
+                break;
+              }
+            }
+          }
+        }
+      }
+    }
+
+    if (!videoFile) {
+      videoFile = await findLargestVideoFile(contentPath);
+    }
     
     if (!videoFile) {
-      console.warn(`[MediaManagement] No video file found in ${contentPath}`);
+      console.warn(`[MediaManagement] No video file found for episode ${episode.show_title} S${episode.season_number}E${episode.episode_number} in ${contentPath}`);
       return;
     }
 
@@ -1011,8 +1089,16 @@ const importEpisode = async (torrent, episode) => {
       console.log(`[MediaManagement] Hardlink complete for episode.`);
     } catch (linkErr) {
       if (linkErr.code === 'EXDEV') {
-        console.log(`[MediaManagement] Cross-device link failed. Falling back to copy for episode.`);
-        await fs.promises.copyFile(videoFile.path, destFile);
+        console.log(`[MediaManagement] Cross-device link failed. Falling back to atomic copy for episode.`);
+        const partialDest = `${destFile}.partial`;
+        try {
+          if (fs.existsSync(partialDest)) await fs.promises.unlink(partialDest).catch(() => {});
+          await fs.promises.copyFile(videoFile.path, partialDest);
+          await fs.promises.rename(partialDest, destFile);
+        } catch (copyErr) {
+          if (fs.existsSync(partialDest)) await fs.promises.unlink(partialDest).catch(() => {});
+          throw copyErr;
+        }
         const shouldRemoveCompleted = db.prepare('SELECT value FROM settings WHERE key = ?').get('removeCompletedDownloads')?.value === 'true';
         if (shouldRemoveCompleted) {
           console.log(`[MediaManagement] Copy complete for episode. Deleting original download file.`);
@@ -1033,17 +1119,13 @@ const importEpisode = async (torrent, episode) => {
       const baseVideoName = path.basename(videoFile.path, ext);
       const dirEntries = await fs.promises.readdir(videoDir).catch(() => []);
       for (const entry of dirEntries) {
-        const subExt = path.extname(entry).toLowerCase();
         if (isSubtitleFile(entry)) {
-          const entryBase = path.basename(entry, subExt);
-          if (entryBase === baseVideoName || entryBase.startsWith(`${baseVideoName}.`)) {
-            let subLangSuffix = entryBase.startsWith(`${baseVideoName}.`) ? entryBase.substring(baseVideoName.length) : '';
-            subLangSuffix = subLangSuffix.replace(/^\.+|\.+$/g, '');
-            const subName = subLangSuffix ? `${fileName}.${subLangSuffix}${subExt}` : `${fileName}${subExt}`;
+          const destSubPath = resolveCompanionSubPath(destFolder, fileName, entry, baseVideoName);
+          if (destSubPath) {
+            // Avoid creating duplicate files if this language sub is already present
+            if (fs.existsSync(destSubPath)) continue;
             const srcSubPath = path.join(videoDir, entry);
-            const destSubPath = path.join(destFolder, subName);
             try {
-              if (fs.existsSync(destSubPath)) await fs.promises.unlink(destSubPath).catch(() => {});
               await fs.promises.link(srcSubPath, destSubPath).catch(async () => {
                 await fs.promises.copyFile(srcSubPath, destSubPath);
               });

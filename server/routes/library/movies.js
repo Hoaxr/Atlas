@@ -15,7 +15,7 @@ const subtitleService = require('../../services/subtitles');
 const { decodeSubtitleBuffer } = require('../../services/subtitles/parser');
 const { getMediaMetadata, parseAudioFromFileName } = require('../../utils/videoUtils');
 const { isWatchedSyncEnabled, extractLang, translateSrt, LANG_CODE } = require('./helpers');
-const { isRootLibraryPath, findLargestVideoFile, deleteFolderRecursive } = require('../../utils/fileUtils');
+const { isRootLibraryPath, findLargestVideoFile, deleteFolderRecursive, safelyDeleteMovieFiles } = require('../../utils/fileUtils');
 const { scanSubtitleLangs } = require('../../services/scanner/fileScanner');
 const requireAdmin = require('../../middleware/requireAdmin');
 const imageService = require('../../services/imageService');
@@ -464,8 +464,10 @@ router.post('/:id/translate-subs', async (req, res, _next) => {
     if (!fs.existsSync(movie.file_path)) return res.status(400).json({ status: 'error', message: 'Movie file not found on disk' });
 
     const parsedPath = path.parse(movie.file_path);
-    const enSubPath = path.join(parsedPath.dir, `${parsedPath.name}.en.srt`);
-    const targetSubPath = path.join(parsedPath.dir, `${parsedPath.name}.${langCode}.srt`);
+    const cleanBaseName = parsedPath.name.replace(/\.+$/, '');
+    const safeLangCode = (String(langCode || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '')) || 'en';
+    const enSubPath = path.join(parsedPath.dir, `${cleanBaseName}.en.srt`);
+    const targetSubPath = path.join(parsedPath.dir, `${cleanBaseName}.${safeLangCode}.srt`);
 
     if (!fs.existsSync(enSubPath)) {
       return res.status(400).json({ status: 'error', message: 'No English subtitle found to translate. Download English subs first.' });
@@ -505,7 +507,9 @@ router.post('/:id/download-subs', async (req, res, _next) => {
     }
 
     const parsedPath = path.parse(movie.file_path);
-    const subPath = path.join(parsedPath.dir, `${parsedPath.name}.${langCode}.srt`);
+    const cleanBaseName = parsedPath.name.replace(/\.+$/, '');
+    const safeLangCode = (String(langCode || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '')) || 'en';
+    const subPath = path.join(parsedPath.dir, `${cleanBaseName}.${safeLangCode}.srt`);
 
     // If an OpenSubtitles fileId is provided, download by file ID
     if ((provider === 'OpenSubtitles' || !provider) && fileId) {
@@ -650,17 +654,9 @@ router.delete('/:id', async (req, res, next) => {
 
     if (deleteFiles) {
       try {
-        const dir = movie.file_path ? path.dirname(movie.file_path) : movie.folder_path;
-        if (dir) {
-          if (isRootLibraryPath(dir)) {
-            // Only delete the file itself if the directory is a root library path
-            if (movie.file_path) await fsp.unlink(movie.file_path).catch(() => {});
-          } else {
-            await deleteFolderRecursive(dir);
-          }
-        }
+        await safelyDeleteMovieFiles(movie);
       } catch (e) {
-        console.warn('[movies] Could not delete folder:', e?.message);
+        console.warn('[movies] Could not delete movie files:', e?.message);
       }
     }
 

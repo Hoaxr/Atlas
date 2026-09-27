@@ -1,4 +1,4 @@
-import { Menu, Search, X, Loader2 } from 'lucide-react';
+import { Search, X, Loader2 } from 'lucide-react';
 
 /**
  * Sticky top bar that appears when scrolling past the page header.
@@ -8,19 +8,18 @@ import { Menu, Search, X, Loader2 } from 'lucide-react';
 export default function StickyBar({ visible, isVisible, searchQuery, onSearchChange, searchPlaceholder, showSearch = false, isTyping = false, inputRef, children }) {
   const show = visible ?? isVisible ?? false;
   const hasDesktopContent = Boolean(showSearch || children);
+
+  // When not active or without content to show, render nothing (avoids duplicate mobile bar)
+  if (!show || !hasDesktopContent) {
+    return null;
+  }
+
   return (
     <div
-      className={`sticky top-0 z-40 !mt-0 -mx-3 sm:-mx-4 md:-mx-6 lg:-mx-8 px-3 sm:px-4 md:px-6 lg:px-8 ${showSearch ? 'py-3' : 'py-2'} bg-[#101b2b]/95 backdrop-blur-md border-b border-slate-800/80 ${(show && hasDesktopContent) ? '' : 'sm:hidden'}`}
+      className={`sticky top-0 z-40 !mt-0 -mx-3 sm:-mx-4 md:-mx-6 lg:-mx-8 px-3 sm:px-4 md:px-6 lg:px-8 ${showSearch ? 'py-3' : 'py-2'} bg-[#101b2b]/95 backdrop-blur-md border-b border-slate-800/80 shadow-md transition-all duration-200`}
       style={{ paddingTop: `calc(${showSearch ? '0.75rem' : '0.5rem'} + env(safe-area-inset-top))` }}
     >
       <div className={`flex items-center gap-2 ${showSearch ? 'relative max-w-2xl mx-auto' : ''}`}>
-        <button
-          onClick={() => window.dispatchEvent(new CustomEvent('atlas-toggle-sidebar'))}
-          className="sm:hidden p-2 -ml-1 text-slate-400 hover:text-white transition-colors shrink-0"
-          aria-label="Open navigation menu"
-        >
-          <Menu className="w-5 h-5" />
-        </button>
         {children}
         {showSearch && (
           <div className="relative flex-1">

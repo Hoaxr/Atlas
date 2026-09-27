@@ -145,4 +145,75 @@ const findLargestVideoFile = async (dirPath) => {
   return best;
 };
 
-module.exports = { VIDEO_EXTENSIONS, AUDIO_EXTENSIONS, SUBTITLE_EXTENSIONS, isVideoFile, isAudioFile, isSubtitleFile, deleteFolderRecursive, isRootLibraryPath, isPathContainedInLibrary, findLargestVideoFile };
+/**
+ * Safely deletes a movie's files from disk without destroying parent/shared directories.
+ * - Deletes the movie file itself.
+ * - Deletes directly matching sidecars (subtitles, .nfo).
+ * - Only removes the directory if it's NOT a root library path, contains NO other video files,
+ *   and is not referenced by any other movie in the database.
+ */
+const safelyDeleteMovieFiles = async (movie) => {
+  if (!movie) return;
+  const db = require('../config/database');
+  const filePath = movie.file_path;
+  const folderPath = movie.folder_path;
+  const dir = filePath ? path.dirname(filePath) : folderPath;
+
+  // 1. Delete the video file if present
+  if (filePath) {
+    try {
+      await fsp.unlink(filePath);
+    } catch (e) {
+      if (e.code !== 'ENOENT') console.warn(`[fileUtils] Failed to unlink movie file: ${filePath}`, e.message);
+    }
+
+    // 2. Delete sidecar files that share the exact basename (e.g. Movie.en.srt, Movie.nfo)
+    if (dir) {
+      try {
+        const parsed = path.parse(filePath);
+        const entries = await fsp.readdir(dir);
+        for (const entry of entries) {
+          if (entry.startsWith(parsed.name)) {
+            const entryPath = path.join(dir, entry);
+            const ext = path.extname(entry).toLowerCase();
+            if (SUBTITLE_EXTENSIONS.has(ext) || ext === '.nfo') {
+              await fsp.unlink(entryPath).catch(() => {});
+            }
+          }
+        }
+      } catch { /* ignore */ }
+    }
+  }
+
+  // 3. Inspect the directory before any directory removal
+  if (!dir || isRootLibraryPath(dir) || !isPathContainedInLibrary(dir)) {
+    return;
+  }
+
+  try {
+    // Check if any other movie in the DB references this directory or files in it
+    const otherMovie = db.prepare(
+      'SELECT id FROM movies WHERE (file_path LIKE ? OR folder_path = ?) AND id != ? LIMIT 1'
+    ).get(`${dir}%`, dir, movie.id);
+
+    if (otherMovie) {
+      // Another movie shares this directory or is inside it — never delete dir!
+      return;
+    }
+
+    // Check if any other video files remain in the directory
+    const remainingEntries = await fsp.readdir(dir);
+    const hasRemainingVideos = remainingEntries.some(e => isVideoFile(e));
+    if (hasRemainingVideos) {
+      // Other video files exist (e.g., another movie or unmonitored media) — preserve folder!
+      return;
+    }
+
+    // If only non-video files or empty, safe to remove directory
+    await fsp.rm(dir, { recursive: true, force: true }).catch(() => {});
+  } catch (err) {
+    console.warn(`[fileUtils] Could not safely clean movie directory ${dir}:`, err.message);
+  }
+};
+
+module.exports = { VIDEO_EXTENSIONS, AUDIO_EXTENSIONS, SUBTITLE_EXTENSIONS, isVideoFile, isAudioFile, isSubtitleFile, deleteFolderRecursive, isRootLibraryPath, isPathContainedInLibrary, findLargestVideoFile, safelyDeleteMovieFiles };

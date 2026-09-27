@@ -56,11 +56,6 @@ const processScannedFiles = async (allFiles, scanProgress, mode, nextStage) => {
       return;
     }
 
-    // Skip season 0 specials completely per user preference
-    if (isShow && seasonNumber === 0) {
-      scanProgress.processedFiles++;
-      return;
-    }
 
     if (isShow) {
       // ──────────────────────────────────────────────
@@ -490,11 +485,35 @@ const processScannedFiles = async (allFiles, scanProgress, mode, nextStage) => {
           const defaultProfile = db.prepare("SELECT id FROM quality_profiles WHERE media_type IN ('movies', 'both') OR media_type IS NULL ORDER BY id ASC LIMIT 1").get();
           const defaultProfileId = defaultProfile?.id || null;
 
-          const existingMonitored = db.prepare('SELECT id FROM movies WHERE tmdb_id = ?').get(matchedMovie.id);
+          const existingMonitored = db.prepare('SELECT id, file_path, resolution, file_size FROM movies WHERE tmdb_id = ?').get(matchedMovie.id);
           
           if (existingMonitored) {
-            db.prepare('UPDATE movies SET file_path = ?, status = ?, rating = ?, file_size = ?, quality_profile_id = COALESCE(quality_profile_id, ?) WHERE tmdb_id = ?')
-              .run(fullPath, 'downloaded', movieRating, fileSize, defaultProfileId, matchedMovie.id);
+            let shouldUpdateFilePath = true;
+            if (existingMonitored.file_path && existingMonitored.file_path !== fullPath) {
+              const syncFs = require('fs');
+              try {
+                if (syncFs.existsSync(existingMonitored.file_path)) {
+                  const QUALITY_RANKS = { '2160p': 4, '1080p': 3, '720p': 2, '480p': 1, 'Unknown': 0 };
+                  const newRes = parseResolution(file.name);
+                  const oldRes = existingMonitored.resolution || parseResolution(existingMonitored.file_path);
+                  const newRank = QUALITY_RANKS[newRes] || 0;
+                  const oldRank = QUALITY_RANKS[oldRes] || 0;
+                  if (oldRank > newRank) {
+                    shouldUpdateFilePath = false;
+                  } else if (oldRank === newRank && (existingMonitored.file_size || 0) > fileSize) {
+                    shouldUpdateFilePath = false;
+                  }
+                }
+              } catch { /* proceed */ }
+            }
+
+            if (shouldUpdateFilePath) {
+              db.prepare('UPDATE movies SET file_path = ?, status = ?, rating = ?, file_size = ?, quality_profile_id = COALESCE(quality_profile_id, ?) WHERE tmdb_id = ?')
+                .run(fullPath, 'downloaded', movieRating, fileSize, defaultProfileId, matchedMovie.id);
+            } else {
+              db.prepare('UPDATE movies SET status = ?, rating = ?, quality_profile_id = COALESCE(quality_profile_id, ?) WHERE tmdb_id = ?')
+                .run('downloaded', movieRating, defaultProfileId, matchedMovie.id);
+            }
             if (matchedMovie.poster_path) await imageService.ensurePoster('movies', matchedMovie.id, matchedMovie.poster_path).catch(err => console.error(`[Scanner] Poster fetch failed for movie ${matchedMovie.id}:`, err.message));
           } else if (mode === 'rematch' && existingMovie) {
             db.prepare('UPDATE movies SET tmdb_id = ?, title = ?, year = ?, poster_path = ?, overview = ?, status = ?, file_path = ?, rating = ?, file_size = ?, release_date = ? WHERE id = ?')

@@ -146,6 +146,17 @@ const doScan = async (mode = 'full') => {
         removedCount++;
       }
       
+      // Circuit breaker: do not delete or unmonitor movies en masse if drive is unreachable
+      if (existingMovies.length > 0 && moviesToDelete.length > 5 && moviesToDelete.length >= existingMovies.length * 0.2) {
+        console.error(`[Scanner] Circuit breaker triggered! ${moviesToDelete.length}/${existingMovies.length} movies appear missing (folder deleted). Aborting movie deletion to protect library.`);
+        moviesToDelete.length = 0;
+      }
+      if (existingMovies.length > 0 && (moviesToDelete.length + moviesToUpdate.length) > 10 && (moviesToDelete.length + moviesToUpdate.length) >= existingMovies.length * 0.5) {
+        console.error(`[Scanner] Circuit breaker triggered! Over 50% of movies (${moviesToDelete.length + moviesToUpdate.length}/${existingMovies.length}) appear missing. Aborting movie updates/deletions to protect library.`);
+        moviesToDelete.length = 0;
+        moviesToUpdate.length = 0;
+      }
+
       if (moviesToDelete.length > 0 || moviesToUpdate.length > 0) {
         db.transaction(() => {
           const delStmt = db.prepare('DELETE FROM movies WHERE id = ?');
@@ -165,11 +176,18 @@ const doScan = async (mode = 'full') => {
     if (mode !== 'movies' && mode !== 'music') {
       const existingShows = db.prepare("SELECT id, title, folder_path FROM shows WHERE folder_path IS NOT NULL").all();
       const showsToDelete = [];
+      const hasDownloadedEpStmt = db.prepare("SELECT 1 FROM episodes WHERE show_id = ? AND file_path IS NOT NULL LIMIT 1");
       for (const s of existingShows) {
         if (scanProgress.cancelled) throw new Error('Scan cancelled by user');
         const stillExists = allFiles.some(f => f.path.startsWith(s.folder_path + path.sep));
         if (stillExists) continue;
         try { await fs.access(s.folder_path); continue; } catch { /* gone */ }
+
+        // Only delete show if it actually had downloaded episodes that were removed from disk.
+        // A newly added show waiting for its first download does not have a folder on disk yet and must be preserved.
+        const hadDownloaded = hasDownloadedEpStmt.get(s.id);
+        if (!hadDownloaded) continue;
+
         showsToDelete.push({ id: s.id, title: s.title, folder_path: s.folder_path });
         removedCount++;
       }
@@ -201,6 +219,13 @@ const doScan = async (mode = 'full') => {
         try { await fs.access(ep.file_path); continue; } catch { /* file gone */ }
         orphanEpisodes.push(ep.id);
       }
+
+      // Circuit breaker for orphan episodes
+      if (existingEpisodes.length > 0 && orphanEpisodes.length > 20 && orphanEpisodes.length >= existingEpisodes.length * 0.5) {
+        console.error(`[Scanner] Circuit breaker triggered! Over 50% of episodes (${orphanEpisodes.length}/${existingEpisodes.length}) appear missing. Aborting episode status resets to protect library.`);
+        orphanEpisodes.length = 0;
+      }
+
       if (orphanEpisodes.length > 0) {
         db.transaction(() => {
           const resetStmt = db.prepare("UPDATE episodes SET status = 'monitored', file_path = NULL, file_size = NULL WHERE id = ?");
@@ -210,11 +235,6 @@ const doScan = async (mode = 'full') => {
         })();
         console.log(`[Scanner] Reset ${orphanEpisodes.length} episode(s) with missing files to monitored`);
       }
-
-      // Purge any Season 0 specials per user preference
-      try {
-        db.prepare("DELETE FROM episodes WHERE season_number = 0").run();
-      } catch { /* ignore */ }
     }
 
     if (removedCount > 0) {

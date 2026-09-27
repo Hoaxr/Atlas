@@ -331,16 +331,12 @@ const addShow = async (tmdbId, rootFolderPath = null, monitorLevel = 'all') => {
         ? path.join(libraryRoot, folderName) 
         : path.join(libraryRoot, 'TV Shows', folderName);
       
-      if (!fs.existsSync(destFolder)) {
-        fs.mkdirSync(destFolder, { recursive: true });
-        console.log(`[LibraryService] Pre-created show folder: ${destFolder}`);
-      }
-
-      // We should also persist the path in the shows DB since ShowDetails expects it for stats/downloads
+      // Do not create empty show folder on disk yet.
+      // The folder will only be created when the first download completes.
       db.prepare('UPDATE shows SET folder_path = ? WHERE id = ?').run(destFolder, internalShowId);
     }
   } catch (err) {
-    console.error(`[LibraryService] Failed to pre-create show folder:`, err.message);
+    console.error(`[LibraryService] Failed to determine show folder:`, err.message);
   }
 
   // Auto-approve any pending request for this show

@@ -168,13 +168,15 @@ function App() {
                   <Route path="music/albums/:id" element={<LazyPage><AlbumDetails /></LazyPage>} />
                   <Route path="downloads" element={<LazyPage><Downloads /></LazyPage>} />
                   <Route path="discover" element={<Discover />} />
-                  <Route path="tasks" element={<LazyPage><SystemTasks /></LazyPage>} />
-                  <Route path="settings" element={<LazyPage><Settings /></LazyPage>} />
+                  <Route element={<ProtectedRoute adminOnly />}>
+                    <Route path="tasks" element={<LazyPage><SystemTasks /></LazyPage>} />
+                    <Route path="settings" element={<LazyPage><Settings /></LazyPage>} />
+                    <Route path="stats/cleanup" element={<LazyPage><CleanupCandidates /></LazyPage>} />
+                  </Route>
                   <Route path="status" element={<LazyPage><Status /></LazyPage>} />
                   <Route path="calendar" element={<LazyPage><Calendar /></LazyPage>} />
                   <Route path="stats" element={<LazyPage><Statistics /></LazyPage>} />
                   <Route path="stats/health" element={<LazyPage><MediaHealth /></LazyPage>} />
-                  <Route path="stats/cleanup" element={<LazyPage><CleanupCandidates /></LazyPage>} />
                   <Route path="requests" element={<LazyPage><Requests /></LazyPage>} />
                   <Route path="watcher" element={<LazyPage><Watcher /></LazyPage>} />
                   <Route path="tracker" element={<Tracker />} />

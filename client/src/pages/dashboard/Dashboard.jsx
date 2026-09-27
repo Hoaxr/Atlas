@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { VirtuosoGrid } from 'react-virtuoso';
 import api from '../../lib/api';
-import { Activity, Film, Tv, Search, CheckCircle2, AlertCircle, Bookmark, LayoutGrid, List, Star, ArrowRight, Zap, Eye, EyeOff, X, RotateCcw, Filter as FilterIcon, CheckSquare, Square, Columns, Plus, ArrowUpDown, Tag, Layers, CircleDot } from 'lucide-react';
+import { Activity, Film, Tv, Search, CheckCircle2, AlertCircle, Bookmark, LayoutGrid, List, Star, ArrowRight, Zap, Eye, EyeOff, X, RotateCcw, Filter as FilterIcon, CheckSquare, Square, Columns, Plus, ArrowUpDown, Tag, Layers, CircleDot, Check } from 'lucide-react';
 import { customAlert, customConfirm } from '../../utils/alerts';
 import { cachedMovies, cachedShows, setCachedMovies, setCachedShows } from '../../lib/libraryCache';
 import { parseResolution, parseCodec } from '../../lib/format';
@@ -303,29 +303,17 @@ export default function Dashboard() {
         if (!isBackground) setError(null);
 
         if (!isBackground) {
+          // Warm up browser image cache for top visible items in background without blocking UI render
           try {
             const currentSort = localStorage.getItem(`atlas_${mode}_Sort`) || 'added_desc';
             const sortedData = sortItems([...data], currentSort);
-            const topItems = sortedData.slice(0, 50);
-            
-            const minLoadTime = new Promise(resolve => setTimeout(resolve, 600));
-            const imagePreloads = Promise.all(topItems.filter(item => item.poster_path && item.tmdb_id).map(item => {
-              return new Promise(resolve => {
-                const img = new window.Image();
-                img.src = posterUrl(mode, item.tmdb_id, item.poster_path);
-                if (img.decode) {
-                  img.decode().then(resolve).catch(resolve);
-                } else {
-                  img.onload = resolve;
-                  img.onerror = resolve;
-                }
-              });
-            }));
-            
-            // Wait for both minimum time AND all images to decode
-            await Promise.all([minLoadTime, imagePreloads]);
-          } catch (preloadErr) {
-            console.error('Failed to preload images', preloadErr);
+            const topItems = sortedData.slice(0, 12);
+            topItems.filter(item => item.poster_path && item.tmdb_id).forEach(item => {
+              const img = new window.Image();
+              img.src = posterUrl(mode, item.tmdb_id, item.poster_path);
+            });
+          } catch {
+            // Non-critical background warmup
           }
         }
       }
@@ -840,9 +828,9 @@ export default function Dashboard() {
                       <Columns className="w-4 h-4" />
                     </button>
                     {columnsMenuOpen && (
-                      <div className="absolute right-0 top-full mt-2 w-48 bg-[#0e1a2b] border border-[#1c2d46] rounded-xl shadow-xl shadow-black/40 z-[60] overflow-hidden">
-                        <div className="px-3.5 py-2 border-b border-[#1c2d46] text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Columns</div>
-                        <div className="p-1.5 flex flex-col gap-0.5">
+                      <div className="absolute right-0 top-full mt-1.5 w-48 bg-[#0e1a2b] border border-[#1c2d46] rounded-xl shadow-xl shadow-black/50 z-[60] py-1.5 overflow-hidden">
+                        <div className="px-3.5 py-1.5 border-b border-[#1c2d46] text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Columns</div>
+                        <div className="flex flex-col">
                           {columnOrder.filter(col => {
                             const def = COLUMN_DEFS[col];
                             if (!def) return false;
@@ -850,18 +838,42 @@ export default function Dashboard() {
                             if (col === 'episodes' && viewMode !== 'shows') return false;
                             if (col === 'subtitles' && viewMode !== 'movies') return false;
                             return true;
-                          }).map(col => (
-                            <label key={col} className="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg hover:bg-slate-800/60 cursor-pointer transition-colors group" onClick={(e) => { e.preventDefault(); setTableColumns(prev => ({ ...prev, [col]: !prev[col] })); }}>
-                              {tableColumns[col] ? (
-                                <div className="w-4 h-4 rounded bg-cyan-500/15 border border-cyan-500/40 flex items-center justify-center">
-                                  <CheckSquare className="w-3.5 h-3.5 text-cyan-400" />
+                          }).map(col => {
+                            const isSelected = !!tableColumns[col];
+                            return (
+                              <label
+                                key={col}
+                                className={`w-full text-left px-3.5 py-2 text-sm flex items-center justify-between transition-colors cursor-pointer ${
+                                  isSelected
+                                    ? 'bg-[#0d2b51]/60 text-white font-medium'
+                                    : 'text-slate-300 hover:bg-[#16273d] hover:text-white'
+                                }`}
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  setTableColumns(prev => ({ ...prev, [col]: !prev[col] }));
+                                }}
+                              >
+                                <div className="flex items-center gap-2.5">
+                                  <div
+                                    className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${
+                                      isSelected
+                                        ? 'bg-[#0d2b51] border-[#1b4273]'
+                                        : 'bg-slate-900 border-slate-700/80'
+                                    }`}
+                                  >
+                                    {isSelected && <Check className="w-3 h-3 text-[#e7ecf6]" />}
+                                  </div>
+                                  <span className="truncate capitalize">{col}</span>
                                 </div>
-                              ) : (
-                                <div className="w-4 h-4 rounded bg-slate-900 border border-slate-700/60 group-hover:border-slate-600 transition-colors" />
-                              )}
-                              <span className="text-xs text-slate-300 capitalize select-none group-hover:text-white transition-colors">{col}</span>
-                            </label>
-                          ))}
+                                <input
+                                  type="checkbox"
+                                  className="hidden"
+                                  checked={isSelected}
+                                  onChange={() => {}}
+                                />
+                              </label>
+                            );
+                          })}
                         </div>
                       </div>
                     )}

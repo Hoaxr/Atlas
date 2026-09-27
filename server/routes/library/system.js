@@ -753,21 +753,24 @@ router.post('/bulk/delete', async (req, res, next) => {
 
     if (deleteFiles) {
       const items = db.prepare(`SELECT * FROM ${table} WHERE id IN (${placeholders})`).all(...ids);
-      const { isRootLibraryPath } = require('../../utils/fileUtils');
+      const { isRootLibraryPath, safelyDeleteMovieFiles } = require('../../utils/fileUtils');
 
       for (const item of items) {
         try {
-          const dir = type === 'shows' ? item.folder_path : (item.file_path ? path.dirname(item.file_path) : item.folder_path);
-          if (dir) {
-            if (isRootLibraryPath(dir)) {
-               // Only delete the file itself if the directory is a root library path
-               if (item.file_path) await fsp.unlink(item.file_path).catch(() => {});
-            } else {
-               await deleteFolderRecursive(dir);
+          if (type === 'movies') {
+            await safelyDeleteMovieFiles(item);
+          } else {
+            const dir = item.folder_path;
+            if (dir) {
+              if (isRootLibraryPath(dir)) {
+                console.warn(`[bulk/delete] Refusing to delete root library path: ${dir}`);
+              } else {
+                await deleteFolderRecursive(dir);
+              }
             }
           }
         } catch (e) {
-          console.warn(`[bulk/delete] Could not delete folder for ${item.title}:`, e?.message);
+          console.warn(`[bulk/delete] Could not delete files for ${item.title}:`, e?.message);
         }
       }
     }
@@ -1011,20 +1014,24 @@ router.delete('/collections/:id', (req, res, next) => {
 // Walks all configured library paths and removes any file that is not a
 // video, subtitle, poster.jpg, or the first .nfo found in the folder.
 // Handles both flat movie folders and show → season subfolder structures.
-router.post('/cleanup-junk', async (req, res, next) => {
+router.post('/cleanup-junk', requireAdmin, async (req, res, next) => {
   try {
-    const { VIDEO_EXTENSIONS, SUBTITLE_EXTENSIONS } = require('../../utils/fileUtils');
+    const { VIDEO_EXTENSIONS, SUBTITLE_EXTENSIONS, AUDIO_EXTENSIONS } = require('../../utils/fileUtils');
+
+    const ALLOWED_METADATA_EXTS = new Set(['.nfo', '.jpg', '.jpeg', '.png', '.webp', '.bif', '.lrc']);
 
     const isKeepable = (filename) => {
       const lower = filename.toLowerCase();
       const ext = path.extname(lower);
       if (VIDEO_EXTENSIONS.has(ext)) return true;
       if (SUBTITLE_EXTENSIONS.has(ext)) return true;
+      if (AUDIO_EXTENSIONS.has(ext)) return true;
+      if (ALLOWED_METADATA_EXTS.has(ext)) return true;
       return false;
     };
 
     // Walk a single folder (non-recursive) and delete all junk files.
-    // Junk = anything that is not a video or subtitle file.
+    // Junk = anything that is not video, audio, subtitle, artwork or metadata.
     const cleanFolder = async (folderPath) => {
       const deleted = [];
 
@@ -1104,7 +1111,8 @@ router.post('/cleanup-junk', async (req, res, next) => {
     const allDeleted = [];
 
     for (const libPath of configuredPaths) {
-      if (libPath.type === 'downloads') continue;
+      // Never run junk cleanup on downloads or music library directories
+      if (libPath.type === 'downloads' || libPath.type === 'music') continue;
       const deleted = await processLibraryPath(libPath.path);
       allDeleted.push(...deleted);
     }

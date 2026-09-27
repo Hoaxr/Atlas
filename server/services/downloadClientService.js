@@ -9,13 +9,36 @@ const adapters = {
   sabnzbd: require('./clients/sabnzbd'),
 };
 
-const getClient = () => {
-  const client = db.prepare('SELECT * FROM download_clients LIMIT 1').get();
+const formatClient = (client) => {
   if (!client) return null;
-  // Only add protocol if host doesn't already specify one (supports both http:// and https://)
-  if (!/^https?:\/\//.test(client.host)) client.host = `http://${client.host}`;
-  client.type = client.type || 'qbittorrent';
-  return client;
+  const formatted = { ...client };
+  if (formatted.host && !/^https?:\/\//.test(formatted.host)) {
+    formatted.host = `http://${formatted.host}`;
+  }
+  formatted.type = formatted.type || 'qbittorrent';
+  return formatted;
+};
+
+const getClient = (clientId = null, type = null) => {
+  let client;
+  if (clientId) {
+    client = db.prepare('SELECT * FROM download_clients WHERE id = ?').get(clientId);
+  } else if (type) {
+    client = db.prepare('SELECT * FROM download_clients WHERE type = ? LIMIT 1').get(type);
+  }
+  if (!client) {
+    client = db.prepare('SELECT * FROM download_clients LIMIT 1').get();
+  }
+  return formatClient(client);
+};
+
+const getAllClients = () => {
+  try {
+    const clients = db.prepare('SELECT * FROM download_clients').all();
+    return clients.map(formatClient);
+  } catch {
+    return [];
+  }
 };
 
 const getAdapter = (client) => {
@@ -54,11 +77,11 @@ const validateTorrentUrl = (url) => {
   }
 };
 
-const addTorrent = async (torrentUrl, type = 'movie') => {
+const addTorrent = async (torrentUrl, type = 'movie', clientId = null) => {
   validateTorrentUrl(torrentUrl);
-  const client = getClient();
+  const client = getClient(clientId);
   if (!client) throw new Error('No download client configured');
-  console.log(`[DownloadClient] Adding ${type} torrent via ${client.type}: ${String(torrentUrl).substring(0, 80)}...`);
+  console.log(`[DownloadClient] Adding ${type} torrent via ${client.type} (id=${client.id}): ${String(torrentUrl).substring(0, 80)}...`);
   return getAdapter(client).addTorrent(client, torrentUrl, type);
 };
 
@@ -95,58 +118,125 @@ const enrichTorrents = (torrents) => {
   });
 };
 
-const getTorrents = async () => {
-  const client = getClient();
-  if (!client) return [];
-  const torrents = await getAdapter(client).getTorrents(client);
-  const clientName = client.name || (client.type === 'qbittorrent' ? 'qBittorrent' : client.type === 'deluge' ? 'Deluge' : client.type === 'transmission' ? 'Transmission' : client.type || 'qBittorrent');
-  const mapped = torrents.map(t => ({ ...t, clientName: t.clientName || clientName }));
-  return enrichTorrents(mapped);
+const getTorrents = async (clientId = null) => {
+  let clients = [];
+  if (clientId) {
+    const c = getClient(clientId);
+    if (c) clients.push(c);
+  } else {
+    clients = getAllClients();
+  }
+  if (clients.length === 0) return [];
+
+  const results = await Promise.allSettled(
+    clients.map(async (client) => {
+      try {
+        const torrents = await getAdapter(client).getTorrents(client);
+        const defaultName = client.type === 'qbittorrent' ? 'qBittorrent' : client.type === 'deluge' ? 'Deluge' : client.type === 'transmission' ? 'Transmission' : client.type || 'Download Client';
+        const clientName = client.name || defaultName;
+        return (torrents || []).map(t => ({
+          ...t,
+          clientId: client.id,
+          clientName: t.clientName || clientName
+        }));
+      } catch (err) {
+        console.warn(`[DownloadClient] Failed to fetch torrents from client ${client.name || client.type} (id=${client.id}):`, err.message);
+        return [];
+      }
+    })
+  );
+
+  const allTorrents = [];
+  for (const res of results) {
+    if (res.status === 'fulfilled' && Array.isArray(res.value)) {
+      allTorrents.push(...res.value);
+    }
+  }
+
+  return enrichTorrents(allTorrents);
 };
 
-const getTransferInfo = async () => {
-  const client = getClient();
-  if (!client) return null;
-  return getAdapter(client).getTransferInfo(client);
+const getTransferInfo = async (clientId = null) => {
+  let clients = [];
+  if (clientId) {
+    const c = getClient(clientId);
+    if (c) clients.push(c);
+  } else {
+    clients = getAllClients();
+  }
+  if (clients.length === 0) return null;
+
+  const results = await Promise.allSettled(
+    clients.map(async (client) => {
+      try {
+        return await getAdapter(client).getTransferInfo(client);
+      } catch {
+        return null;
+      }
+    })
+  );
+
+  const infos = results
+    .filter(r => r.status === 'fulfilled' && r.value)
+    .map(r => r.value);
+
+  if (infos.length === 0) return null;
+  if (infos.length === 1) return infos[0];
+
+  let totalDl = 0;
+  let totalUp = 0;
+  let totalDownloaded = 0;
+  let totalUploaded = 0;
+
+  for (const info of infos) {
+    totalDl += (info.dl_info_speed || info.downloadSpeed || 0);
+    totalUp += (info.up_info_speed || info.uploadSpeed || 0);
+    totalDownloaded += (info.dl_info_data || info.downloaded || 0);
+    totalUploaded += (info.up_info_data || info.uploaded || 0);
+  }
+
+  return {
+    dl_info_speed: totalDl,
+    up_info_speed: totalUp,
+    dl_info_data: totalDownloaded,
+    up_info_data: totalUploaded,
+    connection_status: 'connected',
+  };
 };
 
-const pauseTorrent = async (hash) => {
-  const client = getClient();
-  if (!client) throw new Error('No download client configured');
-  return getAdapter(client).pauseTorrent(client, hash);
+const executeOnClientOrAll = async (clientId, fn) => {
+  if (clientId) {
+    const client = getClient(clientId);
+    if (!client) throw new Error(`Download client with id ${clientId} not found`);
+    return fn(client);
+  }
+  const clients = getAllClients();
+  if (clients.length === 0) throw new Error('No download client configured');
+  return Promise.allSettled(clients.map(c => fn(c)));
 };
 
-const resumeTorrent = async (hash) => {
-  const client = getClient();
-  if (!client) throw new Error('No download client configured');
-  return getAdapter(client).resumeTorrent(client, hash);
+const pauseTorrent = async (hash, clientId = null) => {
+  return executeOnClientOrAll(clientId, client => getAdapter(client).pauseTorrent(client, hash));
 };
 
-const deleteTorrent = async (hash, deleteFiles = false) => {
-  const client = getClient();
-  if (!client) throw new Error('No download client configured');
-  return getAdapter(client).deleteTorrent(client, hash, deleteFiles);
+const resumeTorrent = async (hash, clientId = null) => {
+  return executeOnClientOrAll(clientId, client => getAdapter(client).resumeTorrent(client, hash));
 };
 
-const pauseTorrents = async (hashes) => {
-  const client = getClient();
-  if (!client) throw new Error('No download client configured');
-  const adapter = getAdapter(client);
-  return Promise.allSettled(hashes.map(h => adapter.pauseTorrent(client, h)));
+const deleteTorrent = async (hash, deleteFiles = false, clientId = null) => {
+  return executeOnClientOrAll(clientId, client => getAdapter(client).deleteTorrent(client, hash, deleteFiles));
 };
 
-const resumeTorrents = async (hashes) => {
-  const client = getClient();
-  if (!client) throw new Error('No download client configured');
-  const adapter = getAdapter(client);
-  return Promise.allSettled(hashes.map(h => adapter.resumeTorrent(client, h)));
+const pauseTorrents = async (hashes, clientId = null) => {
+  return Promise.allSettled(hashes.map(h => pauseTorrent(h, clientId)));
 };
 
-const deleteTorrents = async (hashes, deleteFiles = false) => {
-  const client = getClient();
-  if (!client) throw new Error('No download client configured');
-  const adapter = getAdapter(client);
-  return Promise.allSettled(hashes.map(h => adapter.deleteTorrent(client, h, deleteFiles)));
+const resumeTorrents = async (hashes, clientId = null) => {
+  return Promise.allSettled(hashes.map(h => resumeTorrent(h, clientId)));
+};
+
+const deleteTorrents = async (hashes, deleteFiles = false, clientId = null) => {
+  return Promise.allSettled(hashes.map(h => deleteTorrent(h, deleteFiles, clientId)));
 };
 
 const testClientConnection = async (client) => {
@@ -156,6 +246,7 @@ const testClientConnection = async (client) => {
 };
 
 module.exports = {
+  getClient, getAllClients,
   addTorrent, getTorrents, getTransferInfo, pauseTorrent, resumeTorrent, deleteTorrent,
   pauseTorrents, resumeTorrents, deleteTorrents, testClientConnection
 };

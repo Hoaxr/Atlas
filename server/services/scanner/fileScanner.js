@@ -16,7 +16,7 @@ const RECYCLE_DIRS = new Set([
 const shouldSkipDir = (dirName) => {
   if (RECYCLE_DIRS.has(dirName)) return true;
   if (/^\.Trash-\d+$/.test(dirName)) return true;
-  if (/^(samples|extras|featurettes|trailers|specials|season\s*0+)$/i.test(dirName)) return true;
+  if (/^(samples|extras|featurettes|trailers)$/i.test(dirName)) return true;
   return false;
 };
 

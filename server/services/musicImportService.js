@@ -355,213 +355,226 @@ const importMusicDownload = async (downloadPath, downloadName) => {
 
   console.log(`[MusicImport] Found ${audioFiles.length} audio files in: ${downloadName}`);
 
-  // Read tags from first file to identify the release
-  const firstTags = await readAudioTags(audioFiles[0]);
-
-  // Find the matching album in DB
-  const folderName = path.basename(downloadPath);
-  const album = matchAlbumFromFolder(folderName, firstTags, downloadName);
-
-  if (!album) {
-    console.warn(`[MusicImport] Could not match download to a library album: ${downloadName}`);
-    result.skipped += audioFiles.length;
-    result.errors.push(`No matching album found for: ${downloadName}`);
-    return result;
-  }
-
-  const artist = db.prepare('SELECT * FROM music_artists WHERE id = ?').get(album.artist_id);
-  if (!artist) {
-    result.errors.push('Artist not found in library');
-    return result;
+  // Group audio files by album using tags or parent directory
+  const albumGroups = new Map();
+  for (const srcPath of audioFiles) {
+    const tags = await readAudioTags(srcPath);
+    const parentDir = path.basename(path.dirname(srcPath));
+    const albumKey = tags.album ? tags.album.trim().toLowerCase() : parentDir.toLowerCase();
+    if (!albumGroups.has(albumKey)) {
+      albumGroups.set(albumKey, {
+        folderName: parentDir,
+        firstTags: tags,
+        files: []
+      });
+    }
+    albumGroups.get(albumKey).files.push({ srcPath, tags });
   }
 
   const config = musicLibraryService.getMusicNamingConfig();
   const deleteAfterImport = getSetting('musicDeleteAfterImport') === 'true';
 
-  // Determine artist folder — reuse the stored folder_path only when it's a sane
-  // library location (never a recycle bin / trash path), else fall back to the
-  // configured music root + naming template.
-  let artistFolder = artist.folder_path;
-  if (!musicLibraryService.isUsableLibraryPath(artistFolder)) {
-    const musicPaths = db.prepare("SELECT path FROM library_paths WHERE type = 'music'").all();
-    const libraryRoot = musicPaths[0]?.path || null;
-    if (!libraryRoot) {
-      result.errors.push('No music library path configured. Go to Settings → Music to set one.');
-      return result;
+  for (const [, group] of albumGroups) {
+    const folderName = group.folderName;
+    const firstTags = group.firstTags;
+    const album = matchAlbumFromFolder(folderName, firstTags, downloadName)
+      || matchAlbumFromFolder(path.basename(downloadPath), firstTags, downloadName);
+
+    if (!album) {
+      console.warn(`[MusicImport] Could not match album group '${folderName}' in: ${downloadName}`);
+      result.skipped += group.files.length;
+      result.errors.push(`No matching album found for: ${folderName || downloadName}`);
+      continue;
     }
-    artistFolder = path.join(libraryRoot, musicLibraryService.formatArtistFolder(artist, config));
-  }
 
-  const albumFolder = path.join(artistFolder, musicLibraryService.formatAlbumFolder(album, config));
+    const artist = db.prepare('SELECT * FROM music_artists WHERE id = ?').get(album.artist_id);
+    if (!artist) {
+      result.errors.push(`Artist not found in library for album: ${album.title}`);
+      result.skipped += group.files.length;
+      continue;
+    }
 
-  try {
-    fs.mkdirSync(albumFolder, { recursive: true });
-  } catch (err) {
-    result.errors.push(`Cannot create album folder: ${err.message}`);
-    return result;
-  }
+    let artistFolder = artist.folder_path;
+    if (!musicLibraryService.isUsableLibraryPath(artistFolder)) {
+      const musicPaths = db.prepare("SELECT path FROM library_paths WHERE type = 'music'").all();
+      const libraryRoot = musicPaths[0]?.path || null;
+      if (!libraryRoot) {
+        result.errors.push('No music library path configured. Go to Settings → Music to set one.');
+        return result;
+      }
+      artistFolder = path.join(libraryRoot, musicLibraryService.formatArtistFolder(artist, config));
+    }
 
-  // Detect format from files
-  const format = parseMusicFormat(audioFiles[0]);
+    const albumFolder = path.join(artistFolder, musicLibraryService.formatAlbumFolder(album, config));
 
-  // Destination paths of successfully imported tracks (used later to extract embedded cover art)
-  const importedPaths = [];
-
-  for (const srcPath of audioFiles) {
     try {
-      const tags = await readAudioTags(srcPath);
-      const fileExt = path.extname(srcPath).toLowerCase();
-      const destFilename = formatTrackFilename(tags, fileExt, config);
-      const destPath = path.join(albumFolder, destFilename);
-
-      if (fs.existsSync(destPath)) {
-        await fsp.unlink(destPath).catch(() => {});
-      }
-
-      // Hardlink or copy (or move if deleteAfterImport)
-      if (deleteAfterImport) {
-        await fsp.rename(srcPath, destPath).catch(async () => {
-          await fsp.copyFile(srcPath, destPath);
-          await fsp.unlink(srcPath).catch(() => {});
-        });
-      } else {
-        try {
-          await fsp.link(srcPath, destPath);
-        } catch {
-          await fsp.copyFile(srcPath, destPath);
-        }
-      }
-
-      const stat = await fsp.stat(destPath);
-
-      // Upsert track in DB
-      const existingTrack = db.prepare(`
-        SELECT id FROM music_tracks
-        WHERE album_id = ? AND disc_number = ? AND track_number = ?
-      `).get(album.id, tags.discNumber || 1, tags.trackNumber);
-
-      if (existingTrack) {
-        db.prepare(`
-          UPDATE music_tracks SET
-            file_path = ?, file_size = ?, format = ?, bitrate = ?,
-            bitdepth = ?, samplerate = ?, duration = ?, status = 'downloaded'
-          WHERE id = ?
-        `).run(
-          destPath,
-          stat.size || 0,
-          format || null,
-          tags.bitrate ?? null,
-          tags.bitsPerSample ?? null,
-          tags.sampleRate ?? null,
-          tags.duration ?? null,
-          existingTrack.id
-        );
-      } else {
-        db.prepare(`
-          INSERT OR IGNORE INTO music_tracks
-            (album_id, artist_id, title, track_number, disc_number, file_path, file_size,
-             format, bitrate, bitdepth, samplerate, duration, status, monitored, mbid, isrc)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'downloaded', 1, ?, ?)
-        `).run(
-          album.id,
-          artist.id,
-          tags.title || path.basename(srcPath, fileExt),
-          tags.trackNumber ?? null,
-          tags.discNumber || 1,
-          destPath,
-          stat.size || 0,
-          format || null,
-          tags.bitrate ?? null,
-          tags.bitsPerSample ?? null,
-          tags.sampleRate ?? null,
-          tags.duration ?? null,
-          tags.mbidRecording ?? null,
-          null
-        );
-      }
-
-      importedPaths.push(destPath);
-      result.imported++;
+      fs.mkdirSync(albumFolder, { recursive: true });
     } catch (err) {
-      result.errors.push(`Failed to import ${path.basename(srcPath)}: ${err.message}`);
-      result.skipped++;
+      result.errors.push(`Cannot create album folder: ${err.message}`);
+      result.skipped += group.files.length;
+      continue;
     }
-  }
 
-  // Copy companion artwork and cue/log files
-  try {
-    const companionDir = (await fsp.stat(downloadPath)).isDirectory() ? downloadPath : path.dirname(downloadPath);
-    const companionFiles = await fsp.readdir(companionDir);
-    for (const comp of companionFiles) {
-      const compExt = path.extname(comp).toLowerCase();
-      if (['.jpg', '.jpeg', '.png', '.cue', '.log', '.nfo'].includes(compExt)) {
-        const srcComp = path.join(companionDir, comp);
-        const destComp = path.join(albumFolder, comp);
-        if (!fs.existsSync(destComp)) {
-          await fsp.link(srcComp, destComp).catch(async () => {
-            await fsp.copyFile(srcComp, destComp).catch(() => {});
+    const format = parseMusicFormat(group.files[0].srcPath);
+    const importedPaths = [];
+
+    for (const { srcPath, tags } of group.files) {
+      try {
+        const fileExt = path.extname(srcPath).toLowerCase();
+        const destFilename = formatTrackFilename(tags, fileExt, config);
+        const destPath = path.join(albumFolder, destFilename);
+
+        if (fs.existsSync(destPath)) {
+          await fsp.unlink(destPath).catch(() => {});
+        }
+
+        // Hardlink or atomic copy (or move if deleteAfterImport)
+        if (deleteAfterImport) {
+          await fsp.rename(srcPath, destPath).catch(async () => {
+            const tmpPath = `${destPath}.partial`;
+            await fsp.copyFile(srcPath, tmpPath);
+            await fsp.rename(tmpPath, destPath);
+            await fsp.unlink(srcPath).catch(() => {});
           });
+        } else {
+          try {
+            await fsp.link(srcPath, destPath);
+          } catch {
+            const tmpPath = `${destPath}.partial`;
+            await fsp.copyFile(srcPath, tmpPath);
+            await fsp.rename(tmpPath, destPath);
+          }
         }
+
+        const stat = await fsp.stat(destPath);
+
+        // Upsert track in DB
+        const existingTrack = db.prepare(`
+          SELECT id FROM music_tracks
+          WHERE album_id = ? AND disc_number = ? AND track_number = ?
+        `).get(album.id, tags.discNumber || 1, tags.trackNumber);
+
+        if (existingTrack) {
+          db.prepare(`
+            UPDATE music_tracks SET
+              file_path = ?, file_size = ?, format = ?, bitrate = ?,
+              bitdepth = ?, samplerate = ?, duration = ?, status = 'downloaded'
+            WHERE id = ?
+          `).run(
+            destPath,
+            stat.size || 0,
+            format || null,
+            tags.bitrate ?? null,
+            tags.bitsPerSample ?? null,
+            tags.sampleRate ?? null,
+            tags.duration ?? null,
+            existingTrack.id
+          );
+        } else {
+          db.prepare(`
+            INSERT OR IGNORE INTO music_tracks
+              (album_id, artist_id, title, track_number, disc_number, file_path, file_size,
+               format, bitrate, bitdepth, samplerate, duration, status, monitored, mbid, isrc)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'downloaded', 1, ?, ?)
+          `).run(
+            album.id,
+            artist.id,
+            tags.title || path.basename(srcPath, fileExt),
+            tags.trackNumber ?? null,
+            tags.discNumber || 1,
+            destPath,
+            stat.size || 0,
+            format || null,
+            tags.bitrate ?? null,
+            tags.bitsPerSample ?? null,
+            tags.sampleRate ?? null,
+            tags.duration ?? null,
+            tags.mbidRecording ?? null,
+            null
+          );
+        }
+
+        importedPaths.push(destPath);
+        result.imported++;
+      } catch (err) {
+        result.errors.push(`Failed to import ${path.basename(srcPath)}: ${err.message}`);
+        result.skipped++;
       }
     }
-  } catch { /* ignore companion copy error */ }
 
-  // Ensure the album folder has cover.jpg immediately after import, so the UI (and
-  // external tools like Plex/Jellyfin) show art without waiting for a later library scan.
-  // Prefer embedded art from an imported track, then a cached cover by MBID.
-  if (result.imported > 0 && !imageService.findAlbumFolderCover(albumFolder)) {
+    // Copy companion artwork and cue/log files
     try {
-      const folderCover = path.join(albumFolder, 'cover.jpg');
-      let extracted = null;
-      for (const trackPath of importedPaths) {
-        extracted = await imageService.extractEmbeddedCover(trackPath, folderCover);
-        if (extracted) break;
-      }
-      if (!extracted && album.mbid) {
-        const cachedCover = imageService.albumCoverPath(album.mbid);
-        if (fs.existsSync(cachedCover)) {
-          imageService.saveCoverToAlbumFolder(albumFolder, cachedCover);
+      const companionDir = (await fsp.stat(downloadPath)).isDirectory() ? downloadPath : path.dirname(downloadPath);
+      const companionFiles = await fsp.readdir(companionDir);
+      for (const comp of companionFiles) {
+        const compExt = path.extname(comp).toLowerCase();
+        if (['.jpg', '.jpeg', '.png', '.cue', '.log', '.nfo'].includes(compExt)) {
+          const srcComp = path.join(companionDir, comp);
+          const destComp = path.join(albumFolder, comp);
+          if (!fs.existsSync(destComp)) {
+            await fsp.link(srcComp, destComp).catch(async () => {
+              await fsp.copyFile(srcComp, destComp).catch(() => {});
+            });
+          }
         }
       }
-    } catch (err) {
-      console.warn(`[MusicImport] Cover art setup failed for ${album.title}:`, err.message);
+    } catch { /* ignore companion copy error */ }
+
+    // Ensure the album folder has cover.jpg immediately after import
+    if (importedPaths.length > 0 && !imageService.findAlbumFolderCover(albumFolder)) {
+      try {
+        const folderCover = path.join(albumFolder, 'cover.jpg');
+        let extracted = null;
+        for (const trackPath of importedPaths) {
+          extracted = await imageService.extractEmbeddedCover(trackPath, folderCover);
+          if (extracted) break;
+        }
+        if (!extracted && album.mbid) {
+          const cachedCover = imageService.albumCoverPath(album.mbid);
+          if (fs.existsSync(cachedCover)) {
+            imageService.saveCoverToAlbumFolder(albumFolder, cachedCover);
+          }
+        }
+      } catch (err) {
+        console.warn(`[MusicImport] Cover art setup failed for ${album.title}:`, err.message);
+      }
     }
-  }
 
-  // Update album quality info and status
-  if (result.imported > 0) {
-    const firstTagsFull = await readAudioTags(audioFiles[0]);
-    db.prepare(`
-      UPDATE music_albums SET
-        status = 'downloaded',
-        folder_path = ?,
-        file_format = ?,
-        file_bitdepth = ?,
-        file_samplerate = ?,
-        file_size = (SELECT COALESCE(SUM(file_size), 0) FROM music_tracks WHERE album_id = ?)
-      WHERE id = ?
-    `).run(
-      albumFolder,
-      format || null,
-      firstTagsFull.bitsPerSample ?? null,
-      firstTagsFull.sampleRate ?? null,
-      album.id,
-      album.id
-    );
+    // Update album quality info and status
+    if (importedPaths.length > 0) {
+      const firstTagsFull = group.files[0].tags;
+      db.prepare(`
+        UPDATE music_albums SET
+          status = 'downloaded',
+          folder_path = ?,
+          file_format = ?,
+          file_bitdepth = ?,
+          file_samplerate = ?,
+          file_size = (SELECT COALESCE(SUM(file_size), 0) FROM music_tracks WHERE album_id = ?)
+        WHERE id = ?
+      `).run(
+        albumFolder,
+        format || null,
+        firstTagsFull.bitsPerSample ?? null,
+        firstTagsFull.sampleRate ?? null,
+        album.id,
+        album.id
+      );
 
-    // Update artist folder path
-    db.prepare('UPDATE music_artists SET folder_path = ? WHERE id = ?').run(artistFolder, artist.id);
+      // Update artist folder path
+      db.prepare('UPDATE music_artists SET folder_path = ? WHERE id = ?').run(artistFolder, artist.id);
 
-    eventBus.emit({
-      type: 'MUSIC_IMPORT_COMPLETE',
-      albumId: album.id,
-      albumTitle: album.title,
-      artistName: artist.name,
-      imported: result.imported,
-      format,
-    });
+      eventBus.emit({
+        type: 'MUSIC_IMPORT_COMPLETE',
+        albumId: album.id,
+        albumTitle: album.title,
+        artistName: artist.name,
+        imported: importedPaths.length,
+        format,
+      });
 
-    console.log(`[MusicImport] ✓ Imported ${result.imported} tracks → ${artist.name} / ${album.title} (${format})`);
+      console.log(`[MusicImport] ✓ Imported ${importedPaths.length} tracks → ${artist.name} / ${album.title} (${format})`);
+    }
   }
 
   return result;

@@ -611,11 +611,16 @@ const shutdown = (signal) => {
   server.close(() => {
     console.log('[Backend] HTTP server closed.');
     
-    // Close database connection
+    // Close database connection cleanly
     try {
       const db = require('./config/database');
+      try {
+        db.exec('PRAGMA wal_checkpoint(TRUNCATE);');
+      } catch (cpErr) {
+        console.warn('[Backend] WAL checkpoint on shutdown:', cpErr.message);
+      }
       db.close();
-      console.log('[Backend] Database closed.');
+      console.log('[Backend] Database checkpointed and closed.');
     } catch { /* ignore */ }
     
     process.exit(0);

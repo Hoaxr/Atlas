@@ -10,8 +10,8 @@ services:
     init: true
     stop_grace_period: 30s
     environment:
-      - PUID=1026
-      - PGID=100
+      - PUID=1000
+      - PGID=1000
       - TZ=Europe/Amsterdam
       - NODE_ENV=production
       - PORT=9898

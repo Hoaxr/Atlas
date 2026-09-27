@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../lib/api';
-import { Search as SearchIcon, Plus, Tv, Film, Star, CheckCircle2, CheckSquare, ListFilter, Eye } from 'lucide-react';
+import { Search as SearchIcon, Plus, Tv, Film, Star, CheckCircle2, Check, ListFilter, Eye } from 'lucide-react';
 import MediaDetailsModal from '../components/MediaDetailsModal';
 import MediaRow from '../components/MediaRow';
 import InlineError from '../components/shared/InlineError';
@@ -378,33 +378,64 @@ export default function Discover() {
             {isDiscovering && !loading && (
               <div ref={rowsMenuRef} className="relative">
                 <button
+                  type="button"
                   onClick={() => setRowsMenuOpen(!rowsMenuOpen)}
-                  className={`h-10 w-10 flex items-center justify-center rounded-xl border transition-all duration-150 ${
-                    rowsMenuOpen 
-                      ? 'bg-gradient-to-b from-[#38a7f4] to-[#2291ea] text-slate-950 shadow-sm border-transparent' 
-                      : 'bg-[#101e31] border border-[#1c2d46] text-slate-100 hover:text-white hover:border-slate-600 shadow-sm'
+                  className={`h-10 w-10 flex items-center justify-center rounded-xl border transition-colors shadow-sm ${
+                    rowsMenuOpen || ROW_KEYS.some(k => (k !== 'upcoming' || mode === 'movies') && visibleRows[k] === false)
+                      ? 'bg-[#0d2b51] text-[#e7ecf6] border-[#1b4273]'
+                      : 'bg-[#101e31] text-slate-300 border-[#1c2d46] hover:border-slate-600 hover:text-white'
                   }`}
                   title="Toggle visible rows"
                   aria-label="Toggle visible rows"
                 >
-                  <ListFilter className="w-5 h-5" />
+                  <ListFilter className={`w-5 h-5 transition-colors ${
+                    rowsMenuOpen || ROW_KEYS.some(k => (k !== 'upcoming' || mode === 'movies') && visibleRows[k] === false)
+                      ? 'text-cyan-400'
+                      : 'text-slate-400'
+                  }`} />
                 </button>
                 {rowsMenuOpen && (
-                  <div className="absolute right-0 top-full mt-2 w-48 bg-[#0e1a2b] border border-[#1c2d46] rounded-xl shadow-2xl z-[60] overflow-hidden">
-                    <div className="px-3.5 py-2 border-b border-[#1c2d46] text-[10px] font-bold text-slate-400 uppercase tracking-wider">Visible Rows</div>
-                    <div className="p-1.5 flex flex-col gap-0.5">
-                      {ROW_KEYS.filter(k => k !== 'upcoming' || mode === 'movies').map(key => (
-                        <label key={key} className="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg hover:bg-slate-800/60 cursor-pointer transition-colors group" onClick={(e) => { e.preventDefault(); setVisibleRows(prev => ({ ...prev, [key]: !prev[key] })); }}>
-                          {visibleRows[key] ? (
-                            <div className="w-3.5 h-3.5 rounded bg-[#0d2b51] border border-[#1f4e82] flex items-center justify-center">
-                              <CheckSquare className="w-3 h-3 text-cyan-400" />
+                  <div className="absolute right-0 top-full mt-1.5 w-52 max-w-[calc(100vw-1rem)] bg-[#0e1a2b] border border-[#1c2d46] rounded-xl shadow-xl shadow-black/50 z-[60] py-1.5 overflow-hidden">
+                    <div className="px-3.5 py-1.5 border-b border-[#1c2d46] text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+                      Visible Rows
+                    </div>
+                    <div className="flex flex-col">
+                      {ROW_KEYS.filter(k => k !== 'upcoming' || mode === 'movies').map(key => {
+                        const isSelected = !!visibleRows[key];
+                        return (
+                          <label
+                            key={key}
+                            className={`w-full text-left px-3.5 py-2 text-sm flex items-center justify-between transition-colors cursor-pointer ${
+                              isSelected
+                                ? 'bg-[#0d2b51]/60 text-white font-medium'
+                                : 'text-slate-300 hover:bg-[#16273d] hover:text-white'
+                            }`}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              setVisibleRows(prev => ({ ...prev, [key]: !prev[key] }));
+                            }}
+                          >
+                            <div className="flex items-center gap-2.5">
+                              <div
+                                className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${
+                                  isSelected
+                                    ? 'bg-[#0d2b51] border-[#1b4273]'
+                                    : 'bg-slate-900 border-slate-700/80'
+                                }`}
+                              >
+                                {isSelected && <Check className="w-3 h-3 text-[#e7ecf6]" />}
+                              </div>
+                              <span className="truncate">{ROW_LABELS[key]}</span>
                             </div>
-                          ) : (
-                            <div className="w-3.5 h-3.5 rounded bg-slate-900 border border-slate-700 group-hover:border-slate-600 transition-colors" />
-                          )}
-                          <span className="text-xs text-slate-300 capitalize select-none group-hover:text-slate-100 transition-colors">{ROW_LABELS[key]}</span>
-                        </label>
-                      ))}
+                            <input
+                              type="checkbox"
+                              className="hidden"
+                              checked={isSelected}
+                              onChange={() => {}}
+                            />
+                          </label>
+                        );
+                      })}
                     </div>
                   </div>
                 )}

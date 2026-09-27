@@ -13,8 +13,7 @@ const musicScannerService = require('./musicScannerService');
 const eventBus = require('./eventBus');
 const { runWithConcurrency } = require('../utils/concurrency');
 const { registerJob } = require('../utils/cronRegistry');
-const { isVideoFile, deleteFolderRecursive } = require('../utils/fileUtils');
-const { isRootLibraryPath } = require('../utils/fileUtils');
+const { isVideoFile, deleteFolderRecursive, isRootLibraryPath, safelyDeleteMovieFiles } = require('../utils/fileUtils');
 const { calculateNextSearchAt, calculatePriority } = require('./schedulerLogic');
 const { parseResolution, isCutoffMet } = require('../utils/mediaParsing');
 
@@ -719,15 +718,8 @@ const runAutoDeleteWatched = async () => {
 
     for (const movie of moviesToDelete) {
       try {
-        if (fs.existsSync(movie.file_path)) {
-          const dirPath = movie.folder_path || path.dirname(movie.file_path);
-          if (isRootLibraryPath(dirPath)) {
-            await fsp.unlink(movie.file_path);
-          } else {
-            await deleteFolderRecursive(dirPath);
-          }
-          console.log(`[Automation] Auto-deleted watched movie: ${movie.title}`);
-        }
+        await safelyDeleteMovieFiles(movie);
+        console.log(`[Automation] Auto-deleted watched movie files: ${movie.title}`);
         db.prepare("UPDATE movies SET file_path = NULL, status = 'unmonitored' WHERE id = ?").run(movie.id);
       } catch (err) {
         console.error(`[Automation] Failed to auto-delete movie ${movie.title}: ${err.message}`);
