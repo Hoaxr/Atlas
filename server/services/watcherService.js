@@ -63,8 +63,6 @@ class WatcherService {
 
     if (process.env.NODE_ENV !== 'test') {
       this.startPolling();
-      const t1 = setTimeout(() => this.cleanUntrackedWatchHistory(), 1500);
-      t1.unref?.();
       const t2 = setTimeout(() => this.backfillUnsyncedHistory(), 3000);
       t2.unref?.();
     }
@@ -93,25 +91,52 @@ class WatcherService {
 
       if (allowedUsers.length === 0) return { cleaned: 0 };
 
+      const allUsers = db.prepare("SELECT id, username FROM users").all();
+      const allowedUserIds = new Set(
+        allUsers
+          .filter(u => allowedUsers.includes((u.username || '').trim().toLowerCase()))
+          .map(u => u.id)
+      );
+
       const allPlays = db.prepare("SELECT * FROM play_history WHERE user IS NOT NULL").all();
       const untrackedPlays = allPlays.filter(p => !allowedUsers.includes((p.user || '').trim().toLowerCase()));
 
       const cleanTitle = (raw) => (raw || '').replace(/\s*\(\d{4}\)\s*$/, '').trim();
       let cleanedCount = 0;
+      const purgedPlayIds = [];
 
       for (const play of untrackedPlays) {
         if (!play.title) continue;
 
         const alsoTracked = allPlays.some(p => p.title === play.title && allowedUsers.includes((p.user || '').trim().toLowerCase()));
-        if (alsoTracked) continue;
+        if (alsoTracked) {
+          purgedPlayIds.push(play.id);
+          continue;
+        }
 
         if (play.type === 'movie') {
           const cleaned = cleanTitle(play.title);
           const movie = db.prepare('SELECT id, tmdb_id FROM movies WHERE title = ? COLLATE NOCASE OR title = ? COLLATE NOCASE').get(play.title, cleaned);
           if (movie?.tmdb_id) {
+            const hist = db.prepare("SELECT id, user_id, watched_at FROM watch_history WHERE tmdb_id = ? AND type = 'movie'").get(movie.tmdb_id);
+            // If watch_history is owned by an allowed user, preserve it
+            if (hist?.user_id && allowedUserIds.has(hist.user_id)) {
+              purgedPlayIds.push(play.id);
+              continue;
+            }
+            // If watched_at was recorded AFTER this untracked play (e.g. marked watched later), preserve it
+            if (hist?.watched_at && play.created_at) {
+              const histTime = new Date(hist.watched_at).getTime();
+              const playTime = new Date(play.created_at.includes('T') ? play.created_at : play.created_at.replace(' ', 'T') + 'Z').getTime();
+              if (histTime > playTime + 60000) {
+                purgedPlayIds.push(play.id);
+                continue;
+              }
+            }
             const del = db.prepare("DELETE FROM watch_history WHERE tmdb_id = ? AND type = 'movie'").run(movie.tmdb_id);
             if (del.changes > 0) cleanedCount++;
             db.prepare("UPDATE movies SET watched = 0, watched_at = NULL, watch_progress = 0 WHERE id = ?").run(movie.id);
+            purgedPlayIds.push(play.id);
           }
         } else if (play.type === 'episode') {
           const match = play.title.match(/^(.*) - S(\d+)E(\d+)$/i);
@@ -122,16 +147,31 @@ class WatcherService {
             const cleanedShowTitle = cleanTitle(rawShowTitle);
             const show = db.prepare('SELECT id, tmdb_id FROM shows WHERE title = ? COLLATE NOCASE OR title = ? COLLATE NOCASE').get(rawShowTitle, cleanedShowTitle);
             if (show?.tmdb_id) {
+              const hist = db.prepare("SELECT id, user_id, watched_at FROM watch_history WHERE tmdb_id = ? AND type = 'episode' AND season_number = ? AND episode_number = ?").get(show.tmdb_id, sNum, eNum);
+              // If watch_history is owned by an allowed user, preserve it
+              if (hist?.user_id && allowedUserIds.has(hist.user_id)) {
+                purgedPlayIds.push(play.id);
+                continue;
+              }
+              // If watched_at was recorded AFTER this untracked play (e.g. user marked it watched later), preserve it
+              if (hist?.watched_at && play.created_at) {
+                const histTime = new Date(hist.watched_at).getTime();
+                const playTime = new Date(play.created_at.includes('T') ? play.created_at : play.created_at.replace(' ', 'T') + 'Z').getTime();
+                if (histTime > playTime + 60000) {
+                  purgedPlayIds.push(play.id);
+                  continue;
+                }
+              }
               const del = db.prepare("DELETE FROM watch_history WHERE tmdb_id = ? AND type = 'episode' AND season_number = ? AND episode_number = ?").run(show.tmdb_id, sNum, eNum);
               if (del.changes > 0) cleanedCount++;
               db.prepare("UPDATE episodes SET watched = 0, watched_at = NULL, watch_progress = 0 WHERE show_id = ? AND season_number = ? AND episode_number = ?").run(show.id, sNum, eNum);
+              purgedPlayIds.push(play.id);
             }
           }
         }
       }
 
       // Also clean any watch_history entries directly assigned to untracked users
-      const allUsers = db.prepare("SELECT id, username FROM users").all();
       for (const u of allUsers) {
         if (!allowedUsers.includes((u.username || '').trim().toLowerCase())) {
           const directDel = db.prepare("DELETE FROM watch_history WHERE user_id = ?").run(u.id);
@@ -139,10 +179,28 @@ class WatcherService {
         }
       }
 
+      // Purge the untracked play_history records so they can never repeatedly re-trigger cleanup
+      if (purgedPlayIds.length > 0) {
+        const placeholders = purgedPlayIds.map(() => '?').join(',');
+        db.prepare(`DELETE FROM play_history WHERE id IN (${placeholders})`).run(...purgedPlayIds);
+      }
+
       db.prepare(`
         UPDATE shows
         SET watched = 0
         WHERE id NOT IN (SELECT DISTINCT show_id FROM episodes WHERE watched = 1);
+      `).run();
+
+      db.prepare(`
+        UPDATE shows
+        SET watched = 1
+        WHERE id IN (
+          SELECT show_id 
+          FROM episodes 
+          WHERE season_number > 0
+          GROUP BY show_id 
+          HAVING COUNT(*) > 0 AND SUM(watched) = COUNT(*)
+        );
       `).run();
 
       db.prepare(`

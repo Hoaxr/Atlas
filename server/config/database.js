@@ -1540,6 +1540,36 @@ const MIGRATIONS = [
         db.exec('ALTER TABLE shows ADD COLUMN origin_country TEXT;');
       }
     }
+  },
+  {
+    id: 51,
+    name: 'purge_untracked_play_history_and_restore_admin_watch_state',
+    run: (db) => {
+      const settingRow = db.prepare("SELECT value FROM settings WHERE key = 'autoWatchUser'").get();
+      const authUserRow = db.prepare("SELECT value FROM settings WHERE key = 'authUsername'").get();
+      const adminUsers = db.prepare("SELECT username FROM users WHERE role = 'admin'").all().map(u => (u.username || '').toLowerCase());
+
+      let allowedUsers = [];
+      if (settingRow?.value && settingRow.value.trim() !== '') {
+        if (settingRow.value.trim() === '*') return;
+        allowedUsers = settingRow.value.split(',').map(u => u.trim().toLowerCase()).filter(Boolean);
+      } else {
+        if (authUserRow?.value) allowedUsers.push(authUserRow.value.trim().toLowerCase());
+        allowedUsers.push(...adminUsers);
+      }
+
+      if (allowedUsers.length > 0) {
+        // Purge untracked plays from play_history so they don't linger
+        const placeholders = allowedUsers.map(() => '?').join(',');
+        db.prepare(`DELETE FROM play_history WHERE user IS NOT NULL AND LOWER(TRIM(user)) NOT IN (${placeholders})`).run(...allowedUsers);
+      }
+
+      // Re-link watch_history entries with missing user_id to admin user if an admin exists
+      const admin = db.prepare("SELECT id FROM users WHERE role = 'admin' LIMIT 1").get();
+      if (admin) {
+        db.prepare("UPDATE watch_history SET user_id = ? WHERE user_id IS NULL").run(admin.id);
+      }
+    }
   }
 ];
 

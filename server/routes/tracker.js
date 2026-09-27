@@ -696,23 +696,54 @@ router.post('/mark-watched', async (req, res) => {
   if (!tmdbId || !type) return res.status(400).json({ error: 'Missing parameters' });
 
   try {
+    const { getSetting } = require('../utils/settings');
     const watchedAt = new Date().toISOString();
-    const userId = req.user?.id || null;
+    let userId = req.user?.id || null;
+    let username = req.user?.username || null;
+
+    if (!userId) {
+      const admin = db.prepare("SELECT id, username FROM users WHERE role = 'admin' LIMIT 1").get();
+      if (admin) {
+        userId = admin.id;
+        username = admin.username;
+      }
+    }
+    if (!username) {
+      const authUser = getSetting('authUsername');
+      const trackUser = getSetting('autoWatchUser');
+      if (trackUser && trackUser.trim() !== '' && trackUser.trim() !== '*') {
+        username = trackUser.split(',')[0].trim();
+      } else if (authUser && authUser.trim() !== '') {
+        username = authUser.trim();
+      }
+    }
 
     db.transaction(() => {
       if (type === 'movie') {
-        const movie = db.prepare('SELECT id, runtime FROM movies WHERE tmdb_id = ?').get(tmdbId);
+        const movie = db.prepare('SELECT id, runtime, title FROM movies WHERE tmdb_id = ?').get(tmdbId);
         const existingMovie = db.prepare('SELECT id FROM watch_history WHERE tmdb_id = ? AND type = ?').get(tmdbId, 'movie');
         if (existingMovie) {
-          db.prepare('UPDATE watch_history SET watched_at = ?, runtime = ?, user_id = COALESCE(user_id, ?) WHERE id = ?').run(watchedAt, movie ? movie.runtime : null, userId, existingMovie.id);
+          db.prepare('UPDATE watch_history SET watched_at = ?, runtime = ?, user_id = COALESCE(?, user_id) WHERE id = ?').run(watchedAt, movie ? movie.runtime : null, userId, existingMovie.id);
         } else {
           db.prepare('INSERT INTO watch_history (tmdb_id, type, watched_at, runtime, user_id) VALUES (?, ?, ?, ?, ?)').run(tmdbId, 'movie', watchedAt, movie ? movie.runtime : null, userId);
         }
         if (movie) {
           db.prepare('UPDATE movies SET watched = 1, watched_at = ?, watch_progress = 0 WHERE id = ?').run(watchedAt, movie.id);
         }
+        if (username) {
+          try {
+            db.prepare('INSERT INTO play_history (session_id, user, title, type, server, player) VALUES (?, ?, ?, ?, ?, ?)').run(
+              `atlas_manual_${Date.now()}`,
+              username,
+              movie?.title || `Movie ${tmdbId}`,
+              'movie',
+              'Atlas',
+              'Atlas Web'
+            );
+          } catch { /* ignore */ }
+        }
       } else if (type === 'episode') {
-        const show = db.prepare('SELECT id FROM shows WHERE tmdb_id = ?').get(tmdbId);
+        const show = db.prepare('SELECT id, title FROM shows WHERE tmdb_id = ?').get(tmdbId);
         let epRuntime = null;
         const sNum = parseInt(season, 10);
         const eNum = parseInt(episode, 10);
@@ -723,12 +754,29 @@ router.post('/mark-watched', async (req, res) => {
             epRuntime = ep.runtime;
             db.prepare('UPDATE episodes SET watched = 1, watched_at = ?, watch_progress = 0 WHERE id = ?').run(watchedAt, ep.id);
           }
+          const allWatched = db.prepare('SELECT COUNT(*) as total, SUM(watched) as watched_count FROM episodes WHERE show_id = ? AND season_number > 0').get(show.id);
+          if (allWatched && allWatched.total > 0 && allWatched.total === allWatched.watched_count) {
+            db.prepare('UPDATE shows SET watched = 1 WHERE id = ?').run(show.id);
+          }
         }
         const existingEp = db.prepare('SELECT id FROM watch_history WHERE tmdb_id = ? AND type = ? AND season_number = ? AND episode_number = ?').get(tmdbId, 'episode', sNum, eNum);
         if (existingEp) {
-          db.prepare('UPDATE watch_history SET watched_at = ?, runtime = ?, user_id = COALESCE(user_id, ?) WHERE id = ?').run(watchedAt, epRuntime, userId, existingEp.id);
+          db.prepare('UPDATE watch_history SET watched_at = ?, runtime = ?, user_id = COALESCE(?, user_id) WHERE id = ?').run(watchedAt, epRuntime, userId, existingEp.id);
         } else {
           db.prepare('INSERT INTO watch_history (tmdb_id, type, season_number, episode_number, watched_at, runtime, user_id) VALUES (?, ?, ?, ?, ?, ?, ?)').run(tmdbId, 'episode', sNum, eNum, watchedAt, epRuntime, userId);
+        }
+        if (username) {
+          try {
+            const showTitle = show?.title || `Show ${tmdbId}`;
+            db.prepare('INSERT INTO play_history (session_id, user, title, type, server, player) VALUES (?, ?, ?, ?, ?, ?)').run(
+              `atlas_manual_${Date.now()}`,
+              username,
+              `${showTitle} - S${String(sNum).padStart(2, '0')}E${String(eNum).padStart(2, '0')}`,
+              'episode',
+              'Atlas',
+              'Atlas Web'
+            );
+          } catch { /* ignore */ }
         }
       }
     })();

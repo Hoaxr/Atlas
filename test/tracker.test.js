@@ -314,5 +314,46 @@ test('Tracker & Continue Watching System', async (t) => {
       setSetting('authUsername', '');
     }
   });
+
+  await t.test('cleanUntrackedWatchHistory does NOT reset episodes that were marked watched by tracked user after an untracked play', () => {
+    const watcherService = require('../server/services/watcherService');
+    const { setSetting } = require('../server/utils/settings');
+
+    db.prepare("INSERT OR IGNORE INTO users (id, username, password, role) VALUES (77773, 'main_admin', 'hash', 'admin')").run();
+    setSetting('autoWatchUser', 'main_admin');
+
+    const testShowId = 888894;
+    const testTmdbId = 9999994;
+
+    db.prepare("INSERT INTO shows (id, tmdb_id, title, status, watched) VALUES (?, ?, 'Family Show', 'continuing', 1)").run(testShowId, testTmdbId);
+    db.prepare("INSERT INTO episodes (id, show_id, season_number, episode_number, title, status, watched, watch_progress, watched_at) VALUES (99894, ?, 1, 1, 'Ep 1', 'downloaded', 1, 100, '2026-09-27T12:00:00Z')").run(testShowId);
+
+    // Watch history entry recorded for admin user
+    db.prepare("INSERT INTO watch_history (tmdb_id, type, season_number, episode_number, watched_at, user_id) VALUES (?, 'episode', 1, 1, '2026-09-27T12:00:00Z', 77773)").run(testTmdbId);
+
+    // Old untracked play from another user in play_history
+    db.prepare("INSERT INTO play_history (user, title, type, created_at) VALUES ('random_roommate', 'Family Show - S01E01', 'episode', '2026-09-25 10:00:00')").run();
+
+    try {
+      const result = watcherService.cleanUntrackedWatchHistory();
+
+      // Episode must remain watched because it belongs to the admin
+      const ep = db.prepare('SELECT watched, watched_at FROM episodes WHERE id = 99894').get();
+      assert.strictEqual(ep.watched, 1, 'Episode must remain watched');
+      assert.ok(ep.watched_at);
+
+      const wh = db.prepare("SELECT * FROM watch_history WHERE tmdb_id = ? AND type = 'episode'").get(testTmdbId);
+      assert.ok(wh, 'Watch history entry must be preserved');
+      assert.strictEqual(wh.user_id, 77773);
+    } finally {
+      db.prepare('DELETE FROM play_history WHERE user IN (?, ?)').run('main_admin', 'random_roommate');
+      db.prepare('DELETE FROM watch_history WHERE tmdb_id = ?').run(testTmdbId);
+      db.prepare('DELETE FROM episodes WHERE show_id = ?').run(testShowId);
+      db.prepare('DELETE FROM shows WHERE id = ?').run(testShowId);
+      db.prepare('DELETE FROM users WHERE id = 77773').run();
+      setSetting('autoWatchUser', '');
+    }
+  });
 });
+
 

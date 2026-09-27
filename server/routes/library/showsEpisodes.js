@@ -20,6 +20,16 @@ const simklService = require('../../services/simklService');
 const imageService = require('../../services/imageService');
 const { syncEpisodeSubtitles, invalidateStats } = require('../../services/subtitles/sync');
 
+const resolveUserId = (req) => {
+  if (req?.user?.id) return req.user.id;
+  try {
+    const admin = db.prepare("SELECT id FROM users WHERE role = 'admin' LIMIT 1").get();
+    return admin?.id || null;
+  } catch {
+    return null;
+  }
+};
+
 router.post('/shows/:id/watched', async (req, res, next) => {
   try {
     const { watched } = req.body;
@@ -35,11 +45,19 @@ router.post('/shows/:id/watched', async (req, res, next) => {
     if (show?.tmdb_id) {
       if (isWatched) {
         // Insert watch_history entries for every episode so tracker stats are accurate
+        const userId = resolveUserId(req);
         const episodes = db.prepare('SELECT season_number, episode_number, runtime FROM episodes WHERE show_id = ?').all(req.params.id);
-        const insertHistory = db.prepare('INSERT OR IGNORE INTO watch_history (tmdb_id, type, season_number, episode_number, watched_at, runtime) VALUES (?, ?, ?, ?, ?, ?)');
+        const insertHistory = db.prepare(`
+          INSERT INTO watch_history (tmdb_id, type, season_number, episode_number, watched_at, runtime, user_id)
+          VALUES (?, ?, ?, ?, ?, ?, ?)
+          ON CONFLICT(tmdb_id, type, season_number, episode_number) DO UPDATE SET
+            watched_at = excluded.watched_at,
+            runtime = COALESCE(excluded.runtime, watch_history.runtime),
+            user_id = COALESCE(excluded.user_id, watch_history.user_id)
+        `);
         db.transaction(() => {
           for (const ep of episodes) {
-            insertHistory.run(show.tmdb_id, 'episode', ep.season_number, ep.episode_number, watchedAt, ep.runtime || null);
+            insertHistory.run(show.tmdb_id, 'episode', ep.season_number, ep.episode_number, watchedAt, ep.runtime || null, userId);
           }
         })();
         db.exec('PRAGMA wal_checkpoint(TRUNCATE);');
@@ -1046,10 +1064,18 @@ router.post('/shows/:id/seasons/:season/watched', async (req, res, next) => {
       const episodes = db.prepare('SELECT episode_number, runtime FROM episodes WHERE show_id = ? AND season_number = ?').all(req.params.id, req.params.season);
       if (isWatched) {
         // Insert watch_history entries for each episode so tracker stats are accurate
-        const insertHistory = db.prepare('INSERT OR IGNORE INTO watch_history (tmdb_id, type, season_number, episode_number, watched_at, runtime) VALUES (?, ?, ?, ?, ?, ?)');
+        const userId = resolveUserId(req);
+        const insertHistory = db.prepare(`
+          INSERT INTO watch_history (tmdb_id, type, season_number, episode_number, watched_at, runtime, user_id)
+          VALUES (?, ?, ?, ?, ?, ?, ?)
+          ON CONFLICT(tmdb_id, type, season_number, episode_number) DO UPDATE SET
+            watched_at = excluded.watched_at,
+            runtime = COALESCE(excluded.runtime, watch_history.runtime),
+            user_id = COALESCE(excluded.user_id, watch_history.user_id)
+        `);
         db.transaction(() => {
           for (const ep of episodes) {
-            insertHistory.run(show.tmdb_id, 'episode', Number(req.params.season), ep.episode_number, watchedAt, ep.runtime || null);
+            insertHistory.run(show.tmdb_id, 'episode', Number(req.params.season), ep.episode_number, watchedAt, ep.runtime || null, userId);
           }
         })();
         db.exec('PRAGMA wal_checkpoint(TRUNCATE);');
@@ -1095,7 +1121,15 @@ router.post('/episodes/:id/watched', async (req, res, next) => {
     if (ep.show_tmdb_id) {
       if (isWatched) {
         try {
-          db.prepare('INSERT OR IGNORE INTO watch_history (tmdb_id, type, season_number, episode_number, watched_at, runtime) VALUES (?, ?, ?, ?, ?, ?)').run(ep.show_tmdb_id, 'episode', ep.season_number, ep.episode_number, watchedAt, ep.runtime || null);
+          const userId = resolveUserId(req);
+          db.prepare(`
+            INSERT INTO watch_history (tmdb_id, type, season_number, episode_number, watched_at, runtime, user_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(tmdb_id, type, season_number, episode_number) DO UPDATE SET
+              watched_at = excluded.watched_at,
+              runtime = COALESCE(excluded.runtime, watch_history.runtime),
+              user_id = COALESCE(excluded.user_id, watch_history.user_id)
+          `).run(ep.show_tmdb_id, 'episode', ep.season_number, ep.episode_number, watchedAt, ep.runtime || null, userId);
         } catch (e) { console.error('[Episodes] watch_history INSERT failed:', e.message); }
       } else {
         try {

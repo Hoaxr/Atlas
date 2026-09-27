@@ -597,8 +597,16 @@ const simklService = require('../../services/simklService');
 
 router.post('/:id/watched', async (req, res, next) => {
   try {
+    const { watched } = req.body;
     const isWatched = !!watched;
     const watchedAt = new Date().toISOString();
+    let userId = req.user?.id || null;
+    if (!userId) {
+      try {
+        const admin = db.prepare("SELECT id FROM users WHERE role = 'admin' LIMIT 1").get();
+        userId = admin?.id || null;
+      } catch { /* ignore */ }
+    }
     if (isWatched) {
       db.prepare('UPDATE movies SET watched = 1, watched_at = ?, watch_progress = 0 WHERE id = ?').run(watchedAt, req.params.id);
     } else {
@@ -607,12 +615,12 @@ router.post('/:id/watched', async (req, res, next) => {
     const movie = db.prepare('SELECT tmdb_id, runtime FROM movies WHERE id = ?').get(req.params.id);
     
     if (movie?.tmdb_id) {
-      if (watched) {
+      if (isWatched) {
         const existing = db.prepare('SELECT id FROM watch_history WHERE tmdb_id = ? AND type = ?').get(movie.tmdb_id, 'movie');
         if (existing) {
-          db.prepare('UPDATE watch_history SET watched_at = ?, runtime = ? WHERE id = ?').run(watchedAt, movie.runtime || null, existing.id);
+          db.prepare('UPDATE watch_history SET watched_at = ?, runtime = ?, user_id = COALESCE(?, user_id) WHERE id = ?').run(watchedAt, movie.runtime || null, userId, existing.id);
         } else {
-          db.prepare('INSERT INTO watch_history (tmdb_id, type, watched_at, runtime) VALUES (?, ?, ?, ?)').run(movie.tmdb_id, 'movie', watchedAt, movie.runtime || null);
+          db.prepare('INSERT INTO watch_history (tmdb_id, type, watched_at, runtime, user_id) VALUES (?, ?, ?, ?, ?)').run(movie.tmdb_id, 'movie', watchedAt, movie.runtime || null, userId);
         }
       } else {
         db.prepare('DELETE FROM watch_history WHERE tmdb_id = ? AND type = ?').run(movie.tmdb_id, 'movie');
@@ -621,9 +629,9 @@ router.post('/:id/watched', async (req, res, next) => {
     }
 
     if (movie?.tmdb_id) {
-      simklService.pushToSimklOnWatched(movie.tmdb_id, 'movie', !!watched).catch(e => console.error('[SimklSync] Direct push error:', e.message));
+      simklService.pushToSimklOnWatched(movie.tmdb_id, 'movie', isWatched).catch(e => console.error('[SimklSync] Direct push error:', e.message));
     }
-    res.json({ status: 'success', message: watched ? 'Marked as watched' : 'Marked as unwatched' });
+    res.json({ status: 'success', message: isWatched ? 'Marked as watched' : 'Marked as unwatched' });
   } catch (err) {
     next(err);
   }
