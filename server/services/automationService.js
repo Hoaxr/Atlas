@@ -202,7 +202,7 @@ const runSearchCycle = async () => {
       if (ep.scene_name && activeTitles.has(ep.scene_name.toLowerCase().trim())) return;
 
       try {
-        const showRow = db.prepare("SELECT folder_path FROM shows WHERE id = ?").get(ep.show_id);
+        const showRow = db.prepare("SELECT folder_path, network, origin_country FROM shows WHERE id = ?").get(ep.show_id);
         const profile = getProfile(ep.quality_profile_id);
         if (!profile) return;
 
@@ -244,7 +244,7 @@ const runSearchCycle = async () => {
 
         // Prevent premature searches on unreleased / unaired episodes
         if (ep.air_date) {
-          const epDateOnly = localizeAirDate(ep.air_date).split('T')[0];
+          const epDateOnly = localizeAirDate(ep.air_date, showRow?.network, showRow?.origin_country).split('T')[0];
           const todayDateOnly = new Intl.DateTimeFormat('en-CA').format(new Date());
           if (epDateOnly > todayDateOnly) {
             const next = calculateNextSearchAt(ep, 'episode', { isDownloaded: (ep.status === 'downloaded' || hasFile), isCutoffMet: false });
@@ -361,8 +361,10 @@ const runRefreshMetadata = async () => {
     try {
       const data = await tmdbService.getShowById(show.tmdb_id);
       if (data) {
-        db.prepare("UPDATE shows SET rating = ?, poster_path = ?, overview = ?, tmdb_status = ?, last_refreshed_at = datetime('now') WHERE id = ?")
-          .run(data.vote_average || 0, data.poster_path, data.overview, data.status || '', show.id);
+        const network = data.networks?.map(n => n.name).join(', ') || '';
+        const originCountry = (data.origin_country || []).join(', ');
+        db.prepare("UPDATE shows SET rating = ?, poster_path = ?, overview = ?, tmdb_status = ?, network = ?, origin_country = ?, last_refreshed_at = datetime('now') WHERE id = ?")
+          .run(data.vote_average || 0, data.poster_path, data.overview, data.status || '', network, originCountry, show.id);
         if (data.poster_path) {
           imageService.ensurePoster('shows', show.tmdb_id, data.poster_path).catch(() => {});
         }
@@ -920,8 +922,10 @@ const runDeepMetadataRefresh = async () => {
     try {
       const data = await tmdbService.getShowById(show.tmdb_id);
       if (data) {
-        db.prepare("UPDATE shows SET rating = ?, poster_path = ?, overview = ?, tmdb_status = ?, last_refreshed_at = datetime('now') WHERE id = ?")
-          .run(data.vote_average || 0, data.poster_path, data.overview, data.status || '', show.id);
+        const network = data.networks?.map(n => n.name).join(', ') || '';
+        const originCountry = (data.origin_country || []).join(', ');
+        db.prepare("UPDATE shows SET rating = ?, poster_path = ?, overview = ?, tmdb_status = ?, network = ?, origin_country = ?, last_refreshed_at = datetime('now') WHERE id = ?")
+          .run(data.vote_average || 0, data.poster_path, data.overview, data.status || '', network, originCountry, show.id);
         if (data.poster_path) {
           imageService.ensurePoster('shows', show.tmdb_id, data.poster_path).catch(() => {});
         }

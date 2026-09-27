@@ -279,8 +279,10 @@ const refreshShowData = async (id) => {
     try {
       const data = await tmdbService.getShowById(show.tmdb_id);
       if (data) {
-        db.prepare('UPDATE shows SET rating = ?, poster_path = ?, overview = ?, tmdb_status = ? WHERE id = ?')
-          .run(data.vote_average || 0, data.poster_path, data.overview, data.status || '', show.id);
+        const network = data.networks?.map(n => n.name).join(', ') || '';
+        const originCountry = (data.origin_country || []).join(', ');
+        db.prepare('UPDATE shows SET rating = ?, poster_path = ?, overview = ?, tmdb_status = ?, network = ?, origin_country = ? WHERE id = ?')
+          .run(data.vote_average || 0, data.poster_path, data.overview, data.status || '', network, originCountry, show.id);
         if (data.poster_path) {
           imageService.ensurePoster('shows', show.tmdb_id, data.poster_path).catch(() => {});
         }
@@ -345,6 +347,7 @@ router.post('/shows/:id/refresh', async (req, res, next) => {
 
 router.get('/shows/:id/episodes', async (req, res, next) => {
   try {
+    const show = db.prepare('SELECT network, origin_country FROM shows WHERE id = ?').get(req.params.id);
     const episodes = db.prepare('SELECT * FROM episodes WHERE show_id = ? AND season_number > 0 ORDER BY season_number ASC, episode_number ASC').all(req.params.id);
 
     // Group episodes by directory to avoid scanning the same directory multiple times
@@ -394,7 +397,7 @@ router.get('/shows/:id/episodes', async (req, res, next) => {
     // Episodes that don't have a file_path still need empty subtitles array
     const episodesWithSubtitles = episodes.map(ep => ({
       ...ep,
-      air_date: localizeAirDate(ep.air_date),
+      air_date: localizeAirDate(ep.air_date, show?.network, show?.origin_country),
       watched: isWatchedSyncEnabled() ? ep.watched : (ep.watched || 0),
       subtitles: ep.subtitles || []
     }));

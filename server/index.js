@@ -201,6 +201,27 @@ telegramBotService.init();
 simklService.init();
 // Notification and Media Server services auto-init in constructor
 
+if (process.env.NODE_ENV !== 'test') {
+  const backfillTimer = setTimeout(async () => {
+    try {
+      const tmdbService = require('./services/tmdbService');
+      const missingShows = db.prepare("SELECT id, tmdb_id FROM shows WHERE network IS NULL OR origin_country IS NULL").all();
+      for (const s of missingShows) {
+        if (!s.tmdb_id) continue;
+        try {
+          const details = await tmdbService.getShowById(s.tmdb_id);
+          if (details) {
+            const network = details.networks?.map(n => n.name).join(', ') || '';
+            const originCountry = (details.origin_country || []).join(', ');
+            db.prepare("UPDATE shows SET network = ?, origin_country = ? WHERE id = ?").run(network, originCountry, s.id);
+          }
+        } catch { /* ignore */ }
+      }
+    } catch { /* ignore */ }
+  }, 4000);
+  backfillTimer.unref?.();
+}
+
 // ── Layout push broadcast — diff-driven with fallback heartbeat ──
 // Sends counts when state changes or on event triggers; avoids no-op churn.
 let _lastLayoutCounts = null;

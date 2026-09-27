@@ -214,10 +214,13 @@ const processScannedFiles = async (allFiles, scanProgress, mode, nextStage) => {
                 ? Math.round(fullShow.episode_run_time.reduce((a, b) => a + b, 0) / fullShow.episode_run_time.length)
                 : null;
 
+              const showNetwork = fullShow?.networks?.map(n => n.name).join(', ') || '';
+              const showOriginCountry = (fullShow?.origin_country || []).join(', ');
+
               try {
                 const insertRes = db.prepare(`
-                  INSERT INTO shows (tmdb_id, title, year, poster_path, overview, status, folder_path, rating, folder_size, quality_profile_id, tmdb_status, runtime)
-                  VALUES (?, ?, ?, ?, ?, 'downloaded', ?, ?, ?, ?, ?, ?)
+                  INSERT INTO shows (tmdb_id, title, year, poster_path, overview, status, folder_path, rating, folder_size, quality_profile_id, tmdb_status, runtime, network, origin_country)
+                  VALUES (?, ?, ?, ?, ?, 'downloaded', ?, ?, ?, ?, ?, ?, ?, ?)
                 `).run(
                   matchedShow.id,
                   matchedShow.name || matchedShow.title,
@@ -229,7 +232,9 @@ const processScannedFiles = async (allFiles, scanProgress, mode, nextStage) => {
                   folderSize,
                   defaultProfileId,
                   tmdbStatus,
-                  showRuntime
+                  showRuntime,
+                  showNetwork,
+                  showOriginCountry
                 );
                 showId = insertRes.lastInsertRowid;
               } catch (insertErr) {

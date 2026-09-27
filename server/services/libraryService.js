@@ -192,9 +192,12 @@ const addShow = async (tmdbId, rootFolderPath = null, monitorLevel = 'all') => {
 
   const runtime = showDetails.episode_run_time?.length ? Math.round(showDetails.episode_run_time.reduce((a, b) => a + b, 0) / showDetails.episode_run_time.length) : null;
 
+  const network = showDetails.networks?.map(n => n.name).join(', ') || '';
+  const originCountry = (showDetails.origin_country || []).join(', ');
+
   const insert = db.prepare(`
-    INSERT INTO shows (tmdb_id, title, year, poster_path, overview, status, rating, genres, tmdb_status, quality_profile_id, runtime)
-    VALUES (?, ?, ?, ?, ?, 'monitored', ?, ?, ?, ?, ?)
+    INSERT INTO shows (tmdb_id, title, year, poster_path, overview, status, rating, genres, tmdb_status, quality_profile_id, runtime, network, origin_country)
+    VALUES (?, ?, ?, ?, ?, 'monitored', ?, ?, ?, ?, ?, ?, ?)
   `);
   
   const result = insert.run(
@@ -207,7 +210,9 @@ const addShow = async (tmdbId, rootFolderPath = null, monitorLevel = 'all') => {
     genres,
     showDetails.status || '',
     defaultProfileId,
-    runtime
+    runtime,
+    network,
+    originCountry
   );
   
   const internalShowId = result.lastInsertRowid;

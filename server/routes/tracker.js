@@ -834,7 +834,9 @@ router.get('/this-week', (req, res) => {
         e.air_date,
         s.tmdb_id,
         s.title as show_title,
-        s.poster_path
+        s.poster_path,
+        s.network,
+        s.origin_country
       FROM episodes e
       JOIN shows s ON e.show_id = s.id
       WHERE e.air_date >= date(?, '-3 day') 
@@ -882,7 +884,7 @@ router.get('/this-week', (req, res) => {
       weekRange: { from: fromStr, to: toStr },
       movies: movies.map(m => ({ ...m, ...getDayLabel(m.release_date, 'movie') })),
       episodes: episodes
-        .map(ep => ({ ...ep, air_date: localizeAirDate(ep.air_date) }))
+        .map(ep => ({ ...ep, air_date: localizeAirDate(ep.air_date, ep.network, ep.origin_country) }))
         .filter(ep => ep.air_date >= fromStr && ep.air_date <= toStr)
         .map(ep => ({ ...ep, ...getDayLabel(ep.air_date, 'episode') }))
     });

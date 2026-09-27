@@ -638,9 +638,8 @@ router.post('/scan/retry-paths', async (req, res, next) => {
 
 router.get('/calendar', async (req, res, next) => {
   try {
-    const { getAirDateShiftDays } = require('../../utils/airDate');
-    const shift = getAirDateShiftDays();
-    const shiftSql = shift === 0 ? 'e.air_date' : `date(e.air_date, '+${shift} days')`;
+    const { getAirDateShiftSql } = require('../../utils/airDate');
+    const shiftSql = getAirDateShiftSql('e.air_date');
     const shiftSqlM = 'm.release_date';
 
     const upcoming = db.prepare(`

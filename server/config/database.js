@@ -137,7 +137,9 @@ db.exec(`
     folder_path TEXT,
     quality_profile_id INTEGER,
     added_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    runtime INTEGER
+    runtime INTEGER,
+    network TEXT,
+    origin_country TEXT
   );
 
   CREATE TABLE IF NOT EXISTS episodes (
@@ -1525,6 +1527,18 @@ const MIGRATIONS = [
         SET watch_progress = 0
         WHERE show_id NOT IN (SELECT DISTINCT show_id FROM episodes WHERE watched = 1);
       `).run();
+    }
+  },
+  {
+    id: 50,
+    name: 'add_network_and_origin_country_to_shows',
+    run: (db) => {
+      if (!hasColumn('shows', 'network')) {
+        db.exec('ALTER TABLE shows ADD COLUMN network TEXT;');
+      }
+      if (!hasColumn('shows', 'origin_country')) {
+        db.exec('ALTER TABLE shows ADD COLUMN origin_country TEXT;');
+      }
     }
   }
 ];
