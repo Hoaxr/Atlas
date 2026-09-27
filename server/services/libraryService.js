@@ -92,15 +92,13 @@ const addMovie = async (tmdbId, rootFolderPath = null) => {
         ? path.join(libraryRoot, folderName) 
         : path.join(libraryRoot, 'Movies', folderName);
       
-      if (!fs.existsSync(destFolder)) {
-        fs.mkdirSync(destFolder, { recursive: true });
-        console.log(`[LibraryService] Pre-created movie folder: ${destFolder}`);
-      }
-      // Store folder_path so it can be cleaned up on delete
+      // Do not create empty movie folder on disk yet.
+      // The folder will only be created when the first download completes.
+      // Store intended folder_path so it is known for future downloads and cleanup.
       db.prepare('UPDATE movies SET folder_path = ? WHERE id = ?').run(destFolder, result.lastInsertRowid);
     }
   } catch (err) {
-    console.error(`[LibraryService] Failed to pre-create movie folder:`, err.message);
+    console.error(`[LibraryService] Failed to determine movie folder:`, err.message);
   }
 
   // Auto-approve any pending request for this movie

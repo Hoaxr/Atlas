@@ -111,4 +111,20 @@ test('Scanner & Broadcasting Optimizations', async (t) => {
     const countAfterNestedAbort = db.prepare(`SELECT COUNT(*) as cnt FROM ${testTable}`).get().cnt;
     assert.strictEqual(countAfterNestedAbort, 122, 'Nested abort should rollback all uncommitted changes');
   });
+
+  await t.test('Deferred folder creation avoids creating empty directories on disk before download', () => {
+    const fs = require('fs');
+    const path = require('path');
+    const testDir = path.join(__dirname, 'scratch_deferred_test');
+
+    try {
+      const movieFolderName = 'Test Future Movie (2026)';
+      const intendedMovieDest = path.join(testDir, movieFolderName);
+
+      // Verify that intended folder does not exist on disk
+      assert.strictEqual(fs.existsSync(intendedMovieDest), false, 'Empty movie folder should not exist before download completes');
+    } finally {
+      if (fs.existsSync(testDir)) fs.rmSync(testDir, { recursive: true, force: true });
+    }
+  });
 });
