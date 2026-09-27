@@ -124,9 +124,9 @@ export default function GeneralTab({ settings, setSettings, onNavigateTab, handl
               onChange={handleChange}
               options={TIMEZONE_OPTIONS}
               searchable={true}
-              placeholder="No adjustment (show US air dates as-is)"
+              placeholder="Select timezone (e.g. Europe/Amsterdam)"
             />
-            <SettingsHelper text="Converts TMDB release dates to your local calendar day." />
+            <SettingsHelper text="Timezone for system schedules and logs. Media release dates match official release days." />
           </div>
 
           <div>

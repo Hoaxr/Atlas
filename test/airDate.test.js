@@ -11,7 +11,7 @@ const {
   getAirDateShiftDays
 } = require('../server/utils/airDate');
 
-test('AirDate Timezone Shift & Localization', async (t) => {
+test('AirDate Timezone & Release Date Consistency', async (t) => {
   const originalTz = getUserTimezone();
 
   t.after(() => {
@@ -23,69 +23,46 @@ test('AirDate Timezone Shift & Localization', async (t) => {
     invalidateTimezoneCache();
   });
 
-  await t.test('No timezone configured returns unshifted date and 0 shift days', () => {
-    db.prepare('DELETE FROM settings WHERE key = ?').run('timezone');
-    invalidateTimezoneCache();
-
-    assert.strictEqual(getUserTimezone(), '');
-    assert.strictEqual(getAirDateShiftDays(), 0);
-    assert.strictEqual(localizeAirDate('2026-09-24'), '2026-09-24');
-    assert.strictEqual(getAiredCutoffSql(), "date('now', 'localtime')");
-  });
-
-  await t.test('US Eastern timezone returns unshifted date and 0 shift days', () => {
-    setSetting('timezone', 'America/New_York');
-    invalidateTimezoneCache();
-
-    assert.strictEqual(getUserTimezone(), 'America/New_York');
-    assert.strictEqual(getAirDateShiftDays(), 0);
-    assert.strictEqual(localizeAirDate('2026-09-24'), '2026-09-24');
-    assert.strictEqual(getAiredCutoffSql(), "date('now', 'localtime')");
-  });
-
-  await t.test('Europe/Amsterdam converts US Thursday primetime to Friday (+1 day)', () => {
+  await t.test('Air dates remain unshifted regardless of timezone to match official release timing', () => {
+    // Test with Europe/Amsterdam
     setSetting('timezone', 'Europe/Amsterdam');
     invalidateTimezoneCache();
 
     assert.strictEqual(getUserTimezone(), 'Europe/Amsterdam');
-    assert.strictEqual(getAirDateShiftDays(), 1);
-    assert.strictEqual(localizeAirDate('2026-09-24'), '2026-09-25');
-    assert.strictEqual(getAiredCutoffSql(), "date('now', 'localtime', '-1 day')");
-  });
+    assert.strictEqual(getAirDateShiftDays(), 0);
+    assert.strictEqual(localizeAirDate('2026-09-25'), '2026-09-25', 'Friday release date must remain Friday');
+    assert.strictEqual(getAiredCutoffSql(), "date('now', 'localtime')");
 
-  await t.test('Europe/London converts US Thursday primetime to Friday (+1 day)', () => {
-    setSetting('timezone', 'Europe/London');
+    // Test with US Eastern
+    setSetting('timezone', 'America/New_York');
     invalidateTimezoneCache();
+    assert.strictEqual(getAirDateShiftDays(), 0);
+    assert.strictEqual(localizeAirDate('2026-09-25'), '2026-09-25');
 
-    assert.strictEqual(getAirDateShiftDays(), 1);
-    assert.strictEqual(localizeAirDate('2026-09-24'), '2026-09-25');
-  });
-
-  await t.test('Asia/Tokyo converts US Thursday primetime to Friday (+1 day)', () => {
-    setSetting('timezone', 'Asia/Tokyo');
+    // Test without timezone
+    db.prepare('DELETE FROM settings WHERE key = ?').run('timezone');
     invalidateTimezoneCache();
-
-    assert.strictEqual(getAirDateShiftDays(), 1);
-    assert.strictEqual(localizeAirDate('2026-09-24'), '2026-09-25');
+    assert.strictEqual(getAirDateShiftDays(), 0);
+    assert.strictEqual(localizeAirDate('2026-09-25'), '2026-09-25');
   });
 
-  await t.test('SQLite date shift correctly shifts episodes and keeps movies unshifted', () => {
+  await t.test('SQLite date query keeps both episodes and movies on official release date', () => {
     const memDb = new DatabaseSync(':memory:');
     memDb.exec(`
       CREATE TABLE episodes (id INTEGER, air_date TEXT);
       CREATE TABLE movies (id INTEGER, release_date TEXT);
-      INSERT INTO episodes VALUES (1, '2026-09-24');
-      INSERT INTO movies VALUES (1, '2026-09-24');
+      INSERT INTO episodes VALUES (1, '2026-09-25');
+      INSERT INTO movies VALUES (1, '2026-09-25');
     `);
 
-    const shift = 1;
+    const shift = getAirDateShiftDays();
     const shiftSql = shift === 0 ? 'e.air_date' : `date(e.air_date, '+${shift} days')`;
     const shiftSqlM = 'm.release_date';
 
     const epRow = memDb.prepare(`SELECT ${shiftSql} AS date FROM episodes e WHERE id = 1`).get();
     const movieRow = memDb.prepare(`SELECT ${shiftSqlM} AS date FROM movies m WHERE id = 1`).get();
 
-    assert.strictEqual(epRow.date, '2026-09-25');
-    assert.strictEqual(movieRow.date, '2026-09-24');
+    assert.strictEqual(epRow.date, '2026-09-25', 'Episode date must remain Friday 2026-09-25');
+    assert.strictEqual(movieRow.date, '2026-09-25', 'Movie date must remain Friday 2026-09-25');
   });
 });
