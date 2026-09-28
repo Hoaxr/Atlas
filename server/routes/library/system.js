@@ -1057,6 +1057,21 @@ router.post('/cleanup-junk', requireAdmin, async (req, res, next) => {
         try { stat = await fsp.stat(fullPath); } catch { continue; }
         if (stat.isDirectory()) continue;
 
+        // Remove numbered subtitle duplicates (e.g. Movie.en.0.srt) if canonical (Movie.en.srt) already exists
+        const numSubMatch = entry.match(/^(.+\.[a-z]{2,3})\.\d+\.srt$/i);
+        if (numSubMatch) {
+          const canonical = `${numSubMatch[1]}.srt`;
+          if (entries.includes(canonical)) {
+            try {
+              await fsp.unlink(fullPath);
+              deleted.push(fullPath);
+              continue;
+            } catch (e) {
+              console.warn(`[CleanupJunk] Could not delete duplicate numbered subtitle ${fullPath}:`, e.message);
+            }
+          }
+        }
+
         if (!isKeepable(entry)) {
           try {
             await fsp.unlink(fullPath);
