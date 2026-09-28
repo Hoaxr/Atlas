@@ -343,7 +343,8 @@ router.get('/:id/search', async (req, res, next) => {
     const movie = db.prepare('SELECT * FROM movies WHERE id = ?').get(req.params.id);
     if (!movie) return res.status(404).json({ status: 'error', message: 'Movie not found' });
 
-    const results = await indexerService.searchMovie(movie.title, movie.year, null, null, true, movie.tmdb_id);
+    const query = req.query.query || req.query.q || null;
+    const results = await indexerService.searchMovie(movie.title, movie.year, null, null, true, movie.tmdb_id, query);
     res.json({ status: 'success', data: results });
   } catch (err) {
     next(err);

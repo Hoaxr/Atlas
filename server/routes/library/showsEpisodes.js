@@ -639,7 +639,8 @@ router.get('/shows/:id/search', async (req, res, next) => {
     const show = db.prepare('SELECT * FROM shows WHERE id = ?').get(req.params.id);
     if (!show) return res.status(404).json({ status: 'error', message: 'Show not found' });
 
-    const results = await indexerService.searchShowPack(show.title, null, null, true, show.tmdb_id);
+    const query = req.query.query || req.query.q || null;
+    const results = await indexerService.searchShowPack(show.title, null, null, true, show.tmdb_id, query);
     res.json({ status: 'success', data: results });
   } catch (err) {
     next(err);
@@ -714,7 +715,8 @@ router.get('/shows/:id/seasons/:season/search', async (req, res, next) => {
     const seasonNumber = parseInt(req.params.season, 10);
     if (isNaN(seasonNumber)) return res.status(400).json({ status: 'error', message: 'Invalid season number' });
 
-    const results = await indexerService.searchSeasonPack(show.title, seasonNumber, null, null, true, show.tmdb_id);
+    const query = req.query.query || req.query.q || null;
+    const results = await indexerService.searchSeasonPack(show.title, seasonNumber, null, null, true, show.tmdb_id, query);
     res.json({ status: 'success', data: results });
   } catch (err) {
     next(err);
@@ -957,7 +959,8 @@ router.get('/episodes/:id/search', async (req, res, next) => {
     const episode = db.prepare('SELECT e.*, s.title as show_title, s.tmdb_id as show_tmdb_id FROM episodes e JOIN shows s ON e.show_id = s.id WHERE e.id = ?').get(req.params.id);
     if (!episode) return res.status(404).json({ status: 'error', message: 'Episode not found' });
 
-    const results = await indexerService.searchEpisode(episode.show_title, episode.season_number, episode.episode_number, null, null, true, episode.show_tmdb_id);
+    const query = req.query.query || req.query.q || null;
+    const results = await indexerService.searchEpisode(episode.show_title, episode.season_number, episode.episode_number, null, null, true, episode.show_tmdb_id, query);
     res.json({ status: 'success', data: results });
   } catch (err) {
     next(err);

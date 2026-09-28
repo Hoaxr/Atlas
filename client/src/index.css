@@ -196,7 +196,7 @@ h1, h2, h3, h4, h5, h6, .font-display {
 
 .modal-animate-shell.open {
   opacity: 1;
-  transform: scale(1);
+  transform: none;
 }
 
 @starting-style {

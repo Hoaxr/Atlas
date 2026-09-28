@@ -108,3 +108,126 @@ export function parseAudio(title) {
   return 'Unknown';
 }
 
+/**
+ * Extract release group from title or filename (e.g. "-FLUX", "-Framestor", "-playBD").
+ */
+export function parseReleaseGroup(title) {
+  if (!title) return null;
+  const clean = title.replace(/\.(mkv|mp4|avi|mp3|flac|m4a|zip|rar)$/i, '').trim();
+  const match = clean.match(/-([A-Za-z0-9_]+)(?:\[.*?\])?$/);
+  if (!match) return null;
+  const candidate = match[1];
+  const ignored = ['x264', 'x265', 'h264', 'h265', 'hevc', 'avc', 'aac', 'ac3', 'dts', '1080p', '720p', '2160p', '4k', 'remux', 'webrip', 'webdl', 'dl'];
+  if (ignored.includes(candidate.toLowerCase())) return null;
+  return candidate;
+}
+
+/**
+ * Comprehensive release parser extracting resolution, source, HDR, codecs, and group.
+ */
+export function parseRelease(title, mediaType = 'movie') {
+  if (!title) {
+    return {
+      resolution: '—',
+      source: null,
+      isRemux: false,
+      hdr: null,
+      codec: null,
+      audio: null,
+      group: null,
+      isCam: false,
+      musicFormat: null,
+    };
+  }
+
+  const t = title.toLowerCase();
+
+  // Music specific
+  if (mediaType === 'album' || mediaType === 'music') {
+    let musicFormat = 'MP3';
+    if (t.includes('24bit') || t.includes('24-bit') || t.includes('24/96') || t.includes('24/192')) {
+      musicFormat = 'FLAC 24bit';
+    } else if (t.includes('flac') || t.includes('lossless')) {
+      musicFormat = 'FLAC';
+    } else if (t.includes('320k') || t.includes('320 kbps') || t.includes('320kbps')) {
+      musicFormat = 'MP3 320';
+    } else if (t.includes('v0')) {
+      musicFormat = 'MP3 V0';
+    } else if (t.includes('256k') || t.includes('v2')) {
+      musicFormat = 'MP3 256';
+    } else if (t.includes('aac') || t.includes('m4a')) {
+      musicFormat = 'AAC';
+    } else if (t.includes('alac')) {
+      musicFormat = 'ALAC';
+    }
+
+    return {
+      resolution: musicFormat,
+      source: null,
+      isRemux: false,
+      hdr: null,
+      codec: null,
+      audio: null,
+      group: parseReleaseGroup(title),
+      isCam: false,
+      musicFormat,
+    };
+  }
+
+  // Video resolution
+  let resolution = parseResolution(title);
+  if (resolution === 'Unknown') {
+    if (t.includes('2160p') || t.includes('4k') || t.includes('uhd')) resolution = '4K';
+    else if (t.includes('1080p') || t.includes('1080i')) resolution = '1080p';
+    else if (t.includes('720p')) resolution = '720p';
+    else if (t.includes('480p') || t.includes('sd') || t.includes('dvdrip')) resolution = 'SD';
+    else resolution = '—';
+  } else if (resolution === '2160p') {
+    resolution = '4K';
+  }
+
+  // Source
+  const isRemux = /\bremux\b/i.test(t);
+  let source = null;
+  if (isRemux) source = 'REMUX';
+  else if (/\b(uhd[._ -]?bluray|bluray|blu-ray|bdrip|brrip)\b/i.test(t)) source = 'BluRay';
+  else if (/\b(web-?rip)\b/i.test(t)) source = 'WEBRip';
+  else if (/\b(web-?dl|web)\b/i.test(t)) source = 'WEB-DL';
+  else if (/\b(hdtv|pdtv|dsr)\b/i.test(t)) source = 'HDTV';
+  else if (/\b(dvdrip|dvd-?9|dvd-?5|dvd)\b/i.test(t)) source = 'DVDRip';
+
+  // HDR / Color
+  let hdr = null;
+  if (/\b(dv|dovi|dolby[._ -]?vision)\b/i.test(t)) hdr = 'DV';
+  else if (/\b(hdr10\+|hdr10plus)\b/i.test(t)) hdr = 'HDR10+';
+  else if (/\b(hdr10|hdr)\b/i.test(t)) hdr = 'HDR';
+  else if (/\b(10bit|10-bit)\b/i.test(t)) hdr = '10-bit';
+
+  // Codec
+  let codec = parseCodec(title);
+  if (codec === 'Unknown') {
+    if (/\b(av1)\b/i.test(t)) codec = 'AV1';
+    else if (/\b(xvid|divx)\b/i.test(t)) codec = 'XviD';
+    else codec = null;
+  }
+
+  // Audio
+  let audio = parseAudio(title);
+  if (audio === 'Unknown') audio = null;
+
+  // CAM
+  const isCam = /\b(cam|ts|telesync|hdts|hdcam|hc|telecine|tc|workprint|wp|screener|scr|camrip)\b/i.test(t);
+
+  return {
+    resolution,
+    source,
+    isRemux,
+    hdr,
+    codec,
+    audio,
+    group: parseReleaseGroup(title),
+    isCam,
+    musicFormat: null,
+  };
+}
+

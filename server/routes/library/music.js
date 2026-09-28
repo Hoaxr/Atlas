@@ -642,7 +642,8 @@ router.get('/albums/:id/search', async (req, res, _next) => {
     if (!album) return res.status(404).json({ status: 'error', message: 'Album not found' });
 
     const profile = db.prepare('SELECT * FROM music_quality_profiles WHERE id = ?').get(album.quality_profile_id);
-    const results = await indexerService.searchMusic(album.artist_name, album.title, profile, true);
+    const query = req.query.query || req.query.q || null;
+    const results = await indexerService.searchMusic(album.artist_name, album.title, profile, true, query);
     res.json({ status: 'success', data: results });
   } catch (err) {
     console.error(`[MusicSearch] Manual search failed for album ${req.params.id}:`, err.message);

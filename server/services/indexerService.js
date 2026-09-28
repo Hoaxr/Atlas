@@ -122,7 +122,9 @@ const isMaliciousOrFakeRelease = (title) => {
 
 const searchProwlarr = async (query, type = 'search') => {
   if (isCircuitOpen()) {
-    throw new Error('Prowlarr is temporarily unavailable (circuit breaker open).');
+    const err = new Error('Prowlarr is temporarily unavailable (circuit breaker open). Please try again shortly.');
+    err.statusCode = 503;
+    throw err;
   }
 
   const prowlarrUrl = getSetting('prowlarrUrl');
@@ -130,7 +132,9 @@ const searchProwlarr = async (query, type = 'search') => {
 
   if (!prowlarrUrl || !prowlarrApiKey) {
     console.warn('[IndexerService] Prowlarr URL or API Key is missing.');
-    throw new Error('No indexers are configured. Please configure Prowlarr in Settings.');
+    const err = new Error('No indexers are configured. Please configure Prowlarr in Settings.');
+    err.statusCode = 400;
+    throw err;
   }
 
   const startMs = Date.now();
@@ -143,7 +147,7 @@ const searchProwlarr = async (query, type = 'search') => {
 
     const url = `${baseUrl}/api/v1/search?${params}`;
     const res = await axios.get(url, {
-      timeout: 30000,
+      timeout: 45000,
       headers: { 
         'X-Api-Key': prowlarrApiKey,
         'User-Agent': 'Atlas/1.0' 
@@ -171,11 +175,32 @@ const searchProwlarr = async (query, type = 'search') => {
       }
       if (!link) link = item.infoUrl;
 
+      let protocol = (item.protocol || '').toLowerCase();
+      if (!protocol) {
+        if (link && link.startsWith('magnet:')) protocol = 'torrent';
+        else if (item.downloadUrl && item.downloadUrl.toLowerCase().includes('.nzb')) protocol = 'usenet';
+        else protocol = 'torrent';
+      }
+
+      const flags = Array.isArray(item.indexerFlags)
+        ? item.indexerFlags.map(f => String(f).toLowerCase())
+        : [];
+      if (item.indexerFlags && typeof item.indexerFlags === 'number') {
+        if ((item.indexerFlags & 1) !== 0) flags.push('freeleech');
+      }
+
       return {
+        guid: item.guid || item.infoUrl || item.downloadUrl || `${item.title}-${item.size}`,
         title: item.title,
         size: item.size || 0,
-        seeders: item.seeders || 0,
-        leechers: item.leechers || 0,
+        seeders: typeof item.seeders === 'number' ? item.seeders : 0,
+        leechers: typeof item.leechers === 'number' ? item.leechers : 0,
+        publishDate: item.publishDate || null,
+        age: typeof item.age === 'number' ? item.age : null,
+        ageHours: typeof item.ageHours === 'number' ? item.ageHours : null,
+        protocol,
+        indexerFlags: flags,
+        infoUrl: item.infoUrl || item.commentUrl || null,
         link,
         indexer: item.indexer,
       };
@@ -207,7 +232,21 @@ const searchProwlarr = async (query, type = 'search') => {
       // ignore db error
     }
     console.error(`[IndexerService] Prowlarr search failed:`, err.message);
-    throw new Error(`Prowlarr search failed: ${err.message}`, { cause: err });
+
+    let message = `Prowlarr search failed: ${err.message}`;
+    let statusCode = 502;
+
+    if (err.code === 'ECONNABORTED' || (err.message && err.message.toLowerCase().includes('timeout'))) {
+      message = 'Prowlarr search timed out. One or more indexers took too long to respond.';
+      statusCode = 504;
+    } else if (err.response?.status) {
+      statusCode = (err.response.status === 401 || err.response.status === 403) ? 502 : err.response.status;
+      message = `Prowlarr returned HTTP ${err.response.status}: ${err.response.statusText || err.message}`;
+    }
+
+    const customErr = new Error(message, { cause: err });
+    customErr.statusCode = statusCode;
+    throw customErr;
   }
 };
 
@@ -279,7 +318,13 @@ const filterAndSortResults = (results, profile, type, currentQuality = null, isM
     }
 
     const titleLower = r.title.toLowerCase();
-    if (camTerms.test(titleLower)) { camFiltered++; return false; }
+    if (camTerms.test(titleLower)) {
+      if (!isManualSearch) {
+        camFiltered++;
+        return false;
+      }
+      r.isCam = true;
+    }
 
     if (!isManualSearch) {
       for (const rp of releaseProfiles) {
@@ -338,7 +383,12 @@ const filterAndSortResults = (results, profile, type, currentQuality = null, isM
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
-const searchMovie = async (title, year, profile = null, currentQuality = null, isManualSearch = false, _tmdb_id = null) => {
+const searchMovie = async (title, year, profile = null, currentQuality = null, isManualSearch = false, _tmdb_id = null, customQuery = null) => {
+  if (customQuery && customQuery.trim()) {
+    const rawResults = await searchProwlarr(cleanTitle(customQuery), 'movie');
+    return filterAndSortResults(rawResults, profile, 'movies', currentQuality, isManualSearch);
+  }
+
   const cleanedTitle = cleanTitle(title);
   const rawNoAndTitle = (title || '').replace(/['']/g, '').replace(/[^a-zA-Z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
   
@@ -394,7 +444,12 @@ const searchMovie = async (title, year, profile = null, currentQuality = null, i
   return allResults;
 };
 
-const searchEpisode = async (showTitle, season, episode, profile = null, currentQuality = null, isManualSearch = false, _tmdb_id = null) => {
+const searchEpisode = async (showTitle, season, episode, profile = null, currentQuality = null, isManualSearch = false, _tmdb_id = null, customQuery = null) => {
+  if (customQuery && customQuery.trim()) {
+    const rawResults = await searchProwlarr(cleanTitle(customQuery), 'tvsearch');
+    return filterAndSortResults(rawResults, profile, 'shows', currentQuality, isManualSearch);
+  }
+
   const s = season.toString().padStart(2, '0');
   const e = episode.toString().padStart(2, '0');
   const searchTerm = `${cleanTitle(showTitle)} S${s}E${e}`;
@@ -403,7 +458,13 @@ const searchEpisode = async (showTitle, season, episode, profile = null, current
   return filterAndSortResults(results, profile, 'shows', currentQuality, isManualSearch, showTitle);
 };
 
-const searchShowPack = async (showTitle, profile = null, currentQuality = null, isManualSearch = false, _tmdb_id = null) => {
+const searchShowPack = async (showTitle, profile = null, currentQuality = null, isManualSearch = false, _tmdb_id = null, customQuery = null) => {
+  if (customQuery && customQuery.trim()) {
+    const results = await searchProwlarr(cleanTitle(customQuery), 'tvsearch');
+    const filtered = filterAndSortResults(results, profile, 'shows', currentQuality, isManualSearch);
+    return filtered.filter(r => !isEpisodeRelease(r.title));
+  }
+
   const searchTerm = cleanTitle(showTitle);
   const results = await searchProwlarr(searchTerm, 'tvsearch');
   const filtered = filterAndSortResults(results, profile, 'shows', currentQuality, isManualSearch, showTitle);
@@ -411,7 +472,25 @@ const searchShowPack = async (showTitle, profile = null, currentQuality = null, 
   return filtered.filter(r => !isEpisodeRelease(r.title));
 };
 
-const searchSeasonPack = async (showTitle, seasonNumber, _profile = null, _currentQuality = null, _isManualSearch = false, _tmdb_id = null) => {
+const searchSeasonPack = async (showTitle, seasonNumber, _profile = null, _currentQuality = null, _isManualSearch = false, _tmdb_id = null, customQuery = null) => {
+  if (customQuery && customQuery.trim()) {
+    const results = await searchProwlarr(cleanTitle(customQuery), 'tvsearch');
+    const packs = (results || [])
+      .filter(r => !isEpisodeRelease(r.title) && !isMaliciousOrFakeRelease(r.title))
+      .sort((a, b) => b.seeders - a.seeders);
+
+    const seen = new Set();
+    const deduplicated = [];
+    for (const r of packs) {
+      const key = r.title.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+      if (!seen.has(key)) {
+        seen.add(key);
+        deduplicated.push(r);
+      }
+    }
+    return deduplicated;
+  }
+
   const s = seasonNumber.toString().padStart(2, '0');
   const searchTerm = `${cleanTitle(showTitle)} S${s}`;
   const results = await searchProwlarr(searchTerm, 'tvsearch');
@@ -444,7 +523,21 @@ const searchGeneric = async (query) => {
 
 // ─── Music Search ─────────────────────────────────────────────────────────────
 
-const searchMusic = async (artistName, albumTitle = null, profile = null, isManualSearch = false) => {
+const searchMusic = async (artistName, albumTitle = null, profile = null, isManualSearch = false, customQuery = null) => {
+  if (customQuery && customQuery.trim()) {
+    const clean = cleanTitle(customQuery);
+    let rawResults;
+    try {
+      rawResults = await searchProwlarr(clean, 'musicsearch');
+    } catch {
+      rawResults = await searchProwlarr(clean, 'search');
+    }
+    let filtered = rawResults.filter(r => !isMaliciousOrFakeRelease(r.title));
+    if (!isManualSearch) {
+      filtered = filtered.filter(r => r.seeders && r.seeders >= 1);
+    }
+    return filtered.sort((a, b) => (b.seeders || 0) - (a.seeders || 0));
+  }
   const cleanArtist = cleanTitle(artistName || '');
   const cleanAlbum = albumTitle ? cleanTitle(albumTitle) : null;
 

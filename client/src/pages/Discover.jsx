@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../lib/api';
-import { Search as SearchIcon, Plus, Tv, Film, Star, CheckCircle2, Check, ListFilter, Eye } from 'lucide-react';
+import { Search as SearchIcon, Plus, Tv, Film, Star, CheckCircle2, Check, ListFilter, Eye, LayoutGrid, Grid3x3 } from 'lucide-react';
 import MediaDetailsModal from '../components/MediaDetailsModal';
 import MediaRow from '../components/MediaRow';
 import InlineError from '../components/shared/InlineError';
@@ -38,6 +38,32 @@ export default function Discover() {
   useEffect(() => {
     localStorage.setItem('discoverVisibleRows', JSON.stringify(visibleRows));
   }, [visibleRows]);
+
+  const [posterSize, setPosterSize] = useState(() => {
+    try {
+      const saved = localStorage.getItem('discoverPosterSize') || localStorage.getItem('dashboardPosterSize');
+      if (saved) {
+        const parsed = Number(saved);
+        if (!isNaN(parsed) && parsed >= 80 && parsed <= 260) {
+          return parsed;
+        }
+      }
+    } catch {
+      // ignore
+    }
+    return 180;
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('discoverPosterSize', String(posterSize));
+    } catch {
+      // ignore
+    }
+  }, [posterSize]);
+
+  const sliderPercent = Math.min(100, Math.max(0, ((posterSize - 90) / (240 - 90)) * 100));
+
   const [error, setError] = useState('');
   const [mode, setMode] = useState(initialMode); // 'movies' or 'shows'
   const [libraryItems, setLibraryItems] = useState(new Map()); // tmdb_id → library DB id
@@ -246,30 +272,38 @@ export default function Discover() {
     const isInLibrary = tmdbId ? libraryItems.has(tmdbId) : false;
     const displayType = media.media_type === 'tv' ? 'show' : media.media_type === 'movie' ? 'movie' : mode === 'movies' ? 'movie' : 'show';
 
+    const isCompact = posterSize <= 140;
+
     const cardClass = isGrid 
-      ? "rounded-xl border border-slate-800 bg-slate-900/70 overflow-hidden group hover:border-slate-700 transition-all duration-200 relative"
-      : "flex-none w-40 sm:w-44 rounded-xl border border-slate-800 bg-slate-900/70 overflow-hidden group hover:border-slate-700 transition-all duration-200 relative snap-start";
+      ? "rounded-xl border border-slate-800 bg-slate-900/70 overflow-hidden group hover:border-slate-700 transition-all duration-200 relative w-full"
+      : "flex-none rounded-xl border border-slate-800 bg-slate-900/70 overflow-hidden group hover:border-slate-700 transition-all duration-200 relative snap-start";
 
     return (
-      <div key={keyId} className={cardClass}>
+      <div
+        key={keyId}
+        className={cardClass}
+        style={!isGrid ? { width: `${posterSize}px`, minWidth: `${posterSize}px` } : undefined}
+      >
         
         {isInLibrary && (
           <div className="absolute top-2 left-2 z-20 bg-slate-900/80 rounded-full shadow-lg flex items-center justify-center group-hover:opacity-0 transition-opacity duration-200" title="In Library">
-            <CheckCircle2 className="w-6 h-6 text-emerald-400 fill-emerald-400/20" />
+            <CheckCircle2 className={`${isCompact ? 'w-4 h-4' : 'w-6 h-6'} text-emerald-400 fill-emerald-400/20`} />
           </div>
         )}
 
         {isTrending && watchers && (
-          <div className="absolute top-2 right-2 z-20 bg-slate-950/80 backdrop-blur text-xs font-bold px-2 py-1 rounded-md text-orange-400 border border-orange-500/30 shadow-lg group-hover:opacity-0 transition-opacity duration-200">
-            🔥 {watchers} watching
+          <div className={`absolute top-2 right-2 z-20 bg-slate-950/80 backdrop-blur font-bold rounded-md text-orange-400 border border-orange-500/30 shadow-lg group-hover:opacity-0 transition-opacity duration-200 ${
+            isCompact ? 'text-[9px] px-1 py-0.5' : 'text-xs px-2 py-1'
+          }`}>
+            🔥 {watchers} {isCompact ? '' : 'watching'}
           </div>
         )}
 
         <div className="aspect-[2/3] relative bg-slate-800">
           {watchedMap.get(tmdbId) ? (
-            <div className="absolute bottom-2 left-2 z-20 flex items-center gap-1 bg-slate-950/80 backdrop-blur px-2 py-1 rounded-md border border-emerald-500/30 shadow-lg group-hover:opacity-0 transition-opacity duration-200">
+            <div className="absolute bottom-2 left-2 z-20 flex items-center gap-1 bg-slate-950/80 backdrop-blur px-1.5 py-0.5 rounded-md border border-emerald-500/30 shadow-lg group-hover:opacity-0 transition-opacity duration-200">
               <Eye className="w-3 h-3 text-emerald-400" />
-              <span className="text-[10px] font-bold text-emerald-400">Watched</span>
+              {!isCompact && <span className="text-[10px] font-bold text-emerald-400">Watched</span>}
             </div>
           ) : null}
           {poster ? (
@@ -277,18 +311,23 @@ export default function Discover() {
               src={poster} 
               alt={title}
               className="w-full h-full object-cover"
+              loading="lazy"
             />
           ) : (
-            <div className="w-full h-full flex items-center justify-center text-slate-500 text-center p-4">No Image</div>
+            <div className="w-full h-full flex items-center justify-center text-slate-500 text-center p-2 text-xs">No Image</div>
           )}
           
-          <div className="absolute inset-0 bg-slate-950/80 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col items-center justify-center gap-3 p-4 z-10">
+          <div className={`absolute inset-0 bg-slate-950/80 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col items-center justify-center z-10 ${
+            isCompact ? 'p-2 gap-1.5' : 'p-4 gap-3'
+          }`}>
             {!isInLibrary ? (
               <button 
                 onClick={() => handleAddMedia(tmdbId, displayType)}
-                className="bg-cyan-500 hover:bg-cyan-400 text-slate-950 w-full py-1.5 px-2 text-sm rounded-lg font-bold flex items-center justify-center gap-1.5 shadow-lg"
+                className={`bg-cyan-500 hover:bg-cyan-400 text-slate-950 w-full rounded-lg font-bold flex items-center justify-center shadow-lg ${
+                  isCompact ? 'py-1 px-1 text-xs gap-1' : 'py-1.5 px-2 text-sm gap-1.5'
+                }`}
               >
-                <Plus className="w-4 h-4 flex-shrink-0" /> Add {mode === 'movies' ? 'Movie' : 'Show'}
+                <Plus className={`${isCompact ? 'w-3.5 h-3.5' : 'w-4 h-4'} flex-shrink-0`} /> Add {isCompact ? '' : (mode === 'movies' ? 'Movie' : 'Show')}
               </button>
             ) : (
               <button 
@@ -297,21 +336,23 @@ export default function Discover() {
                   const libraryId = libraryItems.get(tmdbId);
                   navigate(displayType === 'movie' ? `/movies/${libraryId}` : `/shows/${libraryId}`);
                 }}
-                className="bg-emerald-500/20 hover:bg-emerald-500/30 transition-colors text-emerald-400 border border-emerald-500/30 w-full py-1.5 px-2 text-sm rounded-lg font-bold flex items-center justify-center gap-1.5 shadow-lg cursor-pointer"
+                className={`bg-emerald-500/20 hover:bg-emerald-500/30 transition-colors text-emerald-400 border border-emerald-500/30 w-full rounded-lg font-bold flex items-center justify-center shadow-lg cursor-pointer ${
+                  isCompact ? 'py-1 px-1 text-xs gap-1' : 'py-1.5 px-2 text-sm gap-1.5'
+                }`}
               >
-                <CheckCircle2 className="w-4 h-4 flex-shrink-0" /> In Library
+                <CheckCircle2 className={`${isCompact ? 'w-3.5 h-3.5' : 'w-4 h-4'} flex-shrink-0`} /> In Library
               </button>
             )}
           </div>
         </div>
-        <div className="p-3 relative z-20 bg-slate-800/95 border-t border-white/10">
-          <h3 className="font-semibold text-sm text-slate-100 truncate tracking-wide" title={title}>{title}</h3>
-          <div className="flex justify-between items-center mt-2">
-            <span className="text-xs text-slate-500 font-medium tracking-wider uppercase">{releaseYear}</span>
+        <div className={`relative z-20 bg-slate-800/95 border-t border-white/10 ${isCompact ? 'p-2' : 'p-3'}`}>
+          <h3 className={`font-semibold text-slate-100 truncate tracking-wide ${isCompact ? 'text-xs' : 'text-sm'}`} title={title}>{title}</h3>
+          <div className="flex justify-between items-center mt-1.5">
+            <span className="text-[11px] text-slate-500 font-medium tracking-wider uppercase">{releaseYear}</span>
             {rating !== '?' && (
-              <div className="flex items-center gap-1 bg-amber-500/10 px-2 py-0.5 rounded-md border border-amber-500/20">
-                <Star className="w-3 h-3 text-amber-400 fill-amber-400" />
-                <span className="text-xs font-bold text-amber-300">{rating}</span>
+              <div className="flex items-center gap-1 bg-amber-500/10 px-1.5 py-0.5 rounded-md border border-amber-500/20">
+                <Star className="w-2.5 h-2.5 text-amber-400 fill-amber-400" />
+                <span className="text-[11px] font-bold text-amber-300">{rating}</span>
               </div>
             )}
           </div>
@@ -335,8 +376,45 @@ export default function Discover() {
             </p>
           </div>
           
-          {/* Mode Toggle & Options */}
-          <div className="flex items-center gap-3 shrink-0">
+          {/* Mode Toggle, Poster Size Slider & Options */}
+          <div className="flex items-center gap-2.5 sm:gap-3 shrink-0 flex-wrap">
+            {/* Poster resize slider (desktop) */}
+            <div className="hidden sm:flex items-center gap-2.5 shrink-0 bg-[#101e31] px-3 py-1.5 rounded-xl border border-[#1c2d46] shadow-inner select-none">
+              <button
+                type="button"
+                onClick={() => setPosterSize(prev => Math.max(90, prev - 15))}
+                className="text-slate-400 hover:text-white transition-colors"
+                title="Smaller posters"
+                aria-label="Smaller posters"
+              >
+                <Grid3x3 className="w-3.5 h-3.5" />
+              </button>
+              <input
+                type="range"
+                min="90"
+                max="240"
+                step="5"
+                value={posterSize}
+                onChange={e => setPosterSize(Number(e.target.value))}
+                onDoubleClick={() => setPosterSize(180)}
+                title={`Poster size: ${posterSize}px (double-click to reset)`}
+                aria-label="Poster size"
+                style={{
+                  background: `linear-gradient(to right, #38a7f4 0%, #38a7f4 ${sliderPercent}%, #101e31 ${sliderPercent}%, #101e31 100%)`
+                }}
+                className="w-20 sm:w-28 md:w-32 h-1.5 rounded-full appearance-none cursor-pointer border border-[#1c2d46] [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3.5 [&::-webkit-slider-thumb]:h-3.5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-[#42a8f8] [&::-webkit-slider-thumb]:shadow-md [&::-webkit-slider-thumb]:cursor-pointer [&::-moz-range-thumb]:w-3.5 [&::-moz-range-thumb]:h-3.5 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-[#42a8f8] [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:cursor-pointer"
+              />
+              <button
+                type="button"
+                onClick={() => setPosterSize(prev => Math.min(240, prev + 15))}
+                className="text-slate-400 hover:text-white transition-colors"
+                title="Larger posters"
+                aria-label="Larger posters"
+              >
+                <LayoutGrid className="w-4 h-4" />
+              </button>
+            </div>
+
             <div className="relative flex items-center bg-[#101e31] p-1 rounded-xl border border-[#1c2d46] shadow-inner select-none">
               <button 
                 type="button"
@@ -444,6 +522,48 @@ export default function Discover() {
           </div>
         </div>
 
+        {/* Mobile secondary bar: poster resize slider */}
+        <div className="flex sm:hidden items-center justify-between gap-3 px-0.5 pt-0.5">
+          <span className="text-xs text-slate-400 font-medium">
+            Poster size
+          </span>
+          <div className="flex items-center gap-2 shrink-0 bg-[#101e31] px-2.5 py-1 rounded-xl border border-[#1c2d46] shadow-inner select-none">
+            <button
+              type="button"
+              onClick={() => setPosterSize(prev => Math.max(90, prev - 15))}
+              className="p-1 text-slate-400 hover:text-white transition-colors"
+              title="Smaller posters"
+              aria-label="Smaller posters"
+            >
+              <Grid3x3 className="w-3.5 h-3.5" />
+            </button>
+            <input
+              type="range"
+              min="90"
+              max="240"
+              step="5"
+              value={posterSize}
+              onChange={e => setPosterSize(Number(e.target.value))}
+              onDoubleClick={() => setPosterSize(180)}
+              title={`Poster size: ${posterSize}px`}
+              aria-label="Poster size"
+              style={{
+                background: `linear-gradient(to right, #38a7f4 0%, #38a7f4 ${sliderPercent}%, #101e31 ${sliderPercent}%, #101e31 100%)`
+              }}
+              className="w-24 xs:w-28 h-1.5 rounded-full appearance-none cursor-pointer border border-[#1c2d46] [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3.5 [&::-webkit-slider-thumb]:h-3.5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-[#42a8f8] [&::-webkit-slider-thumb]:shadow-md [&::-webkit-slider-thumb]:cursor-pointer [&::-moz-range-thumb]:w-3.5 [&::-moz-range-thumb]:h-3.5 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-[#42a8f8] [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:cursor-pointer"
+            />
+            <button
+              type="button"
+              onClick={() => setPosterSize(prev => Math.min(240, prev + 15))}
+              className="p-1 text-slate-400 hover:text-white transition-colors"
+              title="Larger posters"
+              aria-label="Larger posters"
+            >
+              <LayoutGrid className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+
 
 
       {error && (
@@ -488,7 +608,10 @@ export default function Discover() {
            <h2 className="text-base sm:text-lg font-bold text-slate-100 mb-4">
              Search Results
            </h2>
-           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 gap-3 sm:gap-4">
+           <div
+             className="dashboard-poster-grid gap-3 sm:gap-4 relative"
+             style={{ '--poster-size': `${posterSize}px` }}
+           >
              {results.map((item) => renderMediaCard(item, false, true))}
            </div>
         </div>

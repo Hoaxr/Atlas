@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { VirtuosoGrid } from 'react-virtuoso';
 import api from '../../lib/api';
-import { Activity, Film, Tv, Search, CheckCircle2, AlertCircle, Bookmark, LayoutGrid, List, Star, ArrowRight, Zap, Eye, EyeOff, X, RotateCcw, Filter as FilterIcon, CheckSquare, Square, Columns, Plus, ArrowUpDown, Tag, Layers, CircleDot, Check } from 'lucide-react';
+import { Activity, Film, Tv, Search, CheckCircle2, AlertCircle, Bookmark, LayoutGrid, List, Star, ArrowRight, Zap, Eye, EyeOff, X, RotateCcw, Filter as FilterIcon, CheckSquare, Square, Columns, Plus, ArrowUpDown, Tag, Layers, CircleDot, Check, Grid3x3 } from 'lucide-react';
 import { customAlert, customConfirm } from '../../utils/alerts';
 import { cachedMovies, cachedShows, setCachedMovies, setCachedShows } from '../../lib/libraryCache';
 import { parseResolution, parseCodec } from '../../lib/format';
@@ -883,14 +883,15 @@ export default function Dashboard() {
 
               {/* Poster Size Slider Control (Grid View only, hidden on mobile) */}
               {viewStyle === 'grid' && (
-                <div className="hidden sm:flex items-center gap-2.5 shrink-0">
+                <div className="hidden sm:flex items-center gap-2.5 shrink-0 bg-[#101e31] px-3 py-1.5 rounded-xl border border-[#1c2d46] shadow-inner select-none">
                   <button
                     type="button"
                     onClick={() => setPosterSize(prev => Math.max(90, prev - 15))}
-                    className="text-slate-100 hover:text-white transition-colors"
+                    className="text-slate-400 hover:text-white transition-colors"
                     title="Smaller posters"
+                    aria-label="Smaller posters"
                   >
-                    <LayoutGrid className="w-4 h-4" />
+                    <Grid3x3 className="w-3.5 h-3.5" />
                   </button>
                   <input
                     type="range"
@@ -900,7 +901,8 @@ export default function Dashboard() {
                     value={posterSize}
                     onChange={e => setPosterSize(Number(e.target.value))}
                     onDoubleClick={() => setPosterSize(180)}
-                    title={`Poster size: ${posterSize}px`}
+                    title={`Poster size: ${posterSize}px (double-click to reset)`}
+                    aria-label="Poster size"
                     style={{
                       background: `linear-gradient(to right, #38a7f4 0%, #38a7f4 ${sliderPercent}%, #101e31 ${sliderPercent}%, #101e31 100%)`
                     }}
@@ -909,8 +911,9 @@ export default function Dashboard() {
                   <button
                     type="button"
                     onClick={() => setPosterSize(prev => Math.min(240, prev + 15))}
-                    className="text-slate-100 hover:text-white transition-colors"
+                    className="text-slate-400 hover:text-white transition-colors"
                     title="Larger posters"
+                    aria-label="Larger posters"
                   >
                     <LayoutGrid className="w-4 h-4" />
                   </button>
@@ -927,7 +930,7 @@ export default function Dashboard() {
           </span>
 
           {viewStyle === 'grid' && (
-            <div className="flex items-center gap-2 shrink-0">
+            <div className="flex items-center gap-2 shrink-0 bg-[#101e31] px-2.5 py-1 rounded-xl border border-[#1c2d46] shadow-inner select-none">
               <button
                 type="button"
                 onClick={() => setPosterSize(prev => Math.max(90, prev - 15))}
@@ -935,7 +938,7 @@ export default function Dashboard() {
                 title="Smaller posters"
                 aria-label="Smaller posters"
               >
-                <LayoutGrid className="w-3.5 h-3.5" />
+                <Grid3x3 className="w-3.5 h-3.5" />
               </button>
               <input
                 type="range"
@@ -950,7 +953,7 @@ export default function Dashboard() {
                 style={{
                   background: `linear-gradient(to right, #38a7f4 0%, #38a7f4 ${sliderPercent}%, #101e31 ${sliderPercent}%, #101e31 100%)`
                 }}
-                className="w-28 xs:w-32 h-1.5 rounded-full appearance-none cursor-pointer border border-[#1c2d46] [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-[#42a8f8] [&::-webkit-slider-thumb]:shadow-md [&::-webkit-slider-thumb]:cursor-pointer [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-[#42a8f8] [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:cursor-pointer"
+                className="w-24 xs:w-28 h-1.5 rounded-full appearance-none cursor-pointer border border-[#1c2d46] [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3.5 [&::-webkit-slider-thumb]:h-3.5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-[#42a8f8] [&::-webkit-slider-thumb]:shadow-md [&::-webkit-slider-thumb]:cursor-pointer [&::-moz-range-thumb]:w-3.5 [&::-moz-range-thumb]:h-3.5 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-[#42a8f8] [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:cursor-pointer"
               />
               <button
                 type="button"
@@ -959,7 +962,7 @@ export default function Dashboard() {
                 title="Larger posters"
                 aria-label="Larger posters"
               >
-                <LayoutGrid className="w-4.5 h-4.5" />
+                <LayoutGrid className="w-4 h-4" />
               </button>
             </div>
           )}
