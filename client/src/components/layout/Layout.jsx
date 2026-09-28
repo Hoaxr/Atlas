@@ -68,6 +68,9 @@ export default function Layout() {
   const [, setClientConnected] = useState(null);
   const [systemIssues, setSystemIssues] = useState([]);
   const [pendingRequests, setPendingRequests] = useState(0);
+  const [alerts, setAlerts] = useState(() => {
+    try { return JSON.parse(sessionStorage.getItem('atlas_alerts') || '[]'); } catch { return []; }
+  });
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -161,6 +164,17 @@ export default function Layout() {
         try { localStorage.setItem('atlas_download_count', String(count)); } catch { /* ignore */ }
         setClientStats(data.data.clientStats || { dl_info_speed: 0, up_info_speed: 0 });
         setClientConnected(data.data.clientConnected);
+      }
+      // Accumulate warn/error events as dismissible alerts in the notification bell
+      if ((data.level === 'warn' || data.level === 'error') && data.message) {
+        setAlerts((prev) => {
+          const next = [
+            { id: Date.now() + Math.random(), level: data.level, message: data.message, timestamp: data.timestamp || new Date().toISOString() },
+            ...prev,
+          ].slice(0, 10);
+          try { sessionStorage.setItem('atlas_alerts', JSON.stringify(next)); } catch { /* ignore */ }
+          return next;
+        });
       }
     });
 
@@ -492,6 +506,16 @@ export default function Layout() {
             requests: pendingRequests,
             downloads: downloadCount,
             watchers: watcherCount,
+          }}
+          alerts={alerts}
+          onDismissAlert={(id) => setAlerts((prev) => {
+            const next = prev.filter(a => a.id !== id);
+            try { sessionStorage.setItem('atlas_alerts', JSON.stringify(next)); } catch { /* ignore */ }
+            return next;
+          })}
+          onClearAlerts={() => {
+            setAlerts([]);
+            try { sessionStorage.removeItem('atlas_alerts'); } catch { /* ignore */ }
           }}
           onOpenSearch={() => setPaletteOpen(true)}
           onOpenShortcuts={() => setShortcutsOpen(true)}

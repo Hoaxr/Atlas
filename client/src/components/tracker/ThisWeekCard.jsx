@@ -82,10 +82,10 @@ export function ThisWeekCard({ item, type }) {
 
         {/* Type badge — top-right */}
         <div className="absolute top-2 right-2 sm:top-3 sm:right-3">
-          <span className={`text-[9px] sm:text-[10px] uppercase font-bold px-1.5 sm:px-2 py-0.5 rounded-full backdrop-blur-md border ${
+          <span className={`text-[9px] sm:text-[10px] uppercase font-extrabold tracking-wide px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-full backdrop-blur-md shadow-lg border-l-2 ${
             isEpisode
-              ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30'
-              : 'bg-purple-500/20 text-purple-300 border-purple-500/30'
+              ? 'bg-slate-900/80 text-white border-l-cyan-400 border border-slate-700/60'
+              : 'bg-slate-900/80 text-white border-l-purple-400 border border-slate-700/60'
           }`}>
             {isEpisode ? 'TV' : 'Movie'}
           </span>

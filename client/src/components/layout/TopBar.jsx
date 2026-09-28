@@ -21,7 +21,7 @@ const initialsOf = (name) => {
  * @param {{ issues?: number, requests?: number, downloads?: number, watchers?: number }} [props.activity]
  *   Live counters surfaced by the notifications bell (owned by Layout).
  */
-export default function TopBar({ user, activity, onOpenSearch, onOpenShortcuts, onLogout }) {
+export default function TopBar({ user, activity, alerts = [], onDismissAlert, onClearAlerts, onOpenSearch, onOpenShortcuts, onLogout }) {
   const navigate = useNavigate();
   const [activityOpen, setActivityOpen] = useState(false);
   const [hasUnread, setHasUnread] = useState(true);
@@ -52,7 +52,7 @@ export default function TopBar({ user, activity, onOpenSearch, onOpenShortcuts, 
     { key: 'watchers', count: Math.max(0, (activity?.watchers || 0) - (clearedSnapshots.watchers || 0)), label: 'active stream', route: '/watcher', icon: Eye, tone: 'text-cyan-500 dark:text-cyan-400' },
   ].filter((entry) => entry.count > 0);
 
-  const notificationCount = notifications.reduce((total, entry) => total + entry.count, 0);
+  const notificationCount = notifications.reduce((total, entry) => total + entry.count, 0) + alerts.length;
   const prevCountRef = useRef(notificationCount);
 
   useEffect(() => {
@@ -70,6 +70,7 @@ export default function TopBar({ user, activity, onOpenSearch, onOpenShortcuts, 
       downloads: activity?.downloads || 0,
       watchers: activity?.watchers || 0,
     });
+    onClearAlerts?.();
     setHasUnread(false);
   };
 
@@ -189,7 +190,7 @@ export default function TopBar({ user, activity, onOpenSearch, onOpenShortcuts, 
                 )}
               </div>
 
-              {notifications.length === 0 ? (
+              {notifications.length === 0 && alerts.length === 0 ? (
                 <div className="flex flex-col items-center gap-1.5 px-4 py-7 text-center">
                   <CheckCircle2 className="w-5 h-5 text-emerald-500 dark:text-emerald-400" />
                   <p className="text-sm text-slate-500 dark:text-slate-400">You&apos;re all caught up</p>
@@ -227,6 +228,58 @@ export default function TopBar({ user, activity, onOpenSearch, onOpenShortcuts, 
                       </button>
                     </div>
                   ))}
+
+                  {/* Warn / Error alerts from the activity log */}
+                  {alerts.length > 0 && (
+                    <>
+                      {notifications.length > 0 && (
+                        <div className="mx-3 my-1 border-t border-slate-200 dark:border-slate-700/60" />
+                      )}
+                      {alerts.map((alert) => (
+                        <div
+                          key={alert.id}
+                          className={clsx(
+                            'group flex items-start justify-between rounded-lg transition-colors',
+                            alert.level === 'error'
+                              ? 'hover:bg-rose-500/5'
+                              : 'hover:bg-amber-500/5'
+                          )}
+                        >
+                          <button
+                            type="button"
+                            role="menuitem"
+                            onClick={() => { setActivityOpen(false); navigate('/status'); }}
+                            className="flex-1 min-w-0 flex items-start gap-2.5 px-3 py-2 text-left transition-colors"
+                          >
+                            <AlertTriangle className={clsx(
+                              'w-4 h-4 shrink-0 mt-0.5',
+                              alert.level === 'error' ? 'text-rose-400' : 'text-amber-400'
+                            )} />
+                            <span className="min-w-0">
+                              <span className={clsx(
+                                'block text-xs font-semibold uppercase tracking-wide mb-0.5',
+                                alert.level === 'error' ? 'text-rose-400' : 'text-amber-400'
+                              )}>
+                                {alert.level === 'error' ? 'Error' : 'Warning'}
+                              </span>
+                              <span className="block text-sm text-slate-600 dark:text-slate-300 line-clamp-2">
+                                {alert.message}
+                              </span>
+                            </span>
+                          </button>
+                          <button
+                            type="button"
+                            title="Dismiss"
+                            aria-label="Dismiss alert"
+                            onClick={(e) => { e.stopPropagation(); onDismissAlert?.(alert.id); }}
+                            className="opacity-0 group-hover:opacity-100 p-1.5 mt-1 mr-1.5 rounded-md text-slate-400 hover:text-rose-400 hover:bg-slate-200 dark:hover:bg-slate-700/60 transition-all cursor-pointer shrink-0"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      ))}
+                    </>
+                  )}
                 </div>
               )}
             </div>
@@ -257,19 +310,35 @@ export default function TopBar({ user, activity, onOpenSearch, onOpenShortcuts, 
         <div className="h-6 w-px bg-slate-200 dark:bg-slate-700/60 mx-1 hidden sm:block" />
 
         {/* Account */}
-        <div className="flex items-center gap-2 py-1 px-1 sm:px-2 rounded-xl text-slate-700 dark:text-slate-200 shrink-0">
-          <span className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-blue-600 text-white text-xs font-bold flex items-center justify-center shrink-0 shadow-sm">
-            {initialsOf(displayName)}
+        <div className="hidden sm:flex items-center gap-2.5 py-1 px-1.5 rounded-xl hover:bg-slate-200/60 dark:hover:bg-slate-800/50 transition-colors cursor-default shrink-0 group">
+          {/* Avatar with gradient + ring */}
+          <span className="relative w-8 h-8 sm:w-9 sm:h-9 shrink-0">
+            <span className="absolute inset-0 rounded-full bg-gradient-to-br from-sky-400 via-blue-500 to-indigo-600 shadow-md shadow-blue-500/30 flex items-center justify-center text-white text-xs font-bold tracking-wide">
+              {initialsOf(displayName)}
+            </span>
+            {/* Online dot */}
+            <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-emerald-400 border-2 border-white dark:border-[#101b2b] shadow-sm" />
           </span>
-          <span className="hidden sm:flex flex-col text-left leading-tight max-w-[140px]">
-            <span className="block text-[13px] font-medium text-slate-800 dark:text-slate-100 truncate">
+          {/* Name + role pill */}
+          <span className="flex flex-col text-left leading-tight max-w-[130px]">
+            <span className="block text-[13px] font-semibold text-slate-800 dark:text-slate-100 truncate">
               {displayName}
             </span>
-            <span className="block text-[11px] font-normal text-slate-400 dark:text-slate-400 mt-0.5">
-              {role}
+            <span className="flex items-center gap-1 mt-0.5">
+              <span className="inline-flex items-center px-1.5 py-px rounded text-[10px] font-bold uppercase tracking-wider bg-sky-500/15 text-sky-400 border border-sky-500/20 leading-none">
+                {role}
+              </span>
             </span>
           </span>
         </div>
+
+        {/* Avatar only on mobile */}
+        <span className="sm:hidden relative w-8 h-8 shrink-0">
+          <span className="absolute inset-0 rounded-full bg-gradient-to-br from-sky-400 via-blue-500 to-indigo-600 shadow-md flex items-center justify-center text-white text-xs font-bold">
+            {initialsOf(displayName)}
+          </span>
+          <span className="absolute bottom-0 right-0 w-2 h-2 rounded-full bg-emerald-400 border-2 border-white dark:border-[#101b2b]" />
+        </span>
 
         {/* Logout */}
         <button
@@ -277,9 +346,9 @@ export default function TopBar({ user, activity, onOpenSearch, onOpenShortcuts, 
           onClick={onLogout}
           title="Logout"
           aria-label="Logout"
-          className="hidden sm:flex p-2 rounded-xl text-slate-500 dark:text-slate-400 hover:text-rose-500 dark:hover:text-rose-400 hover:bg-rose-500/10 dark:hover:bg-rose-500/10 transition-colors shrink-0"
+          className="hidden sm:flex p-2 rounded-xl text-slate-400 dark:text-slate-500 hover:text-rose-500 dark:hover:text-rose-400 hover:bg-rose-500/10 dark:hover:bg-rose-500/10 transition-colors shrink-0"
         >
-          <LogOut className="w-5 h-5" />
+          <LogOut className="w-4 h-4" />
         </button>
       </div>
     </header>
