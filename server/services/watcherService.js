@@ -455,7 +455,10 @@ class WatcherService {
   async getEmbyCompatibleSessions(url, apiKey, serverLabel) {
     try {
       const response = await axios.get(`${url}/Sessions`, {
-        headers: { 'X-Emby-Token': apiKey },
+        headers: {
+          'Authorization': `MediaBrowser Token="${apiKey}"`,
+          'X-Emby-Token': apiKey
+        },
         timeout: 5000
       });
       const sessions = response.data || [];

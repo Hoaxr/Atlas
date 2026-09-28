@@ -25,7 +25,10 @@ class UserProvisioningService {
           Name: username,
           Password: password
         }, {
-          headers: { 'X-Emby-Token': jellyfinApiKey }
+          headers: {
+            'Authorization': `MediaBrowser Token="${jellyfinApiKey}"`,
+            'X-Emby-Token': jellyfinApiKey
+          }
         });
         results.jellyfin = 'success';
         console.log(`[UserProvisioning] Created user ${username} in Jellyfin.`);
@@ -117,7 +120,10 @@ class UserProvisioningService {
     if (jellyfinUrl && jellyfinApiKey) {
       try {
         const res = await axios.get(`${jellyfinUrl}/Users`, {
-          headers: { 'X-Emby-Token': jellyfinApiKey },
+          headers: {
+            'Authorization': `MediaBrowser Token="${jellyfinApiKey}"`,
+            'X-Emby-Token': jellyfinApiKey
+          },
           timeout: 5000
         });
         if (Array.isArray(res.data)) {

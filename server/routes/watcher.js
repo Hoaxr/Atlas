@@ -116,6 +116,7 @@ router.get('/image', async (req, res) => {
       const jfToken = getSetting('jellyfinApiKey');
       if (!jfUrl || !jfToken) return res.status(404).send('Not configured');
       url = `${jfUrl}/Items/${id}/Images/Primary`;
+      headers['Authorization'] = `MediaBrowser Token="${jfToken}"`;
       headers['X-Emby-Token'] = jfToken;
     } else if (server === 'emby') {
       if (!id || typeof id !== 'string' || !/^[a-zA-Z0-9-]+$/.test(id)) {

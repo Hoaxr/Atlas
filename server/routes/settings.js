@@ -432,7 +432,10 @@ router.post('/media-server/test', requireAdmin, async (req, res) => {
       const label = type === 'jellyfin' ? 'Jellyfin' : 'Emby';
       const result = await axios.get(`${base}/System/Info`, {
         ...axiosCfg,
-        headers: { 'X-Emby-Token': finalApiKey },
+        headers: {
+          'Authorization': `MediaBrowser Token="${finalApiKey}"`,
+          'X-Emby-Token': finalApiKey,
+        },
       });
       if (result.status === 200) return res.json({ status: 'success', message: `Connected to ${label} successfully` });
       if (result.status === 401) return res.status(400).json({ status: 'error', message: `${label} rejected the API key (401 Unauthorized) — check your API key` });
