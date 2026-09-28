@@ -16,9 +16,24 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response && error.response.status === 401 && window.location.pathname !== '/login') {
-      localStorage.removeItem('atlas_token');
-      window.location.href = '/login';
+    if (
+      error.response &&
+      error.response.status === 401 &&
+      window.location.pathname !== '/login'
+    ) {
+      const url = error.config?.url || '';
+      // Don't log out for 401s from external service tests or third-party integrations
+      const isExternalOrSettings =
+        url.includes('/settings/') ||
+        url.includes('/test') ||
+        url.includes('/tmdb/') ||
+        url.includes('/simkl/') ||
+        url.includes('/clients/');
+
+      if (!isExternalOrSettings) {
+        localStorage.removeItem('atlas_token');
+        window.location.href = '/login';
+      }
     }
     return Promise.reject(error);
   }

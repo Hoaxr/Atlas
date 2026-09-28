@@ -435,7 +435,7 @@ router.post('/media-server/test', requireAdmin, async (req, res) => {
         headers: { 'X-Emby-Token': finalApiKey },
       });
       if (result.status === 200) return res.json({ status: 'success', message: `Connected to ${label} successfully` });
-      if (result.status === 401) return res.status(401).json({ status: 'error', message: `${label} rejected the API key (401 Unauthorized) — check your API key` });
+      if (result.status === 401) return res.status(400).json({ status: 'error', message: `${label} rejected the API key (401 Unauthorized) — check your API key` });
       return res.status(400).json({ status: 'error', message: `${label} returned HTTP ${result.status}` });
     }
 

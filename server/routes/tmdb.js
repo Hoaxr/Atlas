@@ -178,7 +178,7 @@ router.get('/test', async (req, res) => {
     }
   } catch (err) {
     if (err.response?.status === 401) {
-      return res.status(401).json({ status: 'error', message: 'TMDB API key is invalid' });
+      return res.status(400).json({ status: 'error', message: 'TMDB API key is invalid' });
     }
     if (err.response?.status === 404) {
       return res.status(400).json({ status: 'error', message: 'TMDB API key is invalid or has no access' });
