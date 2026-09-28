@@ -221,7 +221,9 @@ const validateAndTransform = (key, value) => {
 
   if (schema.type === 'apiKey') {
     if (isMasked(value)) return { valid: false, skip: true };
-    if (typeof value !== 'string' || value.length > 500) return { valid: false, reason: `${key}: invalid API key format` };
+    if (typeof value !== 'string') return { valid: false, reason: `${key}: invalid API key format` };
+    if (value === '') return { valid: false, skip: true }; // Don't overwrite an existing key with empty
+    if (value.length > 500) return { valid: false, reason: `${key}: API key too long` };
     return { valid: true, transformed: value };
   }
 
@@ -385,11 +387,15 @@ router.post('/media-server/test', requireAdmin, async (req, res) => {
     if (!type || !url || !apiKey) return res.status(400).json({ status: 'error', message: 'Missing type, URL, or API Key' });
 
     let finalApiKey = apiKey;
-    const isMasked = (val) => val && /^\*+$/.test(val);
-    if (isMasked(apiKey)) {
-      if (type === 'plex') finalApiKey = getSetting('plexToken') || apiKey;
-      else if (type === 'jellyfin') finalApiKey = getSetting('jellyfinApiKey') || apiKey;
-      else if (type === 'emby') finalApiKey = getSetting('embyApiKey') || apiKey;
+    const _isMasked = (val) => val && (/^\*+$/.test(val) || val.startsWith('***'));
+    if (_isMasked(apiKey)) {
+      if (type === 'plex') finalApiKey = getSetting('plexToken') || '';
+      else if (type === 'jellyfin') finalApiKey = getSetting('jellyfinApiKey') || '';
+      else if (type === 'emby') finalApiKey = getSetting('embyApiKey') || '';
+    }
+
+    if (!finalApiKey) {
+      return res.status(400).json({ status: 'error', message: `No API key stored for ${type}. Please enter and save your API key first.` });
     }
 
     let parsed;
@@ -413,28 +419,33 @@ router.post('/media-server/test', requireAdmin, async (req, res) => {
     }
 
     const base = url.replace(/\/$/, '');
-    
+    const axiosCfg = { timeout: 5000, validateStatus: () => true };
+
     if (type === 'plex') {
       const result = await axios.get(`${base}/identity`, {
+        ...axiosCfg,
         headers: { 'X-Plex-Token': finalApiKey, 'Accept': 'application/json' },
-        timeout: 5000
       });
-      if (result.status === 200) {
-        return res.json({ status: 'success', message: 'Connected to Plex successfully' });
-      }
+      if (result.status === 200) return res.json({ status: 'success', message: 'Connected to Plex successfully' });
+      return res.status(400).json({ status: 'error', message: `Plex returned HTTP ${result.status} — check your URL and token` });
     } else if (type === 'jellyfin' || type === 'emby') {
+      const label = type === 'jellyfin' ? 'Jellyfin' : 'Emby';
       const result = await axios.get(`${base}/System/Info`, {
+        ...axiosCfg,
         headers: { 'X-Emby-Token': finalApiKey },
-        timeout: 5000
       });
-      if (result.status === 200) {
-        return res.json({ status: 'success', message: `Connected to ${type === 'jellyfin' ? 'Jellyfin' : 'Emby'} successfully` });
-      }
+      if (result.status === 200) return res.json({ status: 'success', message: `Connected to ${label} successfully` });
+      if (result.status === 401) return res.status(401).json({ status: 'error', message: `${label} rejected the API key (401 Unauthorized) — check your API key` });
+      return res.status(400).json({ status: 'error', message: `${label} returned HTTP ${result.status}` });
     }
-    
-    res.status(400).json({ status: 'error', message: `Failed to connect to ${type}` });
+
+    res.status(400).json({ status: 'error', message: `Unknown media server type: ${type}` });
   } catch (err) {
-    res.status(500).json({ status: 'error', message: err.message });
+    const msg = err.code === 'ECONNREFUSED' ? 'Connection refused — is the server running?'
+              : err.code === 'ETIMEDOUT'    ? 'Connection timed out — check the URL and firewall'
+              : err.code === 'ENOTFOUND'    ? 'Hostname not found — check the URL'
+              : err.message;
+    res.status(500).json({ status: 'error', message: msg });
   }
 });
 
