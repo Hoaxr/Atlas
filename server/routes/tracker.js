@@ -89,8 +89,9 @@ router.get('/stats', async (req, res) => {
 
     const finishedSeasons = db.prepare(`
       SELECT COUNT(*) as count FROM (
-        SELECT show_id, season_number FROM episodes GROUP BY show_id, season_number
-        HAVING SUM(CASE WHEN watched = 1 THEN 1 ELSE 0 END) = COUNT(*)
+        SELECT DISTINCT tmdb_id, season_number
+        FROM watch_history
+        WHERE type = 'episode' AND season_number > 0
       )
     `).get() || { count: 0 };
 
@@ -355,14 +356,44 @@ router.get('/stats', async (req, res) => {
       ];
     }
 
-    const totalMinutes = (movieStats.total_minutes || 0) + (episodeStats.total_minutes || 0);
+    // Simkl integration: if Simkl is linked, augment total watch time & counts
+    let simklStats = null;
+    const simklTokenRow = db.prepare("SELECT value FROM settings WHERE key = 'simklAccessToken'").get();
+    const simklClientIdRow = db.prepare("SELECT value FROM settings WHERE key = 'simklClientId'").get();
+    const simklConnected = !!(simklTokenRow?.value && simklClientIdRow?.value);
+
+    if (simklConnected) {
+      try {
+        const simklService = require('../services/simklService');
+        simklStats = await simklService.getUserStats();
+        if (simklStats?.error) simklStats = null;
+      } catch (e) {
+        console.warn('[Tracker] Failed to fetch Simkl stats:', e.message);
+      }
+    }
+
+    const localTotalMinutes = (movieStats.total_minutes || 0) + (episodeStats.total_minutes || 0);
+    const simklTotalMinutes = simklStats?.totalMinutes || 0;
+    const totalMinutes = Math.max(localTotalMinutes, simklTotalMinutes);
     const totalHours = Math.round(totalMinutes / 60);
 
+    const effectiveMovieCount = Math.max(movieStats.count, simklStats?.movies?.watched || 0);
+    const effectiveEpisodeCount = Math.max(episodeStats.count, simklStats?.episodes?.watched || 0);
+    const effectiveShowCount = Math.max(episodeStats.shows_count || 0, simklStats?.shows?.watched || 0);
+
     const stats = {
-      movies: { count: movieStats.count, minutes: movieStats.total_minutes || 0, this_month: thisMonthMovies.count || 0 },
-      episodes: { count: episodeStats.count, minutes: episodeStats.total_minutes || 0, this_month: thisMonthEpisodes.count || 0 },
-      shows: { count: episodeStats.shows_count || 0 },
-      completed_shows: completedShows.count,
+      movies: {
+        count: effectiveMovieCount,
+        minutes: Math.max(movieStats.total_minutes || 0, simklStats?.movies?.minutes || 0),
+        this_month: thisMonthMovies.count || 0
+      },
+      episodes: {
+        count: effectiveEpisodeCount,
+        minutes: Math.max(episodeStats.total_minutes || 0, simklStats?.episodes?.minutes || 0),
+        this_month: thisMonthEpisodes.count || 0
+      },
+      shows: { count: effectiveShowCount },
+      completed_shows: Math.max(completedShows.count, simklStats?.shows?.watched || 0),
       finished_seasons: finishedSeasons.count,
       total_minutes: totalMinutes,
       total_hours: totalHours,
@@ -375,7 +406,9 @@ router.get('/stats', async (req, res) => {
       genre_breakdown: genreBreakdown,
       achievements,
       currently_watching: currentlyWatching,
-      now_watching: nowWatching
+      now_watching: nowWatching,
+      simkl_connected: simklConnected,
+      simkl_username: simklStats?.username || null
     };
 
     _statsCache = { full, stats };

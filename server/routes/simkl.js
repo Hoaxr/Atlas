@@ -27,10 +27,11 @@ router.post('/pull', async (req, res, next) => {
   try {
     const moviesSynced = await simklService.syncWatchedMovies();
     const showsSynced = await simklService.syncWatchedShows();
+    const animeSynced = await simklService.syncWatchedAnime();
     res.json({ 
       status: 'success', 
-      data: { moviesSynced, showsSynced },
-      message: `Successfully pulled ${moviesSynced} movies and ${showsSynced} shows from Simkl.` 
+      data: { moviesSynced, showsSynced, animeSynced },
+      message: `Successfully pulled ${moviesSynced} movies, ${showsSynced} shows, and ${animeSynced} anime from Simkl.` 
     });
   } catch (e) {
     next(e);

@@ -4,7 +4,7 @@ const execFileAsync = util.promisify(execFile);
 const { parseAudio } = require('./mediaParsing');
 
 
-const { VALID_LANGUAGES } = require('./languages');
+const { VALID_LANGUAGES, normalizeLanguageCode } = require('./languages');
 
 const getMediaMetadata = async (filePath) => {
   try {
@@ -24,18 +24,18 @@ const getMediaMetadata = async (filePath) => {
     const audioStream = audioStreams[0] || {};
     const subStreams = streams.filter(s => s.codec_type === 'subtitle');
 
-    // Extract embedded subtitle language codes
+    // Extract embedded subtitle language codes (normalized to 2-letter ISO)
     const embeddedSubtitles = [...new Set(
       subStreams
-        .map(s => (s.tags?.language || '').toLowerCase().trim())
-        .filter(lang => lang && VALID_LANGUAGES.has(lang))
+        .map(s => normalizeLanguageCode(s.tags?.language))
+        .filter(Boolean)
     )];
 
-    // Extract audio language codes
+    // Extract audio language codes (normalized to 2-letter ISO)
     const audioLangs = [...new Set(
       audioStreams
-        .map(s => (s.tags?.language || '').toLowerCase().trim())
-        .filter(lang => lang && VALID_LANGUAGES.has(lang))
+        .map(s => normalizeLanguageCode(s.tags?.language))
+        .filter(Boolean)
     )];
 
     // Determine runtime in minutes from ffprobe duration (seconds)

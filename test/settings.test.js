@@ -9,7 +9,7 @@ const isMasked = (val) => typeof val === 'string' && (/^\*+$/.test(val) || val.s
 const maskSecret = (val, isAdmin = true) => {
   if (!val) return '';
   if (!isAdmin) return '';
-  return '***' + (val.length > 4 ? val.slice(-4) : '');
+  return val;
 };
 
 test('Settings System & Masking Rules', async (t) => {
@@ -37,12 +37,12 @@ test('Settings System & Masking Rules', async (t) => {
     assert.strictEqual(isMasked(null), false);
   });
 
-  await t.test('Mask function generates standard masked representations for secrets', () => {
+  await t.test('Mask function preserves full keys for admins and hides from non-admins', () => {
     assert.strictEqual(maskSecret(''), '');
     assert.strictEqual(maskSecret(null), '');
     assert.strictEqual(maskSecret('secret12345', false), ''); // non-admin gets empty string
-    assert.strictEqual(maskSecret('1234', true), '***'); // <= 4 chars
-    assert.strictEqual(maskSecret('mySecretKey9876', true), '***9876'); // > 4 chars preserves last 4
+    assert.strictEqual(maskSecret('1234', true), '1234');
+    assert.strictEqual(maskSecret('mySecretKey9876', true), 'mySecretKey9876'); // admin receives full unmasked key
   });
 
   await t.test('colonReplacement default resolves to "delete"', () => {

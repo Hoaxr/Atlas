@@ -1585,6 +1585,74 @@ const MIGRATIONS = [
            OR LOWER(title) LIKE '%takeover%';
       `).run();
     }
+  },
+  {
+    id: 53,
+    name: 'normalize_subtitles_language_codes',
+    run: (db) => {
+      const { normalizeLanguageCode } = require('../utils/languages');
+      for (const table of ['movies', 'episodes']) {
+        const rows = db.prepare(`SELECT id, subtitles FROM ${table} WHERE subtitles IS NOT NULL AND subtitles != '' AND subtitles != '[]'`).all();
+        const updateStmt = db.prepare(`UPDATE ${table} SET subtitles = ? WHERE id = ?`);
+        for (const row of rows) {
+          try {
+            const raw = JSON.parse(row.subtitles);
+            if (Array.isArray(raw)) {
+              const normalized = [...new Set(raw.map(normalizeLanguageCode).filter(Boolean))];
+              const newJson = JSON.stringify(normalized);
+              if (newJson !== row.subtitles) {
+                updateStmt.run(newJson, row.id);
+              }
+            }
+          } catch { /* skip */ }
+        }
+      }
+    }
+  },
+  {
+    id: 54,
+    name: 'sync_external_subtitles_only',
+    run: (db) => {
+      const fs = require('fs');
+      const path = require('path');
+      const { normalizeLanguageCode } = require('../utils/languages');
+      const SUBTITLE_EXTS = ['.srt', '.sub', '.vtt', '.ass', '.ssa'];
+
+      const getDiskSubtitles = (filePath) => {
+        try {
+          if (!filePath) return [];
+          const dir = path.dirname(filePath);
+          if (!fs.existsSync(dir)) return [];
+          const items = fs.readdirSync(dir);
+          const langs = [];
+          for (const item of items) {
+            const ext = path.extname(item).toLowerCase();
+            if (!SUBTITLE_EXTS.includes(ext)) continue;
+            let name = path.basename(item, ext);
+            name = name.replace(/[._-](?:forced|sdh|hi|cc|\d+)$/i, '');
+            const match = name.match(/(?:^|[._-])([a-z]{2,3}|english|dutch|french|german|spanish|italian|portuguese)$/i);
+            if (match) {
+              const norm = normalizeLanguageCode(match[1]);
+              if (norm) langs.push(norm);
+            }
+          }
+          return [...new Set(langs)];
+        } catch {
+          return [];
+        }
+      };
+
+      for (const table of ['movies', 'episodes']) {
+        const rows = db.prepare(`SELECT id, file_path FROM ${table} WHERE file_path IS NOT NULL AND file_path != ''`).all();
+        const updateStmt = db.prepare(`UPDATE ${table} SET subtitles = ? WHERE id = ?`);
+        for (const row of rows) {
+          try {
+            const diskSubs = getDiskSubtitles(row.file_path);
+            updateStmt.run(JSON.stringify(diskSubs), row.id);
+          } catch { /* skip */ }
+        }
+      }
+    }
   }
 ];
 

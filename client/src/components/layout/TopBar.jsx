@@ -87,7 +87,7 @@ export default function TopBar({ user, activity, onOpenSearch, onOpenShortcuts, 
     : 'Admin';
 
   return (
-    <header className="h-16 shrink-0 flex items-center justify-between gap-2.5 sm:gap-4 px-3 sm:px-6 lg:px-8 bg-slate-100/90 dark:bg-[#101b2b] border-b border-slate-200 dark:border-slate-800/80 backdrop-blur-md relative z-40 max-w-full overflow-hidden">
+    <header className="h-16 shrink-0 flex items-center justify-between gap-2.5 sm:gap-4 px-3 sm:px-6 lg:px-8 bg-slate-100/90 dark:bg-[#101b2b] border-b border-slate-200 dark:border-slate-800/80 backdrop-blur-md relative z-40 max-w-full">
       <button
         onClick={() => window.dispatchEvent(new CustomEvent('atlas-toggle-sidebar'))}
         className="lg:hidden p-2 -ml-1 rounded-lg text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-100 hover:bg-slate-200/70 dark:hover:bg-slate-800/70 transition-colors shrink-0"

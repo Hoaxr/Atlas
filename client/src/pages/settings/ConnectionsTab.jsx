@@ -12,9 +12,11 @@ export default function ConnectionsTab({
   setSettings,
   handleSave: _parentHandleSave,
   simklDeviceCode,
+  setSimklDeviceCode,
   simklUserCode,
   simklVerificationUrl,
   simklPolling,
+  setSimklPolling,
   connectSimkl,
   fetchSettings,
   keyStatuses
@@ -337,6 +339,9 @@ export default function ConnectionsTab({
         simklClientId: typeof settings?.simklClientId === 'string' && settings.simklClientId.startsWith('***')
           ? undefined
           : settings?.simklClientId,
+        simklClientSecret: typeof settings?.simklClientSecret === 'string' && settings.simklClientSecret.startsWith('***')
+          ? undefined
+          : settings?.simklClientSecret,
         simklWatchedSync: settings?.simklWatchedSync,
       });
       if (fetchSettings) fetchSettings();
@@ -438,7 +443,7 @@ export default function ConnectionsTab({
               </label>
               <PasswordInput
                 placeholder="Enter your TMDB API Key"
-                className="w-full bg-[#0c1624] border border-[#1c2d46] rounded-xl px-4 py-2.5 text-sm text-slate-200 focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/50 transition-colors placeholder:text-slate-600"
+                className="w-full bg-[#0c1624] border border-[#1c2d46] rounded-xl px-4 py-2.5 text-sm text-slate-200 focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/50 transition-colors placeholder:text-slate-600 font-mono"
                 value={settings?.tmdbApiKey || ''}
                 onChange={(e) => setSettings({ ...settings, tmdbApiKey: e.target.value })}
               />
@@ -475,16 +480,44 @@ export default function ConnectionsTab({
               </div>
             </div>
             <p className="text-xs text-slate-400">Simkl syncs your watched status and movie/show completion history.</p>
-            <div>
-              <label className="block text-xs sm:text-sm font-medium text-slate-300 mb-1.5">
-                Simkl Client ID / API Key
-              </label>
-              <PasswordInput
-                placeholder="Enter your Simkl Client ID"
-                className="w-full bg-[#0c1624] border border-[#1c2d46] rounded-xl px-4 py-2.5 text-sm text-slate-200 focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/50 transition-colors placeholder:text-slate-600"
-                value={settings?.simklClientId || ''}
-                onChange={(e) => setSettings({ ...settings, simklClientId: e.target.value })}
-              />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs sm:text-sm font-medium text-slate-300 mb-1.5 flex items-center justify-between">
+                  <span>Simkl Client ID</span>
+                  <a
+                    href="https://simkl.com/settings/developer/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[11px] text-cyan-400 hover:text-cyan-300 underline font-normal"
+                  >
+                    Find Keys &rarr;
+                  </a>
+                </label>
+                <PasswordInput
+                  placeholder="Paste your Simkl Client ID"
+                  className="w-full bg-[#0c1624] border border-[#1c2d46] rounded-xl px-4 py-2.5 text-sm text-slate-200 focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/50 transition-colors placeholder:text-slate-600 font-mono"
+                  value={settings?.simklClientId || ''}
+                  onChange={(e) => setSettings({ ...settings, simklClientId: e.target.value })}
+                />
+                {settings?.simklClientId?.trim().startsWith('simkl_cs_') && (
+                  <div className="mt-2 p-2 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-300 text-[11px]">
+                    ⚠️ That looks like a Client Secret. Paste the Client ID here and the Secret on the right.
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-xs sm:text-sm font-medium text-slate-300 mb-1.5 flex items-center justify-between">
+                  <span>Simkl Client Secret</span>
+                  <span className="text-[11px] text-slate-400 font-normal">From Developer Settings</span>
+                </label>
+                <PasswordInput
+                  placeholder="Enter Simkl Client Secret (simkl_cs_...)"
+                  className="w-full bg-[#0c1624] border border-[#1c2d46] rounded-xl px-4 py-2.5 text-sm text-slate-200 focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/50 transition-colors placeholder:text-slate-600 font-mono"
+                  value={settings?.simklClientSecret || ''}
+                  onChange={(e) => setSettings({ ...settings, simklClientSecret: e.target.value })}
+                />
+              </div>
             </div>
 
             <div className="flex items-center gap-3 flex-wrap pt-1">
@@ -521,9 +554,21 @@ export default function ConnectionsTab({
 
             {simklDeviceCode && (
               <div className="bg-[#0b1522] border border-cyan-500/30 rounded-xl p-4 sm:p-5 space-y-3">
-                <p className="text-xs text-slate-300 font-semibold">Simkl Authorization</p>
-                <p className="text-xs text-slate-400">Go to the following URL and enter this PIN:</p>
-                <a href={simklVerificationUrl} target="_blank" rel="noopener noreferrer" className="text-sm font-bold text-cyan-400 hover:text-cyan-300 underline block">{simklVerificationUrl}</a>
+                <div className="flex items-center justify-between">
+                  <p className="text-xs text-slate-300 font-semibold">Simkl Authorization</p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (setSimklDeviceCode) setSimklDeviceCode(null);
+                      if (setSimklPolling) setSimklPolling(false);
+                    }}
+                    className="text-xs text-slate-400 hover:text-rose-400 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </div>
+                <p className="text-xs text-slate-400">Go to the following URL and approve the request:</p>
+                <a href={simklVerificationUrl} target="_blank" rel="noopener noreferrer" className="text-sm font-bold text-cyan-400 hover:text-cyan-300 underline block break-all">{simklVerificationUrl}</a>
                 <div className="text-2xl font-black tracking-widest bg-[#101e31] px-5 py-2.5 rounded-xl border border-cyan-500/30 text-cyan-300 select-all inline-block font-mono">{simklUserCode}</div>
                 {simklPolling ? (
                   <div className="flex items-center gap-2 text-xs text-cyan-400">
@@ -593,7 +638,7 @@ export default function ConnectionsTab({
                   name="plexToken"
                   value={localSettings.plexToken}
                   onChange={handleChange}
-                  className="w-full bg-[#0c1624] border border-[#1c2d46] rounded-xl px-4 py-2.5 text-sm text-slate-200 focus:outline-none focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/50 transition-colors placeholder:text-slate-600"
+                  className="w-full bg-[#0c1624] border border-[#1c2d46] rounded-xl px-4 py-2.5 text-sm text-slate-200 focus:outline-none focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/50 transition-colors placeholder:text-slate-600 font-mono"
                 />
               </div>
             </div>
@@ -640,7 +685,7 @@ export default function ConnectionsTab({
                   name="jellyfinApiKey"
                   value={localSettings.jellyfinApiKey}
                   onChange={handleChange}
-                  className="w-full bg-[#0c1624] border border-[#1c2d46] rounded-xl px-4 py-2.5 text-sm text-slate-200 focus:outline-none focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/50 transition-colors placeholder:text-slate-600"
+                  className="w-full bg-[#0c1624] border border-[#1c2d46] rounded-xl px-4 py-2.5 text-sm text-slate-200 focus:outline-none focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/50 transition-colors placeholder:text-slate-600 font-mono"
                 />
               </div>
             </div>
@@ -682,7 +727,7 @@ export default function ConnectionsTab({
                   name="embyApiKey"
                   value={localSettings.embyApiKey}
                   onChange={handleChange}
-                  className="w-full bg-[#0c1624] border border-[#1c2d46] rounded-xl px-4 py-2.5 text-sm text-slate-200 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/50 transition-colors placeholder:text-slate-600"
+                  className="w-full bg-[#0c1624] border border-[#1c2d46] rounded-xl px-4 py-2.5 text-sm text-slate-200 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/50 transition-colors placeholder:text-slate-600 font-mono"
                 />
               </div>
             </div>
@@ -767,7 +812,7 @@ export default function ConnectionsTab({
                 value={localSettings.discordWebhookUrl}
                 onChange={handleChange}
                 placeholder="https://discord.com/api/webhooks/..."
-                className="w-full bg-[#0c1624] border border-[#1c2d46] rounded-xl px-4 py-2.5 text-sm text-slate-200 focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/50 transition-colors placeholder:text-slate-600"
+                className="w-full bg-[#0c1624] border border-[#1c2d46] rounded-xl px-4 py-2.5 text-sm text-slate-200 focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/50 transition-colors placeholder:text-slate-600 font-mono"
               />
             </div>
           </div>
@@ -786,13 +831,12 @@ export default function ConnectionsTab({
                   value={localSettings.telegramBotToken}
                   onChange={handleChange}
                   placeholder="123456:ABC-DEF..."
-                  className="w-full bg-[#0c1624] border border-[#1c2d46] rounded-xl px-4 py-2.5 text-sm text-slate-200 focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/50 transition-colors placeholder:text-slate-600"
+                  className="w-full bg-[#0c1624] border border-[#1c2d46] rounded-xl px-4 py-2.5 text-sm text-slate-200 focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/50 transition-colors placeholder:text-slate-600 font-mono"
                 />
               </div>
               <div>
                 <label className="block text-xs sm:text-sm font-medium text-slate-300 mb-1.5">Chat ID</label>
-                <input
-                  type="text"
+                <PasswordInput
                   name="telegramChatId"
                   value={localSettings.telegramChatId}
                   onChange={handleChange}
@@ -817,7 +861,7 @@ export default function ConnectionsTab({
                   value={localSettings.pushoverAppToken}
                   onChange={handleChange}
                   placeholder="a1b2c3d4e5..."
-                  className="w-full bg-[#0c1624] border border-[#1c2d46] rounded-xl px-4 py-2.5 text-sm text-slate-200 focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/50 transition-colors placeholder:text-slate-600"
+                  className="w-full bg-[#0c1624] border border-[#1c2d46] rounded-xl px-4 py-2.5 text-sm text-slate-200 focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/50 transition-colors placeholder:text-slate-600 font-mono"
                 />
               </div>
               <div>
@@ -827,7 +871,7 @@ export default function ConnectionsTab({
                   value={localSettings.pushoverUserKey}
                   onChange={handleChange}
                   placeholder="u1v2w3x4y5..."
-                  className="w-full bg-[#0c1624] border border-[#1c2d46] rounded-xl px-4 py-2.5 text-sm text-slate-200 focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/50 transition-colors placeholder:text-slate-600"
+                  className="w-full bg-[#0c1624] border border-[#1c2d46] rounded-xl px-4 py-2.5 text-sm text-slate-200 focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/50 transition-colors placeholder:text-slate-600 font-mono"
                 />
               </div>
             </div>

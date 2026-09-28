@@ -11,6 +11,7 @@ const { getAiredCutoffSql } = require('../../utils/airDate');
 const { parseResolution, isCutoffMet } = require('../../utils/mediaParsing');
 const cleanupWorker = require('../../services/cleanupWorker');
 const { scanSubtitleLangs } = require('../../services/scanner/fileScanner');
+const { normalizeLanguageCode, LANGUAGE_NAMES } = require('../../utils/languages');
 const requireAdmin = require('../../middleware/requireAdmin');
 
 // ── Stats cache — avoids 20+ DB queries on every dashboard load ──
@@ -323,7 +324,7 @@ router.get('/stats', (req, res, next) => {
       WHERE e.file_path IS NOT NULL AND (e.subtitles IS NULL OR e.subtitles = '[]')
     `).get().count;
 
-    // Subtitle languages
+    // Subtitle languages (normalized & deduplicated per media item)
     const subLangRows = db.prepare(`
       SELECT subtitles FROM movies WHERE file_path IS NOT NULL AND subtitles IS NOT NULL AND subtitles != '[]'
       UNION ALL
@@ -333,15 +334,24 @@ router.get('/stats', (req, res, next) => {
     for (const row of subLangRows) {
       try {
         const langs = JSON.parse(row.subtitles);
+        const uniqueMediaLangs = new Set();
         for (const lang of langs) {
-          if (lang) subLangCount[lang] = (subLangCount[lang] || 0) + 1;
+          const norm = normalizeLanguageCode(lang);
+          if (norm) uniqueMediaLangs.add(norm);
+        }
+        for (const lang of uniqueMediaLangs) {
+          subLangCount[lang] = (subLangCount[lang] || 0) + 1;
         }
       } catch { /* ignore */ }
     }
     const topSubLanguages = Object.entries(subLangCount)
       .sort((a, b) => b[1] - a[1])
       .slice(0, 10)
-      .map(([lang, count]) => ({ lang, count }));
+      .map(([lang, count]) => ({
+        lang: lang.toUpperCase(),
+        name: LANGUAGE_NAMES[lang] || lang.toUpperCase(),
+        count
+      }));
 
     // Build status objects
     const movieStatusObj = {};

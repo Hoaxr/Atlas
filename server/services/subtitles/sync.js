@@ -4,26 +4,7 @@ const db = require('../../config/database');
 const { scanSubtitleLangs } = require('../scanner/fileScanner');
 const { runWithConcurrency } = require('../../utils/concurrency');
 
-const { getMediaMetadata } = require('../../utils/videoUtils');
-
-// Helper to normalize 3-letter or alternate language codes into 2-letter codes
-const normalizeLangCode = (code) => {
-  if (!code) return null;
-  const c = String(code).toLowerCase().trim();
-  const map = {
-    eng: 'en', english: 'en',
-    dut: 'nl', nld: 'nl', dutch: 'nl',
-    fre: 'fr', fra: 'fr', french: 'fr',
-    ger: 'de', deu: 'de', german: 'de',
-    spa: 'es', spanish: 'es',
-    ita: 'it', italian: 'it',
-    por: 'pt', portuguese: 'pt',
-    rus: 'ru', russian: 'ru',
-    jpn: 'ja', japanese: 'ja',
-    zho: 'zh', chi: 'zh', chinese: 'zh'
-  };
-  return map[c] || (c.length === 2 ? c : null);
-};
+const { normalizeLanguageCode: normalizeLangCode } = require('../../utils/languages');
 
 const invalidateStats = () => {
   try {
@@ -57,19 +38,10 @@ const syncMovieSubtitles = async (movieId, filePath = null) => {
 
     invalidateMovieDirCache(path.dirname(filePath));
     const diskLangs = await scanSubtitleLangs(filePath);
-
-    let embeddedLangs = [];
-    try {
-      const meta = await getMediaMetadata(filePath);
-      if (meta?.embeddedSubtitles) {
-        embeddedLangs = meta.embeddedSubtitles.map(normalizeLangCode).filter(Boolean);
-      }
-    } catch { /* ignore */ }
-
-    const combined = [...new Set([...diskLangs.map(normalizeLangCode).filter(Boolean), ...embeddedLangs])];
-    db.prepare('UPDATE movies SET subtitles = ? WHERE id = ?').run(JSON.stringify(combined), movieId);
+    const normalized = [...new Set(diskLangs.map(normalizeLangCode).filter(Boolean))];
+    db.prepare('UPDATE movies SET subtitles = ? WHERE id = ?').run(JSON.stringify(normalized), movieId);
     invalidateStats();
-    return combined;
+    return normalized;
   } catch (err) {
     console.warn(`[SubtitleSync] Failed to sync movie subtitles for ${movieId}:`, err.message);
     return [];
@@ -77,7 +49,7 @@ const syncMovieSubtitles = async (movieId, filePath = null) => {
 };
 
 /**
- * Scans disk and video container for episode subtitles, updates SQLite episodes.subtitles,
+ * Scans disk for episode subtitles, updates SQLite episodes.subtitles,
  * and invalidates statsCache.
  */
 const syncEpisodeSubtitles = async (episodeId, filePath = null) => {
@@ -89,19 +61,10 @@ const syncEpisodeSubtitles = async (episodeId, filePath = null) => {
     if (!filePath || !fs.existsSync(filePath)) return [];
 
     const diskLangs = await scanSubtitleLangs(filePath);
-
-    let embeddedLangs = [];
-    try {
-      const meta = await getMediaMetadata(filePath);
-      if (meta?.embeddedSubtitles) {
-        embeddedLangs = meta.embeddedSubtitles.map(normalizeLangCode).filter(Boolean);
-      }
-    } catch { /* ignore */ }
-
-    const combined = [...new Set([...diskLangs.map(normalizeLangCode).filter(Boolean), ...embeddedLangs])];
-    db.prepare('UPDATE episodes SET subtitles = ? WHERE id = ?').run(JSON.stringify(combined), episodeId);
+    const normalized = [...new Set(diskLangs.map(normalizeLangCode).filter(Boolean))];
+    db.prepare('UPDATE episodes SET subtitles = ? WHERE id = ?').run(JSON.stringify(normalized), episodeId);
     invalidateStats();
-    return combined;
+    return normalized;
   } catch (err) {
     console.warn(`[SubtitleSync] Failed to sync episode subtitles for ${episodeId}:`, err.message);
     return [];

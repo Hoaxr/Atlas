@@ -7,6 +7,11 @@ const getSimklClientId = () => {
   return row ? row.value : null;
 };
 
+const getSimklClientSecret = () => {
+  const row = db.prepare('SELECT value FROM settings WHERE key = ?').get('simklClientSecret');
+  return row ? row.value : null;
+};
+
 const getSimklAccessToken = () => {
   const row = db.prepare("SELECT value FROM settings WHERE key = ?").get('simklAccessToken');
   return row ? row.value : null;
@@ -39,29 +44,136 @@ simklApi.interceptors.request.use(simklRequest);
 
 /**
  * Get device code (PIN) for user authorization
- * GET /oauth/pin?client_id={client_id}
+ * Supports AUTH V2 (RFC 8628 Device Flow) with fallback to AUTH V1
  */
 const getDeviceCode = async () => {
   const clientId = getSimklClientId();
   if (!clientId) {
     throw new Error('Simkl Client ID is not configured.');
   }
-  const response = await axios.get(`https://api.simkl.com/oauth/pin?client_id=${encodeURIComponent(clientId)}`, { timeout: 30000 });
-  // response.data: { user_code, verification_url, expires_in, interval }
-  return response.data;
+
+  if (clientId.startsWith('simkl_cs_')) {
+    throw new Error("You entered a Client Secret ('simkl_cs_...'). Please copy the Client ID from your Simkl App page instead.");
+  }
+
+  // 1. Try AUTH V2 first (POST /oauth2/device)
+  try {
+    const params = new URLSearchParams();
+    params.append('client_id', clientId);
+    params.append('scope', 'media:read media:write');
+    const res = await axios.post('https://api.simkl.com/oauth2/device', params.toString(), {
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'User-Agent': 'Atlas-Media-Manager/1.0'
+      },
+      timeout: 15000
+    });
+
+    if (res.data?.user_code) {
+      if (res.data.device_code) {
+        try {
+          db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('simklPendingDeviceCode', ?)").run(res.data.device_code);
+          db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('simklPendingUserCode', ?)").run(res.data.user_code);
+        } catch (dbErr) {
+          console.warn('[Simkl] Could not store pending device code:', dbErr.message);
+        }
+      }
+      return {
+        user_code: res.data.user_code,
+        device_code: res.data.device_code,
+        verification_url: res.data.verification_uri_complete || res.data.verification_uri || 'https://simkl.com/pin',
+        expires_in: res.data.expires_in || 900,
+        interval: res.data.interval || 5,
+        version: 'v2'
+      };
+    }
+  } catch (v2Err) {
+    if (v2Err.response?.data?.error === 'invalid_client') {
+      throw new Error(v2Err.response?.data?.error_description || 'Unknown or invalid Simkl Client ID. Please verify your Client ID.');
+    }
+  }
+
+  // 2. Fallback to AUTH V1 (GET /oauth/pin)
+  try {
+    const response = await axios.get(`https://api.simkl.com/oauth/pin?client_id=${encodeURIComponent(clientId)}`, {
+      headers: { 'User-Agent': 'Atlas-Media-Manager/1.0' },
+      timeout: 30000
+    });
+    return {
+      ...response.data,
+      verification_url: response.data.verification_url || 'https://simkl.com/pin',
+      version: 'v1'
+    };
+  } catch (v1Err) {
+    const msg = v1Err.response?.data?.message || v1Err.message || 'Failed to get PIN from Simkl';
+    throw new Error(msg);
+  }
 };
 
 /**
- * Poll for token using user_code
- * GET /oauth/pin/{user_code}?client_id={client_id}
+ * Poll for token using user_code and optional device_code
  */
-const pollDeviceToken = async (userCode) => {
+const pollDeviceToken = async (userCode, deviceCode) => {
   const clientId = getSimklClientId();
   if (!clientId) {
     throw new Error('Simkl Client ID is not configured.');
   }
-  const response = await axios.get(`https://api.simkl.com/oauth/pin/${encodeURIComponent(userCode)}?client_id=${encodeURIComponent(clientId)}`, { timeout: 30000 });
-  // If authorized, returns: { result: "OK", access_token: "..." }
+
+  // If deviceCode was not passed, retrieve stored pending deviceCode
+  if (!deviceCode) {
+    try {
+      const stored = db.prepare("SELECT value FROM settings WHERE key = 'simklPendingDeviceCode'").get();
+      if (stored?.value) {
+        deviceCode = stored.value;
+      }
+    } catch {}
+  }
+
+  // AUTH V2 polling
+  if (deviceCode) {
+    const clientSecret = getSimklClientSecret();
+    const params = new URLSearchParams();
+    params.append('grant_type', 'urn:ietf:params:oauth:grant-type:device_code');
+    params.append('client_id', clientId);
+    if (clientSecret) {
+      params.append('client_secret', clientSecret);
+    }
+    params.append('device_code', deviceCode);
+
+    try {
+      const res = await axios.post('https://api.simkl.com/oauth2/token', params.toString(), {
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'User-Agent': 'Atlas-Media-Manager/1.0'
+        },
+        timeout: 15000
+      });
+      if (res.data?.access_token) {
+        try {
+          db.prepare("DELETE FROM settings WHERE key IN ('simklPendingDeviceCode', 'simklPendingUserCode')").run();
+        } catch {}
+        return { result: 'OK', access_token: res.data.access_token };
+      }
+      return { status: 'pending' };
+    } catch (err) {
+      if (err.response?.data?.error === 'authorization_pending' || err.response?.data?.error === 'slow_down') {
+        return { status: 'pending' };
+      }
+      if (err.response?.data?.error === 'expired_token') {
+        try {
+          db.prepare("DELETE FROM settings WHERE key IN ('simklPendingDeviceCode', 'simklPendingUserCode')").run();
+        } catch {}
+        throw new Error('Device PIN expired. Please restart authorization.');
+      }
+      throw err;
+    }
+  }
+
+  // AUTH V1 polling fallback
+  const response = await axios.get(`https://api.simkl.com/oauth/pin/${encodeURIComponent(userCode)}?client_id=${encodeURIComponent(clientId)}`, {
+    headers: { 'User-Agent': 'Atlas-Media-Manager/1.0' },
+    timeout: 30000
+  });
   return response.data;
 };
 
@@ -116,7 +228,7 @@ const syncWatchedMovies = async () => {
 
 const syncWatchedShows = async () => {
   try {
-    const response = await simklApi.get('/sync/all-items/shows?extended=full');
+    const response = await simklApi.get('/sync/all-items/shows?extended=full&episode_watched_at=yes&include_all_episodes=yes');
     const showsList = response.data.shows || [];
     const showsNeedingDetail = [];
 
@@ -364,6 +476,88 @@ const pushWatchedToSimkl = async () => {
   }
 };
 
+const syncWatchedAnime = async () => {
+  try {
+    const response = await simklApi.get('/sync/all-items/anime?extended=full&episode_watched_at=yes&include_all_episodes=yes');
+    const animeList = response.data.anime || [];
+    if (!animeList.length) return 0;
+
+    const count = db.transaction((list) => {
+      let localCount = 0;
+      const insertWatched = db.prepare('INSERT OR REPLACE INTO watched_tmdb (tmdb_id, type) VALUES (?, ?)');
+      const insertHistory = db.prepare('INSERT OR IGNORE INTO watch_history (tmdb_id, type, season_number, episode_number, watched_at, runtime) VALUES (?, ?, ?, ?, ?, ?)');
+      const getShowByTmdb = db.prepare('SELECT id, runtime FROM shows WHERE tmdb_id = ?');
+      const updateShowWatched = db.prepare('UPDATE shows SET watched = 1 WHERE id = ?');
+      const getEpRuntime = db.prepare('SELECT runtime FROM episodes WHERE show_id = ? AND season_number = ? AND episode_number = ?');
+      const updateEpWatched = db.prepare('UPDATE episodes SET watched = 1, watched_at = COALESCE(watched_at, ?) WHERE show_id = ? AND season_number = ? AND episode_number = ?');
+
+      for (const item of list) {
+        const tmdbId = item.ids?.tmdb || item.anime?.ids?.tmdb || item.show?.ids?.tmdb;
+        if (!tmdbId) continue;
+
+        const showWatchedAt = item.last_watched_at || item.watched_at || new Date().toISOString();
+
+        if (item.status === 'completed') {
+          insertWatched.run(tmdbId, 'show');
+        }
+
+        const show = getShowByTmdb.get(tmdbId);
+        if (show && item.status === 'completed') {
+          updateShowWatched.run(show.id);
+        }
+
+        if (Array.isArray(item.seasons) && item.seasons.length > 0) {
+          for (const season of item.seasons) {
+            const seasonNum = season.number || 1;
+            if (Array.isArray(season.episodes)) {
+              for (const ep of season.episodes) {
+                const epNum = ep.number;
+                const epWatchedAt = ep.last_watched_at || ep.watched_at || showWatchedAt;
+                let rt = ep.runtime || null;
+                if (!rt && show) {
+                  const localEp = getEpRuntime.get(show.id, seasonNum, epNum);
+                  rt = localEp ? localEp.runtime : show.runtime;
+                }
+                insertHistory.run(tmdbId, 'episode', seasonNum, epNum, epWatchedAt, rt);
+
+                if (show) {
+                  updateEpWatched.run(epWatchedAt, show.id, seasonNum, epNum);
+                }
+              }
+            }
+          }
+        } else if (Array.isArray(item.episodes) && item.episodes.length > 0) {
+          for (const ep of item.episodes) {
+            const epNum = ep.number;
+            const epWatchedAt = ep.last_watched_at || ep.watched_at || showWatchedAt;
+            let rt = ep.runtime || (show ? show.runtime : null);
+            insertHistory.run(tmdbId, 'episode', 1, epNum, epWatchedAt, rt);
+            if (show) {
+              updateEpWatched.run(epWatchedAt, show.id, 1, epNum);
+            }
+          }
+        }
+
+        if (item.status === 'completed') {
+          insertHistory.run(tmdbId, 'show', null, null, showWatchedAt, show ? show.runtime : null);
+        }
+
+        if (show) localCount++;
+      }
+      return localCount;
+    })(animeList);
+
+    console.log(`[SimklSync] Synced ${count} watched anime (${animeList.length} anime items returned from Simkl)`);
+    return count;
+  } catch (error) {
+    if (error.response?.status === 401) {
+      return 0;
+    }
+    console.error('[SimklSync] Failed to sync watched anime:', error.message);
+    return 0;
+  }
+};
+
 const syncWatched = async () => {
   const enabled = db.prepare("SELECT value FROM settings WHERE key = 'simklWatchedSync'").get();
   if (!enabled || enabled.value !== 'true') {
@@ -371,37 +565,106 @@ const syncWatched = async () => {
     return;
   }
   console.log('[SimklSync] Starting watched status sync...');
-  // Pull from Simkl to update local database
+  // Pull from Simkl to update local database (movies, shows, anime)
   const movieCount = await syncWatchedMovies();
   const showCount = await syncWatchedShows();
-  console.log(`[SimklSync] Sync complete — ${movieCount} movies, ${showCount} shows marked as watched.`);
+  const animeCount = await syncWatchedAnime();
+  console.log(`[SimklSync] Sync complete — ${movieCount} movies, ${showCount} shows, ${animeCount} anime marked as watched.`);
+};
+
+let _userStatsCache = null;
+let _userStatsCacheTime = 0;
+const USER_STATS_CACHE_TTL = 300_000; // 5 minutes
+
+const invalidateUserStatsCache = () => {
+  _userStatsCache = null;
+  _userStatsCacheTime = 0;
 };
 
 /**
  * Fetch stats for user from Simkl
- * GET /users/settings
+ * GET /users/settings -> GET /users/{user_id}/stats
  */
-const getUserStats = async () => {
+const getUserStats = async (force = false) => {
+  if (!force && _userStatsCache && Date.now() - _userStatsCacheTime < USER_STATS_CACHE_TTL) {
+    return _userStatsCache;
+  }
   try {
-    const response = await simklApi.get('/users/settings');
-    const user = response.data.user || {};
-    const stats = response.data.stats || {};
+    const settingsRes = await simklApi.get('/users/settings');
+    const user = settingsRes.data?.user || {};
+    const account = settingsRes.data?.account || {};
+    let stats = settingsRes.data?.stats;
 
-    return {
+    // Simkl official stats endpoint: GET /users/{user_id}/stats
+    const userId = account.id;
+    if (userId) {
+      try {
+        const statsRes = await simklApi.get(`/users/${userId}/stats`);
+        if (statsRes.data) {
+          stats = statsRes.data;
+        }
+      } catch (statsErr) {
+        console.warn(`[Simkl] Failed to fetch /users/${userId}/stats, fallback to settings:`, statsErr.message);
+      }
+    }
+
+    let moviesWatched = 0;
+    let moviesMinutes = 0;
+    let showsWatched = 0;
+    let episodesWatched = 0;
+    let episodesMinutes = 0;
+    let totalMinutes = 0;
+
+    if (stats) {
+      if (stats.total_mins !== undefined) {
+        totalMinutes = stats.total_mins || 0;
+        moviesWatched = stats.movies?.completed?.count || 0;
+        moviesMinutes = stats.movies?.total_mins || stats.movies?.completed?.mins || 0;
+
+        const tvCompletedShows = stats.tv?.completed?.count || 0;
+        const tvWatchingShows = stats.tv?.watching?.count || 0;
+        const animeCompletedShows = stats.anime?.completed?.count || 0;
+        showsWatched = tvCompletedShows + tvWatchingShows + animeCompletedShows;
+
+        const tvEps = (stats.tv?.completed?.watched_episodes_count || 0) +
+                      (stats.tv?.watching?.watched_episodes_count || 0) +
+                      (stats.tv?.hold?.watched_episodes_count || 0) +
+                      (stats.tv?.dropped?.watched_episodes_count || 0) +
+                      (stats.tv?.plantowatch?.watched_episodes_count || 0);
+        const animeEps = (stats.anime?.completed?.watched_episodes_count || 0) +
+                         (stats.anime?.watching?.watched_episodes_count || 0) +
+                         (stats.anime?.hold?.watched_episodes_count || 0) +
+                         (stats.anime?.dropped?.watched_episodes_count || 0);
+
+        episodesWatched = tvEps + animeEps;
+        episodesMinutes = (stats.tv?.total_mins || 0) + (stats.anime?.total_mins || 0);
+      } else {
+        moviesWatched = stats.movies?.completed || 0;
+        moviesMinutes = stats.movies?.minutes || 0;
+        showsWatched = stats.shows?.completed || 0;
+        episodesWatched = stats.episodes?.completed || 0;
+        episodesMinutes = stats.episodes?.minutes || 0;
+        totalMinutes = moviesMinutes + episodesMinutes + (stats.anime?.minutes || 0);
+      }
+    }
+
+    _userStatsCache = {
       username: user.name || 'Simkl User',
       movies: {
-        watched: stats.movies?.completed || 0,
-        minutes: stats.movies?.minutes || 0
+        watched: moviesWatched,
+        minutes: moviesMinutes
       },
       shows: {
-        watched: stats.shows?.completed || 0
+        watched: showsWatched
       },
       episodes: {
-        watched: stats.episodes?.completed || 0,
-        minutes: stats.episodes?.minutes || 0
+        watched: episodesWatched,
+        minutes: episodesMinutes
       },
-      totalMinutes: (stats.movies?.minutes || 0) + (stats.episodes?.minutes || 0)
+      totalMinutes: totalMinutes || (moviesMinutes + episodesMinutes)
     };
+    _userStatsCacheTime = Date.now();
+    return _userStatsCache;
   } catch (error) {
     if (error.response?.status === 401) {
       return { error: 'Simkl authentication required. Connect Simkl in Settings.' };
@@ -441,8 +704,10 @@ module.exports = {
   syncWatched,
   syncWatchedMovies,
   syncWatchedShows,
+  syncWatchedAnime,
   pushWatchedToSimkl,
   pushDryRun,
   pushToSimklOnWatched,
-  getUserStats
+  getUserStats,
+  invalidateUserStatsCache
 };

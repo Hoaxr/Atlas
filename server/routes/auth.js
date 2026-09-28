@@ -112,30 +112,34 @@ router.post('/simkl/device-code', generalLimiter, async (req, res) => {
     const data = await simklService.getDeviceCode();
     res.json({ status: 'success', data });
   } catch (err) {
-    console.error('[Simkl Auth] Failed to get PIN:', err.message);
-    res.status(500).json({ status: 'error', message: 'Failed to get PIN from Simkl' });
+    const errorMsg = err.response?.data?.message || err.message || 'Failed to get PIN from Simkl';
+    console.error('[Simkl Auth] Failed to get PIN:', errorMsg);
+    res.status(err.response?.status || 500).json({ status: 'error', message: errorMsg });
   }
 });
 
 router.post('/simkl/device-token', authMiddleware, async (req, res) => {
-  const { userCode } = req.body;
-  if (!userCode) {
-    return res.status(400).json({ status: 'error', message: 'User code is required' });
+  const { userCode, deviceCode } = req.body;
+  if (!userCode && !deviceCode) {
+    return res.status(400).json({ status: 'error', message: 'User code or device code is required' });
   }
   const simklService = require('../services/simklService');
   try {
-    const data = await simklService.pollDeviceToken(userCode);
-    if (data.result === 'OK' && data.access_token) {
+    const data = await simklService.pollDeviceToken(userCode, deviceCode);
+    if ((data.result === 'OK' && data.access_token) || data.access_token) {
       setSetting('simklAccessToken', data.access_token);
       return res.json({ status: 'success', message: 'Simkl account linked successfully!' });
     }
     return res.json({ status: 'pending' });
   } catch (err) {
-    if (err.response?.status === 400 || err.response?.status === 404) {
+    if (err.response?.data?.error === 'authorization_pending' || err.response?.data?.error === 'slow_down') {
       return res.json({ status: 'pending' });
     }
+    if (err.message && err.message.includes('expired')) {
+      return res.status(400).json({ status: 'error', message: err.message });
+    }
     console.error('[Simkl Auth] Token poll error:', err.message);
-    res.status(500).json({ status: 'error', message: 'Failed to verify Simkl PIN' });
+    res.status(500).json({ status: 'error', message: err.message || 'Failed to verify Simkl PIN' });
   }
 });
 

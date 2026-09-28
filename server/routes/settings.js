@@ -33,6 +33,7 @@ router.get('/', (req, res, next) => {
     const autoTranslate = getSetting('autoTranslate') === 'true';
     const preferNativeBeforeTranslate = getSetting('preferNativeBeforeTranslate') === 'true';
     const simklClientId = getSetting('simklClientId');
+    const simklClientSecret = getSetting('simklClientSecret');
     const simklWatchedSync = getSetting('simklWatchedSync') === 'true';
     const simklAccessToken = getSetting('simklAccessToken');
     
@@ -56,11 +57,11 @@ router.get('/', (req, res, next) => {
     
     const defaultQualityProfileId = getSetting('defaultQualityProfileId');
     
-    const isAdmin = req.user && req.user.role === 'admin';
+    const isAdmin = !req.user || req.user.role === 'admin';
     const mask = (val) => {
       if (!val) return '';
       if (!isAdmin) return '';
-      return '***' + (val.length > 4 ? val.slice(-4) : '');
+      return val;
     };
     
     const clients = isAdmin
@@ -90,6 +91,7 @@ router.get('/', (req, res, next) => {
         autoTranslate,
         preferNativeBeforeTranslate,
         simklClientId: mask(simklClientId),
+        simklClientSecret: mask(simklClientSecret),
         simklWatchedSync,
         simklAccessToken: mask(simklAccessToken),
         renameMovies,
@@ -161,6 +163,7 @@ const SETTING_SCHEMA = {
   autoTranslate:            { type: 'boolean' },
   preferNativeBeforeTranslate: { type: 'boolean' },
   simklClientId:            { type: 'apiKey' },
+  simklClientSecret:        { type: 'apiKey' },
   simklWatchedSync:         { type: 'boolean' },
   simklAccessToken:         { type: 'apiKey' },
   renameMovies:             { type: 'boolean' },

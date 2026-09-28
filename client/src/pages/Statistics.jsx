@@ -328,8 +328,8 @@ export default function Statistics() {
                 <div className="space-y-1.5">
                   {(() => {
                     const maxLangCount = Math.max(...stats.topSubLanguages.map(l => l.count), 1);
-                    return stats.topSubLanguages.map(({ lang, count }) => (
-                      <div key={lang} className="flex items-center gap-2">
+                    return stats.topSubLanguages.map(({ lang, name, count }) => (
+                      <div key={lang} className="flex items-center gap-2" title={name ? `${name} (${count})` : undefined}>
                         <span className="text-xs font-bold text-slate-300 w-8 uppercase">{lang}</span>
                         <div className="flex-1 h-2 bg-slate-800 rounded-full overflow-hidden">
                           <div

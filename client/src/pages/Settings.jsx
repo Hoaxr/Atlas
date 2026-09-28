@@ -137,6 +137,12 @@ export default function Settings() {
     telegramChatId: '',
     pushoverAppToken: '',
     pushoverUserKey: '',
+    prowlarrUrl: '',
+    prowlarrApiKey: '',
+    simklClientId: '',
+    simklClientSecret: '',
+    simklWatchedSync: false,
+    simklAccessToken: '',
     notifyOnGrab: false,
     notifyOnDownload: false,
     notifyOnPlaybackStart: false,
@@ -333,6 +339,7 @@ export default function Settings() {
           deepseekApiKey: res.data.data.deepseekApiKey || '',
           claudeApiKey: res.data.data.claudeApiKey || '',
           simklClientId: res.data.data.simklClientId || '',
+          simklClientSecret: res.data.data.simklClientSecret || '',
           simklWatchedSync: res.data.data.simklWatchedSync || false,
           simklAccessToken: res.data.data.simklAccessToken || '',
           renameMovies: res.data.data.renameMovies ?? true,
@@ -548,16 +555,16 @@ export default function Settings() {
   };
 
   // Simkl helpers
-  const pollSimkl = (userCode, interval) => {
+  const pollSimkl = (userCode, deviceCode, interval) => {
     let attempts = 0;
     const poll = async () => {
       attempts++;
       try {
-        const res = await api.post('/auth/simkl/device-token', { userCode });
+        const res = await api.post('/auth/simkl/device-token', { userCode, deviceCode });
         if (res.data.status === 'success') {
           setSimklPolling(false);
           setSimklDeviceCode(null);
-          customAlert('Simkl account linked successfully!');
+          customAlert('Simkl account linked successfully!', 'success');
           fetchSettings();
           return;
         }
@@ -590,12 +597,12 @@ export default function Settings() {
         customAlert(dcRes.data.message || 'Failed to get Simkl PIN', 'error');
         return;
       }
-      const { user_code, verification_url, interval } = dcRes.data.data;
+      const { user_code, device_code, verification_url, interval } = dcRes.data.data;
       setSimklDeviceCode(user_code);
       setSimklUserCode(user_code);
       setSimklVerificationUrl(verification_url || 'https://simkl.com/pin');
       setSimklPolling(true);
-      pollSimkl(user_code, interval || 5);
+      pollSimkl(user_code, device_code, interval || 5);
     } catch (err) {
       const msg = err.response?.data?.message || err.message || 'Failed to start Simkl authorization';
       customAlert(msg, 'error');
@@ -747,9 +754,11 @@ export default function Settings() {
             setSettings={setSettings}
             handleSave={handleSave}
             simklDeviceCode={simklDeviceCode}
+            setSimklDeviceCode={setSimklDeviceCode}
             simklUserCode={simklUserCode}
             simklVerificationUrl={simklVerificationUrl}
             simklPolling={simklPolling}
+            setSimklPolling={setSimklPolling}
             connectSimkl={connectSimkl}
             fetchSettings={fetchSettings}
             keyStatuses={keyStatuses}

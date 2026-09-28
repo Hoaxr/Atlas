@@ -8,6 +8,7 @@ const { parseResolution, parseCodec } = require('../../utils/mediaParsing');
 const { isWatchedSyncEnabled } = require('../../utils/settings');
 const { parseMediaTitle, scanSubtitleLangs } = require('./fileScanner');
 const { isVideoFile } = require('../../utils/fileUtils');
+const { normalizeLanguageCode } = require('../../utils/languages');
 
 // Helper to detect SQLite constraint errors across driver implementations (node:sqlite errcode 19, ERR_SQLITE_ERROR, etc.)
 const isConstraintError = (err) => {
@@ -366,9 +367,6 @@ const processScannedFiles = async (allFiles, scanProgress, mode, nextStage) => {
               if (!audio && meta.audio) {
                 audio = meta.audio;
               }
-              if (meta.embeddedSubtitles && meta.embeddedSubtitles.length > 0) {
-                allSubtitles.push(...meta.embeddedSubtitles);
-              }
             }
           } catch { /* ignore */ }
 
@@ -381,7 +379,7 @@ const processScannedFiles = async (allFiles, scanProgress, mode, nextStage) => {
           } catch { /* ignore */ }
         }
 
-        allSubtitles = [...new Set(allSubtitles)];
+        allSubtitles = [...new Set(allSubtitles.map(normalizeLanguageCode).filter(Boolean))];
 
         const lastEp = episodeEnd || episodeNumber;
         for (let ep = episodeNumber; ep <= lastEp; ep++) {
@@ -581,9 +579,6 @@ const processScannedFiles = async (allFiles, scanProgress, mode, nextStage) => {
                 if (resolution === 'Unknown' && meta.resolution) resolution = meta.resolution;
                 if (codec === 'Unknown' && meta.codec) codec = meta.codec;
                 if (!audio && meta.audio) audio = meta.audio;
-                if (meta.embeddedSubtitles && meta.embeddedSubtitles.length > 0) {
-                  allSubtitles.push(...meta.embeddedSubtitles);
-                }
               }
             } catch { /* ignore */ }
 
@@ -595,7 +590,7 @@ const processScannedFiles = async (allFiles, scanProgress, mode, nextStage) => {
             } catch { /* ignore */ }
           }
 
-          allSubtitles = [...new Set(allSubtitles)];
+          allSubtitles = [...new Set(allSubtitles.map(normalizeLanguageCode).filter(Boolean))];
 
           db.prepare("UPDATE movies SET resolution = ?, codec = ?, audio = ?, scene_name = COALESCE(NULLIF(scene_name, ''), ?) WHERE tmdb_id = ?")
             .run(resolution || null, codec || null, audio || null, null, matchedMovie.id);

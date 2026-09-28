@@ -82,7 +82,7 @@ export default function IndexersTab({ settings, setSettings, handleSave }) {
             <SettingsLabel title="Prowlarr API Key" />
             <PasswordInput 
               placeholder="Your Prowlarr API Key" 
-              className="w-full bg-[#0c1624] border border-[#1c2d46] rounded-xl px-4 py-2.5 text-sm text-slate-200 focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/50 transition-colors placeholder:text-slate-600" 
+              className="w-full bg-[#0c1624] border border-[#1c2d46] rounded-xl px-4 py-2.5 text-sm text-slate-200 focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/50 transition-colors placeholder:text-slate-600 font-mono" 
               value={settings.prowlarrApiKey || ''} 
               onChange={e => setSettings({...settings, prowlarrApiKey: e.target.value})} 
             />

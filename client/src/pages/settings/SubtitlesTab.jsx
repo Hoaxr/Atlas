@@ -55,7 +55,12 @@ export default function SubtitlesTab({ settings, setSettings, keyStatuses }) {
                 )}
               </div>
               <p className="text-xs sm:text-sm text-slate-400 mb-3">{provider.desc}</p>
-              <PasswordInput placeholder={`${provider.name} API Key`} className="glass-input w-full" value={provider.key} onChange={(e) => provider.setter(e.target.value)} />
+              <PasswordInput
+                placeholder={`${provider.name} API Key`}
+                className="glass-input w-full font-mono"
+                value={provider.key}
+                onChange={(e) => provider.setter(e.target.value)}
+              />
               <p className="text-xs sm:text-sm text-slate-400 mt-2">Get key from: <a href={`https://${provider.id === 'opensubtitles' ? 'opensubtitles.com' : provider.id === 'subdl' ? 'subdl.com/panel/login' : 'subsource.net/dashboard/profile'}`} target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:underline">{provider.id === 'opensubtitles' ? 'opensubtitles.com' : provider.id === 'subdl' ? 'subdl.com' : 'subsource.net'}</a></p>
             </div>
           ))}
@@ -111,7 +116,12 @@ export default function SubtitlesTab({ settings, setSettings, keyStatuses }) {
                   </span>
                 )}
               </div>
-              <PasswordInput placeholder={`${p.id.charAt(0).toUpperCase() + p.id.slice(1)} API Key`} className="glass-input w-full mt-2" value={p.key} onChange={(e) => p.setter(e.target.value)} />
+              <PasswordInput
+                placeholder={`${p.id.charAt(0).toUpperCase() + p.id.slice(1)} API Key`}
+                className="glass-input w-full mt-2 font-mono"
+                value={p.key}
+                onChange={(e) => p.setter(e.target.value)}
+              />
               {keyStatuses[p.id]?.status === 'error' && keyStatuses[p.id]?.message && (
                 <p className="text-xs text-red-400 mt-1.5 break-words">
                   {keyStatuses[p.id].message}

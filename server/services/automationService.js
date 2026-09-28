@@ -64,6 +64,15 @@ const runSearchCycle = async () => {
   }
   isSearchCycleRunning = true;
   try {
+    // Bail out early if no indexer is configured — avoids marking every monitored
+    // item as failed and emitting a misleading "completed with errors" warning.
+    const { getSetting } = require('../utils/settings');
+    const prowlarrUrl = getSetting('prowlarrUrl');
+    const prowlarrApiKey = getSetting('prowlarrApiKey');
+    if (!prowlarrUrl || !prowlarrApiKey) {
+      console.log('[Automation] Search cycle skipped: Prowlarr not configured.');
+      return;
+    }
     // Fetch active torrents to prevent double-downloading
     const activeTorrents = await downloadClientService.getTorrents().catch(() => []);
     const activeTitles = new Set(activeTorrents.map(t => t.name?.toLowerCase().trim()).filter(Boolean));
@@ -153,6 +162,8 @@ const runSearchCycle = async () => {
         // Transient error (indexer outage, network failure): don't burn a retry — only
         // empty result sets increment retry_count. Leave scheduling untouched so the
         // next search cycle retries naturally.
+        // Configuration errors (no indexer) are not transient — skip silently.
+        if (err.statusCode === 400 && err.message.includes('No indexers')) return;
         movieFailures++;
         console.error(`[Automation] Failed to process ${movie.title}:`, err.message);
         db.prepare("UPDATE movies SET last_provider_response = ?, last_failure_at = datetime('now') WHERE id = ?")
@@ -306,6 +317,8 @@ const runSearchCycle = async () => {
         }
       } catch (err) {
         // Same as movies: transient errors leave retry_count untouched for next-cycle retry.
+        // Configuration errors (no indexer) are not transient — skip silently.
+        if (err.statusCode === 400 && err.message.includes('No indexers')) return;
         episodeFailures++;
         console.error(`[Automation] Failed to process ${epLabel}:`, err.message);
         db.prepare("UPDATE episodes SET last_provider_response = ?, last_failure_at = datetime('now') WHERE id = ?")
