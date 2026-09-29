@@ -1,7 +1,8 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import clsx from 'clsx';
-import { Search, Menu, SlidersHorizontal, Activity, Keyboard, Bell, AlertTriangle, Heart, DownloadCloud, Eye, CheckCircle2, Inbox, X } from 'lucide-react';
+import { Search, Menu, SlidersHorizontal, Activity, Keyboard, Bell, AlertTriangle, Heart, DownloadCloud, Eye, CheckCircle2, Inbox, X, CircleUser } from 'lucide-react';
 
 function RunningManIcon({ className }) {
   return (
@@ -14,14 +15,7 @@ function RunningManIcon({ className }) {
     />
   );
 }
-import { useOutsideClick } from '../../lib/useOutsideClick';
 import { MOD_KEY } from '../../lib/platform';
-
-const initialsOf = (name) => {
-  const clean = (name || '').trim();
-  if (!clean) return '?';
-  return clean.charAt(0).toUpperCase();
-};
 
 /**
  * Application top bar — global search entry point, action icons and account menu.
@@ -38,7 +32,54 @@ export default function TopBar({ user, activity, alerts = [], onDismissAlert, on
   const [activityOpen, setActivityOpen] = useState(false);
   const [hasUnread, setHasUnread] = useState(true);
   const [clearedSnapshots, setClearedSnapshots] = useState({});
-  const activityRef = useOutsideClick(() => setActivityOpen(false), activityOpen);
+  const activityRef = useRef(null);
+  const activityMenuRef = useRef(null);
+  const activityButtonRef = useRef(null);
+  const [menuStyle, setMenuStyle] = useState(null);
+
+  // Close the notifications menu on any click outside both the bell button and
+  // the (portaled) menu panel.
+  useEffect(() => {
+    if (!activityOpen) return;
+    const listener = (e) => {
+      const inButton = activityRef.current?.contains(e.target);
+      const inMenu = activityMenuRef.current?.contains(e.target);
+      if (!inButton && !inMenu) setActivityOpen(false);
+    };
+    document.addEventListener('mousedown', listener);
+    return () => document.removeEventListener('mousedown', listener);
+  }, [activityOpen]);
+
+  // Position the notifications dropdown with a fixed anchor so it can escape the
+  // header's z-40 stacking context and render above the mobile sidebar (z-50).
+  const updateMenuPosition = useCallback(() => {
+    if (!activityButtonRef.current) return;
+    const rect = activityButtonRef.current.getBoundingClientRect();
+    const width = 288; // matches w-72
+    setMenuStyle({
+      position: 'fixed',
+      top: `${rect.bottom + 8}px`,
+      right: `${Math.max(8, window.innerWidth - rect.right)}px`,
+      width: `${width}px`,
+      maxWidth: `calc(100vw - 1rem)`,
+      zIndex: 60,
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!activityOpen) {
+      setMenuStyle(null);
+      return;
+    }
+    const raf = requestAnimationFrame(updateMenuPosition);
+    window.addEventListener('scroll', updateMenuPosition, true);
+    window.addEventListener('resize', updateMenuPosition);
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener('scroll', updateMenuPosition, true);
+      window.removeEventListener('resize', updateMenuPosition);
+    };
+  }, [activityOpen, updateMenuPosition]);
 
   // Reset cleared snapshot if live count drops below snapshot
   useEffect(() => {
@@ -157,6 +198,7 @@ export default function TopBar({ user, activity, alerts = [], onDismissAlert, on
 
         <div ref={activityRef} className="relative">
           <button
+            ref={activityButtonRef}
             type="button"
             onClick={() => {
               setActivityOpen((o) => !o);
@@ -177,10 +219,12 @@ export default function TopBar({ user, activity, alerts = [], onDismissAlert, on
             )}
           </button>
 
-          {activityOpen && (
+          {activityOpen && menuStyle && createPortal(
             <div
+              ref={activityMenuRef}
               role="menu"
-              className="absolute right-0 top-full mt-2 w-72 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xl shadow-black/10 dark:shadow-black/50 overflow-hidden z-50"
+              style={menuStyle}
+              className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xl shadow-black/10 dark:shadow-black/50 overflow-hidden"
             >
               <div className="px-3.5 py-2.5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
                 <div className="flex items-center gap-2">
@@ -294,7 +338,8 @@ export default function TopBar({ user, activity, alerts = [], onDismissAlert, on
                   )}
                 </div>
               )}
-            </div>
+            </div>,
+            document.body
           )}
         </div>
 
@@ -303,9 +348,9 @@ export default function TopBar({ user, activity, alerts = [], onDismissAlert, on
           onClick={() => navigate('/status')}
           title="Status"
           aria-label="Status"
-          className="hidden sm:flex p-2 rounded-xl text-slate-500 dark:text-slate-300 hover:text-slate-800 dark:hover:text-white hover:bg-slate-200/70 dark:hover:bg-slate-800/60 transition-colors"
+          className="flex p-2 rounded-xl text-slate-500 dark:text-slate-300 hover:text-slate-800 dark:hover:text-white hover:bg-slate-200/70 dark:hover:bg-slate-800/60 transition-colors shrink-0"
         >
-          <Activity className="w-5 h-5" />
+          <Activity className="w-4 h-4 sm:w-5 sm:h-5" />
         </button>
 
         <button
@@ -322,13 +367,16 @@ export default function TopBar({ user, activity, alerts = [], onDismissAlert, on
         <div className="h-6 w-px bg-slate-200 dark:bg-slate-700/60 mx-1 hidden sm:block" />
 
         {/* Account — text only, no avatar */}
-        <div className="hidden sm:flex flex-col items-start justify-center leading-tight cursor-default select-none shrink-0">
-          <span className="text-[13px] font-medium text-slate-200 truncate max-w-[120px]">
-            {displayName}
-          </span>
-          <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-500 truncate max-w-[120px]">
-            {role}
-          </span>
+        <div className="hidden sm:flex items-center gap-2 cursor-default select-none shrink-0">
+          <CircleUser className="w-5 h-5 text-slate-500 dark:text-slate-400 shrink-0" />
+          <div className="flex flex-col items-start justify-center leading-tight min-w-0">
+            <span className="text-[13px] font-medium text-slate-800 dark:text-slate-200 truncate max-w-[120px]">
+              {displayName}
+            </span>
+            <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-500 truncate max-w-[120px]">
+              {role}
+            </span>
+          </div>
         </div>
 
         {/* Divider */}
@@ -340,9 +388,9 @@ export default function TopBar({ user, activity, alerts = [], onDismissAlert, on
           onClick={onLogout}
           title="Logout"
           aria-label="Logout"
-          className="hidden sm:flex p-2 rounded-xl text-slate-400 dark:text-slate-500 hover:text-rose-500 dark:hover:text-rose-400 hover:bg-rose-500/10 dark:hover:bg-rose-500/10 transition-colors shrink-0"
+          className="flex p-2 rounded-xl text-slate-400 dark:text-slate-500 hover:text-rose-500 dark:hover:text-rose-400 hover:bg-rose-500/10 dark:hover:bg-rose-500/10 transition-colors shrink-0"
         >
-          <RunningManIcon className="w-4 h-4" />
+          <RunningManIcon className="w-4 h-4 sm:w-5 sm:h-5" />
         </button>
       </div>
     </header>

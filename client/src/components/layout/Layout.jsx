@@ -315,10 +315,11 @@ export default function Layout() {
       <div className="flex h-screen overflow-hidden bg-slate-50 dark:bg-[#0a1320]" style={{ height: '100dvh', paddingBottom: 'env(safe-area-inset-bottom)' }}>
       {shortcutsOpen && <ShortcutsModal onClose={() => setShortcutsOpen(false)} />}
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
-      {/* Mobile overlay */}
+      {/* Mobile overlay — sits above the header (z-40) but below the sidebar (z-50)
+          so tapping anywhere outside the open menu, including topbar icons, closes it. */}
       {sidebarOpen && (
         <div
-          className="fixed inset-0 bg-black/50 z-40 lg:hidden"
+          className="fixed inset-0 bg-black/50 z-[45] lg:hidden"
           onClick={() => setSidebarOpen(false)}
         />
       )}
