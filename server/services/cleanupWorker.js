@@ -49,7 +49,7 @@ class CleanupWorker {
 
       const getFranchiseRoot = (title) => {
         let base = cleanTitle(title);
-        base = base.split(/\s*[:–—\-]\s*/)[0];
+        base = base.split(/\s*[:–—-]\s*/)[0];
         base = base
           .replace(/\bpart\s+(?:ii|iii|iv|v|vi|vii|viii|ix|x|\d+)\b/gi, '')
           .replace(/\bvol(?:ume)?\.?\s*(?:ii|iii|iv|v|vi|vii|viii|ix|x|\d+)\b/gi, '')

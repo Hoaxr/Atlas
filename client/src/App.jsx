@@ -5,11 +5,11 @@ import { ThemeProvider } from './lib/ThemeContext';
 import { AudioPlayerProvider, useAudioPlayer } from './context/AudioPlayerContext';
 import ErrorBoundary from './components/shared/ErrorBoundary';
 import Layout from './components/layout/Layout';
-import Dashboard from './pages/dashboard/Dashboard';
-import Discover from './pages/Discover';
-import ShowDetails from './pages/ShowDetails';
-import MovieDetails from './pages/MovieDetails';
-import Tracker from './pages/Tracker';
+const Dashboard = lazy(() => import('./pages/dashboard/Dashboard'));
+const Discover = lazy(() => import('./pages/Discover'));
+const ShowDetails = lazy(() => import('./pages/ShowDetails'));
+const MovieDetails = lazy(() => import('./pages/MovieDetails'));
+const Tracker = lazy(() => import('./pages/Tracker'));
 import LoadingState from './components/shared/LoadingState';
 
 const Settings = lazy(() => import('./pages/Settings'));
@@ -159,15 +159,15 @@ function App() {
               <Route element={<ProtectedRoute />}>
                 <Route path="/" element={<Layout />}>
                   <Route index element={<Navigate to={getDefaultLandingPage()} replace />} />
-                  <Route path="movies" element={<Dashboard key="movies-view" />} />
-                  <Route path="shows" element={<Dashboard key="shows-view" />} />
-                  <Route path="movies/:id" element={<MovieDetails />} />
-                  <Route path="shows/:id" element={<ShowDetails />} />
+                  <Route path="movies" element={<LazyPage><Dashboard key="movies-view" /></LazyPage>} />
+                  <Route path="shows" element={<LazyPage><Dashboard key="shows-view" /></LazyPage>} />
+                  <Route path="movies/:id" element={<LazyPage><MovieDetails /></LazyPage>} />
+                  <Route path="shows/:id" element={<LazyPage><ShowDetails /></LazyPage>} />
                   <Route path="music" element={<LazyPage><Music /></LazyPage>} />
                   <Route path="music/artists/:id" element={<LazyPage><ArtistDetails /></LazyPage>} />
                   <Route path="music/albums/:id" element={<LazyPage><AlbumDetails /></LazyPage>} />
                   <Route path="downloads" element={<LazyPage><Downloads /></LazyPage>} />
-                  <Route path="discover" element={<Discover />} />
+                  <Route path="discover" element={<LazyPage><Discover /></LazyPage>} />
                   <Route element={<ProtectedRoute adminOnly />}>
                     <Route path="tasks" element={<LazyPage><SystemTasks /></LazyPage>} />
                     <Route path="settings" element={<LazyPage><Settings /></LazyPage>} />
@@ -179,7 +179,7 @@ function App() {
                   <Route path="stats/health" element={<LazyPage><MediaHealth /></LazyPage>} />
                   <Route path="requests" element={<LazyPage><Requests /></LazyPage>} />
                   <Route path="watcher" element={<LazyPage><Watcher /></LazyPage>} />
-                  <Route path="tracker" element={<Tracker />} />
+                  <Route path="tracker" element={<LazyPage><Tracker /></LazyPage>} />
                   <Route path="person/:id" element={<LazyPage><PersonDetails /></LazyPage>} />
                 </Route>
                 <Route path="/portal" element={<LazyPage><UserPortal /></LazyPage>} />

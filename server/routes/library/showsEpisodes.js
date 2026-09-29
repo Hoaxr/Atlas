@@ -131,6 +131,13 @@ const refreshShowData = async (id) => {
   let totalSize = 0;
   
   if (show.folder_path) {
+    const fsSync = require('fs');
+    if (!fsSync.existsSync(show.folder_path)) {
+      console.warn(`[Shows] refreshShowData skipped: folder_path does not exist or is unmounted: ${show.folder_path}`);
+      return show;
+    }
+
+    const foundEpisodeIds = new Set();
     const calculateSize = async (dirPath) => {
       try {
         const items = await fsp.readdir(dirPath, { withFileTypes: true });
@@ -185,7 +192,10 @@ const refreshShowData = async (id) => {
                 let accepted = false;
                 const saveEpisodes = db.transaction((startEp, endEp) => {
                   for (let ep = startEp; ep <= endEp; ep++) {
-                    const existingEp = db.prepare('SELECT file_path, scene_name, file_size FROM episodes WHERE show_id = ? AND season_number = ? AND episode_number = ?').get(show.id, s, ep);
+                    const existingEp = db.prepare('SELECT id, file_path, scene_name, file_size FROM episodes WHERE show_id = ? AND season_number = ? AND episode_number = ?').get(show.id, s, ep);
+                    if (existingEp?.id) {
+                      foundEpisodeIds.add(existingEp.id);
+                    }
                     if (existingEp?.file_path) {
                       const isCurrentConflict = /(_\d{6}|\(\d+\)|_copy)\b/i.test(item.name);
                       const isExistingConflict = /(_\d{6}|\(\d+\)|_copy)\b/i.test(existingEp.scene_name || existingEp.file_path);
@@ -218,20 +228,17 @@ const refreshShowData = async (id) => {
       }
     };
 
-    // Reset downloaded episodes to missing and clear their paths before scanning.
-    // 'downloading' episodes are left untouched — they are still in the download
-    // client and would otherwise be reset to 'monitored' whenever a sibling
-    // episode triggers a refresh (e.g. via auto-search).
-    db.prepare(`
-      UPDATE episodes 
-      SET status = 'missing',
-          file_path = NULL,
-          file_size = NULL,
-          scene_name = NULL
-      WHERE show_id = ? AND status = 'downloaded'
-    `).run(show.id);
-
     await calculateSize(show.folder_path);
+
+    // Only un-link episodes that were NOT found during this scan AND whose files are actually gone from disk
+    const previouslyDownloaded = db.prepare("SELECT id, file_path FROM episodes WHERE show_id = ? AND status = 'downloaded'").all(show.id);
+    for (const ep of previouslyDownloaded) {
+      if (!foundEpisodeIds.has(ep.id)) {
+        if (!ep.file_path || !fsSync.existsSync(ep.file_path)) {
+          db.prepare("UPDATE episodes SET status = 'missing', file_path = NULL, file_size = NULL, scene_name = NULL WHERE id = ?").run(ep.id);
+        }
+      }
+    }
 
     db.prepare(`
       UPDATE shows 

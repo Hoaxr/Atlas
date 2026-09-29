@@ -15,7 +15,7 @@ const subtitleService = require('../../services/subtitles');
 const { decodeSubtitleBuffer } = require('../../services/subtitles/parser');
 const { getMediaMetadata, parseAudioFromFileName } = require('../../utils/videoUtils');
 const { isWatchedSyncEnabled, extractLang, translateSrt, LANG_CODE } = require('./helpers');
-const { isRootLibraryPath, findLargestVideoFile, deleteFolderRecursive, safelyDeleteMovieFiles } = require('../../utils/fileUtils');
+const { findLargestVideoFile, safelyDeleteMovieFiles } = require('../../utils/fileUtils');
 const { scanSubtitleLangs } = require('../../services/scanner/fileScanner');
 const requireAdmin = require('../../middleware/requireAdmin');
 const imageService = require('../../services/imageService');
@@ -139,7 +139,7 @@ router.get('/:id', async (req, res, next) => {
         db.prepare('UPDATE movies SET subtitles = ? WHERE id = ?').run(JSON.stringify(subLangs), movie.id);
         invalidateStats();
       }
-      if (statResult.status === 'rejected' && (statResult.reason?.message === 'stat timeout' || statResult.reason?.code === 'ENOENT')) {
+      if (statResult.status === 'rejected' && statResult.reason?.code === 'ENOENT') {
         db.prepare("UPDATE movies SET file_path = NULL, file_size = NULL, status = 'monitored' WHERE id = ?").run(movie.id);
         movie.file_path = null;
         movie.status = 'monitored';

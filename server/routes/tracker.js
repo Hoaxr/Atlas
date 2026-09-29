@@ -673,6 +673,9 @@ router.post('/dismiss', async (req, res) => {
 
 // Clean watch history from untracked users
 router.post('/clean-untracked', (req, res) => {
+  if (!req.user || req.user.role !== 'admin') {
+    return res.status(403).json({ error: 'Forbidden: Admins only' });
+  }
   try {
     const result = watcherService.cleanUntrackedWatchHistory();
     invalidateStatsCache();
@@ -689,32 +692,30 @@ router.delete('/history/:id', (req, res) => {
     const userId = req.user?.id;
     const isAdmin = req.user?.role === 'admin';
 
-    const entry = db.prepare('SELECT tmdb_id, type, season_number, episode_number FROM watch_history WHERE id = ?').get(id);
-    if (entry) {
-      if (entry.type === 'movie') {
-        db.prepare('UPDATE movies SET watched = 0, watched_at = NULL, watch_progress = 0 WHERE tmdb_id = ?').run(entry.tmdb_id);
-      } else if (entry.type === 'episode') {
-        const show = db.prepare('SELECT id FROM shows WHERE tmdb_id = ?').get(entry.tmdb_id);
-        if (show) {
-          db.prepare('UPDATE episodes SET watched = 0, watched_at = NULL, watch_progress = 0 WHERE show_id = ? AND season_number = ? AND episode_number = ?').run(show.id, entry.season_number, entry.episode_number);
-          const remainingWatched = db.prepare('SELECT COUNT(*) as count FROM episodes WHERE show_id = ? AND watched = 1').get(show.id);
-          if (!remainingWatched || remainingWatched.count === 0) {
-            db.prepare('UPDATE shows SET watched = 0 WHERE id = ?').run(show.id);
-            db.prepare('UPDATE episodes SET watch_progress = 0 WHERE show_id = ?').run(show.id);
-          }
+    const entry = db.prepare('SELECT id, user_id, tmdb_id, type, season_number, episode_number FROM watch_history WHERE id = ?').get(id);
+    if (!entry) {
+      return res.status(404).json({ error: 'History entry not found' });
+    }
+
+    if (!isAdmin && entry.user_id !== userId) {
+      return res.status(403).json({ error: 'Forbidden: Cannot delete other users’ history entries' });
+    }
+
+    if (entry.type === 'movie') {
+      db.prepare('UPDATE movies SET watched = 0, watched_at = NULL, watch_progress = 0 WHERE tmdb_id = ?').run(entry.tmdb_id);
+    } else if (entry.type === 'episode') {
+      const show = db.prepare('SELECT id FROM shows WHERE tmdb_id = ?').get(entry.tmdb_id);
+      if (show) {
+        db.prepare('UPDATE episodes SET watched = 0, watched_at = NULL, watch_progress = 0 WHERE show_id = ? AND season_number = ? AND episode_number = ?').run(show.id, entry.season_number, entry.episode_number);
+        const remainingWatched = db.prepare('SELECT COUNT(*) as count FROM episodes WHERE show_id = ? AND watched = 1').get(show.id);
+        if (!remainingWatched || remainingWatched.count === 0) {
+          db.prepare('UPDATE shows SET watched = 0 WHERE id = ?').run(show.id);
+          db.prepare('UPDATE episodes SET watch_progress = 0 WHERE show_id = ?').run(show.id);
         }
       }
     }
 
-    let result;
-    if (isAdmin) {
-      result = db.prepare('DELETE FROM watch_history WHERE id = ?').run(id);
-    } else {
-      result = db.prepare('DELETE FROM watch_history WHERE id = ? AND (user_id = ? OR user_id IS NULL)').run(id, userId);
-    }
-    if (result.changes === 0) {
-      return res.status(404).json({ error: 'History entry not found' });
-    }
+    db.prepare('DELETE FROM watch_history WHERE id = ?').run(id);
     invalidateStatsCache();
     res.json({ success: true });
   } catch (error) {

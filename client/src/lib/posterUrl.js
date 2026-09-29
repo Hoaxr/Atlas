@@ -74,6 +74,9 @@ export const artistImageUrl = (artistOrIdOrMbid) => {
  */
 export const trackStreamUrl = (trackId) => {
   if (!trackId) return null;
-  return `/api/library/music/tracks/${trackId}/stream`;
+  const token = typeof localStorage !== 'undefined' ? localStorage.getItem('atlas_token') : null;
+  return token
+    ? `/api/library/music/tracks/${trackId}/stream?token=${encodeURIComponent(token)}`
+    : `/api/library/music/tracks/${trackId}/stream`;
 };
 

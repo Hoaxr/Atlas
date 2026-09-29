@@ -32,6 +32,7 @@ api.interceptors.response.use(
 
       if (!isExternalOrSettings) {
         localStorage.removeItem('atlas_token');
+        localStorage.removeItem('atlas_user');
         window.location.href = '/login';
       }
     }

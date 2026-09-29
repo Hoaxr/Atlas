@@ -365,6 +365,26 @@ router.post('/prowlarr/test', requireAdmin, async (req, res) => {
       finalApiKey = getSetting('prowlarrApiKey') || apiKey;
     }
 
+    let parsed;
+    try {
+      parsed = new URL(url);
+    } catch {
+      return res.status(400).json({ status: 'error', message: 'Invalid URL format' });
+    }
+    if (!['http:', 'https:'].includes(parsed.protocol)) {
+      return res.status(400).json({ status: 'error', message: 'Only http and https protocols are allowed' });
+    }
+    const host = parsed.hostname.toLowerCase();
+    if (
+      host === '169.254.169.254' ||
+      host.startsWith('169.254.') ||
+      host === '0.0.0.0' ||
+      host === 'metadata.google.internal' ||
+      host.includes('@')
+    ) {
+      return res.status(400).json({ status: 'error', message: 'Access to cloud metadata or link-local addresses is prohibited' });
+    }
+
     const base = url.replace(/\/$/, '');
     const result = await axios.get(`${base}/api/v1/system/status`, {
       headers: { 'X-Api-Key': finalApiKey },

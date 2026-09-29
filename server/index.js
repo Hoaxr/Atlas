@@ -112,8 +112,13 @@ wss.on('connection', (ws, req) => {
   console.log('[WS] Client connected');
   let authenticated = false;
   let onEvent = null;
+  let authTimer = null;
 
   const setupAuth = () => {
+    if (authTimer) {
+      clearTimeout(authTimer);
+      authTimer = null;
+    }
     authenticated = true;
     // For anonymous setups when auth is disabled, do not attach to the admin user
     if (!ws._userId) {
@@ -141,6 +146,13 @@ wss.on('connection', (ws, req) => {
     const authEnabled = isAuthEnabled();
     if (!authEnabled) {
       setupAuth();
+    } else {
+      authTimer = setTimeout(() => {
+        if (!authenticated) {
+          console.warn('[WS] Closing unauthenticated connection after timeout');
+          ws.close(4001, 'Authentication timeout');
+        }
+      }, 10000);
     }
   } catch (err) {
     console.error('[WS] Error checking auth enabled status:', err.message);
@@ -160,6 +172,10 @@ wss.on('connection', (ws, req) => {
   });
 
   ws.on('close', () => {
+    if (authTimer) {
+      clearTimeout(authTimer);
+      authTimer = null;
+    }
     if (ws._userId) {
       presenceTracker.removeConnection(ws._userId, ws);
       console.log(`[WS] User ${ws._username || ws._userId} disconnected`);
@@ -168,6 +184,10 @@ wss.on('connection', (ws, req) => {
   });
 
   ws.on('error', () => {
+    if (authTimer) {
+      clearTimeout(authTimer);
+      authTimer = null;
+    }
     if (ws._userId) {
       presenceTracker.removeConnection(ws._userId, ws);
     }
@@ -319,7 +339,7 @@ const broadcastTorrentsUpdate = async (targetWs = null) => {
       downloadClientService.getTransferInfo().catch(() => null)
     ]);
     
-    let rawTorrents = torrents.status === 'fulfilled' ? torrents.value : [];
+    const rawTorrents = torrents.status === 'fulfilled' ? torrents.value : [];
     try {
       const hideCompleted = db.prepare('SELECT value FROM settings WHERE key = ?').get('hideCompletedDownloads');
       if (!hideCompleted || hideCompleted.value !== 'false') {
@@ -434,8 +454,21 @@ app.use(morgan('dev', {
     return ignoredPaths.includes(req.originalUrl);
   }
 }));
+const parseCorsOrigins = (raw) => {
+  if (!raw) return ['http://localhost:3001'];
+  return raw.split(',').map(s => s.trim().replace(/\/$/, '')).filter(Boolean);
+};
+const allowedCorsOrigins = parseCorsOrigins(process.env.CORS_ORIGIN);
+
 app.use(cors({
-  origin: process.env.CORS_ORIGIN || 'http://localhost:3001',
+  origin: (origin, callback) => {
+    if (!origin) return callback(null, true);
+    const normalized = origin.replace(/\/$/, '');
+    if (allowedCorsOrigins.includes('*') || allowedCorsOrigins.includes(normalized)) {
+      return callback(null, true);
+    }
+    return callback(null, false);
+  },
   credentials: true
 }));
 // Restore uploads are large — register above the global 500kb JSON parser with
@@ -452,7 +485,6 @@ app.use('/api', (req, res, next) => {
     req.path.startsWith('/images') ||
     (req.method === 'GET' && req.path.startsWith('/library/music/artists/') && req.path.endsWith('/image')) ||
     (req.method === 'GET' && req.path.startsWith('/library/music/albums/') && req.path.endsWith('/cover')) ||
-    (req.method === 'GET' && req.path.startsWith('/library/music/tracks/') && req.path.endsWith('/stream')) ||
     req.path === '/webhooks/download-client'
   ) {
     return next();

@@ -5,10 +5,22 @@ import Spinner from '../shared/Spinner';
 
 export default function ProtectedRoute({ adminOnly = false }) {
   const token = localStorage.getItem('atlas_token');
-  const [authState, setAuthState] = useState({
-    checking: true,
-    allowed: !!token,
-    isAdmin: true,
+  const getInitialUserRole = () => {
+    try {
+      const user = JSON.parse(localStorage.getItem('atlas_user'));
+      return user?.role || 'user';
+    } catch {
+      return 'user';
+    }
+  };
+
+  const [authState, setAuthState] = useState(() => {
+    const role = getInitialUserRole();
+    return {
+      checking: true,
+      allowed: !!token,
+      isAdmin: role === 'admin',
+    };
   });
 
   useEffect(() => {
@@ -56,7 +68,7 @@ export default function ProtectedRoute({ adminOnly = false }) {
     };
   }, []);
 
-  if (authState.checking && !token) {
+  if (authState.checking && (!token || (adminOnly && !authState.isAdmin))) {
     return (
       <div className="flex items-center justify-center h-screen bg-slate-950" style={{ height: '100dvh' }}>
         <Spinner size="lg" />

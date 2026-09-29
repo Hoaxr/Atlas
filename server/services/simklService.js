@@ -89,7 +89,7 @@ const getDeviceCode = async () => {
     }
   } catch (v2Err) {
     if (v2Err.response?.data?.error === 'invalid_client') {
-      throw new Error(v2Err.response?.data?.error_description || 'Unknown or invalid Simkl Client ID. Please verify your Client ID.');
+      throw new Error(v2Err.response?.data?.error_description || 'Unknown or invalid Simkl Client ID. Please verify your Client ID.', { cause: v2Err });
     }
   }
 
@@ -106,7 +106,7 @@ const getDeviceCode = async () => {
     };
   } catch (v1Err) {
     const msg = v1Err.response?.data?.message || v1Err.message || 'Failed to get PIN from Simkl';
-    throw new Error(msg);
+    throw new Error(msg, { cause: v1Err });
   }
 };
 
@@ -126,7 +126,7 @@ const pollDeviceToken = async (userCode, deviceCode) => {
       if (stored?.value) {
         deviceCode = stored.value;
       }
-    } catch {}
+    } catch { /* ignore */ }
   }
 
   // AUTH V2 polling
@@ -151,7 +151,7 @@ const pollDeviceToken = async (userCode, deviceCode) => {
       if (res.data?.access_token) {
         try {
           db.prepare("DELETE FROM settings WHERE key IN ('simklPendingDeviceCode', 'simklPendingUserCode')").run();
-        } catch {}
+        } catch { /* ignore */ }
         return { result: 'OK', access_token: res.data.access_token };
       }
       return { status: 'pending' };
@@ -162,8 +162,8 @@ const pollDeviceToken = async (userCode, deviceCode) => {
       if (err.response?.data?.error === 'expired_token') {
         try {
           db.prepare("DELETE FROM settings WHERE key IN ('simklPendingDeviceCode', 'simklPendingUserCode')").run();
-        } catch {}
-        throw new Error('Device PIN expired. Please restart authorization.');
+        } catch { /* ignore */ }
+        throw new Error('Device PIN expired. Please restart authorization.', { cause: err });
       }
       throw err;
     }
@@ -530,7 +530,7 @@ const syncWatchedAnime = async () => {
           for (const ep of item.episodes) {
             const epNum = ep.number;
             const epWatchedAt = ep.last_watched_at || ep.watched_at || showWatchedAt;
-            let rt = ep.runtime || (show ? show.runtime : null);
+            const rt = ep.runtime || (show ? show.runtime : null);
             insertHistory.run(tmdbId, 'episode', 1, epNum, epWatchedAt, rt);
             if (show) {
               updateEpWatched.run(epWatchedAt, show.id, 1, epNum);

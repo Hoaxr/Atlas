@@ -56,7 +56,7 @@ const sanitizeTitle = (title, config) => {
 const formatSeriesFolder = (title, year, config) => {
   const format = config.seriesFolderFormat || '{Show Title} ({Release Year})';
   const sanitizedTitle = sanitizeTitle(title, config);
-  let formatted = format
+  const formatted = format
     .replace(/{Show Title}/gi, sanitizedTitle)
     .replace(/{Series Title}/gi, sanitizedTitle)
     .replace(/{Release Year}/gi, year ? String(year) : '')
