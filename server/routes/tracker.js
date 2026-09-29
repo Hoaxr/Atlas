@@ -4,6 +4,7 @@ const db = require('../config/database');
 const { localizeAirDate, getAiredCutoffSql } = require('../utils/airDate');
 const tmdbService = require('../services/tmdbService');
 const watcherService = require('../services/watcherService');
+const { runWithConcurrency } = require('../utils/concurrency');
 
 // Helper to fallback to average runtimes if null
 const MOVIE_AVG = 100;
@@ -485,7 +486,7 @@ router.get('/history', async (req, res) => {
   }
 });
 
-router.get('/up-next', (req, res) => {
+router.get('/up-next', async (req, res) => {
   try {
     // 1. Unwatched movies in library that have been started (watch_progress > 0)
     const movies = db.prepare(`
@@ -615,6 +616,34 @@ router.get('/up-next', (req, res) => {
       ORDER BY sf.show_title
       LIMIT 20
     `).all(EPISODE_AVG);
+
+    // Enrich items with a TMDB backdrop_path so the tracker cards can show a
+    // wide (16:9) image instead of cropping portrait posters. TMDB calls are
+    // memoized per tmdb_id and concurrency-limited so we don't stall the route.
+    const backdropCache = new Map();
+    const resolveBackdrop = (tmdbId, type) =>
+      backdropCache.get(tmdbId) ||
+      (() => {
+        const promise = (async () => {
+          try {
+            const details = type === 'movie'
+              ? await tmdbService.getMovieById(tmdbId)
+              : await tmdbService.getShowById(tmdbId);
+            return details?.backdrop_path || null;
+          } catch {
+            return null;
+          }
+        })();
+        backdropCache.set(tmdbId, promise);
+        return promise;
+      })();
+
+    await runWithConcurrency(movies, 5, async (m) => {
+      m.backdrop_path = (await resolveBackdrop(m.tmdb_id, 'movie')) || m.poster_path || null;
+    });
+    await runWithConcurrency(episodes, 5, async (ep) => {
+      ep.backdrop_path = (await resolveBackdrop(ep.tmdb_id, 'episode')) || ep.poster_path || null;
+    });
 
     res.json({ success: true, movies, episodes });
   } catch (error) {
@@ -871,7 +900,7 @@ router.post('/mark-unwatched', async (req, res) => {
   }
 });
 
-router.get('/this-week', (req, res) => {
+router.get('/this-week', async (req, res) => {
   try {
     const formatLocalDate = (d) => {
       const y = d.getFullYear();
@@ -960,6 +989,33 @@ router.get('/this-week', (req, res) => {
         isTomorrow: diffDays === 1
       };
     };
+
+    // Enrich items with a TMDB backdrop_path (same approach as /up-next) so the
+    // Next Up cards can render wide (16:9) art instead of cropped posters.
+    const backdropCache = new Map();
+    const resolveBackdrop = (tmdbId, type) =>
+      backdropCache.get(tmdbId) ||
+      (() => {
+        const promise = (async () => {
+          try {
+            const details = type === 'movie'
+              ? await tmdbService.getMovieById(tmdbId)
+              : await tmdbService.getShowById(tmdbId);
+            return details?.backdrop_path || null;
+          } catch {
+            return null;
+          }
+        })();
+        backdropCache.set(tmdbId, promise);
+        return promise;
+      })();
+
+    await runWithConcurrency(movies, 5, async (m) => {
+      m.backdrop_path = (await resolveBackdrop(m.tmdb_id, 'movie')) || m.poster_path || null;
+    });
+    await runWithConcurrency(episodes, 5, async (ep) => {
+      ep.backdrop_path = (await resolveBackdrop(ep.tmdb_id, 'episode')) || ep.poster_path || null;
+    });
 
     res.json({
       success: true,

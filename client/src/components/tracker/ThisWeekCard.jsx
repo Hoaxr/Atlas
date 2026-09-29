@@ -52,15 +52,15 @@ export function ThisWeekCard({ item, type }) {
   return (
     <div
       onClick={handleClick}
-      className="w-48 sm:w-72 md:w-80 shrink-0 snap-start bg-slate-800/60 border border-slate-700/50 rounded-xl sm:rounded-2xl overflow-hidden transition-all duration-300 flex flex-col group cursor-pointer hover:border-cyan-500/40 hover:-translate-y-1 shadow-xl"
+      className="w-48 sm:w-72 md:w-80 shrink-0 snap-start bg-slate-800/60 border border-slate-700/50 rounded-xl sm:rounded-2xl overflow-hidden transition-all duration-300 flex flex-col group cursor-pointer hover:border-cyan-500/40 shadow-xl"
     >
-      {/* Poster + Day Badge */}
-      <div className="relative aspect-[16/9] bg-slate-900 overflow-hidden">
-        {item.poster_path ? (
+      {/* Poster */}
+      <div className="relative h-28 sm:h-36 md:h-40 bg-slate-900 overflow-hidden rounded-t-xl sm:rounded-t-2xl">
+        {(item.backdrop_path || item.poster_path) ? (
           <img
-            src={tmdbImgUrl(item.poster_path, 'w500')}
+            src={tmdbImgUrl(item.backdrop_path || item.poster_path, 'w780')}
             alt={title}
-            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 ease-out"
           />
         ) : (
           <div className="w-full h-full flex items-center justify-center text-slate-600">
@@ -68,8 +68,11 @@ export function ThisWeekCard({ item, type }) {
           </div>
         )}
 
+        {/* Gradient overlay */}
+        <div className="absolute inset-0 bg-gradient-to-t from-slate-900 via-slate-900/40 to-transparent" />
+
         {/* Day badge — top-left */}
-        <div className={`absolute top-2 left-2 sm:top-3 sm:left-3 px-2 sm:px-3 py-0.5 sm:py-1 rounded-full text-[10px] sm:text-xs font-bold backdrop-blur-md border shadow-lg flex items-center gap-1 sm:gap-1.5 ${
+        <div className={`absolute top-2 left-2 sm:top-3 sm:left-3 px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-full text-[9px] sm:text-[10px] font-bold backdrop-blur-md border shadow-lg flex items-center gap-1 sm:gap-1.5 ${
           item.isToday
             ? 'bg-emerald-500/30 text-emerald-200 border-emerald-400/50'
             : item.isTomorrow
@@ -80,25 +83,23 @@ export function ThisWeekCard({ item, type }) {
           {item.isToday ? 'Today' : item.isTomorrow ? 'Tomorrow' : item.dayName}
         </div>
 
-        {/* Type badge — top-right */}
-        <div className="absolute top-2 right-2 sm:top-3 sm:right-3">
-          <span className={`text-[9px] sm:text-[10px] uppercase font-extrabold tracking-wide px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-full backdrop-blur-md shadow-lg border-l-2 ${
-            isEpisode
-              ? 'bg-slate-900/80 text-white border-l-cyan-400 border border-slate-700/60'
-              : 'bg-slate-900/80 text-white border-l-purple-400 border border-slate-700/60'
-          }`}>
-            {isEpisode ? 'TV' : 'Movie'}
+        {/* Runtime pill — bottom-left of poster */}
+        {item.runtime && (
+          <span className="absolute bottom-4 sm:bottom-6 left-2 sm:left-3 px-1.5 sm:px-2 py-0.5 rounded-md text-[9px] sm:text-[10px] font-semibold bg-black/70 text-white backdrop-blur-sm z-10">
+            {formatRuntime(item.runtime)}
           </span>
-        </div>
+        )}
 
-        {/* Gradient overlay at bottom */}
-        <div className="absolute inset-x-0 bottom-0 h-16 sm:h-20 bg-gradient-to-t from-slate-900/90 via-slate-900/40 to-transparent pointer-events-none" />
+        {/* Type badge — top-right */}
+        <span className="absolute top-2 right-2 sm:top-3 sm:right-3 text-[9px] sm:text-[10px] uppercase font-extrabold tracking-wide px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-full backdrop-blur-md shadow-lg bg-slate-900/80 text-white border border-slate-700/60">
+          {isEpisode ? 'TV' : 'Movie'}
+        </span>
       </div>
 
       {/* Card body */}
-      <div className="p-2.5 sm:p-3.5 space-y-1 sm:space-y-1.5 flex-1 flex flex-col justify-between">
+      <div className="p-2.5 sm:p-4 flex-1 flex flex-col justify-between space-y-1.5 sm:space-y-3">
         <div>
-          <h3 className="text-slate-100 font-bold text-xs sm:text-sm truncate group-hover:text-cyan-400 transition-colors">
+          <h3 className="font-bold text-slate-100 text-xs sm:text-base md:text-lg truncate group-hover:text-cyan-400 transition-colors">
             {title}
           </h3>
           <p className="text-[10px] sm:text-xs text-slate-400 truncate mt-0.5">
@@ -106,11 +107,6 @@ export function ThisWeekCard({ item, type }) {
           </p>
         </div>
 
-        <div className="flex items-center gap-2 pt-0.5 sm:pt-1">
-          {item.runtime && (
-            <span className="text-[10px] sm:text-[11px] text-slate-500 font-mono">{formatRuntime(item.runtime)}</span>
-          )}
-        </div>
       </div>
     </div>
   );

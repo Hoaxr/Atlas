@@ -125,16 +125,13 @@ export function AnimatedUpNextCard({ item, type, onMarkWatched, onDismiss }) {
         onClick={handleTitleClick}
         className="relative h-28 sm:h-36 md:h-40 bg-slate-900 overflow-hidden z-10 cursor-pointer"
       >
-        {item.poster_path ? (
-          <motion.img
-            src={tmdbImgUrl(item.poster_path, 'w500')}
+        {(item.backdrop_path || item.poster_path) ? (
+          <img
+            src={tmdbImgUrl(item.backdrop_path || item.poster_path, 'w780')}
             alt=""
-            animate={{
-              brightness: isCompleted ? 1.08 : 1,
-              scale: isCompleted ? 1.03 : 1
-            }}
-            transition={{ duration: 0.5 }}
-            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+            className={`w-full h-full object-cover group-hover:scale-105 transition-all duration-500 ease-out ${
+              isCompleted ? 'brightness-110' : ''
+            }`}
           />
         ) : (
           <div className="w-full h-full flex items-center justify-center text-slate-600">
@@ -258,7 +255,7 @@ export function AnimatedUpNextCard({ item, type, onMarkWatched, onDismiss }) {
           <div className="flex items-start justify-between gap-1.5 sm:gap-2">
             <h3 
               onClick={handleTitleClick}
-              className="font-bold text-slate-100 text-xs sm:text-base md:text-lg truncate hover:text-cyan-400 transition-colors cursor-pointer min-w-0"
+              className="font-bold text-slate-100 text-xs sm:text-base md:text-lg truncate group-hover:text-cyan-400 transition-colors cursor-pointer min-w-0"
             >
               {isEpisode ? item.show_title : item.title}
             </h3>
