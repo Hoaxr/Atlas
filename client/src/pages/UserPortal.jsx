@@ -1,5 +1,17 @@
 import { useState, useEffect, useRef } from 'react';
-import { Search, Loader2, Plus, Clock, CheckCircle2, XCircle, LogOut, Key, Star, X, Film, Tv, CalendarClock, Sparkles, Check, TrendingUp, DownloadCloud, Heart } from 'lucide-react';
+import { Search, Loader2, Plus, Clock, CheckCircle2, XCircle, Key, Star, X, Film, Tv, CalendarClock, Sparkles, Check, TrendingUp, DownloadCloud, Heart } from 'lucide-react';
+
+function RunningManIcon({ className }) {
+  return (
+    <img
+      src="/running-man.png"
+      alt=""
+      aria-hidden="true"
+      className={className}
+      style={{ filter: 'brightness(0) invert(1)' }}
+    />
+  );
+}
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import api from '../lib/api';
@@ -368,7 +380,7 @@ export default function UserPortal() {
                   className="p-2 rounded-xl hover:bg-rose-500/10 hover:text-rose-400 transition-colors text-slate-400 group relative"
                   title="Logout"
                 >
-                  <LogOut className="w-5 h-5 group-hover:scale-110 transition-transform" />
+                  <RunningManIcon className="w-5 h-5 group-hover:scale-110 transition-transform" />
                 </button>
               </div>
             )}

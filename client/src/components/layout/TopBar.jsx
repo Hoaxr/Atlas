@@ -1,7 +1,19 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import clsx from 'clsx';
-import { Search, Menu, SlidersHorizontal, Activity, Keyboard, LogOut, Bell, AlertTriangle, Heart, DownloadCloud, Eye, CheckCircle2, Inbox, X } from 'lucide-react';
+import { Search, Menu, SlidersHorizontal, Activity, Keyboard, Bell, AlertTriangle, Heart, DownloadCloud, Eye, CheckCircle2, Inbox, X } from 'lucide-react';
+
+function RunningManIcon({ className }) {
+  return (
+    <img
+      src="/running-man.png"
+      alt=""
+      aria-hidden="true"
+      className={className}
+      style={{ filter: 'brightness(0) invert(1)' }}
+    />
+  );
+}
 import { useOutsideClick } from '../../lib/useOutsideClick';
 import { MOD_KEY } from '../../lib/platform';
 
@@ -309,36 +321,18 @@ export default function TopBar({ user, activity, alerts = [], onDismissAlert, on
         {/* Divider */}
         <div className="h-6 w-px bg-slate-200 dark:bg-slate-700/60 mx-1 hidden sm:block" />
 
-        {/* Account */}
-        <div className="hidden sm:flex items-center gap-2.5 py-1 px-1.5 rounded-xl hover:bg-slate-200/60 dark:hover:bg-slate-800/50 transition-colors cursor-default shrink-0 group">
-          {/* Avatar with gradient + ring */}
-          <span className="relative w-8 h-8 sm:w-9 sm:h-9 shrink-0">
-            <span className="absolute inset-0 rounded-full bg-gradient-to-br from-sky-400 via-blue-500 to-indigo-600 shadow-md shadow-blue-500/30 flex items-center justify-center text-white text-xs font-bold tracking-wide">
-              {initialsOf(displayName)}
-            </span>
-            {/* Online dot */}
-            <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-emerald-400 border-2 border-white dark:border-[#101b2b] shadow-sm" />
+        {/* Account — text only, no avatar */}
+        <div className="hidden sm:flex flex-col items-start justify-center leading-tight cursor-default select-none shrink-0">
+          <span className="text-[13px] font-medium text-slate-200 truncate max-w-[120px]">
+            {displayName}
           </span>
-          {/* Name + role pill */}
-          <span className="flex flex-col text-left leading-tight max-w-[130px]">
-            <span className="block text-[13px] font-semibold text-slate-800 dark:text-slate-100 truncate">
-              {displayName}
-            </span>
-            <span className="flex items-center gap-1 mt-0.5">
-              <span className="inline-flex items-center px-1.5 py-px rounded text-[10px] font-bold uppercase tracking-wider bg-sky-500/15 text-sky-400 border border-sky-500/20 leading-none">
-                {role}
-              </span>
-            </span>
+          <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-500 truncate max-w-[120px]">
+            {role}
           </span>
         </div>
 
-        {/* Avatar only on mobile */}
-        <span className="sm:hidden relative w-8 h-8 shrink-0">
-          <span className="absolute inset-0 rounded-full bg-gradient-to-br from-sky-400 via-blue-500 to-indigo-600 shadow-md flex items-center justify-center text-white text-xs font-bold">
-            {initialsOf(displayName)}
-          </span>
-          <span className="absolute bottom-0 right-0 w-2 h-2 rounded-full bg-emerald-400 border-2 border-white dark:border-[#101b2b]" />
-        </span>
+        {/* Divider */}
+        <div className="h-6 w-px bg-slate-200 dark:bg-slate-700/60 mx-1 hidden sm:block" />
 
         {/* Logout */}
         <button
@@ -348,7 +342,7 @@ export default function TopBar({ user, activity, alerts = [], onDismissAlert, on
           aria-label="Logout"
           className="hidden sm:flex p-2 rounded-xl text-slate-400 dark:text-slate-500 hover:text-rose-500 dark:hover:text-rose-400 hover:bg-rose-500/10 dark:hover:bg-rose-500/10 transition-colors shrink-0"
         >
-          <LogOut className="w-4 h-4" />
+          <RunningManIcon className="w-4 h-4" />
         </button>
       </div>
     </header>
