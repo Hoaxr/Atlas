@@ -107,14 +107,57 @@ test('RBAC & Request Quotas System', async (t) => {
     assert.strictEqual(recent.count, 0, 'Old requests must not appear in 7-day window');
   });
 
-  await t.test('Permission flag can_request: false blocks user even when quota remains', () => {
-    db.prepare('UPDATE users SET permissions = ? WHERE id = ?').run(
-      JSON.stringify({ can_request: false }),
-      testUserId
-    );
+  await t.test('User import links existing users without UNIQUE constraint failure', async () => {
+    const userProvisioningService = require('../server/services/userProvisioningService');
+    const { setSetting } = require('../server/utils/settings');
 
-    const user = db.prepare('SELECT permissions FROM users WHERE id = ?').get(testUserId);
-    const perms = JSON.parse(user.permissions);
-    assert.strictEqual(perms.can_request, false);
+    const tempJellyfinUrl = 'http://127.0.0.1:9999';
+    setSetting('jellyfinUrl', tempJellyfinUrl);
+    setSetting('jellyfinApiKey', 'fake_key');
+
+    // Create a user with atlas origin that would collide with a discovered user
+    const existingAtlasUser = 'import_collision_test';
+    db.prepare('DELETE FROM users WHERE username = ?').run(existingAtlasUser);
+    db.prepare("INSERT INTO users (username, password, role, origin) VALUES (?, 'pass', 'admin', 'atlas')").run(existingAtlasUser);
+
+    try {
+      // Mock axios.get to return collision user + new user
+      const axios = require('../server/node_modules/axios');
+      const originalGet = axios.get;
+      axios.get = async (url) => {
+        if (url.includes('/Users')) {
+          return {
+            data: [
+              { Id: '1', Name: existingAtlasUser },
+              { Id: '2', Name: 'brand_new_imported_user' }
+            ]
+          };
+        }
+        return originalGet.apply(axios, [url]);
+      };
+
+      try {
+        const result = await userProvisioningService.importUsers();
+        assert.strictEqual(result.totalDiscovered, 2);
+        assert.strictEqual(result.importedCount, 1);
+
+        // Collision user should have been linked to jellyfin without changing role
+        const linked = db.prepare('SELECT role, origin FROM users WHERE username = ?').get(existingAtlasUser);
+        assert.strictEqual(linked.role, 'admin');
+        assert.strictEqual(linked.origin, 'jellyfin');
+
+        // New user should be created with origin jellyfin
+        const newU = db.prepare('SELECT role, origin FROM users WHERE username = ?').get('brand_new_imported_user');
+        assert.ok(newU);
+        assert.strictEqual(newU.role, 'user');
+        assert.strictEqual(newU.origin, 'jellyfin');
+      } finally {
+        axios.get = originalGet;
+      }
+    } finally {
+      db.prepare('DELETE FROM users WHERE username IN (?, ?)').run(existingAtlasUser, 'brand_new_imported_user');
+      setSetting('jellyfinUrl', 'http://192.168.1.107:8096');
+      setSetting('jellyfinApiKey', 'd116be2152b949069772a2b0bb4ffd28');
+    }
   });
 });

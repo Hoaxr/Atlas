@@ -119,7 +119,8 @@ class UserProvisioningService {
     // Fetch from Jellyfin
     if (jellyfinUrl && jellyfinApiKey) {
       try {
-        const res = await axios.get(`${jellyfinUrl}/Users`, {
+        const cleanUrl = jellyfinUrl.trim().replace(/\/$/, '');
+        const res = await axios.get(`${cleanUrl}/Users`, {
           headers: {
             'Authorization': `MediaBrowser Token="${jellyfinApiKey}"`,
             'X-Emby-Token': jellyfinApiKey
@@ -128,7 +129,9 @@ class UserProvisioningService {
         });
         if (Array.isArray(res.data)) {
           res.data.forEach(u => {
-            if (u.Name && !importedUsers.has(u.Name)) importedUsers.set(u.Name, 'jellyfin');
+            if (u.Name && !importedUsers.has(u.Name)) {
+              importedUsers.set(u.Name, { origin: 'jellyfin', email: null });
+            }
           });
           successCount++;
         }
@@ -141,13 +144,16 @@ class UserProvisioningService {
     // Fetch from Emby
     if (embyUrl && embyApiKey) {
       try {
-        const res = await axios.get(`${embyUrl}/Users`, {
+        const cleanUrl = embyUrl.trim().replace(/\/$/, '');
+        const res = await axios.get(`${cleanUrl}/Users`, {
           headers: { 'X-Emby-Token': embyApiKey },
           timeout: 5000
         });
         if (Array.isArray(res.data)) {
           res.data.forEach(u => {
-            if (u.Name && !importedUsers.has(u.Name)) importedUsers.set(u.Name, 'emby');
+            if (u.Name && !importedUsers.has(u.Name)) {
+              importedUsers.set(u.Name, { origin: 'emby', email: null });
+            }
           });
           successCount++;
         }
@@ -168,23 +174,60 @@ class UserProvisioningService {
           timeout: 5000
         });
         
-        // The Plex API returns JSON differently depending on the exact endpoint and Accept header.
-        // Usually it's in res.data.MediaContainer.User array, but we need to check carefully.
-        const users = res.data?.MediaContainer?.User || [];
-        // Alternatively, if it returns XML and parses differently, we'll try to extract appropriately.
-        // We look for 'username' or 'title'
-        if (Array.isArray(users)) {
-          users.forEach(u => {
-            const name = u.username || u.title;
-            if (name && !importedUsers.has(name)) importedUsers.set(name, 'plex');
-          });
-        } else if (res.data && Array.isArray(res.data)) {
-            // fallback
-            res.data.forEach(u => {
-                const name = u.username || u.title || u.Name;
-                if (name && !importedUsers.has(name)) importedUsers.set(name, 'plex');
+        if (typeof res.data === 'string') {
+          // XML fallback: extract username/title and email from <User ...> tags
+          const userMatches = res.data.matchAll(/<User\b[^>]*(?:\busername="([^"]+)"|\btitle="([^"]+)")(?:\s+[^>]*\bemail="([^"]+)")?/gi);
+          for (const m of userMatches) {
+            const name = m[1] || m[2];
+            const email = m[3] || null;
+            if (name && !importedUsers.has(name)) {
+              importedUsers.set(name, { origin: 'plex', email });
+            }
+          }
+        } else if (res.data) {
+          const users = res.data?.MediaContainer?.User || (Array.isArray(res.data) ? res.data : []);
+          if (Array.isArray(users)) {
+            users.forEach(u => {
+              const name = u.username || u.title || u.Name;
+              if (name && !importedUsers.has(name)) {
+                importedUsers.set(name, { origin: 'plex', email: u.email || null });
+              }
             });
+          }
         }
+
+        // Also fetch the Plex account owner
+        try {
+          const ownerRes = await axios.get('https://plex.tv/api/v2/user', {
+            headers: { 'X-Plex-Token': plexToken, 'Accept': 'application/json' },
+            timeout: 5000
+          });
+          const ownerName = ownerRes.data?.username || ownerRes.data?.title;
+          if (ownerName && !importedUsers.has(ownerName)) {
+            importedUsers.set(ownerName, { origin: 'plex', email: ownerRes.data?.email || null });
+          }
+        } catch { /* non-critical */ }
+
+        // Also fetch local Plex server accounts if plexUrl is configured
+        const plexUrl = getSetting('plexUrl')?.trim()?.replace(/\/$/, '');
+        if (plexUrl) {
+          try {
+            const localRes = await axios.get(`${plexUrl}/accounts`, {
+              headers: { 'X-Plex-Token': plexToken, 'Accept': 'application/json' },
+              timeout: 5000
+            });
+            const localAccounts = localRes.data?.MediaContainer?.Account || [];
+            if (Array.isArray(localAccounts)) {
+              localAccounts.forEach(a => {
+                const name = a.name || a.title;
+                if (name && !importedUsers.has(name)) {
+                  importedUsers.set(name, { origin: 'plex', email: null });
+                }
+              });
+            }
+          } catch { /* non-critical */ }
+        }
+
         successCount++;
       } catch (err) {
         errors.push(`Plex: ${err.message}`);
@@ -200,16 +243,28 @@ class UserProvisioningService {
     let importCount = 0;
     const crypto = require('crypto');
 
-    for (const [username, origin] of importedUsers.entries()) {
-      const existing = db.prepare('SELECT id FROM users WHERE username = ? AND origin = ?').get(username, origin);
-      if (!existing) {
-        // Random unguessable hash ensures account can only authenticate via media server SSO / OAuth
-        const randomPass = crypto.randomBytes(32).toString('hex');
-        const defaultPassword = await bcrypt.hash(randomPass, 12);
-        db.prepare('INSERT INTO users (username, password, role, origin) VALUES (?, ?, ?, ?)').run(
-          username, defaultPassword, 'user', origin
-        );
-        importCount++;
+    for (const [username, info] of importedUsers.entries()) {
+      const origin = typeof info === 'string' ? info : info.origin;
+      const email = typeof info === 'object' ? info.email : null;
+
+      try {
+        const existing = db.prepare('SELECT id, username, origin, email FROM users WHERE LOWER(username) = LOWER(?)').get(username);
+        if (!existing) {
+          // Random unguessable hash ensures account can only authenticate via media server SSO / OAuth
+          const randomPass = crypto.randomBytes(32).toString('hex');
+          const defaultPassword = await bcrypt.hash(randomPass, 12);
+          db.prepare('INSERT INTO users (username, password, email, role, origin) VALUES (?, ?, ?, ?, ?)').run(
+            username, defaultPassword, email || null, 'user', origin
+          );
+          importCount++;
+        } else {
+          // If the user already exists locally in Atlas without a media server origin, link their origin
+          if (existing.origin === 'atlas' || !existing.origin) {
+            db.prepare('UPDATE users SET origin = ?, email = COALESCE(email, ?) WHERE id = ?').run(origin, email, existing.id);
+          }
+        }
+      } catch (userErr) {
+        console.error(`[UserProvisioning] Failed to import user "${username}":`, userErr.message);
       }
     }
 
