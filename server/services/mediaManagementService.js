@@ -324,6 +324,21 @@ const matchEpisodeToTorrent = (torrent, ep) => {
       break;
     }
   }
+
+  // Also support show titles that contain year in DB when release title omits it
+  if (!hasShowTitle) {
+    const normShowTitleNoYear = normShowTitle.replace(/\b(19\d{2}|20\d{2})\b/g, '').replace(/\s+/g, ' ').trim();
+    const showWordsNoYear = normShowTitleNoYear ? normShowTitleNoYear.split(/\s+/).filter(Boolean) : [];
+    if (showWordsNoYear.length > 0 && showWordsNoYear.length !== showWords.length) {
+      for (let i = 0; i <= rawWords.length - showWordsNoYear.length; i++) {
+        if (rawWords.slice(i, i + showWordsNoYear.length).join(' ') === normShowTitleNoYear) {
+          hasShowTitle = true;
+          break;
+        }
+      }
+    }
+  }
+
   if (!hasShowTitle) return false;
 
   // S01E02 or 01x02 or S1E2 or multi-episode ranges S01E01-E04
@@ -389,6 +404,17 @@ const matchSeasonPackToTorrent = (torrent, showTitle, seasonNumber) => {
     }
   }
 
+  // Also support show titles that contain year in DB when release title omits it
+  const normShowTitleNoYear = normShowTitle.replace(/\b(19\d{2}|20\d{2})\b/g, '').replace(/\s+/g, ' ').trim();
+  const showWordsNoYear = normShowTitleNoYear ? normShowTitleNoYear.split(/\s+/).filter(Boolean) : [];
+  if (showWordsNoYear.length > 0 && showWordsNoYear.length !== showWords.length) {
+    for (let i = 0; i <= rawWords.length - showWordsNoYear.length; i++) {
+      if (rawWords.slice(i, i + showWordsNoYear.length).join(' ') === normShowTitleNoYear) {
+        return true;
+      }
+    }
+  }
+
   return false;
 };
 
@@ -440,7 +466,7 @@ const resetDownloadsNotInClient = async (torrentList) => {
 
   const downloadingMovies = db.prepare("SELECT * FROM movies WHERE status = 'downloading'").all();
   const downloadingEpisodes = db.prepare(`
-    SELECT e.*, s.title as show_title 
+    SELECT e.*, s.title as show_title, s.monitored as show_monitored 
     FROM episodes e 
     JOIN shows s ON e.show_id = s.id 
     WHERE e.status = 'downloading'
@@ -470,22 +496,21 @@ const resetDownloadsNotInClient = async (torrentList) => {
         console.log(`[MediaManagement] Episode ${ep.show_title} S${String(ep.season_number).padStart(2,'0')}E${String(ep.episode_number).padStart(2,'0')} removed from client but its file exists. Restoring to downloaded.`);
         db.prepare("UPDATE episodes SET status = 'downloaded' WHERE id = ?").run(ep.id);
       } else {
-        const resetStatus = ep.monitored === 1 ? 'monitored' : 'unmonitored';
+        const resetStatus = (ep.monitored === 1 && ep.show_monitored === 1) ? 'monitored' : 'unmonitored';
         console.log(`[MediaManagement] Episode ${ep.show_title} S${String(ep.season_number).padStart(2,'0')}E${String(ep.episode_number).padStart(2,'0')} no longer in download client. Resetting to ${resetStatus}.`);
         db.prepare("UPDATE episodes SET status = ?, file_path = NULL, file_size = NULL, scene_name = NULL WHERE id = ?").run(resetStatus, ep.id);
       }
     }
   }
 
-  // Recalculate status for shows that were marked as downloading
-  const downloadingShows = db.prepare("SELECT id, monitored FROM shows WHERE status = 'downloading'").all();
-  for (const show of downloadingShows) {
+  // Recalculate status for shows that were marked as downloading or monitored
+  const candidateShows = db.prepare("SELECT id, monitored FROM shows WHERE status IN ('downloading', 'monitored')").all();
+  for (const show of candidateShows) {
     const activeEps = db.prepare("SELECT COUNT(*) as count FROM episodes WHERE show_id = ? AND status = 'downloading'").get(show.id).count;
     if (activeEps === 0) {
       const missingMonitored = db.prepare("SELECT COUNT(*) as count FROM episodes WHERE show_id = ? AND monitored = 1 AND (file_path IS NULL OR file_path = '')").get(show.id).count;
       const newStatus = missingMonitored > 0 ? (show.monitored === 1 ? 'monitored' : 'unmonitored') : 'downloaded';
-      db.prepare("UPDATE shows SET status = ? WHERE id = ?").run(newStatus, show.id);
-      console.log(`[MediaManagement] Show ID ${show.id} all downloads finished. Status updated to ${newStatus}.`);
+      db.prepare("UPDATE shows SET status = ? WHERE id = ? AND status != ?").run(newStatus, show.id, newStatus);
     }
   }
 
@@ -511,15 +536,14 @@ const resetDownloadsNotInClient = async (torrentList) => {
     }
   }
 
-  // Recalculate status for music artists that were marked as downloading
-  const downloadingArtists = db.prepare("SELECT id, monitored FROM music_artists WHERE status = 'downloading'").all();
-  for (const artist of downloadingArtists) {
+  // Recalculate status for music artists that were marked as downloading or monitored
+  const candidateArtists = db.prepare("SELECT id, monitored FROM music_artists WHERE status IN ('downloading', 'monitored')").all();
+  for (const artist of candidateArtists) {
     const activeAlbums = db.prepare("SELECT COUNT(*) as count FROM music_albums WHERE artist_id = ? AND status = 'downloading'").get(artist.id).count;
     if (activeAlbums === 0) {
       const missingMonitored = db.prepare("SELECT COUNT(*) as count FROM music_albums WHERE artist_id = ? AND monitored = 1 AND (folder_path IS NULL OR folder_path = '')").get(artist.id).count;
       const newStatus = missingMonitored > 0 ? (artist.monitored === 1 ? 'monitored' : 'unmonitored') : 'downloaded';
-      db.prepare("UPDATE music_artists SET status = ? WHERE id = ?").run(newStatus, artist.id);
-      console.log(`[MediaManagement] Music Artist ID ${artist.id} all downloads finished. Status updated to ${newStatus}.`);
+      db.prepare("UPDATE music_artists SET status = ? WHERE id = ? AND status != ?").run(newStatus, artist.id, newStatus);
     }
   }
 };
@@ -675,7 +699,7 @@ const runMediaManagement = async () => {
 
     // Re-fetch what's STILL downloading after imports and reset anything no
     // longer in the torrent client back to monitored (also fixes show status).
-    await resetDownloadsNotInClient(torrentList);
+    await resetDownloadsNotInClient();
 
     if (importedAnything) {
       invalidateStats();
