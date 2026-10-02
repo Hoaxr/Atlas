@@ -369,16 +369,9 @@ const matchEpisodeToTorrent = (torrent, ep) => {
     return true;
   }
 
-  // Multi-episode regex: e.g. S01E01-E05
-  const multiMatch = rawName.match(/\bS(\d{1,2})[._\s-]*E(\d{1,3})(?:[-_E\s]+(?:S\d{1,2})?E?(\d{1,3}))+\b/i);
-  if (multiMatch) {
-    const sNum = parseInt(multiMatch[1], 10);
-    const eStart = parseInt(multiMatch[2], 10);
-    const extra = [...multiMatch[0].matchAll(/(\d{1,3})/g)].map(m => parseInt(m[1], 10));
-    const eEnd = extra[extra.length - 1];
-    if (sNum === ep.season_number && ep.episode_number >= eStart && ep.episode_number <= eEnd) {
-      return true;
-    }
+  const parsed = parseEpisodeFromFilename(rawName);
+  if (parsed && parsed.season === ep.season_number && Array.isArray(parsed.episodes) && parsed.episodes.includes(ep.episode_number)) {
+    return true;
   }
 
   return false;

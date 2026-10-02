@@ -157,4 +157,25 @@ test('Executable Payload Blocking & Quarantine Security', async (t) => {
     assert.strictEqual(resExpired.state, 'EXPIRED');
     assert.strictEqual(resExpired.nextSearch, null);
   });
+
+  await t.test('matchEpisodeToTorrent handles multi-episode releases, dots, and scene formats', () => {
+    const { matchEpisodeToTorrent } = require('../server/services/mediaManagementService');
+
+    const ep1 = { show_title: 'Dark Matter', season_number: 1, episode_number: 1 };
+    const ep2 = { show_title: 'Dark Matter', season_number: 1, episode_number: 2 };
+    const ep5 = { show_title: 'Dark Matter', season_number: 1, episode_number: 5 };
+
+    // S01E01-E02 with dots
+    assert.strictEqual(matchEpisodeToTorrent({ name: 'Dark.Matter.S01E01.E02.1080p.WEB-DL' }, ep1), true);
+    assert.strictEqual(matchEpisodeToTorrent({ name: 'Dark.Matter.S01E01.E02.1080p.WEB-DL' }, ep2), true);
+    assert.strictEqual(matchEpisodeToTorrent({ name: 'Dark.Matter.S01E01.E02.1080p.WEB-DL' }, ep5), false);
+
+    // Multi-episode with range
+    assert.strictEqual(matchEpisodeToTorrent({ name: 'Dark.Matter.S01E01-E04.1080p' }, ep2), true);
+    assert.strictEqual(matchEpisodeToTorrent({ name: 'Dark.Matter.S01E01-E04.1080p' }, ep5), false);
+
+    // Scene format 1x01-02
+    assert.strictEqual(matchEpisodeToTorrent({ name: 'Dark.Matter.1x01-02.720p' }, ep1), true);
+    assert.strictEqual(matchEpisodeToTorrent({ name: 'Dark.Matter.1x01-02.720p' }, ep2), true);
+  });
 });

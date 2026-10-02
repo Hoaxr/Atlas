@@ -224,12 +224,22 @@ const runSearchCycle = async () => {
           
           const isFileForEpisode = (filename) => {
             if (directRegex.test(filename) || sceneRegex.test(filename)) return true;
-            const multiMatch = filename.match(/\bS(\d{1,2})[._\s-]*E(\d{1,3})(?:[-_E\s]+(?:S\d{1,2})?E?(\d{1,3}))+\b/i);
+            const multiMatch = filename.match(/\bS(\d{1,2})[._\s-]*E(\d{1,3})(?:[-_.\s]*(?:S\d{1,2})?(?:E|EP)?(\d{1,3}))+\b/i);
             if (multiMatch) {
               const sNum = parseInt(multiMatch[1], 10);
               const eStart = parseInt(multiMatch[2], 10);
-              const extra = [...multiMatch[0].matchAll(/(\d{1,3})/g)].map(m => parseInt(m[1], 10));
-              const eEnd = extra[extra.length - 1];
+              const rest = multiMatch[0].replace(/^S\d{1,2}[._\s-]*(?:E|EP)\d{1,3}/i, '');
+              const extraParts = [...rest.matchAll(/(?:[-_.\s]*(?:S\d{1,2})?(?:E|EP)|[-_]+)(\d{1,3})/gi)].map(m => parseInt(m[1], 10));
+              const eEnd = extraParts.length > 0 ? extraParts[extraParts.length - 1] : eStart;
+              if (sNum === ep.season_number && ep.episode_number >= eStart && ep.episode_number <= eEnd) {
+                return true;
+              }
+            }
+            const sceneMulti = filename.match(/\b(\d{1,2})x(\d{1,3})[-_]+(\d{1,3})\b/i);
+            if (sceneMulti) {
+              const sNum = parseInt(sceneMulti[1], 10);
+              const eStart = parseInt(sceneMulti[2], 10);
+              const eEnd = parseInt(sceneMulti[3], 10);
               if (sNum === ep.season_number && ep.episode_number >= eStart && ep.episode_number <= eEnd) {
                 return true;
               }
