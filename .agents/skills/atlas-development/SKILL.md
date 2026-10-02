@@ -121,3 +121,17 @@ node --test test/tracker.test.js
 - [ ] `npm test` runs with 0 failures.
 - [ ] No unhandled Promise rejections.
 - [ ] SQLite queries handle NULL values gracefully (e.g. `COALESCE`, `NULLIF`).
+
+---
+
+## 7. Specialized Reference Guides
+
+For in-depth procedures and subsystem specifics, consult the following topic guides:
+
+- [Media Pipeline & Post-Processing](./references/pipeline.md): Hardlink protocols, title matching algorithms, season pack extractions, and subtitle ingestion.
+- [Database Guidelines & Schemas](./references/database.md): Table definitions, migration patterns, and safe transaction rules.
+- [Frontend Architecture & UI](./references/frontend.md): React/Vite structure, SSE event streaming, routing, and secret masking.
+- [Subtitle Engine](./references/subtitles.md): Subtitle providers, format normalization, and audio-based timing verification.
+- [Music System](./references/music.md): Audio file tagging, MusicBrainz integrations, and album/artist status recalculations.
+- [Scheduler & Background Tasks](./references/scheduler_and_tasks.md): Cron registry, task execution, priority scoring, and retry backoff.
+
