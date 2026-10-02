@@ -89,4 +89,30 @@ test('Executable Payload Blocking & Quarantine Security', async (t) => {
     assert.strictEqual(typeof downloadClientService.quarantineMaliciousTorrent, 'function');
     assert.strictEqual(typeof downloadClientService.inspectTorrentsForMalware, 'function');
   });
+
+  await t.test('resetDownloadsNotInClient correctly resets unmonitored items and recalculates music artist status', async () => {
+    const db = require('../server/config/database');
+    const { resetDownloadsNotInClient } = require('../server/services/mediaManagementService');
+
+    // Create temporary test items
+    db.prepare("INSERT INTO movies (title, year, tmdb_id, status, monitored) VALUES ('Test Unmonitored Movie', 2026, 9999901, 'downloading', 0)").run();
+    db.prepare("INSERT INTO music_artists (name, status, monitored) VALUES ('Test Reset Artist', 'downloading', 1)").run();
+    const artist = db.prepare("SELECT id FROM music_artists WHERE name = 'Test Reset Artist'").get();
+    db.prepare("INSERT INTO music_albums (artist_id, title, status, monitored) VALUES (?, 'Test Album', 'downloading', 1)").run(artist.id);
+
+    try {
+      // Empty torrent list -> downloads no longer in client
+      await resetDownloadsNotInClient([]);
+
+      const updatedMovie = db.prepare("SELECT status FROM movies WHERE tmdb_id = 9999901").get();
+      assert.strictEqual(updatedMovie.status, 'unmonitored');
+
+      const updatedArtist = db.prepare("SELECT status FROM music_artists WHERE id = ?").get(artist.id);
+      assert.strictEqual(updatedArtist.status, 'monitored');
+    } finally {
+      db.prepare("DELETE FROM movies WHERE tmdb_id = 9999901").run();
+      db.prepare("DELETE FROM music_albums WHERE artist_id = ?").run(artist.id);
+      db.prepare("DELETE FROM music_artists WHERE id = ?").run(artist.id);
+    }
+  });
 });

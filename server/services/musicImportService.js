@@ -561,8 +561,18 @@ const importMusicDownload = async (downloadPath, downloadName) => {
         album.id
       );
 
-      // Update artist folder path
+      // Update artist folder path and recalculate artist status
       db.prepare('UPDATE music_artists SET folder_path = ? WHERE id = ?').run(artistFolder, artist.id);
+      try {
+        const activeAlbums = db.prepare("SELECT COUNT(*) as count FROM music_albums WHERE artist_id = ? AND status = 'downloading'").get(artist.id).count;
+        if (activeAlbums === 0) {
+          const missingMonitored = db.prepare("SELECT COUNT(*) as count FROM music_albums WHERE artist_id = ? AND monitored = 1 AND (folder_path IS NULL OR folder_path = '')").get(artist.id).count;
+          const newArtistStatus = missingMonitored > 0 ? (artist.monitored === 1 ? 'monitored' : 'unmonitored') : 'downloaded';
+          db.prepare("UPDATE music_artists SET status = ? WHERE id = ?").run(newArtistStatus, artist.id);
+        }
+      } catch (stErr) {
+        console.warn(`[MusicImport] Could not update artist status for ${artist.name}:`, stErr.message);
+      }
 
       eventBus.emit({
         type: 'MUSIC_IMPORT_COMPLETE',

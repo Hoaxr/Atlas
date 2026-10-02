@@ -398,6 +398,31 @@ const matchSeasonPackToTorrent = (torrent, showTitle, seasonNumber) => {
 // 'monitored'. Used after a torrent is removed and by the periodic
 // post-processing cycle. Also recalculates show status when a show has no more
 // active downloads.
+const getMappedDownloadPath = (torrent) => {
+  let contentPath = torrent.content_path || torrent.contentPath || (torrent.save_path ? path.join(torrent.save_path, torrent.name) : null);
+  if (!contentPath) return null;
+
+  const pathMapping = db.prepare("SELECT value FROM settings WHERE key = 'downloadPathMapping'").get();
+  const applyMapping = (p) => {
+    if (!pathMapping?.value) return p;
+    try {
+      const [from, to] = JSON.parse(pathMapping.value);
+      return p.startsWith(from) ? p.replace(from, to) : p;
+    } catch { return p; }
+  };
+
+  contentPath = applyMapping(contentPath);
+
+  if (!fs.existsSync(contentPath) && torrent.save_path) {
+    const altPath = applyMapping(path.join(torrent.save_path, torrent.name));
+    if (fs.existsSync(altPath)) contentPath = altPath;
+  }
+
+  return contentPath;
+};
+
+// Reset any 'downloading' movies/episodes that are no longer present in the
+// active downloads.
 const resetDownloadsNotInClient = async (torrentList) => {
   let list = torrentList;
   if (!list) {
@@ -428,8 +453,9 @@ const resetDownloadsNotInClient = async (torrentList) => {
         console.log(`[MediaManagement] Movie ${movie.title} removed from client but its file exists. Restoring to downloaded.`);
         db.prepare("UPDATE movies SET status = 'downloaded' WHERE id = ?").run(movie.id);
       } else {
-        console.log(`[MediaManagement] Movie ${movie.title} no longer in download client. Resetting to monitored.`);
-        db.prepare("UPDATE movies SET status = 'monitored', file_path = NULL, file_size = 0, scene_name = NULL WHERE id = ?").run(movie.id);
+        const resetStatus = movie.monitored === 1 ? 'monitored' : 'unmonitored';
+        console.log(`[MediaManagement] Movie ${movie.title} no longer in download client. Resetting to ${resetStatus}.`);
+        db.prepare("UPDATE movies SET status = ?, file_path = NULL, file_size = 0, scene_name = NULL WHERE id = ?").run(resetStatus, movie.id);
       }
     }
   }
@@ -444,19 +470,20 @@ const resetDownloadsNotInClient = async (torrentList) => {
         console.log(`[MediaManagement] Episode ${ep.show_title} S${String(ep.season_number).padStart(2,'0')}E${String(ep.episode_number).padStart(2,'0')} removed from client but its file exists. Restoring to downloaded.`);
         db.prepare("UPDATE episodes SET status = 'downloaded' WHERE id = ?").run(ep.id);
       } else {
-        console.log(`[MediaManagement] Episode ${ep.show_title} S${String(ep.season_number).padStart(2,'0')}E${String(ep.episode_number).padStart(2,'0')} no longer in download client. Resetting to monitored.`);
-        db.prepare("UPDATE episodes SET status = 'monitored', file_path = NULL, file_size = NULL, scene_name = NULL WHERE id = ?").run(ep.id);
+        const resetStatus = ep.monitored === 1 ? 'monitored' : 'unmonitored';
+        console.log(`[MediaManagement] Episode ${ep.show_title} S${String(ep.season_number).padStart(2,'0')}E${String(ep.episode_number).padStart(2,'0')} no longer in download client. Resetting to ${resetStatus}.`);
+        db.prepare("UPDATE episodes SET status = ?, file_path = NULL, file_size = NULL, scene_name = NULL WHERE id = ?").run(resetStatus, ep.id);
       }
     }
   }
 
   // Recalculate status for shows that were marked as downloading
-  const downloadingShows = db.prepare("SELECT id FROM shows WHERE status = 'downloading'").all();
+  const downloadingShows = db.prepare("SELECT id, monitored FROM shows WHERE status = 'downloading'").all();
   for (const show of downloadingShows) {
     const activeEps = db.prepare("SELECT COUNT(*) as count FROM episodes WHERE show_id = ? AND status = 'downloading'").get(show.id).count;
     if (activeEps === 0) {
       const missingMonitored = db.prepare("SELECT COUNT(*) as count FROM episodes WHERE show_id = ? AND monitored = 1 AND (file_path IS NULL OR file_path = '')").get(show.id).count;
-      const newStatus = missingMonitored > 0 ? 'monitored' : 'downloaded';
+      const newStatus = missingMonitored > 0 ? (show.monitored === 1 ? 'monitored' : 'unmonitored') : 'downloaded';
       db.prepare("UPDATE shows SET status = ? WHERE id = ?").run(newStatus, show.id);
       console.log(`[MediaManagement] Show ID ${show.id} all downloads finished. Status updated to ${newStatus}.`);
     }
@@ -483,29 +510,18 @@ const resetDownloadsNotInClient = async (torrentList) => {
       }
     }
   }
-};
 
-const getMappedDownloadPath = (torrent) => {
-  let contentPath = torrent.content_path || torrent.contentPath || (torrent.save_path ? path.join(torrent.save_path, torrent.name) : null);
-  if (!contentPath) return null;
-
-  const pathMapping = db.prepare("SELECT value FROM settings WHERE key = 'downloadPathMapping'").get();
-  const applyMapping = (p) => {
-    if (!pathMapping?.value) return p;
-    try {
-      const [from, to] = JSON.parse(pathMapping.value);
-      return p.startsWith(from) ? p.replace(from, to) : p;
-    } catch { return p; }
-  };
-
-  contentPath = applyMapping(contentPath);
-
-  if (!fs.existsSync(contentPath) && torrent.save_path) {
-    const altPath = applyMapping(path.join(torrent.save_path, torrent.name));
-    if (fs.existsSync(altPath)) contentPath = altPath;
+  // Recalculate status for music artists that were marked as downloading
+  const downloadingArtists = db.prepare("SELECT id, monitored FROM music_artists WHERE status = 'downloading'").all();
+  for (const artist of downloadingArtists) {
+    const activeAlbums = db.prepare("SELECT COUNT(*) as count FROM music_albums WHERE artist_id = ? AND status = 'downloading'").get(artist.id).count;
+    if (activeAlbums === 0) {
+      const missingMonitored = db.prepare("SELECT COUNT(*) as count FROM music_albums WHERE artist_id = ? AND monitored = 1 AND (folder_path IS NULL OR folder_path = '')").get(artist.id).count;
+      const newStatus = missingMonitored > 0 ? (artist.monitored === 1 ? 'monitored' : 'unmonitored') : 'downloaded';
+      db.prepare("UPDATE music_artists SET status = ? WHERE id = ?").run(newStatus, artist.id);
+      console.log(`[MediaManagement] Music Artist ID ${artist.id} all downloads finished. Status updated to ${newStatus}.`);
+    }
   }
-
-  return contentPath;
 };
 
 const runMediaManagement = async () => {
@@ -681,24 +697,10 @@ const importMovie = async (torrent, movie) => {
       return;
     }
 
-    let contentPath = torrent.content_path || path.join(torrent.save_path, torrent.name);
-    
-    const pathMapping = db.prepare("SELECT value FROM settings WHERE key = 'downloadPathMapping'").get();
-    const applyMapping = (p) => {
-      if (!pathMapping?.value) return p;
-      try {
-        const [from, to] = JSON.parse(pathMapping.value);
-        return p.startsWith(from) ? p.replace(from, to) : p;
-      } catch { return p; }
-    };
-    contentPath = applyMapping(contentPath);
-
-    if (!fs.existsSync(contentPath) && torrent.save_path) {
-      const altPath = applyMapping(path.join(torrent.save_path, torrent.name));
-      if (fs.existsSync(altPath)) {
-        console.log(`[MediaManagement] content_path ${contentPath} not found, using ${altPath} instead`);
-        contentPath = altPath;
-      }
+    let contentPath = getMappedDownloadPath(torrent);
+    if (!contentPath || !fs.existsSync(contentPath)) {
+      console.warn(`[MediaManagement] Download content path for movie ${movie.title} not found on disk: ${contentPath}`);
+      return;
     }
     
     const videoFile = await findLargestVideoFile(contentPath);
@@ -968,26 +970,10 @@ const importEpisode = async (torrent, episode) => {
       return;
     }
 
-    let contentPath = torrent.content_path || path.join(torrent.save_path, torrent.name);
-    
-    // Apply download path mapping from settings
-    const pathMapping = db.prepare("SELECT value FROM settings WHERE key = 'downloadPathMapping'").get();
-    const applyMapping = (p) => {
-      if (!pathMapping?.value) return p;
-      try {
-        const [from, to] = JSON.parse(pathMapping.value);
-        return p.startsWith(from) ? p.replace(from, to) : p;
-      } catch { return p; }
-    };
-    contentPath = applyMapping(contentPath);
-
-    // Fallback: if content_path doesn't exist, try save_path + name with mapping
-    if (!fs.existsSync(contentPath) && torrent.save_path) {
-      const altPath = applyMapping(path.join(torrent.save_path, torrent.name));
-      if (fs.existsSync(altPath)) {
-        console.log(`[MediaManagement] content_path ${contentPath} not found, using ${altPath} instead`);
-        contentPath = altPath;
-      }
+    let contentPath = getMappedDownloadPath(torrent);
+    if (!contentPath || !fs.existsSync(contentPath)) {
+      console.warn(`[MediaManagement] Download content path for episode ${episode.show_title} not found on disk: ${contentPath}`);
+      return;
     }
     
     let videoFile = null;
@@ -1356,17 +1342,10 @@ const importSeasonPack = async (torrent, { showId, showTitle, seasonNumber }) =>
   console.log(`[MediaManagement] Importing season pack: ${showTitle} S${seasonNumber.toString().padStart(2, '0')}`);
 
   try {
-    let contentPath = torrent.content_path || path.join(torrent.save_path, torrent.name);
-
-    // Apply download path mapping
-    const pathMapping = db.prepare("SELECT value FROM settings WHERE key = 'downloadPathMapping'").get();
-    if (pathMapping?.value) {
-      try {
-        const [from, to] = JSON.parse(pathMapping.value);
-        if (contentPath.startsWith(from)) {
-          contentPath = contentPath.replace(from, to);
-        }
-      } catch { /* ignore */ }
+    let contentPath = getMappedDownloadPath(torrent);
+    if (!contentPath || !fs.existsSync(contentPath)) {
+      console.warn(`[MediaManagement] Download content path for season pack ${showTitle} not found on disk: ${contentPath}`);
+      return;
     }
 
     const videoFiles = await findAllVideoFiles(contentPath);
