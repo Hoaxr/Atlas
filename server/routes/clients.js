@@ -4,16 +4,16 @@ const downloadClientService = require('../services/downloadClientService');
 const { resetDownloadsNotInClient } = require('../services/mediaManagementService');
 const eventBus = require('../services/eventBus');
 
-router.get('/stats', async (req, res) => {
+router.get('/stats', async (req, res, next) => {
   try {
     const stats = await downloadClientService.getTransferInfo();
     res.json({ status: 'success', data: stats });
   } catch (err) {
-    res.status(500).json({ status: 'error', message: err.message });
+    next(err);
   }
 });
 
-router.get('/torrents', async (req, res) => {
+router.get('/torrents', async (req, res, next) => {
   try {
     let torrents = await downloadClientService.getTorrents();
     
@@ -26,11 +26,11 @@ router.get('/torrents', async (req, res) => {
 
     res.json({ status: 'success', data: torrents });
   } catch (err) {
-    res.status(500).json({ status: 'error', message: err.message });
+    next(err);
   }
 });
 
-router.post('/torrents', async (req, res) => {
+router.post('/torrents', async (req, res, next) => {
   try {
     const { url, type = 'movie' } = req.body;
     if (!url) {
@@ -40,11 +40,11 @@ router.post('/torrents', async (req, res) => {
     eventBus.emit('TORRENTS_MUTATED');
     res.json({ status: 'success', message: 'Torrent added successfully' });
   } catch (err) {
-    res.status(500).json({ status: 'error', message: err.message });
+    next(err);
   }
 });
 
-router.post('/torrents/bulk-pause', async (req, res) => {
+router.post('/torrents/bulk-pause', async (req, res, next) => {
   try {
     const { hashes } = req.body;
     if (!Array.isArray(hashes) || hashes.length === 0) {
@@ -54,11 +54,11 @@ router.post('/torrents/bulk-pause', async (req, res) => {
     eventBus.emit('TORRENTS_MUTATED');
     res.json({ status: 'success', message: `${hashes.length} download(s) paused` });
   } catch (err) {
-    res.status(500).json({ status: 'error', message: err.message });
+    next(err);
   }
 });
 
-router.post('/torrents/bulk-resume', async (req, res) => {
+router.post('/torrents/bulk-resume', async (req, res, next) => {
   try {
     const { hashes } = req.body;
     if (!Array.isArray(hashes) || hashes.length === 0) {
@@ -68,11 +68,11 @@ router.post('/torrents/bulk-resume', async (req, res) => {
     eventBus.emit('TORRENTS_MUTATED');
     res.json({ status: 'success', message: `${hashes.length} download(s) resumed` });
   } catch (err) {
-    res.status(500).json({ status: 'error', message: err.message });
+    next(err);
   }
 });
 
-router.post('/torrents/bulk-delete', async (req, res) => {
+router.post('/torrents/bulk-delete', async (req, res, next) => {
   try {
     const { hashes, deleteFiles = true } = req.body;
     if (!Array.isArray(hashes) || hashes.length === 0) {
@@ -89,31 +89,31 @@ router.post('/torrents/bulk-delete', async (req, res) => {
     eventBus.emit('TORRENTS_MUTATED');
     res.json({ status: 'success', message: `${hashes.length} download(s) deleted` });
   } catch (err) {
-    res.status(500).json({ status: 'error', message: err.message });
+    next(err);
   }
 });
 
-router.post('/torrents/:hash/pause', async (req, res) => {
+router.post('/torrents/:hash/pause', async (req, res, next) => {
   try {
     await downloadClientService.pauseTorrent(req.params.hash);
     eventBus.emit('TORRENTS_MUTATED');
     res.json({ status: 'success', message: 'Torrent paused' });
   } catch (err) {
-    res.status(500).json({ status: 'error', message: err.message });
+    next(err);
   }
 });
 
-router.post('/torrents/:hash/resume', async (req, res) => {
+router.post('/torrents/:hash/resume', async (req, res, next) => {
   try {
     await downloadClientService.resumeTorrent(req.params.hash);
     eventBus.emit('TORRENTS_MUTATED');
     res.json({ status: 'success', message: 'Torrent resumed' });
   } catch (err) {
-    res.status(500).json({ status: 'error', message: err.message });
+    next(err);
   }
 });
 
-router.delete('/torrents/:hash', async (req, res) => {
+router.delete('/torrents/:hash', async (req, res, next) => {
   try {
     const deleteFiles = req.query.deleteFiles === 'true';
     await downloadClientService.deleteTorrent(req.params.hash, deleteFiles);
@@ -129,7 +129,7 @@ router.delete('/torrents/:hash', async (req, res) => {
     eventBus.emit('TORRENTS_MUTATED');
     res.json({ status: 'success', message: 'Torrent deleted' });
   } catch (err) {
-    res.status(500).json({ status: 'error', message: err.message });
+    next(err);
   }
 });
 

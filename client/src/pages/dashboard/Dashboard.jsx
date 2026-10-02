@@ -134,6 +134,12 @@ export default function Dashboard() {
 
   const REORDER_FLASH_MS = 150;
 
+  useEffect(() => {
+    return () => {
+      if (reorderTimerRef.current) clearTimeout(reorderTimerRef.current);
+    };
+  }, []);
+
   const triggerReorderFlash = () => {
     setIsReordering(true);
     if (reorderTimerRef.current) clearTimeout(reorderTimerRef.current);

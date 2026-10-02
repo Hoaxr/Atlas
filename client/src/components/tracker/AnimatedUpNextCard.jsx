@@ -4,15 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import toast from 'react-hot-toast';
 import { CheckCircle2, Check, Tv, Film, X } from 'lucide-react';
 import { tmdbImgUrl } from '../../lib/posterUrl';
-
-const formatRuntime = (minutes) => {
-  if (!minutes) return null;
-  const h = Math.floor(minutes / 60);
-  const m = minutes % 60;
-  if (h > 0 && m > 0) return `${h}h ${m}m`;
-  if (h > 0) return `${h}h`;
-  return `${m}m`;
-};
+import { formatRuntime } from '../../lib/format';
 
 // 8-12 burst particles for celebration
 const PARTICLE_ANGLES = Array.from({ length: 10 }, (_, i) => (i * 36 * Math.PI) / 180);
@@ -122,8 +114,17 @@ export function AnimatedUpNextCard({ item, type, onMarkWatched, onDismiss }) {
 
       {/* THUMBNAIL CONTAINER */}
       <div 
+        role="button"
+        tabIndex={0}
+        aria-label={`View ${isEpisode ? item.show_title : item.title}`}
         onClick={handleTitleClick}
-        className="relative h-28 sm:h-36 md:h-40 bg-slate-900 overflow-hidden z-10 cursor-pointer"
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            handleTitleClick();
+          }
+        }}
+        className="relative h-28 sm:h-36 md:h-40 bg-slate-900 overflow-hidden z-10 cursor-pointer focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
       >
         {(item.backdrop_path || item.poster_path) ? (
           <img

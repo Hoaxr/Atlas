@@ -66,8 +66,17 @@ export default function AlbumCard({
 
   return (
     <div
+      role="button"
+      tabIndex={0}
+      aria-label={`View album ${album.title || ''}`}
       onClick={handleCardClick}
-      className={`group relative flex flex-col p-3 rounded-2xl transition-all duration-200 cursor-pointer select-none ${
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          handleCardClick(e);
+        }
+      }}
+      className={`group relative flex flex-col p-3 rounded-2xl transition-all duration-200 cursor-pointer select-none focus:outline-none focus:ring-2 focus:ring-cyan-500/50 ${
         isSelected
           ? 'bg-slate-800/95 border border-cyan-400/80 shadow-[0_4px_24px_-4px_rgba(6,182,212,0.3)]'
           : 'bg-slate-900/70 hover:bg-slate-800/80 border border-slate-800/80 hover:border-slate-700/80 shadow-md hover:shadow-xl'

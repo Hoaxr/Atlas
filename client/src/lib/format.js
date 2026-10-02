@@ -231,3 +231,27 @@ export function parseRelease(title, mediaType = 'movie') {
   };
 }
 
+/**
+ * Format video runtime in minutes to human-readable string (e.g. 84 -> "1h 24m", 45 -> "45m").
+ */
+export function formatRuntime(minutes) {
+  if (!minutes || isNaN(minutes)) return '';
+  const num = Number(minutes);
+  if (num <= 0) return '';
+  const h = Math.floor(num / 60);
+  const m = Math.round(num % 60);
+  if (h === 0) return `${m}m`;
+  return m > 0 ? `${h}h ${m}m` : `${h}h`;
+}
+
+/**
+ * Format audio duration in seconds to "m:ss" (e.g. 215 -> "3:35").
+ */
+export function formatAudioDuration(secs) {
+  if (!secs || isNaN(secs) || !isFinite(secs)) return '--:--';
+  const total = Math.floor(Number(secs));
+  const m = Math.floor(total / 60);
+  const s = total % 60;
+  return `${m}:${s.toString().padStart(2, '0')}`;
+}
+

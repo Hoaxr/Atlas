@@ -8,9 +8,40 @@ const JWT_SECRET = process.env.JWT_SECRET;
 
 // Cache frequently-read settings to avoid DB queries on every request.
 // Invalidated when settings are updated (see settings route exports).
+// Cache frequently-read settings to avoid DB queries on every request.
+// Invalidated when settings are updated (see settings route exports).
 let _cachedAdmin = null;
 let _cacheExpiry = 0;
 const CACHE_TTL = 30000; // 30 seconds
+
+// Cache active user sessions for 5 seconds to prevent synchronous SQLite queries
+// from blocking the event loop on rapid polls (e.g. 5s torrent polls, 15s layout polls).
+const _userCache = new Map();
+const USER_CACHE_TTL = 5000;
+
+const getUserSession = (userId) => {
+  const now = Date.now();
+  const entry = _userCache.get(userId);
+  if (entry && now < entry.expiry) return entry.user;
+  const dbUser = db.prepare('SELECT id, role, jwt_version FROM users WHERE id = ?').get(userId);
+  _userCache.set(userId, { user: dbUser, expiry: now + USER_CACHE_TTL });
+  return dbUser;
+};
+
+const invalidateUserCache = (userId) => {
+  if (userId) {
+    _userCache.delete(userId);
+  } else {
+    _userCache.clear();
+  }
+};
+
+const verifyUserSession = (userId, jwtVersion) => {
+  const dbUser = getUserSession(userId);
+  if (!dbUser) return null;
+  if (dbUser.jwt_version !== jwtVersion) return null;
+  return dbUser;
+};
 
 const getAdminUser = () => {
   const now = Date.now();
@@ -21,9 +52,10 @@ const getAdminUser = () => {
 };
 
 // Allow external invalidation when auth-relevant settings change
-const invalidateAuthCache = () => {
+const invalidateAuthCache = (userId) => {
   _cachedAdmin = null;
   _cacheExpiry = 0;
+  invalidateUserCache(userId);
   if (typeof getCachedSetting.clearCache === 'function') {
     getCachedSetting.clearCache();
   }
@@ -71,9 +103,9 @@ const authMiddleware = (req, res, next) => {
       const decoded = jwt.verify(token, JWT_SECRET);
       req.user = decoded;
       
-      // Ensure we have the most up-to-date role and check jwt_version from the database
+      // Ensure we have the most up-to-date role and check jwt_version from the cached session / database
       if (req.user && req.user.id) {
-        const dbUser = db.prepare('SELECT role, jwt_version FROM users WHERE id = ?').get(req.user.id);
+        const dbUser = getUserSession(req.user.id);
         if (!dbUser) {
           return res.status(401).json({ status: 'error', message: 'User not found or deleted' });
         }
@@ -103,3 +135,5 @@ const authMiddleware = (req, res, next) => {
 
 module.exports = authMiddleware;
 module.exports.invalidateAuthCache = invalidateAuthCache;
+module.exports.invalidateUserCache = invalidateUserCache;
+module.exports.verifyUserSession = verifyUserSession;

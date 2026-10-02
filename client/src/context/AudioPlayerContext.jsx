@@ -1,9 +1,10 @@
-import { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
+import { createContext, useContext, useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { trackStreamUrl, albumCoverUrl } from '../lib/posterUrl';
 import api from '../lib/api';
 import toast from 'react-hot-toast';
 
 const AudioPlayerContext = createContext(null);
+const AudioProgressContext = createContext({ progress: 0, duration: 0 });
 
 export function AudioPlayerProvider({ children }) {
   const audioRef = useRef(null);
@@ -321,29 +322,27 @@ export function AudioPlayerProvider({ children }) {
   }, []);
 
   const removeFromQueue = useCallback((idx) => {
-    setQueue((prev) => {
-      const next = prev.filter((_, i) => i !== idx);
-      if (idx === queueIndex) {
-        if (next.length === 0) {
-          clearQueue();
-        } else {
-          const nextIdx = Math.min(idx, next.length - 1);
-          playTrackAtIndex(nextIdx, next);
-        }
-      } else if (idx < queueIndex) {
+    if (idx === queueIndex) {
+      const nextQueue = queue.filter((_, i) => i !== idx);
+      if (nextQueue.length === 0) {
+        clearQueue();
+      } else {
+        const nextIdx = Math.min(idx, nextQueue.length - 1);
+        playTrackAtIndex(nextIdx, nextQueue);
+      }
+    } else {
+      if (idx < queueIndex) {
         setQueueIndex((prevIdx) => prevIdx - 1);
       }
-      return next;
-    });
-  }, [queueIndex, clearQueue, playTrackAtIndex]);
+      setQueue((prev) => prev.filter((_, i) => i !== idx));
+    }
+  }, [queue, queueIndex, clearQueue, playTrackAtIndex]);
 
-  const value = {
+  const playerValue = useMemo(() => ({
     currentTrack,
     queue,
     queueIndex,
     isPlaying,
-    progress,
-    duration,
     volume,
     isMuted,
     repeatMode,
@@ -364,11 +363,43 @@ export function AudioPlayerProvider({ children }) {
     toggleShuffle,
     clearQueue,
     removeFromQueue
-  };
+  }), [
+    currentTrack,
+    queue,
+    queueIndex,
+    isPlaying,
+    volume,
+    isMuted,
+    repeatMode,
+    isShuffle,
+    queueVisible,
+    setQueueVisible,
+    playTrack,
+    playAlbum,
+    playArtist,
+    playTrackAtIndex,
+    togglePlay,
+    nextTrack,
+    prevTrack,
+    seekTo,
+    setVolume,
+    toggleMute,
+    toggleRepeat,
+    toggleShuffle,
+    clearQueue,
+    removeFromQueue
+  ]);
+
+  const progressValue = useMemo(() => ({
+    progress,
+    duration
+  }), [progress, duration]);
 
   return (
-    <AudioPlayerContext.Provider value={value}>
-      {children}
+    <AudioPlayerContext.Provider value={playerValue}>
+      <AudioProgressContext.Provider value={progressValue}>
+        {children}
+      </AudioProgressContext.Provider>
     </AudioPlayerContext.Provider>
   );
 }
@@ -380,3 +411,8 @@ export function useAudioPlayer() {
   }
   return context;
 }
+
+export function useAudioProgress() {
+  return useContext(AudioProgressContext);
+}
+

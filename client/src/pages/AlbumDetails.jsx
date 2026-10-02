@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../lib/api';
-import { formatSize } from '../lib/format';
+import { formatSize, formatAudioDuration as formatDuration } from '../lib/format';
 import { albumCoverUrl } from '../lib/posterUrl';
 import { useAudioPlayer } from '../context/AudioPlayerContext';
 import ModalShell from '../components/shared/ModalShell';
@@ -100,13 +100,6 @@ export default function AlbumDetails() {
     } finally {
       setDeleting(false);
     }
-  };
-
-  const formatDuration = (secs) => {
-    if (!secs) return '--:--';
-    const m = Math.floor(secs / 60);
-    const s = Math.floor(secs % 60);
-    return `${m}:${s.toString().padStart(2, '0')}`;
   };
 
   // Group tracks by disc number if multi-disc

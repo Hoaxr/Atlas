@@ -46,6 +46,7 @@ const presenceTracker = require('./services/presenceTracker');
 const { isAuthEnabled } = require('./utils/settings');
 const fs = require('fs');
 const authMiddleware = require('./middleware/authMiddleware');
+const { verifyUserSession } = authMiddleware;
 const requireAdmin = require('./middleware/requireAdmin');
 const { stopScan } = require('./services/scanner');
 
@@ -225,18 +226,21 @@ if (process.env.NODE_ENV !== 'test') {
   const backfillTimer = setTimeout(async () => {
     try {
       const tmdbService = require('./services/tmdbService');
-      const missingShows = db.prepare("SELECT id, tmdb_id FROM shows WHERE network IS NULL OR origin_country IS NULL").all();
-      for (const s of missingShows) {
-        if (!s.tmdb_id) continue;
+      const { runWithConcurrency } = require('./utils/concurrency');
+      const missingShows = db.prepare("SELECT id, tmdb_id FROM shows WHERE (network IS NULL OR origin_country IS NULL) AND tmdb_id IS NOT NULL").all();
+      if (!missingShows || missingShows.length === 0) return;
+
+      const updateStmt = db.prepare("UPDATE shows SET network = ?, origin_country = ? WHERE id = ?");
+      await runWithConcurrency(missingShows, 3, async (s) => {
         try {
           const details = await tmdbService.getShowById(s.tmdb_id);
           if (details) {
             const network = details.networks?.map(n => n.name).join(', ') || '';
             const originCountry = (details.origin_country || []).join(', ');
-            db.prepare("UPDATE shows SET network = ?, origin_country = ? WHERE id = ?").run(network, originCountry, s.id);
+            updateStmt.run(network, originCountry, s.id);
           }
-        } catch { /* ignore */ }
-      }
+        } catch { /* ignore individual fetch errors */ }
+      });
     } catch { /* ignore */ }
   }, 4000);
   backfillTimer.unref?.();
@@ -503,6 +507,7 @@ const settingsAdminWrapper = (req, res, next) => {
 // Safe routes wrapper for library (only GET is safe for users, but administrative routes require admin)
 const libraryAdminWrapper = (req, res, next) => {
   if (req.path === '/filesystem/browse') return requireAdmin(req, res, next);
+  if (req.path === '/export' || req.path.startsWith('/export')) return requireAdmin(req, res, next);
   if (req.method === 'GET') return next();
   return requireAdmin(req, res, next);
 };
@@ -516,7 +521,7 @@ const watcherAdminWrapper = (req, res, next) => {
 
 app.use('/api/settings', settingsAdminWrapper, settingsRoutes);
 app.use('/api/tmdb', tmdbRoutes); // TMDB search/details can be used by any user
-app.use('/api/simkl', simklRoutes);
+app.use('/api/simkl', requireAdmin, simklRoutes);
 app.use('/api/library', libraryAdminWrapper, libraryRoutes);
 app.use('/api/tasks', requireAdmin, tasksRoutes);
 app.use('/api/clients', requireAdmin, clientsRoutes);
@@ -554,7 +559,12 @@ app.get('/api/images/:type/:tmdbId/poster', async (req, res) => {
   if (token) {
     try {
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
-      isAuthenticated = !!decoded?.id;
+      if (decoded?.id) {
+        const user = verifyUserSession(decoded.id, decoded.jwt_version);
+        if (user) {
+          isAuthenticated = true;
+        }
+      }
     } catch { /* invalid token — treat as anonymous */ }
   }
 
@@ -710,5 +720,6 @@ server.on('error', (err) => {
 server.listen(PORT, () => {
   console.log(`[Backend] Server running on port ${PORT}`);
   cleanupWorker.start();
-  notificationService.sendNotification('Atlas', 'Atlas Media Manager has started successfully.', { title: '' });
+  notificationService.sendNotification('Atlas', 'Atlas Media Manager has started successfully.', { title: '' })
+    .catch((err) => console.error('[Backend] Startup notification failed:', err?.message || err));
 });

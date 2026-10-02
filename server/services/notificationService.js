@@ -84,6 +84,7 @@ class NotificationService {
           if (fields.length > 0) embed.fields = fields;
         }
 
+        let discordSent = false;
         // Try to attach poster image by downloading it internally
         if (metadata.poster && title === 'Playback Started') {
           try {
@@ -108,7 +109,7 @@ class NotificationService {
                 headers: { 'Content-Type': `multipart/form-data; boundary=${boundary}` },
                 timeout: 10000
               });
-              return; // Sent with attachment, skip the plain JSON post below
+              discordSent = true; // Sent with attachment, skip plain JSON post below
             }
           } catch (posterErr) {
             console.error('[NotificationService] Poster attachment failed, sending without:', posterErr.message);
@@ -116,7 +117,9 @@ class NotificationService {
         }
 
         // Fallback: send without poster attachment
-        await axios.post(discordUrl, { embeds: [embed] }, { timeout: 10000 });
+        if (!discordSent) {
+          await axios.post(discordUrl, { embeds: [embed] }, { timeout: 10000 });
+        }
       } catch (err) {
         console.error('[NotificationService] Discord error:', err.message);
       }

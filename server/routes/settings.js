@@ -7,7 +7,7 @@ const fsp = require('fs/promises');
 const path = require('path');
 const axios = require('axios');
 const db = require('../config/database');
-const { getSetting, setSetting, invalidateSettingsCache } = require('../utils/settings');
+const { getSetting, setSetting, isAuthEnabled, invalidateSettingsCache } = require('../utils/settings');
 const { getVersionInfo } = require('../utils/version');
 const downloadClientService = require('../services/downloadClientService');
 const { invalidateAuthCache } = require('../middleware/authMiddleware');
@@ -116,7 +116,7 @@ router.get('/', (req, res, next) => {
         clients,
         profiles,
         libraryPaths,
-        authEnabled: getSetting('authEnabled') || 'false',
+        authEnabled: isAuthEnabled() ? 'true' : 'false',
         authUsername: isAdmin ? (getSetting('authUsername') || '') : '',
         timezone: getSetting('timezone') || '',
         plexUrl: isAdmin ? (getSetting('plexUrl') || '') : '',
@@ -329,7 +329,7 @@ router.post('/', requireAdmin, async (req, res, next) => {
       if (errors.length === 0) {
         setSetting('authPassword', body.authPassword);
         const existingUser = db.prepare("SELECT id FROM users WHERE role = 'admin' LIMIT 1").get();
-        const hashed = await bcrypt.hash(body.authPassword, 10);
+        const hashed = await bcrypt.hash(body.authPassword, 12);
         if (existingUser) {
           const username = body.authUsername !== undefined ? body.authUsername : getSetting('authUsername');
           db.prepare('UPDATE users SET password = ?, username = ? WHERE id = ?').run(hashed, username, existingUser.id);
@@ -1279,8 +1279,6 @@ const restoreHandler = async (req, res, next) => {
     }
   }
 };
-
-router.post('/restore', requireAdmin, restoreHandler);
 
 // ─── Feature 5: Task Schedule Editor ─────────────────────────────────────────
 

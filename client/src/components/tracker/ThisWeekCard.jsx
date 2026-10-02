@@ -2,15 +2,7 @@
 import { useNavigate } from 'react-router-dom';
 import { Tv, Film, Calendar } from 'lucide-react';
 import { tmdbImgUrl } from '../../lib/posterUrl';
-
-const formatRuntime = (minutes) => {
-  if (!minutes) return null;
-  const h = Math.floor(minutes / 60);
-  const m = minutes % 60;
-  if (h > 0 && m > 0) return `${h}h ${m}m`;
-  if (h > 0) return `${h}h`;
-  return `${m}m`;
-};
+import { formatRuntime } from '../../lib/format';
 
 const formatDate = (dateStr) => {
   if (!dateStr) return '';
@@ -51,8 +43,17 @@ export function ThisWeekCard({ item, type }) {
 
   return (
     <div
+      role="button"
+      tabIndex={0}
+      aria-label={`View ${title}`}
       onClick={handleClick}
-      className="w-48 sm:w-72 md:w-80 shrink-0 snap-start bg-slate-800/60 border border-slate-700/50 rounded-xl sm:rounded-2xl overflow-hidden transition-all duration-300 flex flex-col group cursor-pointer hover:border-cyan-500/40 shadow-xl"
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          handleClick();
+        }
+      }}
+      className="w-48 sm:w-72 md:w-80 shrink-0 snap-start bg-slate-800/60 border border-slate-700/50 rounded-xl sm:rounded-2xl overflow-hidden transition-all duration-300 flex flex-col group cursor-pointer hover:border-cyan-500/40 shadow-xl focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
     >
       {/* Poster */}
       <div className="relative h-28 sm:h-36 md:h-40 bg-slate-900 overflow-hidden rounded-t-xl sm:rounded-t-2xl">

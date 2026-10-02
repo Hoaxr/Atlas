@@ -626,7 +626,6 @@ router.post('/:id/watched', async (req, res, next) => {
       } else {
         db.prepare('DELETE FROM watch_history WHERE tmdb_id = ? AND type = ?').run(movie.tmdb_id, 'movie');
       }
-      db.exec('PRAGMA wal_checkpoint(TRUNCATE);');
     }
 
     if (movie?.tmdb_id) {

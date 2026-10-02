@@ -4,7 +4,7 @@ import {
   Play, Pause, SkipBack, SkipForward, Volume2, VolumeX, Shuffle,
   Repeat, Repeat1, ListMusic, Menu, Monitor, X, Disc, Trash2
 } from 'lucide-react';
-import { useAudioPlayer } from '../../context/AudioPlayerContext';
+import { useAudioPlayer, useAudioProgress } from '../../context/AudioPlayerContext';
 import { albumCoverUrl } from '../../lib/posterUrl';
 
 export default function MusicPlayerBar() {
@@ -14,8 +14,6 @@ export default function MusicPlayerBar() {
     queue,
     queueIndex,
     isPlaying,
-    progress,
-    duration,
     volume,
     isMuted,
     repeatMode,
@@ -34,6 +32,7 @@ export default function MusicPlayerBar() {
     playTrackAtIndex,
     removeFromQueue
   } = useAudioPlayer();
+  const { progress, duration } = useAudioProgress();
 
   const [isScrubbing, setIsScrubbing] = useState(false);
   const [scrubProgress, setScrubProgress] = useState(0);
@@ -80,8 +79,17 @@ export default function MusicPlayerBar() {
               return (
                 <div
                   key={`${track.id}-${idx}`}
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`Play ${track.title}`}
                   onClick={() => playTrackAtIndex(idx)}
-                  className={`group px-2.5 py-2 rounded-xl flex items-center justify-between gap-3 text-sm cursor-pointer transition-colors ${
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      playTrackAtIndex(idx);
+                    }
+                  }}
+                  className={`group px-2.5 py-2 rounded-xl flex items-center justify-between gap-3 text-sm cursor-pointer transition-colors focus:outline-none focus:ring-1 focus:ring-cyan-400 ${
                     isCurrent
                       ? 'bg-cyan-500/15 text-cyan-300 font-semibold border border-cyan-500/30'
                       : 'hover:bg-white/5 text-slate-300'
@@ -133,10 +141,19 @@ export default function MusicPlayerBar() {
           {/* Left: Track info */}
           <div className="flex items-center gap-3 min-w-0 w-1/4 sm:w-1/3">
             <div
+              role="button"
+              tabIndex={0}
+              aria-label={`Go to album ${currentTrack.album_title || ''}`}
               onClick={() => {
                 if (currentTrack.album_id) navigate(`/music/albums/${currentTrack.album_id}`);
               }}
-              className="relative w-11 h-11 sm:w-12 sm:h-12 rounded-lg overflow-hidden bg-slate-900 shrink-0 border border-white/10 shadow-md cursor-pointer group"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  if (currentTrack.album_id) navigate(`/music/albums/${currentTrack.album_id}`);
+                }
+              }}
+              className="relative w-11 h-11 sm:w-12 sm:h-12 rounded-lg overflow-hidden bg-slate-900 shrink-0 border border-white/10 shadow-md cursor-pointer group focus:outline-none focus:ring-1 focus:ring-cyan-400"
             >
               {coverUrl ? (
                 <img
@@ -156,15 +173,16 @@ export default function MusicPlayerBar() {
 
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
-                <p
+                <button
+                  type="button"
                   onClick={() => {
                     if (currentTrack.artist_id) navigate(`/music/artists/${currentTrack.artist_id}`);
                   }}
-                  className="text-sm sm:text-base font-bold text-white hover:text-cyan-400 transition-colors truncate cursor-pointer leading-tight"
+                  className="text-sm sm:text-base font-bold text-white hover:text-cyan-400 transition-colors truncate cursor-pointer leading-tight text-left"
                   title={currentTrack.artist_name}
                 >
                   {currentTrack.artist_name || 'Unknown Artist'}
-                </p>
+                </button>
                 {formatLabel && (
                   <span className="shrink-0 px-2 py-0.5 rounded text-xs font-bold uppercase tracking-wider bg-amber-500/20 text-amber-300 border border-amber-500/30">
                     {formatLabel}
@@ -172,15 +190,16 @@ export default function MusicPlayerBar() {
                 )}
               </div>
 
-              <p
+              <button
+                type="button"
                 onClick={() => {
                   if (currentTrack.album_id) navigate(`/music/albums/${currentTrack.album_id}`);
                 }}
-                className="text-xs sm:text-sm text-slate-300 hover:text-white transition-colors truncate cursor-pointer mt-0.5"
+                className="text-xs sm:text-sm text-slate-300 hover:text-white transition-colors truncate cursor-pointer mt-0.5 text-left block"
                 title={currentTrack.title || currentTrack.album_title}
               >
                 {currentTrack.title || currentTrack.album_title || 'Unknown Track'}
-              </p>
+              </button>
             </div>
           </div>
 

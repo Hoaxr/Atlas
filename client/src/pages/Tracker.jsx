@@ -10,18 +10,10 @@ import {
   Calendar, CheckCircle2, TrendingUp, Zap, Sparkles
 } from 'lucide-react';
 import { tmdbImgUrl } from '../lib/posterUrl';
+import { formatRuntime } from '../lib/format';
 import StickyBar from '../components/shared/StickyBar';
 import LoadingState from '../components/shared/LoadingState';
 import { useStickyBar } from '../lib/useStickyBar';
-
-const formatRuntime = (minutes) => {
-  if (!minutes) return null;
-  const h = Math.floor(minutes / 60);
-  const m = minutes % 60;
-  if (h > 0 && m > 0) return `${h}h ${m}m`;
-  if (h > 0) return `${h}h`;
-  return `${m}m`;
-};
 
 const tmdbCardCache = new Map();
 

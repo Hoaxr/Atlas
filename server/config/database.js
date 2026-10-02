@@ -492,7 +492,7 @@ const MIGRATIONS = [
         if (authUsernameRow && authUsernameRow.value) {
           const bcrypt = require('bcrypt');
           const password = authPasswordRow ? authPasswordRow.value : '';
-          const hashedPassword = bcrypt.hashSync(password, 10);
+          const hashedPassword = bcrypt.hashSync(password, 12);
           db.prepare("INSERT INTO users (username, password, role) VALUES (?, ?, 'admin')").run(
             authUsernameRow.value,
             hashedPassword

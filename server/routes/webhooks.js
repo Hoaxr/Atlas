@@ -8,9 +8,9 @@ const requireAdmin = require('../middleware/requireAdmin');
 // Lazily provision a shared secret so download clients can trigger
 // post-processing without a JWT. Configure the client to call:
 //   POST /api/webhooks/download-client?token=<secret>
-const ensureWebhookSecret = () => {
+const ensureWebhookSecret = (createIfMissing = false) => {
   let secret = getSetting('webhookSecret');
-  if (!secret) {
+  if (!secret && createIfMissing) {
     secret = crypto.randomBytes(24).toString('hex');
     setSetting('webhookSecret', secret);
   }
@@ -18,7 +18,7 @@ const ensureWebhookSecret = () => {
 };
 
 router.get('/token', requireAdmin, (req, res) => {
-  res.json({ status: 'success', data: { token: ensureWebhookSecret() } });
+  res.json({ status: 'success', data: { token: ensureWebhookSecret(true) } });
 });
 
 /**
@@ -29,7 +29,10 @@ router.get('/token', requireAdmin, (req, res) => {
  */
 router.post('/download-client', async (req, res, next) => {
   try {
-    const secret = ensureWebhookSecret();
+    const secret = ensureWebhookSecret(false);
+    if (!secret) {
+      return res.status(401).json({ status: 'error', message: 'Webhook token not configured' });
+    }
     const provided = req.query.token
       || req.get('x-webhook-token')
       || String(req.headers.authorization || '').replace(/^Bearer\s+/i, '');

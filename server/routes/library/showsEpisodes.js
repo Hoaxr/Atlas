@@ -60,10 +60,8 @@ router.post('/shows/:id/watched', async (req, res, next) => {
             insertHistory.run(show.tmdb_id, 'episode', ep.season_number, ep.episode_number, watchedAt, ep.runtime || null, userId);
           }
         })();
-        db.exec('PRAGMA wal_checkpoint(TRUNCATE);');
       } else {
         db.prepare("DELETE FROM watch_history WHERE tmdb_id = ? AND (type = 'episode' OR type = 'show')").run(show.tmdb_id);
-        db.exec('PRAGMA wal_checkpoint(TRUNCATE);');
       }
       simklService.pushToSimklOnWatched(show.tmdb_id, 'show', isWatched).catch(e => console.error('[SimklSync] Direct push error:', e.message));
     }
@@ -1092,11 +1090,9 @@ router.post('/shows/:id/seasons/:season/watched', async (req, res, next) => {
             insertHistory.run(show.tmdb_id, 'episode', Number(req.params.season), ep.episode_number, watchedAt, ep.runtime || null, userId);
           }
         })();
-        db.exec('PRAGMA wal_checkpoint(TRUNCATE);');
       } else {
         const delResult = db.prepare('DELETE FROM watch_history WHERE tmdb_id = ? AND type = ? AND season_number = ?').run(show.tmdb_id, 'episode', req.params.season);
         console.log('[Episodes] season watch_history DELETE: removed %d row(s) for tmdb=%s S%s', delResult.changes, show.tmdb_id, req.params.season);
-        db.exec('PRAGMA wal_checkpoint(TRUNCATE);');
       }
       for (const ep of episodes) {
         simklService.pushToSimklOnWatched(show.tmdb_id, 'show', isWatched, Number(req.params.season), ep.episode_number).catch(e => console.error('[SimklSync] Direct push error:', e.message));
@@ -1149,7 +1145,6 @@ router.post('/episodes/:id/watched', async (req, res, next) => {
         try {
           const delResult = db.prepare('DELETE FROM watch_history WHERE tmdb_id = ? AND type = ? AND season_number = ? AND episode_number = ?').run(ep.show_tmdb_id, 'episode', ep.season_number, ep.episode_number);
           console.log('[Episodes] watch_history DELETE: removed %d row(s) for tmdb=%s S%02dE%02d', delResult.changes, ep.show_tmdb_id, ep.season_number, ep.episode_number);
-          db.exec('PRAGMA wal_checkpoint(TRUNCATE);');
         } catch (e) { console.error('[Episodes] watch_history DELETE failed:', e.message); }
       }
 

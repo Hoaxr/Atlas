@@ -265,10 +265,11 @@ export default function Downloads() {
   const [addLoading, setAddLoading] = useState(false);
 
   useEffect(() => {
+    if (!openMenuHash) return;
     const handleOutsideClick = () => setOpenMenuHash(null);
     window.addEventListener('click', handleOutsideClick);
     return () => window.removeEventListener('click', handleOutsideClick);
-  }, []);
+  }, [openMenuHash]);
 
   useEffect(() => {
     // Initial fetch

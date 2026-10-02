@@ -944,7 +944,7 @@ const getSystemHealth = async (req, res, next) => {
 router.get('/system-health', getSystemHealth);
 
 
-router.get('/export', (req, res, next) => {
+router.get('/export', requireAdmin, (req, res, next) => {
   try {
     const format = req.query.format === 'csv' ? 'csv' : 'json';
     const movies = db.prepare(
