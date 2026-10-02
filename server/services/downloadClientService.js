@@ -249,7 +249,13 @@ const executeOnClientOrAll = async (clientId, fn) => {
   }
   const clients = getAllClients();
   if (clients.length === 0) throw new Error('No download client configured');
-  return Promise.allSettled(clients.map(c => fn(c)));
+  const results = await Promise.allSettled(clients.map(c => fn(c)));
+  const anyFulfilled = results.some(r => r.status === 'fulfilled');
+  if (!anyFulfilled && results.length > 0) {
+    const firstErr = results.find(r => r.status === 'rejected')?.reason;
+    throw firstErr || new Error('All download clients failed to execute operation');
+  }
+  return results;
 };
 
 const pauseTorrent = async (hash, clientId = null) => {
@@ -343,7 +349,7 @@ const quarantineMaliciousTorrent = async (torrent, badFileName) => {
     
     // Check downloading episodes
     const downloadingEpisodes = db.prepare(`
-      SELECT e.id, e.show_id, e.season_number, e.episode_number, s.title as show_title
+      SELECT e.id, e.show_id, e.season_number, e.episode_number, e.monitored, s.title as show_title, s.monitored as show_monitored
       FROM episodes e
       JOIN shows s ON e.show_id = s.id
       WHERE e.status = 'downloading'
@@ -354,17 +360,56 @@ const quarantineMaliciousTorrent = async (torrent, badFileName) => {
       const s = `s${String(ep.season_number).padStart(2, '0')}`;
       const e = `e${String(ep.episode_number).padStart(2, '0')}`;
       if (torrentName.includes(showTitle) && (torrentName.includes(`${s}${e}`) || torrentName.includes(s))) {
-        console.log(`[Security] Resetting episode ${ep.show_title} S${ep.season_number}E${ep.episode_number} to monitored after blocking malicious release.`);
-        db.prepare("UPDATE episodes SET status = 'monitored', file_path = NULL, file_size = NULL, scene_name = NULL WHERE id = ?").run(ep.id);
+        const resetStatus = (ep.monitored === 1 && ep.show_monitored === 1) ? 'monitored' : 'unmonitored';
+        console.log(`[Security] Resetting episode ${ep.show_title} S${ep.season_number}E${ep.episode_number} to ${resetStatus} after blocking malicious release.`);
+        db.prepare("UPDATE episodes SET status = ?, file_path = NULL, file_size = NULL, scene_name = NULL WHERE id = ?").run(resetStatus, ep.id);
       }
     }
 
     // Check downloading movies
-    const downloadingMovies = db.prepare("SELECT id, title FROM movies WHERE status = 'downloading'").all();
+    const downloadingMovies = db.prepare("SELECT id, title, monitored FROM movies WHERE status = 'downloading'").all();
     for (const m of downloadingMovies) {
       if (torrentName.includes(m.title.toLowerCase())) {
-        console.log(`[Security] Resetting movie ${m.title} to monitored after blocking malicious release.`);
-        db.prepare("UPDATE movies SET status = 'monitored', file_path = NULL, file_size = 0, scene_name = NULL WHERE id = ?").run(m.id);
+        const resetStatus = m.monitored === 1 ? 'monitored' : 'unmonitored';
+        console.log(`[Security] Resetting movie ${m.title} to ${resetStatus} after blocking malicious release.`);
+        db.prepare("UPDATE movies SET status = ?, file_path = NULL, file_size = 0, scene_name = NULL WHERE id = ?").run(resetStatus, m.id);
+      }
+    }
+
+    // Check downloading music albums
+    const downloadingAlbums = db.prepare(`
+      SELECT a.id, a.title, a.monitored, art.name as artist_name, art.monitored as artist_monitored
+      FROM music_albums a
+      JOIN music_artists art ON a.artist_id = art.id
+      WHERE a.status = 'downloading'
+    `).all();
+    for (const alb of downloadingAlbums) {
+      if (torrentName.includes(alb.title.toLowerCase()) || torrentName.includes(alb.artist_name.toLowerCase())) {
+        const resetStatus = (alb.monitored === 1 && alb.artist_monitored === 1) ? 'monitored' : 'unmonitored';
+        console.log(`[Security] Resetting music album ${alb.artist_name} - ${alb.title} to ${resetStatus} after blocking malicious release.`);
+        db.prepare("UPDATE music_albums SET status = ?, folder_path = NULL WHERE id = ?").run(resetStatus, alb.id);
+      }
+    }
+
+    // Recalculate candidate shows
+    const candidateShows = db.prepare("SELECT id, monitored FROM shows WHERE status IN ('downloading', 'monitored')").all();
+    for (const show of candidateShows) {
+      const activeEps = db.prepare("SELECT COUNT(*) as count FROM episodes WHERE show_id = ? AND status = 'downloading'").get(show.id).count;
+      if (activeEps === 0) {
+        const missingMonitored = db.prepare("SELECT COUNT(*) as count FROM episodes WHERE show_id = ? AND monitored = 1 AND (file_path IS NULL OR file_path = '')").get(show.id).count;
+        const newStatus = missingMonitored > 0 ? (show.monitored === 1 ? 'monitored' : 'unmonitored') : 'downloaded';
+        db.prepare("UPDATE shows SET status = ? WHERE id = ? AND status != ?").run(newStatus, show.id, newStatus);
+      }
+    }
+
+    // Recalculate candidate artists
+    const candidateArtists = db.prepare("SELECT id, monitored FROM music_artists WHERE status IN ('downloading', 'monitored')").all();
+    for (const artist of candidateArtists) {
+      const activeAlbums = db.prepare("SELECT COUNT(*) as count FROM music_albums WHERE artist_id = ? AND status = 'downloading'").get(artist.id).count;
+      if (activeAlbums === 0) {
+        const missingMonitored = db.prepare("SELECT COUNT(*) as count FROM music_albums WHERE artist_id = ? AND monitored = 1 AND (folder_path IS NULL OR folder_path = '')").get(artist.id).count;
+        const newStatus = missingMonitored > 0 ? (artist.monitored === 1 ? 'monitored' : 'unmonitored') : 'downloaded';
+        db.prepare("UPDATE music_artists SET status = ? WHERE id = ? AND status != ?").run(newStatus, artist.id, newStatus);
       }
     }
   } catch (dbErr) {

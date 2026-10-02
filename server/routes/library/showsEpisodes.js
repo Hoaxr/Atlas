@@ -312,10 +312,14 @@ const refreshShowData = async (id) => {
           imageService.ensurePoster('shows', show.tmdb_id, data.poster_path).catch(() => {});
         }
 
+        const isShowMonitored = show.monitored === 1;
+        const initialStatus = isShowMonitored ? 'monitored' : 'unmonitored';
+        const initialMonitored = isShowMonitored ? 1 : 0;
+
         const seasons = await tmdbService.getShowSeasons(show.tmdb_id);
         const insertEp = db.prepare(`
-          INSERT INTO episodes (show_id, season_number, episode_number, title, overview, status, air_date, runtime)
-          VALUES (?, ?, ?, ?, ?, 'monitored', ?, ?)
+          INSERT INTO episodes (show_id, season_number, episode_number, title, overview, status, air_date, monitored, runtime)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
           ON CONFLICT(show_id, season_number, episode_number) DO UPDATE SET
             title = excluded.title,
             overview = excluded.overview,
@@ -329,7 +333,7 @@ const refreshShowData = async (id) => {
           for (const ep of episodes) {
             const key = `${ep.season_number}|${ep.episode_number}`;
             tmdbEpisodeKeys.add(key);
-            insertEp.run(show.id, ep.season_number, ep.episode_number, ep.name, ep.overview, ep.air_date, ep.runtime || null);
+            insertEp.run(show.id, ep.season_number, ep.episode_number, ep.name, ep.overview, initialStatus, ep.air_date, initialMonitored, ep.runtime || null);
           }
         }
 

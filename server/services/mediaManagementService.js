@@ -250,13 +250,33 @@ const matchMovieToTorrent = (torrent, movie) => {
   const normMovieTitle = normalizeForMatching(movie.title);
   if (!normMovieTitle) return false;
 
-  // Extract year from raw torrent name
-  const yearMatches = [...rawName.matchAll(/\b(19\d{2}|20\d{2})\b/g)];
-  const torrentYear = yearMatches.length > 0 ? parseInt(yearMatches[0][1], 10) : null;
+  // Extract all year tokens from movie title itself (e.g. 1917, 2049, 2001) so they are preserved
+  const titleYearTokens = new Set((movie.title.match(/\b(19\d{2}|20\d{2})\b/g) || []).map(y => parseInt(y, 10)));
 
-  // Strip release tags to find clean title stem
+  // Identify release year from raw torrent name
+  const yearMatches = [...rawName.matchAll(/\b(19\d{2}|20\d{2})\b/g)].map(m => parseInt(m[1], 10));
+  
+  // Find torrentYear: prioritize match with movie.year if available, else candidate years not part of movie title
+  let torrentYear = null;
+  if (movie.year && yearMatches.some(y => Math.abs(movie.year - y) <= 1)) {
+    torrentYear = yearMatches.find(y => Math.abs(movie.year - y) <= 1);
+  } else {
+    const nonTitleYears = yearMatches.filter(y => !titleYearTokens.has(y));
+    torrentYear = nonTitleYears.length > 0 ? nonTitleYears[nonTitleYears.length - 1] : null;
+  }
+
+  // Strip release tags to find clean title stem, removing only the release year (preserving numbers in the title)
   const strippedTitlePart = stripReleaseTags(rawName);
-  const normTitlePart = normalizeForMatching(strippedTitlePart.replace(/\b(19\d{2}|20\d{2})\b/g, ''));
+  let titleStemWithoutYear = strippedTitlePart;
+  if (torrentYear) {
+    const yRegex = new RegExp(`\\b${torrentYear}\\b`, 'g');
+    titleStemWithoutYear = titleStemWithoutYear.replace(yRegex, '');
+  } else {
+    titleStemWithoutYear = titleStemWithoutYear.replace(/\b(19\d{2}|20\d{2})\b/g, (m) => {
+      return titleYearTokens.has(parseInt(m, 10)) ? m : '';
+    });
+  }
+  const normTitlePart = normalizeForMatching(titleStemWithoutYear);
 
   // Exact title stem match (e.g. "x" vs "x", "above and below" vs "above and below")
   if (normTitlePart === normMovieTitle) {
@@ -884,7 +904,7 @@ const importMovie = async (torrent, movie) => {
       }
     }
 
-    db.prepare("UPDATE movies SET status = 'downloaded', file_path = ?, scene_name = ? WHERE id = ?").run(destFile, torrent.name, movie.id);
+    db.prepare("UPDATE movies SET status = 'downloaded', file_path = ?, folder_path = COALESCE(NULLIF(folder_path, ''), ?), scene_name = ? WHERE id = ?").run(destFile, destFolder, torrent.name, movie.id);
     console.log(`[MediaManagement] Movie ${movie.title} marked as downloaded.`);
     eventBus.success('Download complete', { title: movie.title, type: 'movie', destinationPath: destFile });
 
@@ -1230,6 +1250,7 @@ const importEpisode = async (torrent, episode) => {
     }
 
     db.prepare("UPDATE episodes SET status = 'downloaded', file_path = ?, scene_name = ? WHERE id = ?").run(destFile, torrent.name, episode.id);
+    db.prepare("UPDATE shows SET folder_path = COALESCE(NULLIF(folder_path, ''), ?) WHERE id = ?").run(path.dirname(destFolder), episode.show_id);
     console.log(`[MediaManagement] Episode marked as downloaded.`);
     const formattedSE = `S${String(episode.season_number).padStart(2, '0')}E${String(episode.episode_number).padStart(2, '0')}`;
     eventBus.success('Download complete', { title: `${episode.show_title} ${formattedSE}`, type: 'episode', destinationPath: destFile });
@@ -1303,9 +1324,9 @@ const importEpisode = async (torrent, episode) => {
     // Calculate folder size
     try {
       const show = db.prepare('SELECT * FROM shows WHERE id = ?').get(episode.show_id);
-      const fullShowFolder = isDedicatedPath
-        ? path.join(libraryRoot, showFolder)
-        : path.join(libraryRoot, 'TV Shows', showFolder);
+      const fullShowFolder = (show && show.folder_path && path.isAbsolute(show.folder_path))
+        ? show.folder_path
+        : (isDedicatedPath ? path.join(libraryRoot, showFolder) : path.join(libraryRoot, 'TV Shows', showFolder));
       
 
       // Update the show's total folder size
@@ -1472,5 +1493,8 @@ module.exports = {
   getNamingConfig,
   sanitizeTitle,
   formatSeriesFolder,
-  resetDownloadsNotInClient
+  resetDownloadsNotInClient,
+  matchMovieToTorrent,
+  matchEpisodeToTorrent,
+  matchSeasonPackToTorrent
 };

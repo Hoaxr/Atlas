@@ -311,7 +311,7 @@ const runSearchCycle = async () => {
           eventBus.info('Download started', { title: epLabel, type: 'episode', release: bestRelease.title });
         } else {
           ep.retry_count = (ep.retry_count || 0) + 1;
-          const next = calculateNextSearchAt(ep, 'episode', { isDownloaded: (ep.status === 'downloaded' || hasFile), isCutoffMet });
+          const next = calculateNextSearchAt(ep, 'episode', { isDownloaded: (ep.status === 'downloaded' || hasFile), isCutoffMet: false });
           db.prepare("UPDATE episodes SET last_searched_at = datetime('now'), search_state = ?, next_search_at = ?, retry_count = ?, last_failure_at = datetime('now') WHERE id = ?")
             .run(next.state, next.nextSearch ? next.nextSearch.toISOString() : null, ep.retry_count, ep.id);
         }
@@ -367,7 +367,7 @@ const runRefreshMetadata = async () => {
   });
 
   // Update 20 oldest shows
-  const shows = db.prepare("SELECT id, tmdb_id, title FROM shows WHERE status != 'unmonitored' ORDER BY last_refreshed_at ASC NULLS FIRST LIMIT 20").all();
+  const shows = db.prepare("SELECT id, tmdb_id, title, monitored FROM shows WHERE status != 'unmonitored' ORDER BY last_refreshed_at ASC NULLS FIRST LIMIT 20").all();
   let showsUpdated = 0;
 
   await runWithConcurrency(shows, 3, async (show) => {
@@ -382,10 +382,14 @@ const runRefreshMetadata = async () => {
           imageService.ensurePoster('shows', show.tmdb_id, data.poster_path).catch(() => {});
         }
 
+        const isShowMonitored = show.monitored === 1;
+        const initialStatus = isShowMonitored ? 'monitored' : 'unmonitored';
+        const initialMonitored = isShowMonitored ? 1 : 0;
+
         const seasons = await tmdbService.getShowSeasons(show.tmdb_id);
         const insertEp = db.prepare(`
-          INSERT INTO episodes (show_id, season_number, episode_number, title, overview, status, air_date, runtime)
-          VALUES (?, ?, ?, ?, ?, 'monitored', ?, ?)
+          INSERT INTO episodes (show_id, season_number, episode_number, title, overview, status, air_date, monitored, runtime)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
           ON CONFLICT(show_id, season_number, episode_number) DO UPDATE SET
             title = excluded.title,
             overview = excluded.overview,
@@ -408,7 +412,7 @@ const runRefreshMetadata = async () => {
           for (const ep of episodes) {
             const key = `${ep.season_number}|${ep.episode_number}`;
             tmdbEpisodeKeys.add(key);
-            insertEp.run(show.id, ep.season_number, ep.episode_number, ep.name, ep.overview, ep.air_date, ep.runtime || null);
+            insertEp.run(show.id, ep.season_number, ep.episode_number, ep.name, ep.overview, initialStatus, ep.air_date, initialMonitored, ep.runtime || null);
           }
         }
 
@@ -923,7 +927,7 @@ const runDeepMetadataRefresh = async () => {
   });
 
   const shows = db.prepare(`
-    SELECT id, tmdb_id, title 
+    SELECT id, tmdb_id, title, monitored 
     FROM shows 
     WHERE status != 'unmonitored' AND added_at <= ? 
       AND (last_refreshed_at IS NULL OR last_refreshed_at <= ?)
@@ -943,10 +947,14 @@ const runDeepMetadataRefresh = async () => {
           imageService.ensurePoster('shows', show.tmdb_id, data.poster_path).catch(() => {});
         }
 
+        const isShowMonitored = show.monitored === 1;
+        const initialStatus = isShowMonitored ? 'monitored' : 'unmonitored';
+        const initialMonitored = isShowMonitored ? 1 : 0;
+
         const seasons = await tmdbService.getShowSeasons(show.tmdb_id);
         const insertEp = db.prepare(`
-          INSERT INTO episodes (show_id, season_number, episode_number, title, overview, status, air_date, runtime)
-          VALUES (?, ?, ?, ?, ?, 'monitored', ?, ?)
+          INSERT INTO episodes (show_id, season_number, episode_number, title, overview, status, air_date, monitored, runtime)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
           ON CONFLICT(show_id, season_number, episode_number) DO UPDATE SET
             title = excluded.title,
             overview = excluded.overview,
@@ -968,7 +976,7 @@ const runDeepMetadataRefresh = async () => {
           for (const ep of episodes) {
             const key = `${ep.season_number}|${ep.episode_number}`;
             tmdbEpisodeKeys.add(key);
-            insertEp.run(show.id, ep.season_number, ep.episode_number, ep.name, ep.overview, ep.air_date, ep.runtime || null);
+            insertEp.run(show.id, ep.season_number, ep.episode_number, ep.name, ep.overview, initialStatus, ep.air_date, initialMonitored, ep.runtime || null);
           }
         }
 

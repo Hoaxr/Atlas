@@ -115,4 +115,46 @@ test('Executable Payload Blocking & Quarantine Security', async (t) => {
       db.prepare("DELETE FROM music_artists WHERE id = ?").run(artist.id);
     }
   });
+
+  await t.test('matchMovieToTorrent accurately matches titles containing year tokens and respects release years', () => {
+    const { matchMovieToTorrent } = require('../server/services/mediaManagementService');
+
+    // 1917 (2019)
+    assert.strictEqual(
+      matchMovieToTorrent({ name: '1917.2019.1080p.BluRay.x264-SPARKS' }, { title: '1917', year: 2019 }),
+      true
+    );
+
+    // Blade Runner 2049 (2017)
+    assert.strictEqual(
+      matchMovieToTorrent({ name: 'Blade.Runner.2049.2017.1080p.BluRay.x264-SPARKS' }, { title: 'Blade Runner 2049', year: 2017 }),
+      true
+    );
+
+    // 2001: A Space Odyssey (1968)
+    assert.strictEqual(
+      matchMovieToTorrent({ name: '2001.A.Space.Odyssey.1968.1080p.BluRay' }, { title: '2001: A Space Odyssey', year: 1968 }),
+      true
+    );
+
+    // Wrong year must NOT match (e.g. 1982 original vs 2011 remake)
+    assert.strictEqual(
+      matchMovieToTorrent({ name: 'The.Thing.2011.1080p.BluRay' }, { title: 'The Thing', year: 1982 }),
+      false
+    );
+  });
+
+  await t.test('calculateNextSearchAt requires boolean isCutoffMet === true to avoid false expirations', () => {
+    const { calculateNextSearchAt } = require('../server/services/schedulerLogic');
+
+    // Passing a function or non-boolean truthy object must NOT trigger expiration
+    const fakeFn = () => {};
+    const res = calculateNextSearchAt({ retry_count: 0 }, 'episode', { isDownloaded: true, isCutoffMet: fakeFn });
+    assert.notStrictEqual(res.state, 'EXPIRED');
+
+    // True boolean cutoff met triggers expiration
+    const resExpired = calculateNextSearchAt({ retry_count: 0 }, 'episode', { isDownloaded: true, isCutoffMet: true });
+    assert.strictEqual(resExpired.state, 'EXPIRED');
+    assert.strictEqual(resExpired.nextSearch, null);
+  });
 });

@@ -56,7 +56,7 @@ const calculateNextSearchAt = (item, type, options = {}, currentDate = new Date(
   const config = getSchedulerConfig();
   const { isCutoffMet = false, isDownloaded = false } = options;
   
-  if (isDownloaded && isCutoffMet) {
+  if (isDownloaded && isCutoffMet === true) {
     return { state: 'EXPIRED', nextSearch: null };
   }
 
