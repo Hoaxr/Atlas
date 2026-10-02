@@ -78,7 +78,7 @@ const parseReleaseInfo = (rawName, torrent = {}) => {
   else if (/dv|dovi|dolby\s*vision/i.test(name)) hdr = 'DV';
 
   // Video and TV clues
-  const hasVideoClues = /\b(1080p|720p|2160p|4k|480p|576p|bluray|bdrip|brrip|hdtv|web-?dl|web-?rip|x264|x265|hevc|h264|h265|avc|xvid|divx|dvdrip)\b/i.test(name);
+  const hasVideoClues = /\b(1080p|720p|2160p|4k|480p|576p|bluray|blu-ray|bdrip|brrip|hdtv|web-?dl|web-?rip|x264|x265|hevc|h264|h265|avc|xvid|divx|dvdrip|dvd[59]?|dvdr|mdvdr|bd25|bd50|vob|iso)\b/i.test(name) || /\b(music\s*videos?|the\s*videos|video\s*collection)\b/i.test(name);
   const hasTvClues = /\b(S\d{1,2}[._\s-]*E\d{1,3}|Season\s*\d+|\d+x\d+)\b/i.test(name);
 
   // Explicit music indicators
@@ -109,11 +109,12 @@ const parseReleaseInfo = (rawName, torrent = {}) => {
   );
 
   if (isMusic && !hasVideoClues) {
-    let musicFormat = 'FLAC';
+    let musicFormat = null;
     if (/\b(mp3|320kbps|320k)\b/i.test(name) || /\.mp3$/i.test(rawName)) musicFormat = 'MP3';
     else if (/\b(aac|m4a)\b/i.test(name) || /\.(aac|m4a)$/i.test(rawName)) musicFormat = 'AAC';
     else if (/\bopus\b/i.test(name) || /\.opus$/i.test(rawName)) musicFormat = 'Opus';
     else if (/\bflac\b/i.test(name) || /\.flac$/i.test(rawName)) musicFormat = 'FLAC';
+    else if (/\b(lossless|alac|wav|ape|wv)\b/i.test(name)) musicFormat = 'FLAC';
 
     let musicSource = null;
     if (/\bvinyl\b/i.test(name)) musicSource = 'Vinyl';

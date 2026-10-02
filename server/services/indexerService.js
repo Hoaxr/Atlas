@@ -118,6 +118,42 @@ const isMaliciousOrFakeRelease = (title) => {
   return DANGEROUS_EXTS.test(title) || FAKE_RELEASE_TERMS.test(title);
 };
 
+// Video release detection for music searches — concerts, music videos, DVD/Blu-ray discs, and video files
+const VIDEO_MUSIC_TERMS = /\b(dvd[59]?|dvdrip|dvdr|mdvdr|bluray|blu-ray|bdrip|brrip|bd25|bd50|vob|m2ts|iso|video[._ -]?ts)\b/i;
+const VIDEO_MUSIC_CODECS = /\b(2160p|1080[pi]|720p|576[pi]|480[pi]|x264|x265|h264|h265|hevc|avc|xvid|divx|ntsc|pal)\b/i;
+const VIDEO_MUSIC_KEYWORDS = /\b(music\s*videos?|the\s*videos|video\s*collection|concert\s*film|live\s*concert\s*video|live\s*at\s*.*(?:dvd|bluray))\b/i;
+const VIDEO_EXTENSIONS = /\.(iso|vob|mkv|mp4|avi|mov|wmv|m4v|mpg|mpeg)$/i;
+
+const isVideoMusicRelease = (title, categories = []) => {
+  if (!title) return false;
+
+  // Category check: Prowlarr/Torznab 3030 is Audio/Video (concerts/music videos), 1000-2999 are Movies/TV
+  if (Array.isArray(categories)) {
+    const hasOnlyVideoCat = categories.some(c => {
+      const catId = typeof c === 'object' ? c?.id : Number(c);
+      return catId === 3030 || (catId >= 1000 && catId < 3000);
+    });
+    const hasAudioCat = categories.some(c => {
+      const catId = typeof c === 'object' ? c?.id : Number(c);
+      return catId === 3000 || catId === 3010 || catId === 3020 || catId === 3040 || catId === 3050;
+    });
+    if (hasOnlyVideoCat && !hasAudioCat) return true;
+  }
+
+  const t = title.toLowerCase();
+
+  if (VIDEO_MUSIC_TERMS.test(t)) return true;
+  if (VIDEO_MUSIC_KEYWORDS.test(t)) return true;
+  if (VIDEO_EXTENSIONS.test(title.trim())) return true;
+
+  // If title has video codecs/resolutions and no explicit audio file extension
+  if (VIDEO_MUSIC_CODECS.test(t) && !/\.(flac|mp3|m4a|aac|ogg|opus|wav|alac|ape|wv)$/i.test(title.trim())) {
+    return true;
+  }
+
+  return false;
+};
+
 // ─── Prowlarr JSON Search ─────────────────────────────────────────────
 
 const searchProwlarr = async (query, type = 'search') => {
@@ -203,6 +239,7 @@ const searchProwlarr = async (query, type = 'search') => {
         infoUrl: item.infoUrl || item.commentUrl || null,
         link,
         indexer: item.indexer,
+        categories: item.categories || [],
       };
     });
 
@@ -532,7 +569,7 @@ const searchMusic = async (artistName, albumTitle = null, profile = null, isManu
     } catch {
       rawResults = await searchProwlarr(clean, 'search');
     }
-    let filtered = rawResults.filter(r => !isMaliciousOrFakeRelease(r.title));
+    let filtered = rawResults.filter(r => !isMaliciousOrFakeRelease(r.title) && !isVideoMusicRelease(r.title, r.categories));
     if (!isManualSearch) {
       filtered = filtered.filter(r => r.seeders && r.seeders >= 1);
     }
@@ -566,8 +603,8 @@ const searchMusic = async (artistName, albumTitle = null, profile = null, isManu
     }
   }
 
-  // Filter out malicious releases
-  let filtered = rawResults.filter(r => !isMaliciousOrFakeRelease(r.title));
+  // Filter out malicious releases and video releases for music searches
+  let filtered = rawResults.filter(r => !isMaliciousOrFakeRelease(r.title) && !isVideoMusicRelease(r.title, r.categories));
 
   // For automated searches, require seeders
   if (!isManualSearch) {
@@ -633,6 +670,7 @@ module.exports = {
   searchSeasonPack,
   searchGeneric,
   searchMusic,
+  isVideoMusicRelease,
   parseQuality,
   getCircuitStatus,
 };
