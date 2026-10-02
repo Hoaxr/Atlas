@@ -45,7 +45,7 @@ router.get('/', (req, res, next) => {
     const renameEpisodes = getSetting('renameEpisodes') !== 'false';
     const standardEpisodeFormat = getSetting('standardEpisodeFormat') || '{Show Title} - S{Season}E{Episode} - {Episode Title}';
     const seasonFolderFormat = getSetting('seasonFolderFormat') || 'Season {Season Number}';
-    const seriesFolderFormat = getSetting('seriesFolderFormat') || '{Show Title} ({Release Year})';
+    const seriesFolderFormat = getSetting('seriesFolderFormat') || '{Show Title}';
     
     // Download Client Preferences
     const removeCompletedDownloads = getSetting('removeCompletedDownloads') === 'true'; // default false

@@ -82,7 +82,7 @@ export default function NamingTab({ settings, setSettings }) {
 
   const previewSeasonFolder = fillTvTags(settings?.seasonFolderFormat, 'Season {Season Number}');
   const previewEpisodeFile = fillTvTags(settings?.standardEpisodeFormat, '{Show Title} - S{Season}E{Episode} - {Episode Title}');
-  const previewSeriesFolder = fillTvTags(settings?.seriesFolderFormat, '{Show Title} ({Release Year})');
+  const previewSeriesFolder = fillTvTags(settings?.seriesFolderFormat, '{Show Title}');
   const previewTvPath = `/media/tv/${previewSeriesFolder}/${previewSeasonFolder}/${previewEpisodeFile}.mkv`;
 
   const previewArtist = (settings?.musicArtistFolderFormat || '{Artist Name}').replace(/{Artist Name}/gi, 'Daft Punk');
@@ -239,7 +239,7 @@ export default function NamingTab({ settings, setSettings }) {
                   type="text"
                   className="flex-1 bg-[#0c1624] border border-[#1c2d46] rounded-l-xl px-4 py-2.5 text-sm text-slate-200 focus:outline-none focus:ring-1 focus:ring-cyan-500/50 focus:border-cyan-500/50 transition-colors placeholder:text-slate-600 font-mono"
                   value={settings.seriesFolderFormat || ''}
-                  placeholder="{Show Title} ({Release Year})"
+                  placeholder="{Show Title}"
                   onChange={e => setSettings({...settings, seriesFolderFormat: e.target.value})}
                 />
                 <button 

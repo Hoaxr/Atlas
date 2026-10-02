@@ -26,7 +26,7 @@ const getNamingConfig = () => {
     renameEpisodes: getSetting('renameEpisodes') !== 'false',
     standardEpisodeFormat: getSetting('standardEpisodeFormat') || '{Show Title} - S{Season}E{Episode} - {Episode Title}',
     seasonFolderFormat: getSetting('seasonFolderFormat') || 'Season {Season Number}',
-    seriesFolderFormat: getSetting('seriesFolderFormat') || '{Show Title} ({Release Year})'
+    seriesFolderFormat: getSetting('seriesFolderFormat') || '{Show Title}'
   };
 };
 
@@ -54,7 +54,7 @@ const sanitizeTitle = (title, config) => {
 };
 
 const formatSeriesFolder = (title, year, config) => {
-  const format = config.seriesFolderFormat || '{Show Title} ({Release Year})';
+  const format = config.seriesFolderFormat || '{Show Title}';
   const sanitizedTitle = sanitizeTitle(title, config);
   const formatted = format
     .replace(/{Show Title}/gi, sanitizedTitle)
@@ -1006,21 +1006,27 @@ const importEpisode = async (torrent, episode) => {
     
     const showRow = db.prepare('SELECT folder_path, title, year FROM shows WHERE id = ?').get(episode.show_id);
     const showFolder = formatSeriesFolder(episode.show_title, showRow?.year, config);
-    let fileName = `${showFolder} - S${s}E${e}`;
+    const showTitle = sanitizeTitle(episode.show_title, config);
+    const releaseYear = showRow?.year ? String(showRow.year) : '';
+    let fileName = `${showTitle} - S${s}E${e}`;
     
     if (config.renameEpisodes) {
       let format = config.standardEpisodeFormat;
-      format = format.replace('{Show Title}', showFolder);
-      format = format.replace('{Season}', s);
-      format = format.replace('{Episode}', e);
-      format = format.replace('{Episode Title}', sanitizeTitle(episode.title || '', config));
+      format = format.replace(/{Show Title}/gi, showTitle);
+      format = format.replace(/{Series Title}/gi, showTitle);
+      format = format.replace(/{Release Year}/gi, releaseYear);
+      format = format.replace(/{Season}/gi, s);
+      format = format.replace(/{Episode}/gi, e);
+      format = format.replace(/{Episode Title}/gi, sanitizeTitle(episode.title || '', config));
       fileName = format;
     } else {
       fileName = path.basename(videoFile.path, ext);
     }
 
     let seasonFolder = config.seasonFolderFormat || 'Season {Season Number}';
-    seasonFolder = seasonFolder.replace(/{Show Title}/gi, showFolder);
+    seasonFolder = seasonFolder.replace(/{Show Title}/gi, showTitle);
+    seasonFolder = seasonFolder.replace(/{Series Title}/gi, showTitle);
+    seasonFolder = seasonFolder.replace(/{Release Year}/gi, releaseYear);
     seasonFolder = seasonFolder.replace(/{Season}/gi, s);
     seasonFolder = seasonFolder.replace(/{Season Number}/gi, episode.season_number.toString());
     
