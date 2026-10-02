@@ -1653,6 +1653,63 @@ const MIGRATIONS = [
         }
       }
     }
+  },
+  {
+    id: 55,
+    name: 'unmark_unreleased_episodes_watched',
+    run: (db) => {
+      // 1. Reset watched state on episodes that have not aired yet and are not downloaded on disk
+      db.prepare(`
+        UPDATE episodes
+        SET watched = 0, watched_at = NULL, watch_progress = 0
+        WHERE watched = 1
+          AND file_path IS NULL
+          AND (air_date IS NULL OR air_date > date('now', 'localtime'));
+      `).run();
+
+      // 2. Remove erroneous episode-level watch_history rows for unreleased episodes
+      db.prepare(`
+        DELETE FROM watch_history
+        WHERE type = 'episode'
+          AND rowid IN (
+            SELECT w.rowid
+            FROM watch_history w
+            JOIN shows s ON s.tmdb_id = w.tmdb_id
+            JOIN episodes e ON e.show_id = s.id AND e.season_number = w.season_number AND e.episode_number = w.episode_number
+            WHERE e.file_path IS NULL
+              AND (e.air_date IS NULL OR e.air_date > date('now', 'localtime'))
+          );
+      `).run();
+
+      // 3. Recompute shows.watched:
+      // A show should NOT be marked watched if it has aired/downloaded episodes that are unwatched
+      db.prepare(`
+        UPDATE shows
+        SET watched = 0
+        WHERE watched = 1
+          AND EXISTS (
+            SELECT 1 FROM episodes e
+            WHERE e.show_id = shows.id
+              AND e.season_number > 0
+              AND (e.file_path IS NOT NULL OR (e.air_date IS NOT NULL AND e.air_date <= date('now', 'localtime')))
+              AND e.watched = 0
+          );
+      `).run();
+
+      // Or if it has no watched aired/downloaded episodes at all
+      db.prepare(`
+        UPDATE shows
+        SET watched = 0
+        WHERE watched = 1
+          AND NOT EXISTS (
+            SELECT 1 FROM episodes e
+            WHERE e.show_id = shows.id
+              AND e.season_number > 0
+              AND (e.file_path IS NOT NULL OR (e.air_date IS NOT NULL AND e.air_date <= date('now', 'localtime')))
+              AND e.watched = 1
+          );
+      `).run();
+    }
   }
 ];
 

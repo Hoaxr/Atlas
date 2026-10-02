@@ -294,7 +294,7 @@ const processScannedFiles = async (allFiles, scanProgress, mode, nextStage) => {
                       WHERE s.id = episodes.show_id 
                         AND (
                           (w.type = 'episode' AND w.season_number = episodes.season_number AND w.episode_number = episodes.episode_number)
-                          OR (w.type = 'show')
+                          OR (w.type = 'show' AND (episodes.file_path IS NOT NULL OR (episodes.air_date IS NOT NULL AND episodes.air_date <= date('now', 'localtime'))))
                         )
                       LIMIT 1
                     ))
@@ -305,7 +305,7 @@ const processScannedFiles = async (allFiles, scanProgress, mode, nextStage) => {
                   WHERE s.id = episodes.show_id 
                     AND (
                       (w.type = 'episode' AND w.season_number = episodes.season_number AND w.episode_number = episodes.episode_number)
-                      OR (w.type = 'show')
+                      OR (w.type = 'show' AND (episodes.file_path IS NOT NULL OR (episodes.air_date IS NOT NULL AND episodes.air_date <= date('now', 'localtime'))))
                     )
                 )
               `).run(showId);

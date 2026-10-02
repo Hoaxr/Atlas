@@ -98,11 +98,17 @@ export default function ShowSeasonList({
                       e.stopPropagation();
                       e.preventDefault();
                       const sNum = Number(season);
-                      const allWatched = seasonEpisodes.every((ep) => ep.watched);
+                      const isReleased = (ep) => Boolean(ep.file_path || (ep.air_date && new Date(ep.air_date) <= new Date()));
+                      const releasedEpisodes = seasonEpisodes.filter(isReleased);
+                      const allWatched = releasedEpisodes.length > 0 && releasedEpisodes.every((ep) => ep.watched);
                       const targetWatched = allWatched ? 0 : 1;
                       const prevEpisodes = episodes;
                       setEpisodes((prev) =>
-                        prev.map((ep) => (ep.season_number === sNum ? { ...ep, watched: targetWatched } : ep))
+                        prev.map((ep) => {
+                          if (ep.season_number !== sNum) return ep;
+                          if (targetWatched === 1 && !isReleased(ep)) return ep;
+                          return { ...ep, watched: targetWatched };
+                        })
                       );
                       try {
                         await api.post(`/library/shows/${show.id}/seasons/${season}/watched`, {
@@ -116,11 +122,23 @@ export default function ShowSeasonList({
                       }
                     }}
                     className={`p-2 rounded-lg transition-all ${
-                      seasonEpisodes.every((ep) => ep.watched)
+                      (() => {
+                        const isReleased = (ep) => Boolean(ep.file_path || (ep.air_date && new Date(ep.air_date) <= new Date()));
+                        const releasedEpisodes = seasonEpisodes.filter(isReleased);
+                        return releasedEpisodes.length > 0 && releasedEpisodes.every((ep) => ep.watched);
+                      })()
                         ? 'bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20'
                         : 'text-slate-500 bg-slate-800/80 hover:bg-slate-700/80 hover:text-slate-300'
                     }`}
-                    title="Toggle season watched status"
+                    title={
+                      (() => {
+                        const isReleased = (ep) => Boolean(ep.file_path || (ep.air_date && new Date(ep.air_date) <= new Date()));
+                        const releasedEpisodes = seasonEpisodes.filter(isReleased);
+                        return releasedEpisodes.length > 0 && releasedEpisodes.every((ep) => ep.watched)
+                          ? 'Mark season unwatched'
+                          : 'Mark season watched';
+                      })()
+                    }
                   >
                     <CheckSquare className="w-5 h-5" />
                   </button>

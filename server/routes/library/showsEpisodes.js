@@ -35,22 +35,25 @@ router.post('/shows/:id/watched', async (req, res, next) => {
     const { watched } = req.body;
     const isWatched = !!watched;
     const watchedAt = new Date().toISOString();
-    db.prepare('UPDATE shows SET watched = ? WHERE id = ?').run(isWatched ? 1 : 0, req.params.id);
+    const airedOrOnDisk = "AND (file_path IS NOT NULL OR (air_date IS NOT NULL AND air_date <= date('now', 'localtime')))";
     if (isWatched) {
-      db.prepare('UPDATE episodes SET watched = 1, watched_at = ?, watch_progress = 0 WHERE show_id = ?').run(watchedAt, req.params.id);
+      db.prepare(`UPDATE episodes SET watched = 1, watched_at = ?, watch_progress = 0 WHERE show_id = ? ${airedOrOnDisk}`).run(watchedAt, req.params.id);
+      const allWatched = db.prepare(`SELECT COUNT(*) as total, SUM(watched) as watched_count FROM episodes WHERE show_id = ? AND season_number > 0 ${airedOrOnDisk}`).get(req.params.id);
+      db.prepare('UPDATE shows SET watched = ? WHERE id = ?').run(allWatched && allWatched.total > 0 && allWatched.total === allWatched.watched_count ? 1 : 0, req.params.id);
     } else {
+      db.prepare('UPDATE shows SET watched = 0 WHERE id = ?').run(req.params.id);
       db.prepare('UPDATE episodes SET watched = 0, watched_at = NULL, watch_progress = 0 WHERE show_id = ?').run(req.params.id);
     }
     const show = db.prepare('SELECT tmdb_id FROM shows WHERE id = ?').get(req.params.id);
     if (show?.tmdb_id) {
       if (isWatched) {
-        // Insert watch_history entries for every episode so tracker stats are accurate
+        // Insert watch_history entries only for aired or on-disk episodes so tracker stats are accurate
         const userId = resolveUserId(req);
-        const episodes = db.prepare('SELECT season_number, episode_number, runtime FROM episodes WHERE show_id = ?').all(req.params.id);
+        const episodes = db.prepare(`SELECT season_number, episode_number, runtime FROM episodes WHERE show_id = ? ${airedOrOnDisk}`).all(req.params.id);
         const insertHistory = db.prepare(`
           INSERT INTO watch_history (tmdb_id, type, season_number, episode_number, watched_at, runtime, user_id)
           VALUES (?, ?, ?, ?, ?, ?, ?)
-          ON CONFLICT(tmdb_id, type, season_number, episode_number) DO UPDATE SET
+          ON CONFLICT(tmdb_id, type, season_number, episode_number) WHERE type = 'episode' DO UPDATE SET
             watched_at = excluded.watched_at,
             runtime = COALESCE(excluded.runtime, watch_history.runtime),
             user_id = COALESCE(excluded.user_id, watch_history.user_id)
@@ -1060,27 +1063,34 @@ router.post('/shows/:id/seasons/:season/watched', async (req, res, next) => {
     const isWatched = watched === undefined ? true : !!watched;
     const watchedAt = new Date().toISOString();
     let result;
+    const airedOrOnDisk = "AND (file_path IS NOT NULL OR (air_date IS NOT NULL AND air_date <= date('now', 'localtime')))";
     if (isWatched) {
-      result = db.prepare('UPDATE episodes SET watched = 1, watched_at = ?, watch_progress = 0 WHERE show_id = ? AND season_number = ?').run(watchedAt, req.params.id, req.params.season);
+      result = db.prepare(`UPDATE episodes SET watched = 1, watched_at = ?, watch_progress = 0 WHERE show_id = ? AND season_number = ? ${airedOrOnDisk}`).run(watchedAt, req.params.id, req.params.season);
+      const allWatched = db.prepare(`SELECT COUNT(*) as total, SUM(watched) as watched_count FROM episodes WHERE show_id = ? AND season_number > 0 ${airedOrOnDisk}`).get(req.params.id);
+      if (allWatched && allWatched.total > 0 && allWatched.total === allWatched.watched_count) {
+        db.prepare('UPDATE shows SET watched = 1 WHERE id = ?').run(req.params.id);
+      }
     } else {
       result = db.prepare('UPDATE episodes SET watched = 0, watched_at = NULL, watch_progress = 0 WHERE show_id = ? AND season_number = ?').run(req.params.id, req.params.season);
+      db.prepare('UPDATE shows SET watched = 0 WHERE id = ?').run(req.params.id);
       const remainingWatched = db.prepare('SELECT COUNT(*) as count FROM episodes WHERE show_id = ? AND watched = 1').get(req.params.id);
       if (!remainingWatched || remainingWatched.count === 0) {
-        db.prepare('UPDATE shows SET watched = 0 WHERE id = ?').run(req.params.id);
         db.prepare('UPDATE episodes SET watch_progress = 0 WHERE show_id = ?').run(req.params.id);
       }
     }
 
     const show = db.prepare('SELECT tmdb_id FROM shows WHERE id = ?').get(req.params.id);
     if (show?.tmdb_id) {
-      const episodes = db.prepare('SELECT episode_number, runtime FROM episodes WHERE show_id = ? AND season_number = ?').all(req.params.id, req.params.season);
+      const episodes = isWatched
+        ? db.prepare(`SELECT episode_number, runtime FROM episodes WHERE show_id = ? AND season_number = ? ${airedOrOnDisk}`).all(req.params.id, req.params.season)
+        : db.prepare('SELECT episode_number, runtime FROM episodes WHERE show_id = ? AND season_number = ?').all(req.params.id, req.params.season);
       if (isWatched) {
-        // Insert watch_history entries for each episode so tracker stats are accurate
+        // Insert watch_history entries only for aired or on-disk episodes so tracker stats are accurate
         const userId = resolveUserId(req);
         const insertHistory = db.prepare(`
           INSERT INTO watch_history (tmdb_id, type, season_number, episode_number, watched_at, runtime, user_id)
           VALUES (?, ?, ?, ?, ?, ?, ?)
-          ON CONFLICT(tmdb_id, type, season_number, episode_number) DO UPDATE SET
+          ON CONFLICT(tmdb_id, type, season_number, episode_number) WHERE type = 'episode' DO UPDATE SET
             watched_at = excluded.watched_at,
             runtime = COALESCE(excluded.runtime, watch_history.runtime),
             user_id = COALESCE(excluded.user_id, watch_history.user_id)
@@ -1111,9 +1121,10 @@ router.post('/episodes/:id/watched', async (req, res, next) => {
     const ep = db.prepare('SELECT e.*, s.tmdb_id as show_tmdb_id FROM episodes e JOIN shows s ON e.show_id = s.id WHERE e.id = ?').get(req.params.id);
     if (!ep) return res.status(404).json({ status: 'error', message: 'Episode not found' });
 
+    const airedOrOnDisk = "AND (file_path IS NOT NULL OR (air_date IS NOT NULL AND air_date <= date('now', 'localtime')))";
     if (isWatched) {
       db.prepare('UPDATE episodes SET watched = 1, watched_at = ?, watch_progress = 0 WHERE id = ?').run(watchedAt, req.params.id);
-      const allWatched = db.prepare('SELECT COUNT(*) as total, SUM(watched) as watched_count FROM episodes WHERE show_id = ? AND season_number > 0').get(ep.show_id);
+      const allWatched = db.prepare(`SELECT COUNT(*) as total, SUM(watched) as watched_count FROM episodes WHERE show_id = ? AND season_number > 0 ${airedOrOnDisk}`).get(ep.show_id);
       if (allWatched && allWatched.total > 0 && allWatched.total === allWatched.watched_count) {
         db.prepare('UPDATE shows SET watched = 1 WHERE id = ?').run(ep.show_id);
       }

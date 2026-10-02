@@ -354,6 +354,144 @@ test('Tracker & Continue Watching System', async (t) => {
       setSetting('autoWatchUser', '');
     }
   });
+
+  await t.test('Bulk marking show or season as watched does NOT mark unreleased episodes without files as watched', async () => {
+    const showsEpisodesRouter = require('../server/routes/library/showsEpisodes');
+    const showWatchedHandler = showsEpisodesRouter.stack.find(s => s.route?.path === '/shows/:id/watched')?.route?.stack[0]?.handle;
+    const seasonWatchedHandler = showsEpisodesRouter.stack.find(s => s.route?.path === '/shows/:id/seasons/:season/watched')?.route?.stack[0]?.handle;
+
+    assert.ok(showWatchedHandler, 'showWatchedHandler must exist');
+    assert.ok(seasonWatchedHandler, 'seasonWatchedHandler must exist');
+
+    const showId = 7788991;
+    const tmdbId = 9988771;
+
+    try {
+      db.prepare('DELETE FROM episodes WHERE show_id = ?').run(showId);
+      db.prepare('DELETE FROM shows WHERE id = ?').run(showId);
+      db.prepare('DELETE FROM watch_history WHERE tmdb_id = ?').run(tmdbId);
+
+      db.prepare("INSERT INTO shows (id, tmdb_id, title, status, watched) VALUES (?, ?, 'Upcoming Test Show', 'continuing', 0)").run(showId, tmdbId);
+
+      // S1E1: aired in past, downloaded
+      db.prepare("INSERT INTO episodes (id, show_id, season_number, episode_number, title, air_date, file_path, watched) VALUES (77001, ?, 1, 1, 'Past Downloaded', '2024-01-01', '/media/s1e1.mkv', 0)").run(showId);
+      // S1E2: aired in past, missing file
+      db.prepare("INSERT INTO episodes (id, show_id, season_number, episode_number, title, air_date, file_path, watched) VALUES (77002, ?, 1, 2, 'Past Missing', '2024-01-08', NULL, 0)").run(showId);
+      // S1E3: future air date, missing file (unreleased)
+      db.prepare("INSERT INTO episodes (id, show_id, season_number, episode_number, title, air_date, file_path, watched) VALUES (77003, ?, 1, 3, 'Future Missing', '2099-01-01', NULL, 0)").run(showId);
+      // S1E4: TBA air date (NULL), missing file (unreleased)
+      db.prepare("INSERT INTO episodes (id, show_id, season_number, episode_number, title, air_date, file_path, watched) VALUES (77004, ?, 1, 4, 'TBA Missing', NULL, NULL, 0)").run(showId);
+      // S1E5: future air date, but downloaded file exists (advance copy)
+      db.prepare("INSERT INTO episodes (id, show_id, season_number, episode_number, title, air_date, file_path, watched) VALUES (77005, ?, 1, 5, 'Advance Copy', '2099-01-15', '/media/s1e5.mkv', 0)").run(showId);
+
+      // 1. Mark Season 1 watched
+      await new Promise((resolve, reject) => {
+        seasonWatchedHandler({ params: { id: showId, season: '1' }, body: { watched: true } }, { json: resolve }, reject);
+      });
+
+      const ep1 = db.prepare('SELECT watched FROM episodes WHERE id = 77001').get();
+      const ep2 = db.prepare('SELECT watched FROM episodes WHERE id = 77002').get();
+      const ep3 = db.prepare('SELECT watched FROM episodes WHERE id = 77003').get();
+      const ep4 = db.prepare('SELECT watched FROM episodes WHERE id = 77004').get();
+      const ep5 = db.prepare('SELECT watched FROM episodes WHERE id = 77005').get();
+
+      assert.strictEqual(ep1.watched, 1, 'Past downloaded episode should be marked watched');
+      assert.strictEqual(ep2.watched, 1, 'Past aired missing episode should be marked watched');
+      assert.strictEqual(ep3.watched, 0, 'Future unreleased episode without file must NOT be marked watched');
+      assert.strictEqual(ep4.watched, 0, 'TBA unreleased episode without file must NOT be marked watched');
+      assert.strictEqual(ep5.watched, 1, 'Advance copy with file should be marked watched');
+
+      // Check watch_history records
+      const history = db.prepare("SELECT episode_number FROM watch_history WHERE tmdb_id = ? AND type = 'episode'").all(tmdbId);
+      const historyEpNums = history.map(h => h.episode_number);
+      assert.ok(historyEpNums.includes(1), 'Episode 1 should be in watch_history');
+      assert.ok(historyEpNums.includes(2), 'Episode 2 should be in watch_history');
+      assert.ok(historyEpNums.includes(5), 'Episode 5 should be in watch_history');
+      assert.ok(!historyEpNums.includes(3), 'Episode 3 (unreleased) must NOT be in watch_history');
+      assert.ok(!historyEpNums.includes(4), 'Episode 4 (TBA) must NOT be in watch_history');
+
+      // 2. Mark Season 1 unwatched
+      await new Promise((resolve, reject) => {
+        seasonWatchedHandler({ params: { id: showId, season: '1' }, body: { watched: false } }, { json: resolve }, reject);
+      });
+      const watchedCountAfterUnwatch = db.prepare('SELECT COUNT(*) as count FROM episodes WHERE show_id = ? AND watched = 1').get(showId).count;
+      assert.strictEqual(watchedCountAfterUnwatch, 0, 'All episodes should be unwatched after season unwatch');
+
+      // 3. Mark entire Show watched
+      await new Promise((resolve, reject) => {
+        showWatchedHandler({ params: { id: showId }, body: { watched: true } }, { json: resolve }, reject);
+      });
+
+      const ep3AfterShowWatched = db.prepare('SELECT watched FROM episodes WHERE id = 77003').get();
+      const ep4AfterShowWatched = db.prepare('SELECT watched FROM episodes WHERE id = 77004').get();
+      assert.strictEqual(ep3AfterShowWatched.watched, 0, 'Show-level watched must NOT mark future unreleased episode watched');
+      assert.strictEqual(ep4AfterShowWatched.watched, 0, 'Show-level watched must NOT mark TBA unreleased episode watched');
+    } finally {
+      db.prepare('DELETE FROM watch_history WHERE tmdb_id = ?').run(tmdbId);
+      db.prepare('DELETE FROM episodes WHERE show_id = ?').run(showId);
+      db.prepare('DELETE FROM shows WHERE id = ?').run(showId);
+    }
+  });
+
+  await t.test('Migration 55 unmarks unreleased episodes without files and removes erroneous watch_history entries', () => {
+    const showId = 7788992;
+    const tmdbId = 9988772;
+
+    try {
+      db.prepare('DELETE FROM episodes WHERE show_id = ?').run(showId);
+      db.prepare('DELETE FROM shows WHERE id = ?').run(showId);
+      db.prepare('DELETE FROM watch_history WHERE tmdb_id = ?').run(tmdbId);
+
+      db.prepare("INSERT INTO shows (id, tmdb_id, title, status, watched) VALUES (?, ?, 'Migration Test Show', 'continuing', 1)").run(showId, tmdbId);
+
+      // Pre-corrupted state: future & TBA episodes marked watched without files
+      db.prepare("INSERT INTO episodes (id, show_id, season_number, episode_number, title, air_date, file_path, watched, watched_at) VALUES (77011, ?, 1, 1, 'Aired', '2024-01-01', '/media/ep1.mkv', 1, '2024-01-02T00:00:00Z')").run(showId);
+      db.prepare("INSERT INTO episodes (id, show_id, season_number, episode_number, title, air_date, file_path, watched, watched_at) VALUES (77012, ?, 1, 2, 'Future Unreleased', '2099-01-01', NULL, 1, '2024-01-02T00:00:00Z')").run(showId);
+      db.prepare("INSERT INTO episodes (id, show_id, season_number, episode_number, title, air_date, file_path, watched, watched_at) VALUES (77013, ?, 1, 3, 'TBA Unreleased', NULL, NULL, 1, '2024-01-02T00:00:00Z')").run(showId);
+
+      db.prepare("INSERT INTO watch_history (tmdb_id, type, season_number, episode_number, watched_at) VALUES (?, 'episode', 1, 1, '2024-01-02T00:00:00Z')").run(tmdbId);
+      db.prepare("INSERT INTO watch_history (tmdb_id, type, season_number, episode_number, watched_at) VALUES (?, 'episode', 1, 2, '2024-01-02T00:00:00Z')").run(tmdbId);
+      db.prepare("INSERT INTO watch_history (tmdb_id, type, season_number, episode_number, watched_at) VALUES (?, 'episode', 1, 3, '2024-01-02T00:00:00Z')").run(tmdbId);
+
+      // Execute migration 55's SQL statements directly to verify data cleanup
+      db.prepare(`
+        UPDATE episodes
+        SET watched = 0, watched_at = NULL, watch_progress = 0
+        WHERE watched = 1
+          AND file_path IS NULL
+          AND (air_date IS NULL OR air_date > date('now', 'localtime'));
+      `).run();
+
+      db.prepare(`
+        DELETE FROM watch_history
+        WHERE type = 'episode'
+          AND rowid IN (
+            SELECT w.rowid
+            FROM watch_history w
+            JOIN shows s ON s.tmdb_id = w.tmdb_id
+            JOIN episodes e ON e.show_id = s.id AND e.season_number = w.season_number AND e.episode_number = w.episode_number
+            WHERE e.file_path IS NULL
+              AND (e.air_date IS NULL OR e.air_date > date('now', 'localtime'))
+          );
+      `).run();
+
+      const ep1 = db.prepare('SELECT watched FROM episodes WHERE id = 77011').get();
+      const ep2 = db.prepare('SELECT watched FROM episodes WHERE id = 77012').get();
+      const ep3 = db.prepare('SELECT watched FROM episodes WHERE id = 77013').get();
+
+      assert.strictEqual(ep1.watched, 1, 'Aired downloaded episode should remain watched');
+      assert.strictEqual(ep2.watched, 0, 'Future unreleased episode must be reset to unwatched');
+      assert.strictEqual(ep3.watched, 0, 'TBA unreleased episode must be reset to unwatched');
+
+      const history = db.prepare("SELECT episode_number FROM watch_history WHERE tmdb_id = ? AND type = 'episode'").all(tmdbId);
+      const historyEpNums = history.map(h => h.episode_number);
+      assert.deepStrictEqual(historyEpNums, [1], 'Only released episode should remain in watch_history');
+    } finally {
+      db.prepare('DELETE FROM watch_history WHERE tmdb_id = ?').run(tmdbId);
+      db.prepare('DELETE FROM episodes WHERE show_id = ?').run(showId);
+      db.prepare('DELETE FROM shows WHERE id = ?').run(showId);
+    }
+  });
 });
 
 
