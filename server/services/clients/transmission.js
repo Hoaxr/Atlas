@@ -104,6 +104,23 @@ const resumeTorrent = async (client, hash) => {
   return true;
 };
 
+const getTorrentFiles = async (client, hash) => {
+  try {
+    const data = await rpc(client, 'torrent-get', {
+      ids: [hash],
+      fields: ['files']
+    });
+    const torrent = data.arguments?.torrents?.[0];
+    return (torrent?.files || []).map(f => ({
+      name: f.name,
+      size: f.length,
+      progress: f.length ? f.bytesCompleted / f.length : 0
+    }));
+  } catch (err) {
+    return [];
+  }
+};
+
 const deleteTorrent = async (client, hash, deleteFiles = false) => {
   await rpc(client, 'torrent-remove', {
     ids: [hash],
@@ -121,4 +138,4 @@ const testConnection = async (client) => {
   }
 };
 
-module.exports = { addTorrent, getTorrents, getTransferInfo, pauseTorrent, resumeTorrent, deleteTorrent, testConnection };
+module.exports = { addTorrent, getTorrents, getTransferInfo, getTorrentFiles, pauseTorrent, resumeTorrent, deleteTorrent, testConnection };

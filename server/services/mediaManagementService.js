@@ -10,7 +10,7 @@ const tmdbService = require('./tmdbService');
 const imageService = require('./imageService');
 
 const { getSetting } = require('../utils/settings');
-const { isVideoFile, isSubtitleFile, findLargestVideoFile } = require('../utils/fileUtils');
+const { isVideoFile, isSubtitleFile, findLargestVideoFile, isDangerousFile, findDangerousFiles } = require('../utils/fileUtils');
 const { getMediaMetadata, parseAudioFromFileName } = require('../utils/videoUtils');
 const subtitleService = require('./subtitles');
 const subtitleSyncService = require('./subtitles/subtitleSyncService');
@@ -539,6 +539,23 @@ const runMediaManagement = async () => {
       return 'skipped';
     }
     
+    // Safety check: quarantine any torrent whose content path contains dangerous executable files (.exe, .bat, etc.)
+    for (const torrent of torrentList) {
+      const contentPath = getMappedDownloadPath(torrent);
+      if (contentPath && fs.existsSync(contentPath)) {
+        const dangerous = await findDangerousFiles(contentPath);
+        if (dangerous.length > 0 || isDangerousFile(contentPath)) {
+          console.warn(`[Security] Quarantining malicious download "${torrent.name}" at ${contentPath}`);
+          try {
+            await downloadClientService.deleteTorrent(torrent.hash, true);
+          } catch { /* ignore */ }
+          try {
+            await fs.promises.rm(contentPath, { recursive: true, force: true });
+          } catch { /* ignore */ }
+        }
+      }
+    }
+
     // Filter finished torrents
     const finishedTorrents = torrentList.filter(t => t.progress >= 100);
 
@@ -688,6 +705,25 @@ const importMovie = async (torrent, movie) => {
     
     if (!videoFile) {
       console.warn(`[MediaManagement] No video file found in ${contentPath}`);
+      // Security check: if download contains dangerous executable files, quarantine and purge immediately!
+      const dangerous = await findDangerousFiles(contentPath);
+      if (dangerous.length > 0 || isDangerousFile(contentPath)) {
+        console.warn(`[Security] Quarantining malicious movie download "${torrent.name}" containing executable file(s): ${dangerous.join(', ')}`);
+        try {
+          if (torrent.hash) {
+            await downloadClientService.deleteTorrent(torrent.hash, true);
+          }
+        } catch (delErr) {
+          console.error(`[Security] Failed to delete malicious torrent from client: ${delErr.message}`);
+        }
+        try {
+          await fs.promises.rm(contentPath, { recursive: true, force: true });
+        } catch (rmErr) {
+          console.error(`[Security] Failed to remove malicious path from disk: ${rmErr.message}`);
+        }
+        db.prepare("UPDATE movies SET status = 'monitored', file_path = NULL, file_size = 0, scene_name = NULL WHERE id = ?").run(movie.id);
+        eventBus.error('Malicious Download Removed', { title: movie.title, message: `Removed fake movie release containing executable files.` });
+      }
       return;
     }
 
@@ -990,6 +1026,25 @@ const importEpisode = async (torrent, episode) => {
     
     if (!videoFile) {
       console.warn(`[MediaManagement] No video file found for episode ${episode.show_title} S${episode.season_number}E${episode.episode_number} in ${contentPath}`);
+      // Security check: if download contains dangerous executable files, quarantine and purge immediately!
+      const dangerous = await findDangerousFiles(contentPath);
+      if (dangerous.length > 0 || isDangerousFile(contentPath)) {
+        console.warn(`[Security] Quarantining malicious episode download "${torrent.name}" containing executable file(s): ${dangerous.join(', ')}`);
+        try {
+          if (torrent.hash) {
+            await downloadClientService.deleteTorrent(torrent.hash, true);
+          }
+        } catch (delErr) {
+          console.error(`[Security] Failed to delete malicious torrent from client: ${delErr.message}`);
+        }
+        try {
+          await fs.promises.rm(contentPath, { recursive: true, force: true });
+        } catch (rmErr) {
+          console.error(`[Security] Failed to remove malicious path from disk: ${rmErr.message}`);
+        }
+        db.prepare("UPDATE episodes SET status = 'monitored', file_path = NULL, file_size = NULL, scene_name = NULL WHERE id = ?").run(episode.id);
+        eventBus.error('Malicious Download Removed', { title: `${episode.show_title} S${episode.season_number}E${episode.episode_number}`, message: `Removed fake episode release containing executable files.` });
+      }
       return;
     }
 
@@ -1317,6 +1372,18 @@ const importSeasonPack = async (torrent, { showId, showTitle, seasonNumber }) =>
     const videoFiles = await findAllVideoFiles(contentPath);
     if (videoFiles.length === 0) {
       console.warn(`[MediaManagement] No video files found in season pack: ${contentPath}`);
+      const dangerous = await findDangerousFiles(contentPath);
+      if (dangerous.length > 0 || isDangerousFile(contentPath)) {
+        console.warn(`[Security] Quarantining malicious season pack "${torrent.name}" containing executable files.`);
+        try {
+          if (torrent.hash) {
+            await downloadClientService.deleteTorrent(torrent.hash, true);
+          }
+        } catch { /* ignore */ }
+        try {
+          await fs.promises.rm(contentPath, { recursive: true, force: true });
+        } catch { /* ignore */ }
+      }
       return;
     }
     console.log(`[MediaManagement] Found ${videoFiles.length} video files in season pack`);

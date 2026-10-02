@@ -177,6 +177,16 @@ const resumeTorrent = async (client, hash) => {
   return true;
 };
 
+const getTorrentFiles = async (client, hash) => {
+  const response = await authedRequest(client, (cookie) =>
+    http.get(`${client.host}:${client.port}/api/v2/torrents/files`, {
+      headers: { 'Cookie': cookie },
+      params: { hash }
+    })
+  );
+  return response.data || [];
+};
+
 const deleteTorrent = async (client, hash, deleteFiles = false) => {
   await authedRequest(client, (cookie) =>
     http.post(`${client.host}:${client.port}/api/v2/torrents/delete`,
@@ -201,4 +211,4 @@ const testConnection = async (client) => {
   }
 };
 
-module.exports = { login, addTorrent, getTorrents, getTransferInfo, pauseTorrent, resumeTorrent, deleteTorrent, testConnection };
+module.exports = { login, addTorrent, getTorrents, getTransferInfo, getTorrentFiles, pauseTorrent, resumeTorrent, deleteTorrent, testConnection };

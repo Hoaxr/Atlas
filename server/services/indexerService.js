@@ -113,9 +113,29 @@ const isEpisodeRelease = (title) => {
 const DANGEROUS_EXTS = /\.(exe|bat|cmd|com|msi|scr|pif|vbs|ps1|jar|lnk|url|app|dmg|sh|bin|reg|hta|jse|wsf|wsh|msc|cpl|apk)\b/i;
 const FAKE_RELEASE_TERMS = /\b(zipx)\b/i;
 
-const isMaliciousOrFakeRelease = (title) => {
+const isMaliciousOrFakeRelease = (title, categories = [], extra = {}) => {
   if (!title) return false;
-  return DANGEROUS_EXTS.test(title) || FAKE_RELEASE_TERMS.test(title);
+  if (DANGEROUS_EXTS.test(title) || FAKE_RELEASE_TERMS.test(title)) return true;
+
+  if (extra?.fileName && DANGEROUS_EXTS.test(extra.fileName)) return true;
+  if (extra?.link && DANGEROUS_EXTS.test(decodeURIComponent(extra.link))) return true;
+
+  // Software / PC categories (4000-4999 in Torznab/Newznab) must never be accepted for media
+  if (Array.isArray(categories) && categories.length > 0) {
+    const isSoftwareCat = categories.some(c => {
+      const catId = typeof c === 'object' ? c?.id : Number(c);
+      return catId >= 4000 && catId < 5000;
+    });
+    if (isSoftwareCat) {
+      const hasMediaCat = categories.some(c => {
+        const catId = typeof c === 'object' ? c?.id : Number(c);
+        return (catId >= 2000 && catId < 3000) || (catId >= 5000 && catId < 6000) || (catId >= 3000 && catId < 4000);
+      });
+      if (!hasMediaCat) return true;
+    }
+  }
+
+  return false;
 };
 
 // Video release detection for music searches — concerts, music videos, DVD/Blu-ray discs, and video files
@@ -310,8 +330,8 @@ const filterAndSortResults = (results, profile, type, currentQuality = null, isM
   let camFiltered = 0;
   let dangerousFiltered = 0;
   let filtered = results.filter(r => {
-    // Block torrents containing dangerous file extensions or fake/spam honeypot markers
-    if (isMaliciousOrFakeRelease(r.title)) { dangerousFiltered++; return false; }
+    // Block torrents containing dangerous file extensions, software categories, or fake/spam honeypot markers
+    if (isMaliciousOrFakeRelease(r.title, r.categories, { link: r.link })) { dangerousFiltered++; return false; }
 
     // Block suspiciously small fake torrents during automated background searches
     if (!isManualSearch && r.size && r.size > 0) {
@@ -513,7 +533,7 @@ const searchSeasonPack = async (showTitle, seasonNumber, _profile = null, _curre
   if (customQuery && customQuery.trim()) {
     const results = await searchProwlarr(cleanTitle(customQuery), 'tvsearch');
     const packs = (results || [])
-      .filter(r => !isEpisodeRelease(r.title) && !isMaliciousOrFakeRelease(r.title))
+      .filter(r => !isEpisodeRelease(r.title) && !isMaliciousOrFakeRelease(r.title, r.categories, { link: r.link }))
       .sort((a, b) => b.seeders - a.seeders);
 
     const seen = new Set();
@@ -536,7 +556,7 @@ const searchSeasonPack = async (showTitle, seasonNumber, _profile = null, _curre
   // pack option and skip release-profile / quality / CAM filters. Individual
   // episode releases (SxxExx / xxXxx) are excluded.
   const packs = (results || [])
-    .filter(r => !isEpisodeRelease(r.title) && !isMaliciousOrFakeRelease(r.title))
+    .filter(r => !isEpisodeRelease(r.title) && !isMaliciousOrFakeRelease(r.title, r.categories, { link: r.link }))
     .sort((a, b) => b.seeders - a.seeders);
 
   // Deduplicate on normalized title stem
@@ -569,7 +589,7 @@ const searchMusic = async (artistName, albumTitle = null, profile = null, isManu
     } catch {
       rawResults = await searchProwlarr(clean, 'search');
     }
-    let filtered = rawResults.filter(r => !isMaliciousOrFakeRelease(r.title) && !isVideoMusicRelease(r.title, r.categories));
+    let filtered = rawResults.filter(r => !isMaliciousOrFakeRelease(r.title, r.categories, { link: r.link }) && !isVideoMusicRelease(r.title, r.categories));
     if (!isManualSearch) {
       filtered = filtered.filter(r => r.seeders && r.seeders >= 1);
     }
@@ -604,7 +624,7 @@ const searchMusic = async (artistName, albumTitle = null, profile = null, isManu
   }
 
   // Filter out malicious releases and video releases for music searches
-  let filtered = rawResults.filter(r => !isMaliciousOrFakeRelease(r.title) && !isVideoMusicRelease(r.title, r.categories));
+  let filtered = rawResults.filter(r => !isMaliciousOrFakeRelease(r.title, r.categories, { link: r.link }) && !isVideoMusicRelease(r.title, r.categories));
 
   // For automated searches, require seeders
   if (!isManualSearch) {
@@ -671,6 +691,7 @@ module.exports = {
   searchGeneric,
   searchMusic,
   isVideoMusicRelease,
+  isMaliciousOrFakeRelease,
   parseQuality,
   getCircuitStatus,
 };

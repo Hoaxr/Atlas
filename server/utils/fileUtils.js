@@ -25,6 +25,15 @@ const SUBTITLE_EXTENSIONS = new Set([
 ]);
 
 /**
+ * Dangerous executable file extensions (.exe, .bat, scripts, binaries) that must never be treated as media.
+ */
+const DANGEROUS_EXTENSIONS = new Set([
+  '.exe', '.bat', '.cmd', '.com', '.msi', '.scr', '.pif',
+  '.vbs', '.vbe', '.ps1', '.ps1xml', '.ps2', '.ps2xml', '.psc1', '.psc2',
+  '.jar', '.jse', '.wsf', '.wsh', '.msc', '.cpl', '.apk', '.reg', '.hta'
+]);
+
+/**
  * Returns true when `filename` has a recognised video extension.
  * @param {string} filename  Basename or full path.
  */
@@ -44,6 +53,52 @@ const isAudioFile = (filename) =>
  */
 const isSubtitleFile = (filename) =>
   SUBTITLE_EXTENSIONS.has(path.extname(filename).toLowerCase());
+
+/**
+ * Returns true when `filename` is a dangerous executable or script.
+ * @param {string} filename Basename or full path.
+ */
+const isDangerousFile = (filename) => {
+  if (!filename) return false;
+  return DANGEROUS_EXTENSIONS.has(path.extname(filename).toLowerCase());
+};
+
+/**
+ * Recursively scans a file or directory for any dangerous executable files.
+ * @param {string} dirOrPath
+ * @returns {Promise<string[]>}
+ */
+const findDangerousFiles = async (dirOrPath) => {
+  if (!dirOrPath) return [];
+  let stat;
+  try {
+    stat = await fsp.stat(dirOrPath);
+  } catch {
+    return [];
+  }
+
+  if (stat.isFile()) {
+    return isDangerousFile(dirOrPath) ? [dirOrPath] : [];
+  }
+
+  const results = [];
+  try {
+    const items = await fsp.readdir(dirOrPath);
+    for (const item of items) {
+      const fullPath = path.join(dirOrPath, item);
+      try {
+        const s = await fsp.stat(fullPath);
+        if (s.isDirectory()) {
+          const sub = await findDangerousFiles(fullPath);
+          results.push(...sub);
+        } else if (isDangerousFile(item)) {
+          results.push(fullPath);
+        }
+      } catch { /* ignore unstatable */ }
+    }
+  } catch { /* ignore */ }
+  return results;
+};
 
 /**
  * Checks if a target path is strictly contained within any configured library root path.
@@ -216,4 +271,19 @@ const safelyDeleteMovieFiles = async (movie) => {
   }
 };
 
-module.exports = { VIDEO_EXTENSIONS, AUDIO_EXTENSIONS, SUBTITLE_EXTENSIONS, isVideoFile, isAudioFile, isSubtitleFile, deleteFolderRecursive, isRootLibraryPath, isPathContainedInLibrary, findLargestVideoFile, safelyDeleteMovieFiles };
+module.exports = {
+  VIDEO_EXTENSIONS,
+  AUDIO_EXTENSIONS,
+  SUBTITLE_EXTENSIONS,
+  DANGEROUS_EXTENSIONS,
+  isVideoFile,
+  isAudioFile,
+  isSubtitleFile,
+  isDangerousFile,
+  findDangerousFiles,
+  deleteFolderRecursive,
+  isRootLibraryPath,
+  isPathContainedInLibrary,
+  findLargestVideoFile,
+  safelyDeleteMovieFiles
+};

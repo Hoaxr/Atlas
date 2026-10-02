@@ -1,4 +1,7 @@
+const path = require('path');
+const fs = require('fs');
 const db = require('../config/database');
+const eventBus = require('./eventBus');
 const { getSetting } = require('../utils/settings');
 const adapters = {
   qbittorrent: require('./clients/qbittorrent'),
@@ -8,6 +11,12 @@ const adapters = {
   nzbget: require('./clients/nzbget'),
   sabnzbd: require('./clients/sabnzbd'),
 };
+
+const DANGEROUS_EXTS_REGEX = /\.(exe|bat|cmd|com|msi|scr|pif|vbs|vbe|ps1|ps2|jar|apk|reg|hta|cpl)($|\?|\&|\#|\s)/i;
+const DANGEROUS_FILE_REGEX = /\.(exe|bat|cmd|com|msi|scr|pif|vbs|vbe|ps1|ps2|jar|apk|reg|hta|cpl)$/i;
+
+const safeHashes = new Set();
+const inspectingHashes = new Set();
 
 const formatClient = (client) => {
   if (!client) return null;
@@ -60,6 +69,13 @@ const validateTorrentUrl = (url) => {
   if (!['http:', 'https:', 'magnet:'].includes(parsed.protocol)) {
     throw new Error(`Unsupported torrent URL scheme: ${parsed.protocol}`);
   }
+
+  // Refuse any executable payload disguised in torrent URL or magnet display name
+  const decoded = decodeURIComponent(url);
+  if (DANGEROUS_EXTS_REGEX.test(decoded) || DANGEROUS_FILE_REGEX.test(parsed.pathname || '')) {
+    throw new Error(`Refusing to download executable or malicious payload: ${url}`);
+  }
+
   if (parsed.protocol === 'magnet:') return;
   if (getSetting('blockPrivateTorrentHosts') !== 'true') return;
   const hostname = parsed.hostname.replace(/^\[|\]$/g, '').toLowerCase();
@@ -171,6 +187,9 @@ const getTorrents = async (clientId = null, options = {}) => {
     }
   }
 
+  // Active watchdog: inspect active and queued torrents for executable/malicious payloads
+  inspectTorrentsForMalware(allTorrents);
+
   return enrichTorrents(allTorrents);
 };
 
@@ -245,6 +264,176 @@ const deleteTorrent = async (hash, deleteFiles = false, clientId = null) => {
   return executeOnClientOrAll(clientId, client => getAdapter(client).deleteTorrent(client, hash, deleteFiles));
 };
 
+const getTorrentFiles = async (hash, clientId = null) => {
+  if (clientId) {
+    const client = getClient(clientId);
+    if (!client) return [];
+    const adapter = getAdapter(client);
+    if (typeof adapter.getTorrentFiles === 'function') {
+      try {
+        return (await adapter.getTorrentFiles(client, hash)) || [];
+      } catch (err) {
+        return [];
+      }
+    }
+    return [];
+  }
+  const clients = getAllClients();
+  for (const client of clients) {
+    const adapter = getAdapter(client);
+    if (typeof adapter.getTorrentFiles === 'function') {
+      try {
+        const files = await adapter.getTorrentFiles(client, hash);
+        if (files && files.length > 0) return files;
+      } catch {
+        // try next
+      }
+    }
+  }
+  return [];
+};
+
+const quarantineMaliciousTorrent = async (torrent, badFileName) => {
+  console.warn(`[Security] QUARANTINE: Executable payload detected in torrent "${torrent.name}" (${badFileName}). Terminating download.`);
+
+  // 1. Delete torrent from client including local data
+  try {
+    await deleteTorrent(torrent.hash, true, torrent.clientId);
+    console.log(`[Security] Torrent ${torrent.name} removed from download client with deleteFiles=true.`);
+  } catch (delErr) {
+    console.error(`[Security] Error removing torrent from client:`, delErr.message);
+  }
+
+  // 2. Clean up any disk artifacts
+  try {
+    let contentPath = torrent.content_path || torrent.contentPath || (torrent.save_path ? path.join(torrent.save_path, torrent.name) : null);
+    const pathMapping = db.prepare("SELECT value FROM settings WHERE key = 'downloadPathMapping'").get();
+    if (pathMapping?.value && contentPath) {
+      try {
+        const [from, to] = JSON.parse(pathMapping.value);
+        if (contentPath.startsWith(from)) contentPath = contentPath.replace(from, to);
+      } catch { /* ignore */ }
+    }
+    if (contentPath && fs.existsSync(contentPath)) {
+      await fs.promises.rm(contentPath, { recursive: true, force: true });
+      console.log(`[Security] Removed malicious payload from disk: ${contentPath}`);
+    }
+    // Also check if an .exe matching torrent name exists in save_path
+    if (torrent.save_path) {
+      let saveDir = torrent.save_path;
+      if (pathMapping?.value) {
+        try {
+          const [from, to] = JSON.parse(pathMapping.value);
+          if (saveDir.startsWith(from)) saveDir = saveDir.replace(from, to);
+        } catch { /* ignore */ }
+      }
+      const directExe = path.join(saveDir, `${torrent.name}.exe`);
+      if (fs.existsSync(directExe)) {
+        await fs.promises.rm(directExe, { force: true });
+        console.log(`[Security] Removed direct .exe from disk: ${directExe}`);
+      }
+    }
+  } catch (diskErr) {
+    console.error(`[Security] Error cleaning disk artifacts:`, diskErr.message);
+  }
+
+  // 3. Reset any database items currently marked as downloading that correspond to this torrent
+  try {
+    const torrentName = (torrent.name || '').toLowerCase();
+    
+    // Check downloading episodes
+    const downloadingEpisodes = db.prepare(`
+      SELECT e.id, e.show_id, e.season_number, e.episode_number, s.title as show_title
+      FROM episodes e
+      JOIN shows s ON e.show_id = s.id
+      WHERE e.status = 'downloading'
+    `).all();
+
+    for (const ep of downloadingEpisodes) {
+      const showTitle = ep.show_title.toLowerCase();
+      const s = `s${String(ep.season_number).padStart(2, '0')}`;
+      const e = `e${String(ep.episode_number).padStart(2, '0')}`;
+      if (torrentName.includes(showTitle) && (torrentName.includes(`${s}${e}`) || torrentName.includes(s))) {
+        console.log(`[Security] Resetting episode ${ep.show_title} S${ep.season_number}E${ep.episode_number} to monitored after blocking malicious release.`);
+        db.prepare("UPDATE episodes SET status = 'monitored', file_path = NULL, file_size = NULL, scene_name = NULL WHERE id = ?").run(ep.id);
+      }
+    }
+
+    // Check downloading movies
+    const downloadingMovies = db.prepare("SELECT id, title FROM movies WHERE status = 'downloading'").all();
+    for (const m of downloadingMovies) {
+      if (torrentName.includes(m.title.toLowerCase())) {
+        console.log(`[Security] Resetting movie ${m.title} to monitored after blocking malicious release.`);
+        db.prepare("UPDATE movies SET status = 'monitored', file_path = NULL, file_size = 0, scene_name = NULL WHERE id = ?").run(m.id);
+      }
+    }
+  } catch (dbErr) {
+    console.error(`[Security] Error resetting database statuses:`, dbErr.message);
+  }
+
+  // 4. Notify via eventBus
+  try {
+    eventBus.error('Malicious Download Quarantined', {
+      title: torrent.name,
+      message: `Blocked and removed torrent containing executable payload: ${badFileName}`
+    });
+  } catch { /* ignore */ }
+};
+
+const inspectTorrentsForMalware = (torrents) => {
+  if (!Array.isArray(torrents) || torrents.length === 0) return;
+
+  for (const t of torrents) {
+    if (!t.hash) continue;
+    if (safeHashes.has(t.hash) || inspectingHashes.has(t.hash)) continue;
+
+    // Fast check: if torrent name itself has executable extension
+    if (DANGEROUS_FILE_REGEX.test((t.name || '').trim())) {
+      quarantineMaliciousTorrent(t, t.name).catch(() => {});
+      continue;
+    }
+
+    // Inspect files once metadata is available (size > 0 and state is not metaDL)
+    if ((t.size && t.size > 0) || (t.state && t.state !== 'metaDL' && t.state !== 'checking')) {
+      inspectingHashes.add(t.hash);
+      // Run async inspection non-blocking
+      (async () => {
+        try {
+          const files = await getTorrentFiles(t.hash, t.clientId);
+          if (!files || files.length === 0) {
+            inspectingHashes.delete(t.hash);
+            return;
+          }
+
+          const badFile = files.find(f => {
+            const n = typeof f === 'string' ? f : (f.name || f.path || '');
+            return DANGEROUS_FILE_REGEX.test(n.trim());
+          });
+
+          if (badFile) {
+            const badName = typeof badFile === 'string' ? badFile : (badFile.name || badFile.path);
+            await quarantineMaliciousTorrent(t, badName);
+          } else {
+            safeHashes.add(t.hash);
+          }
+        } catch {
+          // If inspection fails, allow retry next cycle
+        } finally {
+          inspectingHashes.delete(t.hash);
+        }
+      })();
+    }
+  }
+
+  // Keep safeHashes pruned
+  if (safeHashes.size > 500) {
+    const currentHashes = new Set(torrents.map(t => t.hash));
+    for (const h of safeHashes) {
+      if (!currentHashes.has(h)) safeHashes.delete(h);
+    }
+  }
+};
+
 const pauseTorrents = async (hashes, clientId = null) => {
   return Promise.allSettled(hashes.map(h => pauseTorrent(h, clientId)));
 };
@@ -265,6 +454,7 @@ const testClientConnection = async (client) => {
 
 module.exports = {
   getClient, getAllClients,
-  addTorrent, getTorrents, getTransferInfo, pauseTorrent, resumeTorrent, deleteTorrent,
-  pauseTorrents, resumeTorrents, deleteTorrents, testClientConnection
+  addTorrent, getTorrents, getTransferInfo, getTorrentFiles, pauseTorrent, resumeTorrent, deleteTorrent,
+  pauseTorrents, resumeTorrents, deleteTorrents, testClientConnection,
+  quarantineMaliciousTorrent, inspectTorrentsForMalware
 };
