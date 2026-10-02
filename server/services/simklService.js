@@ -238,8 +238,9 @@ const syncWatchedShows = async () => {
       const insertHistory = db.prepare('INSERT OR IGNORE INTO watch_history (tmdb_id, type, season_number, episode_number, watched_at, runtime) VALUES (?, ?, ?, ?, ?, ?)');
       const getShowByTmdb = db.prepare('SELECT id, runtime FROM shows WHERE tmdb_id = ?');
       const updateShowWatched = db.prepare('UPDATE shows SET watched = 1 WHERE id = ?');
-      const getEpRuntime = db.prepare('SELECT runtime FROM episodes WHERE show_id = ? AND season_number = ? AND episode_number = ?');
-      const updateEpWatched = db.prepare('UPDATE episodes SET watched = 1, watched_at = COALESCE(watched_at, ?) WHERE show_id = ? AND season_number = ? AND episode_number = ?');
+      const airedOrOnDisk = "AND (file_path IS NOT NULL OR (air_date IS NOT NULL AND air_date <= date('now','localtime')))";
+      const getEpInfo = db.prepare(`SELECT runtime, (file_path IS NOT NULL OR (air_date IS NOT NULL AND air_date <= date('now','localtime'))) as is_released FROM episodes WHERE show_id = ? AND season_number = ? AND episode_number = ?`);
+      const updateEpWatched = db.prepare(`UPDATE episodes SET watched = 1, watched_at = COALESCE(watched_at, ?) WHERE show_id = ? AND season_number = ? AND episode_number = ? ${airedOrOnDisk}`);
 
       for (const item of list) {
         const tmdbId = item.ids?.tmdb || item.show?.ids?.tmdb;
@@ -255,7 +256,10 @@ const syncWatchedShows = async () => {
         const show = getShowByTmdb.get(tmdbId);
         // Only mark the show as completely watched if Simkl explicitly marks status as completed AND no un-aired/un-watched episodes exist
         if (show && item.status === 'completed') {
-          updateShowWatched.run(show.id);
+          const allWatched = db.prepare(`SELECT COUNT(*) as total, SUM(watched) as watched_count FROM episodes WHERE show_id = ? AND season_number > 0 ${airedOrOnDisk}`).get(show.id);
+          if (allWatched && allWatched.total > 0 && allWatched.total === allWatched.watched_count) {
+            updateShowWatched.run(show.id);
+          }
         }
           
         if (Array.isArray(item.seasons) && item.seasons.length > 0) {
@@ -266,15 +270,16 @@ const syncWatchedShows = async () => {
                 const epNum = ep.number;
                 const epWatchedAt = ep.last_watched_at || ep.watched_at || showWatchedAt;
                 let rt = ep.runtime || null;
-                if (!rt && show) {
-                  const localEp = getEpRuntime.get(show.id, seasonNum, epNum);
-                  rt = localEp ? localEp.runtime : show.runtime;
-                }
-                insertHistory.run(tmdbId, 'episode', seasonNum, epNum, epWatchedAt, rt);
-                
                 if (show) {
+                  const localEp = getEpInfo.get(show.id, seasonNum, epNum);
+                  if (localEp && !localEp.is_released) {
+                    // Unaired placeholder from TMDB must stay unwatched
+                    continue;
+                  }
+                  rt = localEp ? localEp.runtime : show.runtime;
                   updateEpWatched.run(epWatchedAt, show.id, seasonNum, epNum);
                 }
+                insertHistory.run(tmdbId, 'episode', seasonNum, epNum, epWatchedAt, rt);
               }
             }
           }
@@ -488,8 +493,9 @@ const syncWatchedAnime = async () => {
       const insertHistory = db.prepare('INSERT OR IGNORE INTO watch_history (tmdb_id, type, season_number, episode_number, watched_at, runtime) VALUES (?, ?, ?, ?, ?, ?)');
       const getShowByTmdb = db.prepare('SELECT id, runtime FROM shows WHERE tmdb_id = ?');
       const updateShowWatched = db.prepare('UPDATE shows SET watched = 1 WHERE id = ?');
-      const getEpRuntime = db.prepare('SELECT runtime FROM episodes WHERE show_id = ? AND season_number = ? AND episode_number = ?');
-      const updateEpWatched = db.prepare('UPDATE episodes SET watched = 1, watched_at = COALESCE(watched_at, ?) WHERE show_id = ? AND season_number = ? AND episode_number = ?');
+      const airedOrOnDisk = "AND (file_path IS NOT NULL OR (air_date IS NOT NULL AND air_date <= date('now','localtime')))";
+      const getEpInfo = db.prepare(`SELECT runtime, (file_path IS NOT NULL OR (air_date IS NOT NULL AND air_date <= date('now','localtime'))) as is_released FROM episodes WHERE show_id = ? AND season_number = ? AND episode_number = ?`);
+      const updateEpWatched = db.prepare(`UPDATE episodes SET watched = 1, watched_at = COALESCE(watched_at, ?) WHERE show_id = ? AND season_number = ? AND episode_number = ? ${airedOrOnDisk}`);
 
       for (const item of list) {
         const tmdbId = item.ids?.tmdb || item.anime?.ids?.tmdb || item.show?.ids?.tmdb;
@@ -503,7 +509,10 @@ const syncWatchedAnime = async () => {
 
         const show = getShowByTmdb.get(tmdbId);
         if (show && item.status === 'completed') {
-          updateShowWatched.run(show.id);
+          const allWatched = db.prepare(`SELECT COUNT(*) as total, SUM(watched) as watched_count FROM episodes WHERE show_id = ? AND season_number > 0 ${airedOrOnDisk}`).get(show.id);
+          if (allWatched && allWatched.total > 0 && allWatched.total === allWatched.watched_count) {
+            updateShowWatched.run(show.id);
+          }
         }
 
         if (Array.isArray(item.seasons) && item.seasons.length > 0) {
@@ -514,15 +523,15 @@ const syncWatchedAnime = async () => {
                 const epNum = ep.number;
                 const epWatchedAt = ep.last_watched_at || ep.watched_at || showWatchedAt;
                 let rt = ep.runtime || null;
-                if (!rt && show) {
-                  const localEp = getEpRuntime.get(show.id, seasonNum, epNum);
-                  rt = localEp ? localEp.runtime : show.runtime;
-                }
-                insertHistory.run(tmdbId, 'episode', seasonNum, epNum, epWatchedAt, rt);
-
                 if (show) {
+                  const localEp = getEpInfo.get(show.id, seasonNum, epNum);
+                  if (localEp && !localEp.is_released) {
+                    continue;
+                  }
+                  rt = localEp ? localEp.runtime : show.runtime;
                   updateEpWatched.run(epWatchedAt, show.id, seasonNum, epNum);
                 }
+                insertHistory.run(tmdbId, 'episode', seasonNum, epNum, epWatchedAt, rt);
               }
             }
           }
@@ -530,16 +539,28 @@ const syncWatchedAnime = async () => {
           for (const ep of item.episodes) {
             const epNum = ep.number;
             const epWatchedAt = ep.last_watched_at || ep.watched_at || showWatchedAt;
-            const rt = ep.runtime || (show ? show.runtime : null);
-            insertHistory.run(tmdbId, 'episode', 1, epNum, epWatchedAt, rt);
+            let rt = ep.runtime || (show ? show.runtime : null);
             if (show) {
+              const localEp = getEpInfo.get(show.id, 1, epNum);
+              if (localEp && !localEp.is_released) {
+                continue;
+              }
+              rt = localEp ? localEp.runtime : rt;
               updateEpWatched.run(epWatchedAt, show.id, 1, epNum);
             }
+            insertHistory.run(tmdbId, 'episode', 1, epNum, epWatchedAt, rt);
           }
         }
 
         if (item.status === 'completed') {
           insertHistory.run(tmdbId, 'show', null, null, showWatchedAt, show ? show.runtime : null);
+          if (show) {
+            const allEps = db.prepare(`SELECT season_number, episode_number, runtime FROM episodes WHERE show_id = ? ${airedOrOnDisk}`).all(show.id);
+            for (const ep of allEps) {
+              insertHistory.run(tmdbId, 'episode', ep.season_number, ep.episode_number, showWatchedAt, ep.runtime || show.runtime || null);
+            }
+            db.prepare(`UPDATE episodes SET watched = 1, watched_at = COALESCE(watched_at, ?) WHERE show_id = ? ${airedOrOnDisk}`).run(showWatchedAt, show.id);
+          }
         }
 
         if (show) localCount++;
