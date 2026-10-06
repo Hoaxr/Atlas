@@ -7,6 +7,10 @@ const { getNamingConfig, sanitizeTitle, formatSeriesFolder } = require('./mediaM
 const { isWatchedSyncEnabled } = require('../utils/settings');
 const eventBus = require('./eventBus');
 const imageService = require('./imageService');
+const { findLargestVideoFile } = require('../utils/fileUtils');
+const { parseResolution, parseCodec } = require('../utils/mediaParsing');
+const { parseAudioFromFileName } = require('../utils/videoUtils');
+const { scanSubtitleLangs } = require('./scanner/fileScanner');
 
 const sanitizeWatched = (items) => {
   if (isWatchedSyncEnabled()) return items;
@@ -92,10 +96,43 @@ const addMovie = async (tmdbId, rootFolderPath = null) => {
         ? path.join(libraryRoot, folderName) 
         : path.join(libraryRoot, 'Movies', folderName);
       
-      // Do not create empty movie folder on disk yet.
-      // The folder will only be created when the first download completes.
-      // Store intended folder_path so it is known for future downloads and cleanup.
-      db.prepare('UPDATE movies SET folder_path = ? WHERE id = ?').run(destFolder, result.lastInsertRowid);
+      let targetFolder = destFolder;
+      if (!fs.existsSync(targetFolder)) {
+        const unformatted = path.join(libraryRoot, `${movieDetails.title} (${year})`);
+        if (fs.existsSync(unformatted)) {
+          targetFolder = unformatted;
+        }
+      }
+
+      db.prepare('UPDATE movies SET folder_path = ? WHERE id = ?').run(targetFolder, result.lastInsertRowid);
+
+      // If the movie directory already exists on disk and contains a video file, immediately link it
+      if (fs.existsSync(targetFolder)) {
+        try {
+          const videoMatch = await findLargestVideoFile(targetFolder);
+          if (videoMatch && videoMatch.path) {
+            const resolution = parseResolution(videoMatch.name);
+            const codec = parseCodec(videoMatch.name);
+            const audio = parseAudioFromFileName(videoMatch.name);
+            const subLangs = await scanSubtitleLangs(videoMatch.path).catch(() => []);
+            db.prepare(`
+              UPDATE movies 
+              SET file_path = ?, status = 'downloaded', file_size = ?, resolution = ?, codec = ?, audio = ?, subtitles = ?
+              WHERE id = ?
+            `).run(
+              videoMatch.path,
+              videoMatch.size,
+              resolution !== 'Unknown' ? resolution : null,
+              codec,
+              audio,
+              JSON.stringify(subLangs),
+              result.lastInsertRowid
+            );
+          }
+        } catch (probeErr) {
+          console.error(`[LibraryService] Failed to probe existing video file in ${targetFolder}:`, probeErr.message);
+        }
+      }
     }
   } catch (err) {
     console.error(`[LibraryService] Failed to determine movie folder:`, err.message);
