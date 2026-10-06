@@ -767,6 +767,11 @@ router.post('/shows', async (req, res, next) => {
     if (qualityProfileId) {
       db.prepare('UPDATE shows SET quality_profile_id = ? WHERE id = ?').run(qualityProfileId, result.id);
     }
+    eventBus.emit('event', {
+      type: 'SHOW_ADDED',
+      data: result,
+      message: `Show added: ${result.title}`
+    });
     
     // Auto-Search
     if (autoSearch) {

@@ -142,8 +142,12 @@ export default function Layout() {
       if (data.type === 'WATCHERS_UPDATE') {
         setWatcherCount(data.count);
       }
-      // Invalidate library cache when a scan completes (new/removed items)
-      if (data.message && data.message.toLowerCase().includes('scan complete')) {
+      // Invalidate library cache when media is added or scan completes (new/removed items)
+      if (
+        data.type === 'MOVIE_ADDED' ||
+        data.type === 'SHOW_ADDED' ||
+        (data.message && data.message.toLowerCase().includes('scan complete'))
+      ) {
         setCachedMovies(null);
         setCachedShows(null);
         invalidateLibraryIndex();

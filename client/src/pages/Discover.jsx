@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../lib/api';
@@ -7,6 +7,9 @@ import MediaDetailsModal from '../components/MediaDetailsModal';
 import MediaRow from '../components/MediaRow';
 import InlineError from '../components/shared/InlineError';
 import { useOutsideClick } from '../lib/useOutsideClick';
+import useWebSocket from '../lib/useWebSocket';
+import { setCachedMovies, setCachedShows } from '../lib/libraryCache';
+import { invalidateLibraryIndex } from '../lib/libraryIndex';
 
 
 
@@ -64,6 +67,18 @@ export default function Discover() {
 
   const sliderPercent = Math.min(100, Math.max(0, ((posterSize - 90) / (240 - 90)) * 100));
 
+  const cardScale = useMemo(() => {
+    const t = Math.min(1, Math.max(0, (posterSize - 90) / (240 - 90)));
+    return {
+      badgeSize: Math.round(22 + t * 14),        // 22px at 90 -> 36px at 240
+      badgeIconSize: Math.round(12 + t * 7),     // 12px at 90 -> 19px at 240
+      cornerOffset: Math.round(4 + t * 6),       // 4px at 90 -> 10px at 240
+      dockBtnSize: Math.round(24 + t * 20),      // 24px at 90 -> 44px at 240
+      dockIconSize: Math.round(12 + t * 8),      // 12px at 90 -> 20px at 240
+      isCompact: posterSize <= 140,
+    };
+  }, [posterSize]);
+
   const [error, setError] = useState('');
   const [mode, setMode] = useState(initialMode); // 'movies' or 'shows'
   const [libraryItems, setLibraryItems] = useState(new Map()); // tmdb_id → library DB id
@@ -86,6 +101,19 @@ export default function Discover() {
 
 
   // Close rows menu on outside click — handled by useOutsideClick hook above
+
+  const { onEvent } = useWebSocket();
+  useEffect(() => {
+    return onEvent((data) => {
+      if (
+        data.type === 'MOVIE_ADDED' ||
+        data.type === 'SHOW_ADDED' ||
+        (data.message && data.message.toLowerCase().includes('scan complete'))
+      ) {
+        fetchLibrary();
+      }
+    });
+  }, [onEvent, mode]);
 
   useEffect(() => {
     let interval;
@@ -146,8 +174,8 @@ export default function Discover() {
 
   const fetchLibrary = async () => {
     try {
-      // Use ?badges=true to skip expensive subtitle scanning on movies
-      const endpoint = mode === 'movies' ? '/library/movies?badges=true' : '/library/shows';
+      // Use ?badges=true to skip expensive subtitle scanning on movies, add cache-buster
+      const endpoint = mode === 'movies' ? `/library/movies?badges=true&_t=${Date.now()}` : `/library/shows?_t=${Date.now()}`;
       const [libRes, watchedRes] = await Promise.all([
         api.get(endpoint),
         api.get('/library/watched-tmdb'),
@@ -178,6 +206,7 @@ export default function Discover() {
           title: i.title,
           name: i.title,
         }));
+
         setRecentResults(mappedRecent);
         
         // Update cache
@@ -278,32 +307,90 @@ export default function Discover() {
       ? "rounded-xl border border-slate-800 bg-slate-900/70 overflow-hidden group hover:border-slate-700 transition-all duration-200 relative w-full"
       : "flex-none rounded-xl border border-slate-800 bg-slate-900/70 overflow-hidden group hover:border-slate-700 transition-all duration-200 relative snap-start";
 
+    const handleCardClick = () => {
+      if (isInLibrary) {
+        const libraryId = libraryItems.get(tmdbId);
+        if (libraryId) {
+          navigate(displayType === 'movie' ? `/movies/${libraryId}` : `/shows/${libraryId}`);
+          return;
+        }
+      }
+      setSelectedMediaId(tmdbId);
+      setSelectedMediaType(displayType);
+      setModalAction('details');
+    };
+
     return (
       <div
         key={keyId}
-        className={cardClass}
+        role="button"
+        tabIndex={0}
+        aria-label={`View details for ${title}`}
+        onClick={handleCardClick}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            handleCardClick();
+          }
+        }}
+        className={`${cardClass} cursor-pointer focus:outline-none focus:ring-2 focus:ring-cyan-500/50`}
         style={!isGrid ? { width: `${posterSize}px`, minWidth: `${posterSize}px` } : undefined}
       >
         
         {isInLibrary && (
-          <div className="absolute top-2 left-2 z-20 bg-slate-900/80 rounded-full shadow-lg flex items-center justify-center group-hover:opacity-0 transition-opacity duration-200" title="In Library">
-            <CheckCircle2 className={`${isCompact ? 'w-4 h-4' : 'w-6 h-6'} text-emerald-400 fill-emerald-400/20`} />
+          <div 
+            style={{
+              top: `${cardScale.cornerOffset}px`,
+              left: `${cardScale.cornerOffset}px`,
+              width: `${cardScale.badgeSize}px`,
+              height: `${cardScale.badgeSize}px`,
+            }}
+            className="absolute z-20 bg-slate-900/80 rounded-full shadow-lg flex items-center justify-center group-hover:opacity-0 transition-opacity duration-200" 
+            title="In Library"
+          >
+            <CheckCircle2 
+              style={{
+                width: `${cardScale.badgeIconSize}px`,
+                height: `${cardScale.badgeIconSize}px`,
+              }}
+              className="text-emerald-400 fill-emerald-400/20" 
+            />
           </div>
         )}
 
         {isTrending && watchers && (
-          <div className={`absolute top-2 right-2 z-20 bg-slate-950/80 backdrop-blur font-bold rounded-md text-orange-400 border border-orange-500/30 shadow-lg group-hover:opacity-0 transition-opacity duration-200 ${
-            isCompact ? 'text-[9px] px-1 py-0.5' : 'text-xs px-2 py-1'
-          }`}>
+          <div 
+            style={{
+              top: `${cardScale.cornerOffset}px`,
+              right: `${cardScale.cornerOffset}px`,
+            }}
+            className={`absolute z-20 bg-slate-950/80 backdrop-blur font-bold rounded-md text-orange-400 border border-orange-500/30 shadow-lg group-hover:opacity-0 transition-opacity duration-200 ${
+              isCompact ? 'text-[9px] px-1 py-0.5' : 'text-xs px-2 py-1'
+            }`}
+          >
             🔥 {watchers} {isCompact ? '' : 'watching'}
           </div>
         )}
 
         <div className="aspect-[2/3] relative bg-slate-800">
           {watchedMap.get(tmdbId) ? (
-            <div className="absolute bottom-2 left-2 z-20 flex items-center gap-1 bg-slate-950/80 backdrop-blur px-1.5 py-0.5 rounded-md border border-emerald-500/30 shadow-lg group-hover:opacity-0 transition-opacity duration-200">
-              <Eye className="w-3 h-3 text-emerald-400" />
-              {!isCompact && <span className="text-[10px] font-bold text-emerald-400">Watched</span>}
+            <div 
+              style={{
+                bottom: `${cardScale.cornerOffset}px`,
+                left: `${cardScale.cornerOffset}px`,
+                width: `${cardScale.badgeSize}px`,
+                height: `${cardScale.badgeSize}px`,
+              }}
+              className="absolute z-20 flex items-center justify-center rounded-full bg-slate-900/80 backdrop-blur border border-emerald-500/30 shadow-lg group-hover:opacity-0 transition-opacity duration-200" 
+              title="Watched"
+            >
+              <Eye 
+                style={{
+                  width: `${cardScale.badgeIconSize}px`,
+                  height: `${cardScale.badgeIconSize}px`,
+                }}
+                className="text-emerald-400" 
+              />
             </div>
           ) : null}
           {poster ? (
@@ -317,13 +404,16 @@ export default function Discover() {
             <div className="w-full h-full flex items-center justify-center text-slate-500 text-center p-2 text-xs">No Image</div>
           )}
           
-          <div className={`absolute inset-0 bg-slate-950/80 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col items-center justify-center z-10 ${
+          <div className={`absolute inset-0 bg-slate-950/80 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col items-center justify-center z-10 pointer-events-none ${
             isCompact ? 'p-2 gap-1.5' : 'p-4 gap-3'
           }`}>
             {!isInLibrary ? (
               <button 
-                onClick={() => handleAddMedia(tmdbId, displayType)}
-                className={`bg-cyan-500 hover:bg-cyan-400 text-slate-950 w-full rounded-lg font-bold flex items-center justify-center shadow-lg ${
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleAddMedia(tmdbId, displayType);
+                }}
+                className={`bg-cyan-500 hover:bg-cyan-400 text-slate-950 w-full rounded-lg font-bold flex items-center justify-center shadow-lg pointer-events-auto ${
                   isCompact ? 'py-1 px-1 text-xs gap-1' : 'py-1.5 px-2 text-sm gap-1.5'
                 }`}
               >
@@ -334,13 +424,21 @@ export default function Discover() {
                 onClick={(e) => {
                   e.stopPropagation();
                   const libraryId = libraryItems.get(tmdbId);
-                  navigate(displayType === 'movie' ? `/movies/${libraryId}` : `/shows/${libraryId}`);
+                  if (libraryId) {
+                    navigate(displayType === 'movie' ? `/movies/${libraryId}` : `/shows/${libraryId}`);
+                  }
                 }}
-                className={`bg-emerald-500/20 hover:bg-emerald-500/30 transition-colors text-emerald-400 border border-emerald-500/30 w-full rounded-lg font-bold flex items-center justify-center shadow-lg cursor-pointer ${
-                  isCompact ? 'py-1 px-1 text-xs gap-1' : 'py-1.5 px-2 text-sm gap-1.5'
+                className={`bg-emerald-500/20 hover:bg-emerald-500/30 transition-colors text-emerald-400 border border-emerald-500/30 font-bold flex items-center justify-center shadow-lg cursor-pointer pointer-events-auto ${
+                  isCompact ? 'rounded-full hover:scale-110 transition-transform p-0' : 'w-full rounded-lg py-1.5 px-2 text-sm gap-1.5'
                 }`}
+                style={isCompact ? { width: `${cardScale.dockBtnSize}px`, height: `${cardScale.dockBtnSize}px` } : undefined}
+                title="In Library"
               >
-                <CheckCircle2 className={`${isCompact ? 'w-3.5 h-3.5' : 'w-4 h-4'} flex-shrink-0`} /> In Library
+                <CheckCircle2 
+                  style={isCompact ? { width: `${cardScale.dockIconSize}px`, height: `${cardScale.dockIconSize}px` } : undefined}
+                  className={`${isCompact ? '' : 'w-4 h-4'} flex-shrink-0`} 
+                />
+                {!isCompact && <span>In Library</span>}
               </button>
             )}
           </div>
@@ -633,24 +731,58 @@ export default function Discover() {
         isInLibrary={selectedMediaId ? libraryItems.has(selectedMediaId) : false}
         libraryId={selectedMediaId ? libraryItems.get(selectedMediaId) : null}
         mode={modalAction}
-        onAdded={(tmdbId, details) => {
+        onAdded={(tmdbId, details, createdItem) => {
+          const numericTmdbId = Number(tmdbId || details?.id);
+          const dbId = createdItem?.id || numericTmdbId;
+
+          // 1. Immediately mark as in library so cards instantly switch to "In Library"
+          setLibraryItems(prev => {
+            const next = new Map(prev);
+            next.set(numericTmdbId, dbId);
+            return next;
+          });
+
+          // 2. Prepend immediately to Recently Added
           if (details) {
+            const itemType = (selectedMediaType === 'tv' || selectedMediaType === 'show' || details.media_type === 'tv') ? 'tv' : 'movie';
             const newItem = {
-              id: details.id,
-              tmdb_id: details.id,
-              media_type: mode === 'movies' ? 'movie' : 'tv',
+              id: dbId,
+              tmdb_id: numericTmdbId,
+              media_type: itemType,
               title: details.title || details.name,
               name: details.title || details.name,
               poster_path: details.poster_path,
-              vote_average: details.vote_average,
-              rating: details.vote_average,
+              vote_average: details.vote_average || 0,
+              rating: details.vote_average || 0,
               year: details.release_date ? parseInt(details.release_date.split('-')[0]) : (details.first_air_date ? parseInt(details.first_air_date.split('-')[0]) : null),
               release_date: details.release_date || '',
               first_air_date: details.first_air_date || '',
-              overview: details.overview,
+              overview: details.overview || '',
             };
-            setRecentResults(prev => [newItem, ...prev].slice(0, 20));
+
+            setRecentResults(prev => [
+              newItem,
+              ...prev.filter(x => (x.tmdb_id || x.id) !== numericTmdbId)
+            ].slice(0, 20));
+
+            // Keep the cache for this mode in sync so clearing search doesn't revert to stale data
+            if (cacheRef.current[mode]) {
+              cacheRef.current[mode].recent = [
+                newItem,
+                ...(cacheRef.current[mode].recent || []).filter(x => (x.tmdb_id || x.id) !== numericTmdbId)
+              ].slice(0, 20);
+              if (cacheRef.current[mode].libraryIds) {
+                cacheRef.current[mode].libraryIds.set(numericTmdbId, dbId);
+              }
+            }
           }
+
+          // 3. Invalidate global module caches
+          setCachedMovies(null);
+          setCachedShows(null);
+          invalidateLibraryIndex();
+
+          // 4. Background refresh
           fetchLibrary();
         }}
       />

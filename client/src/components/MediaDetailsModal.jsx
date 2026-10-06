@@ -7,6 +7,8 @@ import { customAlert } from '../utils/alerts';
 import TrailerModal from './TrailerModal';
 import Spinner from './shared/Spinner';
 import { posterUrl, tmdbImgUrl } from '../lib/posterUrl';
+import { setCachedMovies, setCachedShows } from '../lib/libraryCache';
+import { invalidateLibraryIndex } from '../lib/libraryIndex';
 
 
 export default function MediaDetailsModal({ isOpen, onClose, mediaId, mediaType, isInLibrary, libraryId, onAdded, onRequest, mode = 'add', requestStatus, onDelete }) {
@@ -426,7 +428,10 @@ export default function MediaDetailsModal({ isOpen, onClose, mediaId, mediaType,
                         monitorLevel: mediaType === 'show' ? monitorLevel : undefined
                       };
                       const res = await api.post(endpoint, payload);
-                      if (onAdded) onAdded(details.id, details);
+                      setCachedMovies(null);
+                      setCachedShows(null);
+                      invalidateLibraryIndex();
+                      if (onAdded) onAdded(details.id, details, res.data?.data);
                       onClose();
                       customAlert(`${mediaType === 'movie' ? 'Movie' : 'TV Show'} added to library successfully!`);
                       // Server already launches a background auto-search for shows on POST /library/shows

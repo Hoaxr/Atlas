@@ -63,7 +63,7 @@ const probeAudioVolumeAt = async (filePath, startSec, durationSec = 2.0) => {
       '-i', resolvedPath,
       '-t', String(durationSec),
       '-vn',
-      '-af', 'volumedetect',
+      '-af', 'highpass=f=200,lowpass=f=3500,volumedetect',
       '-f', 'null',
       '-'
     ], { timeout: 10000 });
@@ -74,8 +74,8 @@ const probeAudioVolumeAt = async (filePath, startSec, durationSec = 2.0) => {
     const maxVol = maxMatch ? parseFloat(maxMatch[1]) : -99;
     const meanVol = meanMatch ? parseFloat(meanMatch[1]) : -99;
 
-    // Normal dialogue voice activity typically peaks above -38dB
-    const hasSound = maxVol > -40;
+    // Filtered speech band (200Hz-3500Hz) dialogue energy typically peaks above -35dB and mean above -52dB
+    const hasSound = maxVol > -35 && meanVol > -52;
     return { maxVol, meanVol, hasSound };
   } catch {
     return { maxVol: -99, meanVol: -99, hasSound: false };
@@ -146,6 +146,20 @@ const verifySingleSubtitleSync = async ({ filePath, subPath, _mediaType, _mediaI
     };
   }
 
+  // If subtitle ends significantly earlier than video duration (> 6 mins for feature films, or > 18% earlier for episodes/short media)
+  // Normal closing credits are 2-4 minutes (rarely 5 mins). A gap > 360s (6 min) strongly indicates a wrong edition (e.g. theatrical cut on extended/director's cut).
+  const endGapMs = durationMs - lastCue.endMs;
+  if ((durationMs > 1800000 && endGapMs > 360000) || (durationMs <= 1800000 && endGapMs > 240000 && endGapMs / durationMs > 0.18)) {
+    const gapMin = Math.round(endGapMs / 60000);
+    return {
+      status: 'duration_mismatch',
+      synced: false,
+      confidence: 0.95,
+      offsetSeconds: -Math.round(endGapMs / 1000),
+      message: `Subtitle finishes ~${gapMin}m before video ends (different cut or edition, e.g. theatrical vs director's cut)`
+    };
+  }
+
   // -------------------------------------------------------------
   // TIER 2: Reference Subtitle Alignment (Cross-Track Comparison)
   // -------------------------------------------------------------
@@ -159,7 +173,7 @@ const verifySingleSubtitleSync = async ({ filePath, subPath, _mediaType, _mediaI
     const dirFiles = await fsp.readdir(subDir);
     const otherSubs = dirFiles.filter(f => {
       const lower = f.toLowerCase();
-      return (lower.endsWith('.srt') || lower.endsWith('.vtt')) && f !== subFilename;
+      return (lower.endsWith('.srt') || lower.endsWith('.vtt')) && f !== subFilename && !lower.endsWith('.bak');
     });
 
     // Prefer English reference subtitle
@@ -175,6 +189,16 @@ const verifySingleSubtitleSync = async ({ filePath, subPath, _mediaType, _mediaI
     try {
       const refContent = await readSubtitleFile(refPath);
       const { cues: rawRefCues } = parseSubtitles(refContent);
+
+      // Validate that reference track itself does not have a duration mismatch with the video
+      const refLastCue = rawRefCues && rawRefCues.length > 0 ? rawRefCues[rawRefCues.length - 1] : null;
+      if (refLastCue) {
+        const refGapMs = durationMs - refLastCue.endMs;
+        if (refLastCue.endMs > durationMs + 8000 || (durationMs > 1800000 && refGapMs > 360000)) {
+          // Reference track has duration mismatch with video — do not use as reference
+          refPath = null;
+        }
+      }
 
       const isCreditCue = (c) => /(vertaling|translation|translated by|subtitles by|synced by|opensubtitles|subdl|subsource|addic7ed)/i.test(c?.text || '');
       const cleanTargetCues = cues.filter(c => !isCreditCue(c));
@@ -292,22 +316,32 @@ const verifySingleSubtitleSync = async ({ filePath, subPath, _mediaType, _mediaI
     };
   }
 
-  if (checksPerformed >= 3 && soundHits === 0) {
+  if (checksPerformed >= 3 && soundHits <= 1) {
     return {
       status: 'desynced',
       synced: false,
-      confidence: 0.75,
+      confidence: 0.80,
       offsetSeconds: 0,
-      message: 'Dialogue cues land during prolonged audio silence'
+      message: 'Dialogue cues do not correlate with detected speech audio'
+    };
+  }
+
+  if (checksPerformed >= 3 && soundHits >= checksPerformed - 1) {
+    return {
+      status: 'in_sync',
+      synced: true,
+      confidence: 0.88,
+      offsetSeconds: 0,
+      message: 'Dialogue cues correlate with active speech audio'
     };
   }
 
   return {
-    status: 'in_sync',
+    status: 'unknown',
     synced: true,
-    confidence: 0.80,
+    confidence: 0.50,
     offsetSeconds: 0,
-    message: 'Subtitle timing checks passed without anomalies'
+    message: 'Speech energy analysis was inconclusive'
   };
 };
 

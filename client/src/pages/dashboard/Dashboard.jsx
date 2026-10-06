@@ -287,11 +287,15 @@ export default function Dashboard() {
     fetchViewData(otherMode, true);
   }, []);
 
-  // Listen for scan completion to refresh library
+  // Listen for scan completion or new media added to refresh library
   const { onEvent } = useWebSocket();
   useEffect(() => {
     return onEvent((data) => {
-      if (data.message && data.message.toLowerCase().includes('scan complete')) {
+      if (
+        data.type === 'MOVIE_ADDED' ||
+        data.type === 'SHOW_ADDED' ||
+        (data.message && data.message.toLowerCase().includes('scan complete'))
+      ) {
         fetchViewData('movies', true);
         fetchViewData('shows', true);
       }
@@ -649,10 +653,30 @@ export default function Dashboard() {
       <div {...props} className="w-full h-full flex flex-col min-w-0">
         {children}
       </div>
-    )
+    ),
   }), [posterSize]);
 
   const sliderPercent = Math.min(100, Math.max(0, ((posterSize - 90) / (240 - 90)) * 100));
+
+  const cardScale = useMemo(() => {
+    const t = Math.min(1, Math.max(0, (posterSize - 90) / (240 - 90)));
+    return {
+      badgeSize: Math.round(22 + t * 14),        // 22px at 90 -> 36px at 240
+      badgeIconSize: Math.round(12 + t * 7),     // 12px at 90 -> 19px at 240
+      badgeGap: Math.round(4 + t * 4),           // 4px at 90 -> 8px at 240
+      cornerOffset: Math.round(4 + t * 6),       // 4px at 90 -> 10px at 240
+      dockBtnSize: Math.round(24 + t * 20),      // 24px at 90 -> 44px at 240
+      dockIconSize: Math.round(12 + t * 8),      // 12px at 90 -> 20px at 240
+      dockGap: Math.round(4 + t * 4),            // 4px at 90 -> 8px at 240
+      dockPadding: Math.round(3 + t * 3),        // 3px at 90 -> 6px at 240
+      seasonHeight: Math.round(20 + t * 8),      // 20px at 90 -> 28px at 240
+      seasonIconSize: Math.round(11 + t * 5),    // 11px at 90 -> 16px at 240
+      seasonFontSize: Math.round(10 + t * 3),    // 10px at 90 -> 13px at 240
+      seasonPaddingX: Math.round(5 + t * 4),     // 5px at 90 -> 9px at 240
+      backdropIconSize: Math.round(32 + t * 16), // 32px at 90 -> 48px at 240
+      isCompact: posterSize <= 140,
+    };
+  }, [posterSize]);
 
   return (
     <div className="space-y-5">
@@ -1105,7 +1129,7 @@ export default function Dashboard() {
                 components={gridComponents}
                 itemContent={(index, item) => {
                   if (!item) return <div key={`empty-${index}`} />;
-                  const isCompact = posterSize <= 150;
+                  const isCompact = cardScale.isCompact;
                   return (
                   <div 
                     key={item.id}
@@ -1125,7 +1149,13 @@ export default function Dashboard() {
                     }}
                     className={`w-full h-full min-w-0 cursor-pointer glass-panel interactive-glow-card rounded-xl overflow-hidden group hover:scale-[1.02] transition-all duration-300 relative flex flex-col focus:outline-none focus:ring-2 focus:ring-cyan-500/50 hover:shadow-[0_0_30px_-5px_rgba(6,182,212,0.25)] hover:border-cyan-500/40`}
                   >
-                  <div className={`absolute ${isCompact ? 'top-1 left-1' : 'top-1.5 sm:top-2 left-1.5 sm:left-2'} z-20`}>
+                  <div 
+                    style={{
+                      top: `${cardScale.cornerOffset}px`,
+                      left: `${cardScale.cornerOffset}px`,
+                    }}
+                    className="absolute z-20"
+                  >
                     <button 
                       onClick={async (e) => {
                         e.stopPropagation(); e.preventDefault();
@@ -1134,54 +1164,142 @@ export default function Dashboard() {
                           const res = await api.post(endpoint);
                           if (res.data.status === 'success') {
                             refreshLibrary();
-                            customAlert(res.data.data.monitored ? 'Now monitored' : 'Now unmonitored');
+                            customAlert(res.data.data?.monitored ? 'Now monitored' : 'Now unmonitored');
                           }
                         } catch {
                           customAlert('Failed to toggle monitor status', 'error');
                         }
                       }}
-                      className={`${isCompact ? 'w-5 h-5' : 'w-6 h-6 sm:w-8 sm:h-8'} rounded-full bg-slate-900/80 hover:bg-slate-800 transition-colors shadow-lg flex items-center justify-center group/btn`}
+                      style={{
+                        width: `${cardScale.badgeSize}px`,
+                        height: `${cardScale.badgeSize}px`,
+                      }}
+                      className="rounded-full bg-slate-900/80 hover:bg-slate-800 transition-colors shadow-lg flex items-center justify-center group/btn"
                       title={item.monitored ? 'Unmonitor' : 'Monitor'}
                     >
                       {item.monitored ? (
-                        <Bookmark className={`${isCompact ? 'w-3 h-3' : 'w-3.5 h-3.5 sm:w-5 sm:h-5'} text-emerald-500 fill-emerald-500 group-hover/btn:text-rose-400 group-hover/btn:fill-transparent`} />
+                        <Bookmark 
+                          style={{
+                            width: `${cardScale.badgeIconSize}px`,
+                            height: `${cardScale.badgeIconSize}px`,
+                          }}
+                          className="text-emerald-500 fill-emerald-500 group-hover/btn:text-rose-400 group-hover/btn:fill-transparent" 
+                        />
                       ) : (
-                        <Bookmark className={`${isCompact ? 'w-3 h-3' : 'w-3.5 h-3.5 sm:w-5 sm:h-5'} text-rose-400 group-hover/btn:text-emerald-400`} />
+                        <Bookmark 
+                          style={{
+                            width: `${cardScale.badgeIconSize}px`,
+                            height: `${cardScale.badgeIconSize}px`,
+                          }}
+                          className="text-rose-400 group-hover/btn:text-emerald-400" 
+                        />
                       )}
                     </button>
                   </div>
 
-                  <div className={`absolute ${isCompact ? 'top-1 right-1 gap-1' : 'top-1.5 sm:top-2 right-1.5 sm:right-2 gap-1 sm:gap-2'} z-20 flex`}>
+                  <div 
+                    style={{
+                      top: `${cardScale.cornerOffset}px`,
+                      right: `${cardScale.cornerOffset}px`,
+                      gap: `${cardScale.badgeGap}px`,
+                    }}
+                    className="absolute z-20 flex"
+                  >
                     {(item.status === 'downloading' || (viewMode === 'shows' && item.downloading_episodes > 0)) && (
-                      <div className={`${isCompact ? 'w-5 h-5' : 'w-6 h-6 sm:w-8 sm:h-8'} rounded-full bg-slate-900/80 flex items-center justify-center shadow-lg`} title="Downloading">
-                        <Activity className={`${isCompact ? 'w-3 h-3' : 'w-3.5 h-3.5 sm:w-5 sm:h-5'} text-blue-400 animate-pulse`} />
+                      <div 
+                        style={{
+                          width: `${cardScale.badgeSize}px`,
+                          height: `${cardScale.badgeSize}px`,
+                        }}
+                        className="rounded-full bg-slate-900/80 flex items-center justify-center shadow-lg" 
+                        title="Downloading"
+                      >
+                        <Activity 
+                          style={{
+                            width: `${cardScale.badgeIconSize}px`,
+                            height: `${cardScale.badgeIconSize}px`,
+                          }}
+                          className="text-blue-400 animate-pulse" 
+                        />
                       </div>
                     )}
                     {viewMode === 'shows' && item.status !== 'downloading' && !item.downloading_episodes && (
                       item.missing_episodes > 0 ? (
-                        <div className={`${isCompact ? 'w-5 h-5' : 'w-6 h-6 sm:w-8 sm:h-8'} rounded-full bg-slate-900/80 flex items-center justify-center shadow-lg`} title={`${item.missing_episodes} Missing Episode${item.missing_episodes > 1 ? 's' : ''}`}>
-                          <AlertCircle className={`${isCompact ? 'w-3 h-3' : 'w-3.5 h-3.5 sm:w-5 sm:h-5'} text-amber-500`} />
+                        <div 
+                          style={{
+                            width: `${cardScale.badgeSize}px`,
+                            height: `${cardScale.badgeSize}px`,
+                          }}
+                          className="rounded-full bg-slate-900/80 flex items-center justify-center shadow-lg" 
+                          title={`${item.missing_episodes} Missing Episode${item.missing_episodes > 1 ? 's' : ''}`}
+                        >
+                          <AlertCircle 
+                            style={{
+                              width: `${cardScale.badgeIconSize}px`,
+                              height: `${cardScale.badgeIconSize}px`,
+                            }}
+                            className="text-amber-500" 
+                          />
                         </div>
                       ) : (item.downloaded_episodes > 0 || item.status === 'downloaded') ? (
-                        <div className={`${isCompact ? 'w-5 h-5' : 'w-6 h-6 sm:w-8 sm:h-8'} rounded-full bg-slate-900/80 flex items-center justify-center shadow-lg`} title="Available">
-                          <CheckCircle2 className={`${isCompact ? 'w-3 h-3' : 'w-3.5 h-3.5 sm:w-5 sm:h-5'} text-emerald-400 fill-emerald-400/20`} />
+                        <div 
+                          style={{
+                            width: `${cardScale.badgeSize}px`,
+                            height: `${cardScale.badgeSize}px`,
+                          }}
+                          className="rounded-full bg-slate-900/80 flex items-center justify-center shadow-lg" 
+                          title="Available"
+                        >
+                          <CheckCircle2 
+                            style={{
+                              width: `${cardScale.badgeIconSize}px`,
+                              height: `${cardScale.badgeIconSize}px`,
+                            }}
+                            className="text-emerald-400 fill-emerald-400/20" 
+                          />
                         </div>
                       ) : null
                     )}
                     {viewMode === 'movies' && item.status !== 'downloading' && (
                       <>
                         {item.status === 'downloaded' && (
-                          <div className={`${isCompact ? 'w-5 h-5' : 'w-6 h-6 sm:w-8 sm:h-8'} rounded-full bg-slate-900/80 flex items-center justify-center shadow-lg`} title="Available">
-                            <CheckCircle2 className={`${isCompact ? 'w-3 h-3' : 'w-3.5 h-3.5 sm:w-5 sm:h-5'} text-emerald-400 fill-emerald-400/20`} />
+                          <div 
+                            style={{
+                              width: `${cardScale.badgeSize}px`,
+                              height: `${cardScale.badgeSize}px`,
+                            }}
+                            className="rounded-full bg-slate-900/80 flex items-center justify-center shadow-lg" 
+                            title="Available"
+                          >
+                            <CheckCircle2 
+                              style={{
+                                width: `${cardScale.badgeIconSize}px`,
+                                height: `${cardScale.badgeIconSize}px`,
+                              }}
+                              className="text-emerald-400 fill-emerald-400/20" 
+                            />
                           </div>
                         )}
                         {item.status === 'monitored' && (
-                          <div className={`${isCompact ? 'w-5 h-5' : 'w-6 h-6 sm:w-8 sm:h-8'} rounded-full bg-slate-900/80 flex items-center justify-center shadow-lg`} title={
-                            item.release_date && new Date(item.release_date) > new Date()
-                              ? 'Missing / Not Released Yet'
-                              : 'Missing'
-                          }>
-                            <AlertCircle className={`${isCompact ? 'w-3 h-3' : 'w-3.5 h-3.5 sm:w-5 sm:h-5'} ${item.release_date && new Date(item.release_date) > new Date() ? 'text-amber-400' : 'text-amber-500'}`} />
+                          <div 
+                            style={{
+                              width: `${cardScale.badgeSize}px`,
+                              height: `${cardScale.badgeSize}px`,
+                            }}
+                            className="rounded-full bg-slate-900/80 flex items-center justify-center shadow-lg" 
+                            title={
+                              item.release_date && new Date(item.release_date) > new Date()
+                                ? 'Missing / Not Released Yet'
+                                : 'Missing'
+                            }
+                          >
+                            <AlertCircle 
+                              style={{
+                                width: `${cardScale.badgeIconSize}px`,
+                                height: `${cardScale.badgeIconSize}px`,
+                              }}
+                              className={item.release_date && new Date(item.release_date) > new Date() ? 'text-amber-400' : 'text-amber-500'} 
+                            />
                           </div>
                         )}
                       </>
@@ -1192,22 +1310,71 @@ export default function Dashboard() {
                     {/* Placeholder backdrop icon */}
                     <div className="absolute inset-0 flex items-center justify-center text-slate-700/60 pointer-events-none">
                       {viewMode === 'shows' ? (
-                        <Tv className={`${isCompact ? 'w-8 h-8' : 'w-10 h-10'} stroke-[1.5]`} />
+                        <Tv 
+                          style={{
+                            width: `${cardScale.backdropIconSize}px`,
+                            height: `${cardScale.backdropIconSize}px`,
+                          }} 
+                          className="stroke-[1.5]" 
+                        />
                       ) : (
-                        <Film className={`${isCompact ? 'w-8 h-8' : 'w-10 h-10'} stroke-[1.5]`} />
+                        <Film 
+                          style={{
+                            width: `${cardScale.backdropIconSize}px`,
+                            height: `${cardScale.backdropIconSize}px`,
+                          }} 
+                          className="stroke-[1.5]" 
+                        />
                       )}
                     </div>
 
                     {item.watched ? (
-                      <div className={`absolute ${isCompact ? 'bottom-1.5 left-1.5 px-1.5 py-0.5' : 'bottom-2 left-2 px-2 py-1'} z-20 flex items-center gap-1 bg-slate-950/80 backdrop-blur rounded-md border border-emerald-500/30 shadow-lg md:group-hover:opacity-0 transition-opacity duration-200`}>
-                        <Eye className={`${isCompact ? 'w-2.5 h-2.5' : 'w-3 h-3'} text-emerald-400`} />
-                        <span className={`${isCompact ? 'text-[9px]' : 'text-[10px]'} font-bold text-emerald-400`}>Watched</span>
+                      <div 
+                        style={{
+                          width: `${cardScale.badgeSize}px`,
+                          height: `${cardScale.badgeSize}px`,
+                          bottom: `${cardScale.cornerOffset}px`,
+                          left: `${cardScale.cornerOffset}px`,
+                        }}
+                        className="absolute z-20 flex items-center justify-center rounded-full bg-slate-900/80 backdrop-blur border border-emerald-500/30 shadow-lg md:group-hover:opacity-0 transition-opacity duration-200"
+                        title="Watched"
+                      >
+                        <Eye 
+                          style={{
+                            width: `${cardScale.badgeIconSize}px`,
+                            height: `${cardScale.badgeIconSize}px`,
+                          }}
+                          className="text-emerald-400" 
+                        />
                       </div>
                     ) : null}
                     {viewMode === 'shows' && item.season_count > 0 && (
-                      <div className={`absolute ${isCompact ? 'bottom-1.5 right-1.5 px-1.5 py-0.5' : 'bottom-2 right-2 px-2 py-1'} z-20 flex items-center gap-1 bg-slate-950/80 backdrop-blur rounded-md border border-purple-500/30 shadow-lg md:group-hover:opacity-0 transition-opacity duration-200`}>
-                        <Tv className={`${isCompact ? 'w-2.5 h-2.5' : 'w-3 h-3'} text-purple-400`} />
-                        <span className={`${isCompact ? 'text-[9px]' : 'text-[10px]'} font-bold text-purple-400`}>{item.season_count}</span>
+                      <div 
+                        style={{
+                          height: `${cardScale.seasonHeight}px`,
+                          bottom: `${cardScale.cornerOffset}px`,
+                          right: `${cardScale.cornerOffset}px`,
+                          paddingLeft: `${cardScale.seasonPaddingX}px`,
+                          paddingRight: `${cardScale.seasonPaddingX}px`,
+                          gap: `${Math.max(2, Math.round(cardScale.seasonIconSize * 0.25))}px`,
+                        }}
+                        className="absolute z-20 flex items-center bg-slate-900/80 backdrop-blur rounded-md border border-purple-500/30 shadow-lg md:group-hover:opacity-0 transition-opacity duration-200"
+                      >
+                        <Tv 
+                          style={{
+                            width: `${cardScale.seasonIconSize}px`,
+                            height: `${cardScale.seasonIconSize}px`,
+                          }}
+                          className="text-purple-400" 
+                        />
+                        <span 
+                          style={{
+                            fontSize: `${cardScale.seasonFontSize}px`,
+                          }}
+                          className="font-bold text-purple-400 leading-none"
+                        >
+                          {item.season_count}
+                        </span>
                       </div>
                     )}
 
@@ -1227,7 +1394,13 @@ export default function Dashboard() {
                     />
                     <div className="absolute inset-0 bg-slate-950/80 opacity-0 md:group-hover:opacity-100 transition-opacity duration-300 hidden md:flex items-center justify-center p-2 sm:p-3 z-10 pointer-events-none">
                       {/* Center Floating Action Dock */}
-                      <div className={`flex items-center ${isCompact ? 'gap-1 p-1' : 'gap-2 p-1.5'} rounded-full bg-slate-900/90 backdrop-blur-md border border-white/10 shadow-2xl pointer-events-auto`}>
+                      <div 
+                        style={{
+                          gap: `${cardScale.dockGap}px`,
+                          padding: `${cardScale.dockPadding}px`,
+                        }}
+                        className="flex items-center rounded-full bg-slate-900/90 backdrop-blur-md border border-white/10 shadow-2xl pointer-events-auto"
+                      >
                         <button 
                           onClick={async (e) => { 
                             e.stopPropagation(); e.preventDefault(); 
@@ -1244,10 +1417,20 @@ export default function Dashboard() {
                               customAlert('Auto-search failed to find any results', 'error');
                             }
                           }}
-                          className={`bg-amber-400 hover:bg-amber-300 text-slate-950 ${isCompact ? 'w-7 h-7' : 'w-10 h-10'} rounded-full font-bold flex items-center justify-center transition-transform hover:scale-110 shadow-lg`}
+                          style={{
+                            width: `${cardScale.dockBtnSize}px`,
+                            height: `${cardScale.dockBtnSize}px`,
+                          }}
+                          className="bg-amber-400 hover:bg-amber-300 text-slate-950 rounded-full font-bold flex items-center justify-center transition-transform hover:scale-110 shadow-lg"
                           title="Auto Search"
                         >
-                          <Zap className={`${isCompact ? 'w-3 h-3' : 'w-4 h-4'} fill-current`} />
+                          <Zap 
+                            style={{
+                              width: `${cardScale.dockIconSize}px`,
+                              height: `${cardScale.dockIconSize}px`,
+                            }}
+                            className="fill-current" 
+                          />
                         </button>
                         <button 
                           onClick={(e) => { 
@@ -1257,10 +1440,19 @@ export default function Dashboard() {
                             setSearchMediaTitle(item.title);
                             setSearchModalOpen(true);
                           }}
-                          className={`bg-cyan-500 hover:bg-cyan-400 text-slate-950 ${isCompact ? 'w-7 h-7' : 'w-10 h-10'} rounded-full font-bold flex items-center justify-center transition-transform hover:scale-110 shadow-lg`}
+                          style={{
+                            width: `${cardScale.dockBtnSize}px`,
+                            height: `${cardScale.dockBtnSize}px`,
+                          }}
+                          className="bg-cyan-500 hover:bg-cyan-400 text-slate-950 rounded-full font-bold flex items-center justify-center transition-transform hover:scale-110 shadow-lg"
                           title="Manual Search"
                         >
-                          <Search className={`${isCompact ? 'w-3 h-3' : 'w-4 h-4'}`} />
+                          <Search 
+                            style={{
+                              width: `${cardScale.dockIconSize}px`,
+                              height: `${cardScale.dockIconSize}px`,
+                            }}
+                          />
                         </button>
                         <button 
                           onClick={async (e) => {
@@ -1279,14 +1471,32 @@ export default function Dashboard() {
                               customAlert('Failed to update watch status', 'error');
                             }
                           }}
-                          className={`${isCompact ? 'w-7 h-7' : 'w-10 h-10'} rounded-full font-bold flex items-center justify-center transition-transform hover:scale-110 shadow-lg ${
+                          style={{
+                            width: `${cardScale.dockBtnSize}px`,
+                            height: `${cardScale.dockBtnSize}px`,
+                          }}
+                          className={`rounded-full font-bold flex items-center justify-center transition-transform hover:scale-110 shadow-lg ${
                             item.watched 
                               ? 'bg-emerald-500 hover:bg-emerald-400 text-slate-950' 
                               : 'bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-white/10'
                           }`}
                           title={item.watched ? 'Mark as Unwatched' : 'Mark as Watched'}
                         >
-                          {item.watched ? <Eye className={`${isCompact ? 'w-3 h-3' : 'w-4 h-4'}`} /> : <EyeOff className={`${isCompact ? 'w-3 h-3' : 'w-4 h-4'}`} />}
+                          {item.watched ? (
+                            <Eye 
+                              style={{
+                                width: `${cardScale.dockIconSize}px`,
+                                height: `${cardScale.dockIconSize}px`,
+                              }}
+                            />
+                          ) : (
+                            <EyeOff 
+                              style={{
+                                width: `${cardScale.dockIconSize}px`,
+                                height: `${cardScale.dockIconSize}px`,
+                              }}
+                            />
+                          )}
                         </button>
                       </div>
                     </div>

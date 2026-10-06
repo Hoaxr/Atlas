@@ -16,13 +16,13 @@ test('Cleanup Candidates & Franchise Protection System', async (t) => {
 
   t.after(() => {
     tmdbService.getMovieById = origGetMovieById;
-    db.prepare('DELETE FROM movie_collections WHERE movie_id >= 98000').run();
-    db.prepare('DELETE FROM movies WHERE id >= 98000').run();
+    db.prepare('DELETE FROM movie_collections WHERE movie_id BETWEEN 98000 AND 98999').run();
+    db.prepare('DELETE FROM movies WHERE id BETWEEN 98000 AND 98999').run();
   });
 
   // Clean any prior remnants
-  db.prepare('DELETE FROM movie_collections WHERE movie_id >= 98000').run();
-  db.prepare('DELETE FROM movies WHERE id >= 98000').run();
+  db.prepare('DELETE FROM movie_collections WHERE movie_id BETWEEN 98000 AND 98999').run();
+  db.prepare('DELETE FROM movies WHERE id BETWEEN 98000 AND 98999').run();
 
   await t.test('The Matrix Resurrections and The Matrix are detected as a franchise and excluded', async () => {
     db.prepare(`

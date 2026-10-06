@@ -445,6 +445,11 @@ router.post('/', async (req, res, next) => {
     if (qualityProfileId) {
       db.prepare('UPDATE movies SET quality_profile_id = ? WHERE id = ?').run(qualityProfileId, result.id);
     }
+    eventBus.emit('event', {
+      type: 'MOVIE_ADDED',
+      data: result,
+      message: `Movie added: ${result.title}`
+    });
     res.json({ status: 'success', data: result });
   } catch (error) {
     if (error.message === 'Movie already in library') {
