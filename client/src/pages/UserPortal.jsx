@@ -494,8 +494,8 @@ export default function UserPortal() {
                         <div className="text-xl sm:text-3xl font-black text-white">
                           {userRequests.filter(req => {
                             const inLibrary = req.type === 'movie' 
-                              ? libraryMovies.some(m => m.tmdb_id === req.tmdb_id)
-                              : libraryShows.some(s => s.tmdb_id === req.tmdb_id);
+                              ? libraryMovies.some(m => Number(m.tmdb_id) === Number(req.tmdb_id))
+                              : libraryShows.some(s => Number(s.tmdb_id) === Number(req.tmdb_id));
                             return inLibrary || req.status === 'approved' || req.status === 'available';
                           }).length}
                         </div>
@@ -510,8 +510,8 @@ export default function UserPortal() {
                         <div className="text-xl sm:text-3xl font-black text-white">
                           {userRequests.filter(req => {
                             const inLibrary = req.type === 'movie' 
-                              ? libraryMovies.some(m => m.tmdb_id === req.tmdb_id)
-                              : libraryShows.some(s => s.tmdb_id === req.tmdb_id);
+                              ? libraryMovies.some(m => Number(m.tmdb_id) === Number(req.tmdb_id))
+                              : libraryShows.some(s => Number(s.tmdb_id) === Number(req.tmdb_id));
                             return !inLibrary && req.status === 'pending';
                           }).length}
                         </div>
@@ -671,10 +671,10 @@ export default function UserPortal() {
         onClose={() => setSelectedMediaId(null)}
         mediaId={selectedMediaId}
         mediaType={selectedMediaType}
-        isInLibrary={selectedMediaId ? (selectedMediaType === 'movie' ? libraryMovies.some(m => m.tmdb_id === selectedMediaId) : libraryShows.some(s => s.tmdb_id === selectedMediaId)) : false}
-        libraryId={selectedMediaId ? (selectedMediaType === 'movie' ? libraryMovies.find(m => m.tmdb_id === selectedMediaId)?.id : libraryShows.find(s => s.tmdb_id === selectedMediaId)?.id) : null}
+        isInLibrary={selectedMediaId ? (selectedMediaType === 'movie' ? libraryMovies.some(m => Number(m.tmdb_id) === Number(selectedMediaId)) : libraryShows.some(s => Number(s.tmdb_id) === Number(selectedMediaId))) : false}
+        libraryId={selectedMediaId ? (selectedMediaType === 'movie' ? libraryMovies.find(m => Number(m.tmdb_id) === Number(selectedMediaId))?.id : libraryShows.find(s => Number(s.tmdb_id) === Number(selectedMediaId))?.id) : null}
         mode="details"
-        requestStatus={selectedMediaId ? requests.find(r => r.tmdb_id === selectedMediaId)?.status : null}
+        requestStatus={selectedMediaId ? requests.find(r => Number(r.tmdb_id) === Number(selectedMediaId))?.status : null}
         onRequest={handleRequest}
       />
     </div>

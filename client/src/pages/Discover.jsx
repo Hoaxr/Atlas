@@ -130,7 +130,8 @@ export default function Discover() {
         setRecommendedResults(cacheRef.current[mode].recommended);
         setUpcomingResults(cacheRef.current[mode].upcoming || []);
         setRecentResults(cacheRef.current[mode].recent);
-        setLibraryItems(cacheRef.current[mode].libraryIds);
+        setLibraryItems(cacheRef.current[mode].libraryIds || new Map());
+        setWatchedMap(cacheRef.current[mode].watchedMap || new Map());
         setDownloadedSet(cacheRef.current[mode].downloadedIds || new Set());
         setLoading(false);
       }
@@ -184,17 +185,37 @@ export default function Discover() {
       ]);
       if (libRes.data.status === 'success') {
         const items = libRes.data.data;
-        const itemMap = new Map(items.map(item => [item.tmdb_id, item.id]));
-        const downloaded = new Set(
-          items
-            .filter(item => item.status === 'downloaded' || (item.file_path && item.file_path.trim() !== ''))
-            .map(item => Number(item.tmdb_id))
-        );
+        const itemMap = new Map();
+        const watched = new Map();
+        const downloaded = new Set();
+
+        for (const item of items) {
+          if (item.tmdb_id !== null && item.tmdb_id !== undefined) {
+            itemMap.set(item.tmdb_id, item.id);
+            itemMap.set(Number(item.tmdb_id), item.id);
+            itemMap.set(String(item.tmdb_id), item.id);
+
+            if (item.watched) {
+              watched.set(item.tmdb_id, true);
+              watched.set(Number(item.tmdb_id), true);
+              watched.set(String(item.tmdb_id), true);
+            }
+
+            if (item.status === 'downloaded' || (item.file_path && item.file_path.trim() !== '')) {
+              downloaded.add(item.tmdb_id);
+              downloaded.add(Number(item.tmdb_id));
+              downloaded.add(String(item.tmdb_id));
+            }
+          }
+        }
+
         // Merge persistent watched_tmdb entries (survives library deletion)
         if (watchedRes.data.status === 'success') {
           for (const entry of watchedRes.data.data) {
-            if (!watched.has(entry.tmdb_id)) {
+            if (entry.tmdb_id !== null && entry.tmdb_id !== undefined) {
               watched.set(entry.tmdb_id, true);
+              watched.set(Number(entry.tmdb_id), true);
+              watched.set(String(entry.tmdb_id), true);
             }
           }
         }
@@ -220,6 +241,7 @@ export default function Discover() {
         if (cacheRef.current[mode]) {
           cacheRef.current[mode].recent = mappedRecent;
           cacheRef.current[mode].libraryIds = itemMap;
+          cacheRef.current[mode].watchedMap = watched;
           cacheRef.current[mode].downloadedIds = downloaded;
         }
       }
@@ -260,6 +282,7 @@ export default function Discover() {
         upcoming: results[2]?.data?.status === 'success' ? results[2].data.data : (cacheRef.current[mode]?.upcoming || []),
         recent: cacheRef.current[mode]?.recent || [],
         libraryIds: cacheRef.current[mode]?.libraryIds || new Map(),
+        watchedMap: cacheRef.current[mode]?.watchedMap || new Map(),
         downloadedIds: cacheRef.current[mode]?.downloadedIds || new Set(),
       };
     } catch (err) {
@@ -844,6 +867,7 @@ export default function Discover() {
           setLibraryItems(prev => {
             const next = new Map(prev);
             next.set(numericTmdbId, dbId);
+            next.set(String(numericTmdbId), dbId);
             return next;
           });
 
@@ -878,6 +902,7 @@ export default function Discover() {
               ].slice(0, 20);
               if (cacheRef.current[mode].libraryIds) {
                 cacheRef.current[mode].libraryIds.set(numericTmdbId, dbId);
+                cacheRef.current[mode].libraryIds.set(String(numericTmdbId), dbId);
               }
             }
           }
