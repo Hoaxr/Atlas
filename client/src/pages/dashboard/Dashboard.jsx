@@ -661,8 +661,8 @@ export default function Dashboard() {
   const cardScale = useMemo(() => {
     const t = Math.min(1, Math.max(0, (posterSize - 90) / (240 - 90)));
     return {
-      badgeSize: Math.round(22 + t * 14),        // 22px at 90 -> 36px at 240
-      badgeIconSize: Math.round(12 + t * 7),     // 12px at 90 -> 19px at 240
+      badgeSize: Math.round((22 + t * 14) / 2) * 2,        // 22px at 90 -> 36px at 240 (always even)
+      badgeIconSize: Math.round((12 + t * 8) / 2) * 2,     // 12px at 90 -> 20px at 240 (always even)
       badgeGap: Math.round(4 + t * 4),           // 4px at 90 -> 8px at 240
       cornerOffset: Math.round(4 + t * 6),       // 4px at 90 -> 10px at 240
       dockBtnSize: Math.round(24 + t * 20),      // 24px at 90 -> 44px at 240
