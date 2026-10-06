@@ -27,7 +27,7 @@ const shouldSkipFile = (fileName) => {
   return false;
 };
 
-const { VALID_LANGUAGES, normalizeLanguageCode } = require('../../utils/languages');
+const { VALID_LANGUAGES, normalizeLanguageCode, parseSubtitleMetadata } = require('../../utils/languages');
 
 const SUBTITLE_EXTS = [...SUBTITLE_EXTENSIONS];
 
@@ -86,15 +86,8 @@ const scanSubtitleLangs = async (filePath) => {
           return false;
         })
         .map(item => {
-          let name = path.basename(item, path.extname(item));
-          name = name.replace(/[._-](?:forced|sdh|hi|cc|\d+)$/i, '');
-          const match = name.match(/(?:^|[._-])([a-z]{2,3}|english|dutch|french|german|spanish|italian|portuguese)$/i);
-          if (match) {
-            const code = match[1].toLowerCase();
-            const normalized = normalizeLanguageCode(code);
-            if (normalized) return normalized;
-          }
-          return 'en';
+          const meta = parseSubtitleMetadata(item);
+          return meta.langCode !== 'und' ? meta.langCode : 'en';
         })
         .filter(Boolean)
     )];

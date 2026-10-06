@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { 
   Languages, Download, Trash2, Edit3, Sparkles, 
-  Search, X, Loader2, CheckCircle2, AlertTriangle, XCircle 
+  Search, X, Loader2, CheckCircle2, AlertTriangle, XCircle,
+  Wrench, Undo2
 } from 'lucide-react';
 import ModalShell from '../shared/ModalShell';
 import api from '../../lib/api';
@@ -23,6 +24,7 @@ export default function SubtitleManagerModal({
   const [loading, setLoading] = useState(true);
   const [deletingFile, setDeletingFile] = useState(null);
   const [verifyingSync, setVerifyingSync] = useState(false);
+  const [repairingFile, setRepairingFile] = useState(null);
 
   // Modals state
   const [translateModalOpen, setTranslateModalOpen] = useState(false);
@@ -97,6 +99,79 @@ export default function SubtitleManagerModal({
     }
   };
 
+  const handleRepairOffset = async (track) => {
+    setRepairingFile(track.filename);
+    try {
+      const res = await api.post('/library/subtitles/repair/offset', {
+        mediaType,
+        mediaId,
+        filename: track.filename,
+        offset: track.syncOffset
+      });
+      if (res.data?.status === 'success') {
+        const v = res.data.data?.verification;
+        const statusMsg = v?.status === 'in_sync' ? 'In Sync' : (v?.status || 'verified');
+        customAlert(`Offset repaired (${track.syncOffset > 0 ? '+' : ''}${track.syncOffset}s)! Verification: ${statusMsg}`, 'success');
+        fetchTracks();
+        if (onRefresh) onRefresh();
+      }
+    } catch (err) {
+      customAlert(err.response?.data?.message || 'Failed to repair offset', 'error');
+    } finally {
+      setRepairingFile(null);
+    }
+  };
+
+  const handleRepairDrift = async (track) => {
+    setRepairingFile(track.filename);
+    try {
+      const res = await api.post('/library/subtitles/repair/drift', {
+        mediaType,
+        mediaId,
+        filename: track.filename,
+        slope: track.syncDrift
+      });
+      if (res.data?.status === 'success') {
+        const v = res.data.data?.verification;
+        const statusMsg = v?.status === 'in_sync' ? 'In Sync' : (v?.status || 'verified');
+        customAlert(`Framerate drift corrected! Verification: ${statusMsg}`, 'success');
+        fetchTracks();
+        if (onRefresh) onRefresh();
+      }
+    } catch (err) {
+      customAlert(err.response?.data?.message || 'Failed to repair drift', 'error');
+    } finally {
+      setRepairingFile(null);
+    }
+  };
+
+  const handleRestoreBackup = async (track) => {
+    const confirmed = await customConfirm(`Restore unedited backup for "${track.filename}"? This will overwrite current changes with the .bak file.`, {
+      title: 'Restore Subtitle Backup',
+      confirmText: 'Restore Backup',
+      type: 'warning',
+    });
+    if (!confirmed) return;
+
+    setRepairingFile(track.filename);
+    try {
+      const res = await api.post('/library/subtitles/repair/restore', {
+        mediaType,
+        mediaId,
+        filename: track.filename
+      });
+      if (res.data?.status === 'success') {
+        customAlert('Original subtitle restored from backup', 'success');
+        fetchTracks();
+        if (onRefresh) onRefresh();
+      }
+    } catch (err) {
+      customAlert(err.response?.data?.message || 'Failed to restore backup', 'error');
+    } finally {
+      setRepairingFile(null);
+    }
+  };
+
   const renderSyncBadge = (track) => {
     if (!track.syncStatus || track.syncStatus === 'unknown') return null;
 
@@ -105,7 +180,7 @@ export default function SubtitleManagerModal({
         return (
           <span
             className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1"
-            title={`In sync with dialogue (${Math.round((track.syncDetails?.confidence ?? 1) * 100)}% match)`}
+            title={`In sync with audio dialogue (${Math.round((track.syncConfidence ?? track.syncDetails?.confidence ?? 1) * 100)}% confidence)`}
           >
             <CheckCircle2 className="w-3 h-3 text-emerald-400" />
             In Sync
@@ -135,13 +210,24 @@ export default function SubtitleManagerModal({
         return (
           <span
             className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-300 border border-rose-500/30 flex items-center gap-1"
-            title={track.syncDetails?.message || 'Subtitle duration does not match video runtime'}
+            title="Different video/subtitle edition detected. Automatic repair is unsafe."
           >
             <XCircle className="w-3 h-3 text-rose-400" />
             Cut Mismatch
           </span>
         );
+      case 'partial_subtitle':
+        return (
+          <span
+            className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-500/30 flex items-center gap-1"
+            title={track.syncDetails?.message || 'Subtitle only covers part of the video'}
+          >
+            <AlertTriangle className="w-3 h-3 text-blue-400" />
+            Partial Subtitle
+          </span>
+        );
       case 'desynced':
+      case 'invalid_timing':
         return (
           <span
             className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-300 border border-rose-500/30 flex items-center gap-1"
@@ -255,6 +341,35 @@ export default function SubtitleManagerModal({
 
                             {/* Status Badges */}
                             {renderSyncBadge(track)}
+                            {track.isForced && (
+                              <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-500/30">
+                                Forced
+                              </span>
+                            )}
+                            {track.isSdh && (
+                              <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                                SDH
+                              </span>
+                            )}
+                            {!track.isSdh && track.isHearingImpaired && (
+                              <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                                HI
+                              </span>
+                            )}
+                            {track.qualityScore !== null && track.qualityScore !== undefined && (
+                              <span
+                                className={`text-[10px] font-medium px-1.5 py-0.5 rounded border ${
+                                  track.qualityScore >= 80
+                                    ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+                                    : track.qualityScore >= 60
+                                    ? 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+                                    : 'bg-rose-500/15 text-rose-300 border-rose-500/30'
+                                }`}
+                                title="Subtitle Quality Score (0-100)"
+                              >
+                                Quality {track.qualityScore}
+                              </span>
+                            )}
                             {track.trackType === 'translated' && (
                               <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/30">
                                 AI Translated {track.sourceLang ? `from ${track.sourceLang}` : ''}
@@ -284,20 +399,64 @@ export default function SubtitleManagerModal({
                                 <span>{track.cueCount} cues</span>
                               </>
                             )}
-                            {track.syncDetails?.confidence !== null && track.syncDetails?.confidence !== undefined && (
+                            {(track.syncConfidence !== null && track.syncConfidence !== undefined && track.syncConfidence > 0) || (track.syncDetails?.confidence !== null && track.syncDetails?.confidence !== undefined) ? (
                               <>
                                 <span>•</span>
                                 <span className={track.syncStatus === 'in_sync' ? 'text-emerald-400/80' : 'text-amber-400/80'}>
-                                  {Math.round(track.syncDetails.confidence * 100)}% match
+                                  {Math.round((track.syncConfidence || track.syncDetails?.confidence || 0) * 100)}% confidence
                                 </span>
                               </>
-                            )}
+                            ) : null}
                           </div>
                         </div>
                       </div>
 
                       {/* Right: Actions */}
                       <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-center">
+                        {track.syncStatus === 'offset_detected' && (
+                          <button
+                            onClick={() => handleRepairOffset(track)}
+                            disabled={repairingFile === track.filename}
+                            className="px-2.5 py-1 text-xs font-medium bg-amber-500/20 text-amber-300 border border-amber-500/30 hover:bg-amber-500/30 rounded-lg transition-colors flex items-center gap-1.5 disabled:opacity-50"
+                            title={`Automatically fix offset (${track.syncOffset > 0 ? '+' : ''}${track.syncOffset}s)`}
+                          >
+                            {repairingFile === track.filename ? (
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            ) : (
+                              <Wrench className="w-3.5 h-3.5" />
+                            )}
+                            Fix Offset
+                          </button>
+                        )}
+                        {track.syncStatus === 'drift_detected' && (
+                          <button
+                            onClick={() => handleRepairDrift(track)}
+                            disabled={repairingFile === track.filename}
+                            className="px-2.5 py-1 text-xs font-medium bg-amber-500/20 text-amber-300 border border-amber-500/30 hover:bg-amber-500/30 rounded-lg transition-colors flex items-center gap-1.5 disabled:opacity-50"
+                            title="Apply timing stretch for framerate drift"
+                          >
+                            {repairingFile === track.filename ? (
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            ) : (
+                              <Wrench className="w-3.5 h-3.5" />
+                            )}
+                            Fix Drift
+                          </button>
+                        )}
+                        {track.hasBackup && (
+                          <button
+                            onClick={() => handleRestoreBackup(track)}
+                            disabled={repairingFile === track.filename}
+                            className="p-2 text-slate-400 hover:text-amber-300 hover:bg-amber-500/10 rounded-lg transition-colors disabled:opacity-50"
+                            title="Restore Original Backup (.bak)"
+                          >
+                            {repairingFile === track.filename ? (
+                              <Loader2 className="w-4 h-4 animate-spin text-amber-400" />
+                            ) : (
+                              <Undo2 className="w-4 h-4" />
+                            )}
+                          </button>
+                        )}
                         <button
                           onClick={() => setEditorModalFile(track.filename)}
                           className="p-2 text-slate-400 hover:text-cyan-300 hover:bg-cyan-500/10 rounded-lg transition-colors"

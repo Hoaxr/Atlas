@@ -1735,6 +1735,28 @@ const MIGRATIONS = [
         }
       }
     }
+  },
+  {
+    id: 57,
+    name: 'add_subtitle_tracks_metadata_columns',
+    run: (db) => {
+      const cols = [
+        ['is_forced', 'INTEGER DEFAULT 0'],
+        ['is_sdh', 'INTEGER DEFAULT 0'],
+        ['is_hearing_impaired', 'INTEGER DEFAULT 0'],
+        ['sync_confidence', 'REAL DEFAULT 0'],
+        ['sync_drift', 'REAL DEFAULT 0'],
+        ['sync_method', 'TEXT DEFAULT NULL'],
+        ['quality_score', 'INTEGER DEFAULT NULL'],
+      ];
+      for (const [col, colType] of cols) {
+        if (!hasColumn('subtitle_tracks', col)) {
+          try {
+            db.exec(`ALTER TABLE subtitle_tracks ADD COLUMN ${col} ${colType};`);
+          } catch { /* ignore */ }
+        }
+      }
+    }
   }
 ];
 

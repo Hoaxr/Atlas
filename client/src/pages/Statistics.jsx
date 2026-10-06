@@ -691,7 +691,20 @@ export default function Statistics() {
                     </div>
                     {sub.sync_details && (
                       <p className="text-[11px] text-slate-500 mt-1 italic">
-                        {typeof sub.sync_details === 'string' ? sub.sync_details : JSON.stringify(sub.sync_details)}
+                        {(() => {
+                          try {
+                            if (typeof sub.sync_details === 'string' && sub.sync_details.startsWith('{')) {
+                              const parsed = JSON.parse(sub.sync_details);
+                              return parsed.message || sub.sync_details;
+                            }
+                            if (typeof sub.sync_details === 'object' && sub.sync_details?.message) {
+                              return sub.sync_details.message;
+                            }
+                            return String(sub.sync_details);
+                          } catch {
+                            return String(sub.sync_details);
+                          }
+                        })()}
                       </p>
                     )}
                   </div>

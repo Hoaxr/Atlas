@@ -20,6 +20,7 @@ const translationQueue = require('../../services/subtitles/translationQueue');
 const subtitleSyncService = require('../../services/subtitles/subtitleSyncService');
 const { CODE_TO_LANG } = require('../../utils/constants');
 const { extractLang, getSubtitlesInDir } = require('./helpers');
+const { parseSubtitleMetadata } = require('../../utils/languages');
 
 /**
  * Helper to resolve media file path and directory securely
@@ -235,7 +236,20 @@ router.get('/tracks/:mediaType/:mediaId', async (req, res, next) => {
       return res.json({ status: 'success', data: [] });
     }
 
-    const subFiles = await getSubtitlesInDir(resolved.dir, fsp, path);
+    let subFiles = await getSubtitlesInDir(resolved.dir, fsp, path);
+
+    // Filter TV episodes to only return subtitles matching this episode
+    if (mediaType === 'episode' && resolved.seasonNumber !== undefined && resolved.episodeNumber !== undefined) {
+      const sPad = String(resolved.seasonNumber).padStart(2, '0');
+      const ePad = String(resolved.episodeNumber).padStart(2, '0');
+      const p1 = `s${sPad}e${ePad}`.toLowerCase();
+      const p2 = `${resolved.seasonNumber}x${ePad}`.toLowerCase();
+      subFiles = subFiles.filter(f => {
+        const lower = f.toLowerCase();
+        return lower.includes(p1) || lower.includes(p2);
+      });
+    }
+
     const dbTracks = db.prepare('SELECT * FROM subtitle_tracks WHERE media_type = ? AND media_id = ?').all(mediaType, mediaId);
     const dbTrackMap = new Map(dbTracks.map(t => [t.filename, t]));
 
@@ -244,13 +258,15 @@ router.get('/tracks/:mediaType/:mediaId', async (req, res, next) => {
     for (const file of subFiles) {
       const filePath = path.join(resolved.dir, file);
       const ext = path.extname(file).replace('.', '').toLowerCase();
-      const langCode = extractLang(file, path);
-      const langName = CODE_TO_LANG[langCode] || langCode;
+      const meta = parseSubtitleMetadata(file);
+      const langCode = meta.langCode !== 'und' ? meta.langCode : extractLang(file, path);
+      const langName = meta.langName || CODE_TO_LANG[langCode] || langCode;
 
       let stat = null;
       try { stat = await fsp.stat(filePath); } catch { /* ignore */ }
 
       const dbTrack = dbTrackMap.get(file);
+      const bakExists = fs.existsSync(`${filePath}.bak`);
 
       tracks.push({
         filename: file,
@@ -262,13 +278,21 @@ router.get('/tracks/:mediaType/:mediaId', async (req, res, next) => {
         sourceLang: dbTrack?.source_lang || null,
         provider: dbTrack?.provider || null,
         manuallyEdited: Boolean(dbTrack?.manually_edited),
+        isForced: Boolean(dbTrack?.is_forced ?? meta.isForced),
+        isSdh: Boolean(dbTrack?.is_sdh ?? meta.isSdh),
+        isHearingImpaired: Boolean(dbTrack?.is_hearing_impaired ?? meta.isHearingImpaired),
+        qualityScore: dbTrack?.quality_score ?? null,
         syncStatus: dbTrack?.sync_status || 'unknown',
         syncOffset: dbTrack?.sync_offset || 0,
+        syncDrift: dbTrack?.sync_drift || 0,
+        syncConfidence: dbTrack?.sync_confidence ?? 0,
+        syncMethod: dbTrack?.sync_method || null,
+        hasBackup: bakExists,
         syncDetails: (() => {
           try {
-            return dbTrack?.sync_details ? JSON.parse(dbTrack.sync_details) : null;
+            return dbTrack?.sync_details ? (typeof dbTrack.sync_details === 'string' && (dbTrack.sync_details.startsWith('{') || dbTrack.sync_details.startsWith('[')) ? JSON.parse(dbTrack.sync_details) : dbTrack.sync_details) : null;
           } catch {
-            return null;
+            return dbTrack?.sync_details || null;
           }
         })(),
         fileSize: stat?.size || dbTrack?.file_size || 0,
@@ -293,6 +317,72 @@ router.post('/verify-sync/:mediaType/:mediaId', async (req, res, next) => {
     const force = req.query.force !== 'false';
     const results = await subtitleSyncService.verifyAllSubtitlesForMedia(mediaType, parseInt(mediaId, 10), { force });
     res.json({ status: 'success', data: { results } });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * POST /api/library/subtitles/repair/offset
+ * Safely applies an offset repair with backup and immediate re-verification
+ */
+router.post('/repair/offset', async (req, res, next) => {
+  try {
+    const { mediaType, mediaId, filename, offsetSeconds } = req.body;
+    if (!mediaType || !mediaId || !filename || offsetSeconds === undefined) {
+      return res.status(400).json({ status: 'error', message: 'Missing required parameters' });
+    }
+    const result = await subtitleSyncService.applyOffsetRepair({
+      mediaType,
+      mediaId: parseInt(mediaId, 10),
+      filename,
+      offsetSeconds
+    });
+    res.json({ status: 'success', data: result });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * POST /api/library/subtitles/repair/drift
+ * Safely applies a framerate drift scale repair with backup and immediate re-verification
+ */
+router.post('/repair/drift', async (req, res, next) => {
+  try {
+    const { mediaType, mediaId, filename, slope, anchorMs } = req.body;
+    if (!mediaType || !mediaId || !filename || slope === undefined) {
+      return res.status(400).json({ status: 'error', message: 'Missing required parameters' });
+    }
+    const result = await subtitleSyncService.applyDriftRepair({
+      mediaType,
+      mediaId: parseInt(mediaId, 10),
+      filename,
+      slope,
+      anchorMs: anchorMs || 0
+    });
+    res.json({ status: 'success', data: result });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * POST /api/library/subtitles/repair/restore
+ * Restores original subtitle from .bak backup and re-verifies
+ */
+router.post('/repair/restore', async (req, res, next) => {
+  try {
+    const { mediaType, mediaId, filename } = req.body;
+    if (!mediaType || !mediaId || !filename) {
+      return res.status(400).json({ status: 'error', message: 'Missing required parameters' });
+    }
+    const result = await subtitleSyncService.restoreBackup({
+      mediaType,
+      mediaId: parseInt(mediaId, 10),
+      filename
+    });
+    res.json({ status: 'success', data: result });
   } catch (err) {
     next(err);
   }
@@ -445,6 +535,9 @@ router.delete('/tracks/:mediaType/:mediaId/:filename', async (req, res, next) =>
     if (safePath && fs.existsSync(safePath)) {
       await fsp.unlink(safePath);
     }
+    if (safePath && fs.existsSync(`${safePath}.bak`)) {
+      try { await fsp.unlink(`${safePath}.bak`); } catch { /* ignore */ }
+    }
 
     // Clean from subtitle_tracks table
     db.prepare('DELETE FROM subtitle_tracks WHERE media_type = ? AND media_id = ? AND filename = ?')
@@ -452,7 +545,17 @@ router.delete('/tracks/:mediaType/:mediaId/:filename', async (req, res, next) =>
 
     // Rescan remaining subtitle languages for media item
     try {
-      const remainingFiles = await getSubtitlesInDir(resolved.dir, fsp, path);
+      let remainingFiles = await getSubtitlesInDir(resolved.dir, fsp, path);
+      if (mediaType === 'episode' && resolved.seasonNumber !== undefined && resolved.episodeNumber !== undefined) {
+        const sPad = String(resolved.seasonNumber).padStart(2, '0');
+        const ePad = String(resolved.episodeNumber).padStart(2, '0');
+        const p1 = `s${sPad}e${ePad}`.toLowerCase();
+        const p2 = `${resolved.seasonNumber}x${ePad}`.toLowerCase();
+        remainingFiles = remainingFiles.filter(f => {
+          const lower = f.toLowerCase();
+          return lower.includes(p1) || lower.includes(p2);
+        });
+      }
       const langs = [...new Set(remainingFiles.map(f => extractLang(f, path)).filter(Boolean))];
       const table = mediaType === 'movie' ? 'movies' : 'episodes';
       db.prepare(`UPDATE ${table} SET subtitles = ? WHERE id = ?`).run(JSON.stringify(langs), mediaId);

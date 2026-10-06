@@ -198,7 +198,18 @@ const translateWithProvider = async (srtContent, targetLang, overrides = {}) => 
     }
   }
 
-  return serializeSubtitles(translatedCues, format, header);
+  const serialized = serializeSubtitles(translatedCues, format, header);
+
+  // Step 17: Post-translation verification
+  const verification = parseSubtitles(serialized);
+  if (!verification.cues || verification.cues.length === 0) {
+    throw new Error('Post-translation verification failed: serialized output contains 0 valid cues');
+  }
+  if (verification.cues.length !== cues.length) {
+    console.warn(`[AITranslator] Post-translation verification notice: cue count difference (original=${cues.length}, verified=${verification.cues.length})`);
+  }
+
+  return serialized;
 };
 
 const translateSubtitles = async () => {

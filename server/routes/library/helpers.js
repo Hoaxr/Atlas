@@ -18,25 +18,12 @@ const getSubtitlesInDir = async (dir, fsp, pathLib) => {
   }
 };
 
-const { VALID_LANGUAGES } = require('../../utils/languages');
+const { VALID_LANGUAGES, parseSubtitleMetadata } = require('../../utils/languages');
 
 const extractLang = (filename, pathLib) => {
-  let name = pathLib.basename(filename, pathLib.extname(filename));
-  name = name.replace(/[._-](?:forced|sdh|hi|cc|\d+)$/i, '');
-  const match = name.match(/[._-]([a-z]{2,3})$/i);
-  if (match) {
-    const code = match[1].toLowerCase();
-    const langMap = {
-      eng: 'en', english: 'en',
-      nld: 'nl', dutch: 'nl', dut: 'nl',
-      fra: 'fr', fre: 'fr', french: 'fr',
-      deu: 'de', ger: 'de', german: 'de',
-      spa: 'es', spanish: 'es',
-      ita: 'it', italian: 'it',
-      por: 'pt', portuguese: 'pt',
-    };
-    const mapped = langMap[code] || code;
-    if (VALID_LANGUAGES.has(mapped)) return mapped;
+  const meta = parseSubtitleMetadata(filename);
+  if (meta.langCode && meta.langCode !== 'und') {
+    return meta.langCode;
   }
   return 'en';
 };

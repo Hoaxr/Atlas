@@ -136,9 +136,88 @@ const normalizeLanguageCode = (code) => {
   return null;
 };
 
+const SCENE_MEDIA_TAGS = new Set([
+  'web', 'webdl', 'web-dl', 'webrip', 'bluray', 'blu-ray', 'bdrip', 'brrip', 'dvd', 'dvdrip', 'hdtv', 'pdtv',
+  '2160p', '1080p', '720p', '480p', '4k', 'uhd',
+  'x264', 'x265', 'h264', 'h265', 'hevc', 'avc', '10bit',
+  'aac', 'dts', 'ac3', 'eac3', 'truehd', 'atmos', 'ddp5', 'dd5',
+  'repack', 'proper', 'internal', 'remux', 'yify', 'rarbg', 'ettv', 'eztv', 'sparks'
+]);
+
+/**
+ * Extracts rich metadata from a subtitle filename.
+ * Handles compound tags (.en.forced.sdh), regional tags (.nl-BE, .pt-BR),
+ * distinguishes Hindi (.hi) from Hearing Impaired (.en.hi),
+ * and ignores scene/resolution tags.
+ *
+ * @param {string} filename 
+ * @returns {{ langCode: string, langName: string, isForced: boolean, isSdh: boolean, isHearingImpaired: boolean, source: string|null }}
+ */
+const parseSubtitleMetadata = (filename) => {
+  if (!filename) {
+    return { langCode: 'und', langName: 'Undetermined', isForced: false, isSdh: false, isHearingImpaired: false, source: null };
+  }
+
+  const base = String(filename).replace(/\.[^.]+$/, '');
+  const tokens = base.toLowerCase().split(/(?:\s+-\s+|[._\s]+)/).filter(Boolean);
+
+  let isForced = false;
+  let isSdh = false;
+  let isHearingImpaired = false;
+  let langCode = null;
+  let source = null;
+
+  for (let i = tokens.length - 1; i >= 0; i--) {
+    let t = tokens[i];
+    if (t.startsWith('-') || t.endsWith('-')) t = t.replace(/^-+|-+$/g, '');
+    if (!t) continue;
+
+    if (t === 'forced') {
+      isForced = true;
+      continue;
+    }
+    if (t === 'sdh' || t === 'cc') {
+      isSdh = true;
+      isHearingImpaired = true;
+      continue;
+    }
+    if (t === 'hi') {
+      const prevIsLang = i > 0 && Boolean(normalizeLanguageCode(tokens[i - 1]));
+      if (langCode || isForced || isSdh || prevIsLang) {
+        isHearingImpaired = true;
+        continue;
+      }
+    }
+    if (SCENE_MEDIA_TAGS.has(t)) {
+      if (['web', 'webdl', 'web-dl', 'webrip', 'bluray', 'blu-ray', 'dvd', 'hdtv'].includes(t) && !source) {
+        source = t;
+      }
+      continue;
+    }
+
+    const norm = normalizeLanguageCode(t);
+    if (norm && !langCode) {
+      langCode = norm;
+      break;
+    }
+  }
+
+  const finalLang = langCode || 'und';
+  return {
+    langCode: finalLang,
+    langName: LANGUAGE_NAMES[finalLang] || (finalLang === 'und' ? 'Undetermined' : finalLang.toUpperCase()),
+    isForced,
+    isSdh,
+    isHearingImpaired,
+    source
+  };
+};
+
 module.exports = {
   VALID_LANGUAGES,
   ISO_639_2_TO_1,
   LANGUAGE_NAMES,
   normalizeLanguageCode,
+  parseSubtitleMetadata,
+  SCENE_MEDIA_TAGS
 };
