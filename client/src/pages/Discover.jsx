@@ -201,7 +201,12 @@ export default function Discover() {
               watched.set(String(item.tmdb_id), true);
             }
 
-            if (item.status === 'downloaded' || (item.file_path && item.file_path.trim() !== '')) {
+            if (
+              item.status === 'downloaded' || 
+              (item.file_path && item.file_path.trim() !== '') ||
+              (item.downloaded_episodes && item.downloaded_episodes > 0) ||
+              (item.file_size && item.file_size > 0)
+            ) {
               downloaded.add(item.tmdb_id);
               downloaded.add(Number(item.tmdb_id));
               downloaded.add(String(item.tmdb_id));
@@ -386,8 +391,15 @@ export default function Discover() {
     const poster = media.poster_path ? (media.poster_path.startsWith('http') ? media.poster_path : `https://image.tmdb.org/t/p/w500${media.poster_path}`) : null;
     const tmdbId = media.ids?.tmdb || media.id;
     const keyId = tmdbId || media.title || media.name || Math.random().toString();
-    const isInLibrary = tmdbId ? libraryItems.has(tmdbId) : false;
-    const isDownloaded = tmdbId ? downloadedSet.has(Number(tmdbId)) : false;
+    const isInLibrary = tmdbId ? (libraryItems.has(tmdbId) || libraryItems.has(Number(tmdbId)) || libraryItems.has(String(tmdbId))) : false;
+    const isDownloaded = tmdbId ? (
+      downloadedSet.has(tmdbId) || 
+      downloadedSet.has(Number(tmdbId)) || 
+      downloadedSet.has(String(tmdbId)) || 
+      media.status === 'downloaded' ||
+      Boolean(media.file_path && media.file_path.trim() !== '') ||
+      Boolean(media.downloaded_episodes && media.downloaded_episodes > 0)
+    ) : false;
     const downloadInfo = (isUpcoming && !isDownloaded) ? getProbableDownloadInfo(media) : null;
     const displayType = media.media_type === 'tv' ? 'show' : media.media_type === 'movie' ? 'movie' : mode === 'movies' ? 'movie' : 'show';
 
@@ -486,7 +498,7 @@ export default function Discover() {
             </div>
           ) : null}
 
-          {downloadInfo && (
+          {downloadInfo && !isDownloaded && (
             <div 
               style={{
                 bottom: `${cardScale.cornerOffset}px`,
@@ -871,6 +883,15 @@ export default function Discover() {
             return next;
           });
 
+          if (createdItem?.status === 'downloaded' || (createdItem?.file_path && createdItem.file_path.trim() !== '')) {
+            setDownloadedSet(prev => {
+              const next = new Set(prev);
+              next.add(numericTmdbId);
+              next.add(String(numericTmdbId));
+              return next;
+            });
+          }
+
           // 2. Prepend immediately to Recently Added
           if (details) {
             const itemType = (selectedMediaType === 'tv' || selectedMediaType === 'show' || details.media_type === 'tv') ? 'tv' : 'movie';
@@ -903,6 +924,10 @@ export default function Discover() {
               if (cacheRef.current[mode].libraryIds) {
                 cacheRef.current[mode].libraryIds.set(numericTmdbId, dbId);
                 cacheRef.current[mode].libraryIds.set(String(numericTmdbId), dbId);
+              }
+              if ((createdItem?.status === 'downloaded' || createdItem?.file_path) && cacheRef.current[mode].downloadedIds) {
+                cacheRef.current[mode].downloadedIds.add(numericTmdbId);
+                cacheRef.current[mode].downloadedIds.add(String(numericTmdbId));
               }
             }
           }
