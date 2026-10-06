@@ -44,4 +44,14 @@ test('Language Normalization & ISO 639 Mapping', async (t) => {
     assert.strictEqual(LANGUAGE_NAMES['de'], 'German');
     assert.strictEqual(LANGUAGE_NAMES['sv'], 'Swedish');
   });
+
+  await t.test('rejects invalid codes and arbitrary words', () => {
+    assert.strictEqual(normalizeLanguageCode('do'), null);
+    assert.strictEqual(normalizeLanguageCode('boy'), null);
+    assert.strictEqual(normalizeLanguageCode('old'), null);
+    assert.strictEqual(normalizeLanguageCode('lot'), null);
+    assert.strictEqual(normalizeLanguageCode('xyz'), null);
+    assert.strictEqual(normalizeLanguageCode(''), null);
+    assert.strictEqual(normalizeLanguageCode(null), null);
+  });
 });

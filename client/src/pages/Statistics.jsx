@@ -5,7 +5,7 @@ import { formatSize } from '../lib/format';
 import {
   BarChart3, Film, Tv, HardDrive, Star,
   CheckCircle2, Hash, Zap, PlayCircle, Activity, Languages, Trash2, FolderOpen,
-  Music2, Disc, Mic2, FileAudio, ChevronRight
+  Music2, Disc, Mic2, FileAudio, ChevronRight, AlertCircle
 } from 'lucide-react';
 import LoadingState from '../components/shared/LoadingState';
 import EmptyState from '../components/shared/EmptyState';
@@ -54,6 +54,9 @@ export default function Statistics() {
   const [missingSubsModal, setMissingSubsModal] = useState(false);
   const [missingSubsData, setMissingSubsData] = useState(null);
   const [missingSubsLoading, setMissingSubsLoading] = useState(false);
+  const [syncIssuesModal, setSyncIssuesModal] = useState(false);
+  const [syncIssuesData, setSyncIssuesData] = useState(null);
+  const [syncIssuesLoading, setSyncIssuesLoading] = useState(false);
   const [, setDeletableData] = useState(null);
   const [, setDeletableLoading] = useState(false);
 
@@ -70,6 +73,21 @@ export default function Statistics() {
       console.error('Failed to fetch missing subs', e);
     } finally {
       setMissingSubsLoading(false);
+    }
+  };
+
+  const openSyncIssues = async () => {
+    setSyncIssuesModal(true);
+    setSyncIssuesLoading(true);
+    try {
+      const res = await api.get('/library/subtitles/sync-issues');
+      if (res.data.status === 'success') {
+        setSyncIssuesData(res.data.data || []);
+      }
+    } catch (e) {
+      console.error('Failed to fetch subtitle sync issues', e);
+    } finally {
+      setSyncIssuesLoading(false);
     }
   };
 
@@ -303,7 +321,7 @@ export default function Statistics() {
             </div>
 
             {/* Stats cards */}
-            <div className="grid grid-cols-3 gap-3 mb-4">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
               <div className="bg-cyan-500/10 rounded-xl p-3 border border-cyan-500/20">
                 <p className="text-lg font-black text-cyan-400">{totalWithSubs}</p>
                 <p className="text-[10px] text-cyan-300/70">With subtitles</p>
@@ -318,6 +336,22 @@ export default function Statistics() {
               >
                 <p className="text-lg font-black text-cyan-400">{totalMissingSubs}</p>
                 <p className="text-[10px] text-slate-500">Missing subs</p>
+              </button>
+              <button
+                onClick={openSyncIssues}
+                className={`rounded-xl p-3 border text-left w-full transition-colors hover:brightness-125 cursor-pointer ${
+                  (stats.subtitleSyncIssuesCount || 0) > 0
+                    ? 'bg-amber-500/10 border-amber-500/30'
+                    : 'bg-cyan-500/10 border-cyan-500/20'
+                }`}
+                title="Subtitles with runtime cutoff, framerate drift, or audio desync"
+              >
+                <p className={`text-lg font-black ${(stats.subtitleSyncIssuesCount || 0) > 0 ? 'text-amber-400' : 'text-cyan-400'}`}>
+                  {stats.subtitleSyncIssuesCount || 0}
+                </p>
+                <p className="text-[10px] text-slate-500">
+                  {(stats.subtitleSyncIssuesCount || 0) > 0 ? 'Sync / cut issues' : 'Sync issues'}
+                </p>
               </button>
             </div>
 
@@ -569,6 +603,112 @@ export default function Statistics() {
                 All downloaded files have subtitles!
               </div>
             )}
+          </div>
+        )}
+      </ModalShell>
+
+      <ModalShell open={syncIssuesModal} onClose={() => setSyncIssuesModal(false)} title="Subtitle Synchronization & Integrity" width="max-w-2xl">
+        {syncIssuesLoading ? (
+          <LoadingState className="py-12" />
+        ) : !syncIssuesData ? (
+          <div className="py-12 text-center text-slate-500">Failed to load sync data.</div>
+        ) : syncIssuesData.length === 0 ? (
+          <div className="py-10 text-center space-y-3">
+            <div className="inline-flex p-3 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+              <CheckCircle2 className="w-6 h-6" />
+            </div>
+            <p className="text-slate-200 font-medium text-base">All checked subtitles are in sync!</p>
+            <p className="text-xs text-slate-400 max-w-md mx-auto leading-relaxed">
+              No runtime mismatches (cut off subtitles), framerate timing drift, or audio speech desync anomalies have been detected.
+            </p>
+            <div className="pt-2">
+              <button
+                onClick={() => { setSyncIssuesModal(false); navigate('/health'); }}
+                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-cyan-400 border border-white/5 transition-colors cursor-pointer"
+              >
+                View Full Health in Media Health &rarr;
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-4 text-sm">
+            <div className="flex items-center justify-between">
+              <p className="text-xs text-slate-400">
+                Found <span className="font-semibold text-amber-400">{syncIssuesData.length}</span> subtitle track{syncIssuesData.length > 1 ? 's' : ''} with synchronization or cutoff anomalies:
+              </p>
+              <button
+                onClick={() => { setSyncIssuesModal(false); navigate('/health'); }}
+                className="text-xs text-cyan-400 hover:underline cursor-pointer"
+              >
+                Media Health &rarr;
+              </button>
+            </div>
+            <div className="bg-slate-900/50 rounded-xl border border-white/5 overflow-hidden divide-y divide-slate-800/50 max-h-96 overflow-y-auto">
+              {syncIssuesData.map((sub) => (
+                <div key={sub.id || sub.filename} className="p-3.5 hover:bg-slate-800/30 transition-colors flex items-center justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <button
+                      onClick={() => {
+                        setSyncIssuesModal(false);
+                        if (sub.show_or_movie_id) {
+                          navigate(sub.media_type === 'movie' ? `/movies/${sub.show_or_movie_id}` : `/shows/${sub.show_or_movie_id}`);
+                        }
+                      }}
+                      className="font-medium text-slate-200 hover:text-cyan-400 transition-colors text-left truncate block max-w-full cursor-pointer"
+                    >
+                      {sub.media_title || sub.title || sub.filename}
+                    </button>
+                    <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                      <span className="text-xs text-slate-400 truncate max-w-[260px]">{sub.filename}</span>
+                      <span className="px-1.5 py-0.5 rounded bg-cyan-500/10 text-cyan-300 border border-cyan-500/20 uppercase font-bold text-[10px]">
+                        {sub.lang_code}
+                      </span>
+                      {sub.sync_status === 'duration_mismatch' && (
+                        <span className="px-2 py-0.5 rounded border bg-rose-500/10 text-rose-400 border-rose-500/20 text-[11px] font-semibold">
+                          Runtime / Cut Mismatch
+                        </span>
+                      )}
+                      {sub.sync_status === 'drift_detected' && (
+                        <span className="px-2 py-0.5 rounded border bg-amber-500/10 text-amber-400 border-amber-500/20 text-[11px] font-semibold">
+                          Framerate Drift
+                        </span>
+                      )}
+                      {sub.sync_status === 'desynced' && (
+                        <span className="px-2 py-0.5 rounded border bg-rose-500/10 text-rose-400 border-rose-500/20 text-[11px] font-semibold">
+                          Audio Desync
+                        </span>
+                      )}
+                      {sub.sync_status === 'offset_detected' && (
+                        <span className="px-2 py-0.5 rounded border bg-amber-500/10 text-amber-400 border-amber-500/20 text-[11px] font-semibold">
+                          Offset: {sub.sync_offset > 0 ? `+${sub.sync_offset}s` : `${sub.sync_offset}s`}
+                        </span>
+                      )}
+                      {sub.sync_status === 'invalid_timing' && (
+                        <span className="px-2 py-0.5 rounded border bg-rose-500/10 text-rose-400 border-rose-500/20 text-[11px] font-semibold">
+                          Invalid Timing
+                        </span>
+                      )}
+                    </div>
+                    {sub.sync_details && (
+                      <p className="text-[11px] text-slate-500 mt-1 italic">
+                        {typeof sub.sync_details === 'string' ? sub.sync_details : JSON.stringify(sub.sync_details)}
+                      </p>
+                    )}
+                  </div>
+                  {sub.show_or_movie_id && (
+                    <button
+                      onClick={() => {
+                        setSyncIssuesModal(false);
+                        navigate(sub.media_type === 'movie' ? `/movies/${sub.show_or_movie_id}` : `/shows/${sub.show_or_movie_id}`);
+                      }}
+                      className="px-2.5 py-1 text-xs rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors shrink-0 cursor-pointer"
+                    >
+                      View
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
           </div>
         )}
       </ModalShell>

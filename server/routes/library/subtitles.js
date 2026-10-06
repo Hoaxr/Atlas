@@ -308,8 +308,12 @@ router.get('/sync-issues', (req, res, next) => {
       SELECT st.*, 
         CASE 
           WHEN st.media_type = 'movie' THEN m.title 
-          WHEN st.media_type = 'episode' THEN s.title || ' S' || printf('%02d', e.season_number) || 'E' || printf('%02d', e.episode_number)
-        END as media_title
+          WHEN st.media_type = 'episode' THEN s.title || ' - S' || printf('%02d', e.season_number) || 'E' || printf('%02d', e.episode_number)
+        END as media_title,
+        CASE
+          WHEN st.media_type = 'movie' THEN m.id
+          WHEN st.media_type = 'episode' THEN s.id
+        END as show_or_movie_id
       FROM subtitle_tracks st
       LEFT JOIN movies m ON st.media_type = 'movie' AND st.media_id = m.id
       LEFT JOIN episodes e ON st.media_type = 'episode' AND st.media_id = e.id

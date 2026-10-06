@@ -133,7 +133,7 @@ const normalizeLanguageCode = (code) => {
   if (VALID_LANGUAGES.has(c)) {
     return ISO_639_2_TO_1[c] || (c.length === 2 ? c : null);
   }
-  return /^[a-z]{2}$/.test(c) ? c : null;
+  return null;
 };
 
 module.exports = {

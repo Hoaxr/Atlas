@@ -1710,6 +1710,31 @@ const MIGRATIONS = [
           );
       `).run();
     }
+  },
+  {
+    id: 56,
+    name: 'cleanup_invalid_subtitle_lang_codes',
+    run: (db) => {
+      const { VALID_LANGUAGES, ISO_639_2_TO_1 } = require('../utils/languages');
+      for (const table of ['movies', 'episodes']) {
+        const rows = db.prepare(`SELECT id, subtitles FROM ${table} WHERE subtitles IS NOT NULL AND subtitles != '[]'`).all();
+        const updateStmt = db.prepare(`UPDATE ${table} SET subtitles = ? WHERE id = ?`);
+        for (const row of rows) {
+          try {
+            const parsed = JSON.parse(row.subtitles);
+            if (!Array.isArray(parsed)) continue;
+            const filtered = parsed.filter(code => {
+              if (!code) return false;
+              const c = String(code).toLowerCase().trim().split(/[-_]/)[0];
+              return VALID_LANGUAGES.has(c) || Boolean(ISO_639_2_TO_1[c]);
+            });
+            if (filtered.length !== parsed.length) {
+              updateStmt.run(JSON.stringify(filtered), row.id);
+            }
+          } catch { /* ignore */ }
+        }
+      }
+    }
   }
 ];
 

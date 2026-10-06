@@ -377,6 +377,14 @@ router.get('/stats', (req, res, next) => {
     const totalDownloaded = movieAgg.downloaded + showAgg.downloaded;
     const totalItems = moviesCount + showsCount;
 
+    let subtitleSyncIssuesCount = 0;
+    try {
+      subtitleSyncIssuesCount = db.prepare(`
+        SELECT COUNT(*) as count FROM subtitle_tracks
+        WHERE sync_status IN ('desynced', 'offset_detected', 'drift_detected', 'duration_mismatch', 'invalid_timing')
+      `).get()?.count || 0;
+    } catch { /* ignore */ }
+
     const data = {
       movies: moviesCount,
       shows: showsCount,
@@ -409,6 +417,7 @@ router.get('/stats', (req, res, next) => {
       episodesWithSubtitles: epAgg.withSubs,
       episodesMissingSubtitles: epAgg.missingSubs,
       topSubLanguages,
+      subtitleSyncIssuesCount,
     };
 
     _statsCache = data;
