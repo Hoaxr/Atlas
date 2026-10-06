@@ -293,7 +293,7 @@ export default function Discover() {
 
     const title = media.title || media.name;
     const releaseYear = (media.release_date || media.first_air_date || '')?.split('-')[0] || 'Unknown';
-    const rating = media.vote_average ? media.vote_average.toFixed(1) : '?';
+    const rating = Number(media.vote_average || media.rating) > 0 ? Number(media.vote_average || media.rating).toFixed(1) : 'N/A';
     const watchers = media.watchers;
     const poster = media.poster_path ? (media.poster_path.startsWith('http') ? media.poster_path : `https://image.tmdb.org/t/p/w500${media.poster_path}`) : null;
     const tmdbId = media.ids?.tmdb || media.id;
@@ -447,12 +447,14 @@ export default function Discover() {
           <h3 className={`font-semibold text-slate-100 truncate tracking-wide ${isCompact ? 'text-xs' : 'text-sm'}`} title={title}>{title}</h3>
           <div className="flex justify-between items-center mt-1.5">
             <span className="text-[11px] text-slate-500 font-medium tracking-wider uppercase">{releaseYear}</span>
-            {rating !== '?' && (
-              <div className="flex items-center gap-1 bg-amber-500/10 px-1.5 py-0.5 rounded-md border border-amber-500/20">
-                <Star className="w-2.5 h-2.5 text-amber-400 fill-amber-400" />
-                <span className="text-[11px] font-bold text-amber-300">{rating}</span>
-              </div>
-            )}
+            <div className={`flex items-center gap-1 px-1.5 py-0.5 rounded-md border ${
+              rating !== 'N/A' 
+                ? 'bg-amber-500/10 border-amber-500/20 text-amber-300' 
+                : 'bg-slate-700/30 border-white/5 text-slate-400'
+            }`}>
+              <Star className={`w-2.5 h-2.5 ${rating !== 'N/A' ? 'text-amber-400 fill-amber-400' : 'text-slate-500'}`} />
+              <span className={`text-[11px] ${rating !== 'N/A' ? 'font-bold' : 'font-medium'}`}>{rating}</span>
+            </div>
           </div>
         </div>
       </div>

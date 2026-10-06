@@ -64,11 +64,9 @@ export default function RemapModal({ type, title, currentTmdbId, open, onClose, 
                 <p className="text-xs font-bold text-slate-200 truncate">{resultName} <span className="text-slate-400 font-normal">({resultYear})</span></p>
                 {result.overview && <p className="text-[11px] text-slate-400 line-clamp-1 mt-0.5">{result.overview}</p>}
                 <div className="flex items-center gap-2 mt-1">
-                  {result.vote_average > 0 && (
-                    <span className="flex items-center gap-0.5 text-[11px] text-amber-400 font-semibold">
-                      <Star className="w-3 h-3 fill-amber-400" /> {result.vote_average.toFixed(1)}
-                    </span>
-                  )}
+                  <span className={`flex items-center gap-0.5 text-[11px] ${result.vote_average > 0 ? 'text-amber-400 font-semibold' : 'text-slate-500 font-medium'}`}>
+                    <Star className={`w-3 h-3 ${result.vote_average > 0 ? 'fill-amber-400' : ''}`} /> {result.vote_average > 0 ? result.vote_average.toFixed(1) : 'N/A'}
+                  </span>
                   <span className="text-[10px] font-mono text-slate-500">TMDB: {result.id}</span>
                   {isCurrent && <span className="text-[10px] font-bold text-cyan-400 bg-cyan-500/20 px-1.5 py-0.5 rounded-md border border-cyan-500/30">Current</span>}
                 </div>

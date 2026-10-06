@@ -167,12 +167,10 @@ export default function MediaDetailsModal({ isOpen, onClose, mediaId, mediaType,
               {/* Info & Form */}
               <div className="flex-1 text-sm md:text-base">
                 <div className="mb-6 flex flex-wrap items-center gap-4 text-xs font-bold text-slate-400 uppercase tracking-wider">
-                  {details.vote_average ? (
-                    <div className="flex items-center gap-1 text-yellow-400">
-                      <Star className="w-4 h-4 fill-current" />
-                      {details.vote_average.toFixed(1)}
-                    </div>
-                  ) : null}
+                  <div className={`flex items-center gap-1 ${details.vote_average > 0 ? 'text-yellow-400' : 'text-slate-500'}`}>
+                    <Star className={`w-4 h-4 ${details.vote_average > 0 ? 'fill-current' : ''}`} />
+                    {details.vote_average > 0 ? details.vote_average.toFixed(1) : 'N/A'}
+                  </div>
                   {(details.release_date || details.first_air_date) ? (
                     <div className="flex items-center gap-1">
                       <Calendar className="w-4 h-4" />

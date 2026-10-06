@@ -1514,10 +1514,15 @@ export default function Dashboard() {
                     <div className={`flex justify-between items-center ${isCompact ? 'mt-0.5' : 'mt-1 sm:mt-2'}`}>
                       <span className={`${isCompact ? 'text-[10px]' : 'text-[11px] sm:text-xs'} text-slate-500 font-medium tracking-wider uppercase`}>{item.year}</span>
                       <div className="flex items-center gap-1">
-                        {item.rating > 0 && (
+                        {item.rating > 0 ? (
                           <div className={`flex items-center gap-1 bg-amber-500/10 ${isCompact ? 'px-1 py-0.5' : 'px-1.5 sm:px-2 py-0.5'} rounded-md border border-amber-500/20`}>
                             <Star className={`${isCompact ? 'w-2 h-2 sm:w-2.5 sm:h-2.5' : 'w-2.5 h-2.5 sm:w-3 sm:h-3'} text-amber-400 fill-amber-400`} />
                             <span className={`${isCompact ? 'text-[10px]' : 'text-[11px] sm:text-xs'} font-bold text-amber-300`}>{Number(item.rating).toFixed(1)}</span>
+                          </div>
+                        ) : (
+                          <div className={`flex items-center gap-1 bg-slate-800/40 ${isCompact ? 'px-1 py-0.5' : 'px-1.5 sm:px-2 py-0.5'} rounded-md border border-white/5`}>
+                            <Star className={`${isCompact ? 'w-2 h-2 sm:w-2.5 sm:h-2.5' : 'w-2.5 h-2.5 sm:w-3 sm:h-3'} text-slate-500`} />
+                            <span className={`${isCompact ? 'text-[10px]' : 'text-[11px] sm:text-xs'} font-medium text-slate-400`}>N/A</span>
                           </div>
                         )}
                       </div>

@@ -252,12 +252,12 @@ export default function PersonDetails() {
                 <p className="text-xs font-semibold text-slate-200 truncate leading-tight">{title}</p>
                 <div className="flex items-center justify-between mt-1">
                   <span className="text-[11px] text-slate-500 font-medium">{year || '—'}</span>
-                  {credit.vote_average > 0 && (
-                    <div className="flex items-center gap-1 bg-slate-950/50 px-1.5 py-0.5 rounded-md border border-white/5 shadow-inner">
-                      <Star className="w-2.5 h-2.5 text-yellow-400 fill-yellow-400 drop-shadow-sm" />
-                      <span className="text-[10px] font-bold text-slate-200">{credit.vote_average.toFixed(1)}</span>
-                    </div>
-                  )}
+                  <div className={`flex items-center gap-1 ${credit.vote_average > 0 ? 'bg-slate-950/50 shadow-inner' : 'bg-slate-950/30'} px-1.5 py-0.5 rounded-md border border-white/5`}>
+                    <Star className={`w-2.5 h-2.5 ${credit.vote_average > 0 ? 'text-yellow-400 fill-yellow-400 drop-shadow-sm' : 'text-slate-500'}`} />
+                    <span className={`text-[10px] ${credit.vote_average > 0 ? 'font-bold text-slate-200' : 'font-medium text-slate-400'}`}>
+                      {credit.vote_average > 0 ? credit.vote_average.toFixed(1) : 'N/A'}
+                    </span>
+                  </div>
                 </div>
                 {credit.character && (
                   <p className="text-[11px] text-slate-600 truncate mt-0.5">as {credit.character}</p>

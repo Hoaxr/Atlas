@@ -230,7 +230,7 @@ export default function UserPortal() {
       
     const title = item.title || item.name;
     const releaseYear = (item.release_date || item.first_air_date || item.year || '')?.toString().split('-')[0] || 'Unknown';
-    const rating = item.vote_average ? item.vote_average.toFixed(1) : '?';
+    const rating = Number(item.vote_average) > 0 ? Number(item.vote_average).toFixed(1) : 'N/A';
     const keyId = tmdbId || title || Math.random().toString();
 
     const cardClass = isGrid 
@@ -323,12 +323,10 @@ export default function UserPortal() {
           <h3 className="font-bold text-slate-200 truncate" title={title}>{title}</h3>
           <div className="flex justify-between items-center mt-1">
             <p className="text-xs text-slate-400 font-medium">{releaseYear}</p>
-            {rating !== '?' && (
-              <div className="flex items-center gap-1 bg-slate-950/50 px-2 py-0.5 rounded border border-white/5 shadow-inner">
-                <Star className="w-3 h-3 text-yellow-400 fill-yellow-400 drop-shadow-sm" />
-                <span className="text-xs font-bold text-slate-200">{rating}</span>
-              </div>
-            )}
+            <div className={`flex items-center gap-1 ${rating !== 'N/A' ? 'bg-slate-950/50 shadow-inner' : 'bg-slate-950/30'} px-2 py-0.5 rounded border border-white/5`}>
+              <Star className={`w-3 h-3 ${rating !== 'N/A' ? 'text-yellow-400 fill-yellow-400 drop-shadow-sm' : 'text-slate-500'}`} />
+              <span className={`text-xs ${rating !== 'N/A' ? 'font-bold text-slate-200' : 'font-medium text-slate-400'}`}>{rating}</span>
+            </div>
           </div>
         </div>
       </motion.div>

@@ -415,9 +415,9 @@ export default function ShowDetails() {
               <div className="grid grid-cols-2 gap-2 bg-slate-950/40 border border-white/5 rounded-2xl p-2.5">
                 <div className="bg-slate-800/40 rounded-xl p-2.5 text-center border border-white/5">
                   <div className="flex items-center justify-center gap-1 mb-0.5">
-                    <Star className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
-                    <span className="text-sm font-bold text-white">{show.rating > 0 ? Number(show.rating).toFixed(1) : '—'}</span>
-                    <span className="text-xs text-slate-500">/10</span>
+                    <Star className={`w-3.5 h-3.5 ${show.rating > 0 ? 'text-amber-400 fill-amber-400' : 'text-slate-500'}`} />
+                    <span className="text-sm font-bold text-white">{show.rating > 0 ? Number(show.rating).toFixed(1) : 'N/A'}</span>
+                    {show.rating > 0 && <span className="text-xs text-slate-500">/10</span>}
                   </div>
                   <p className="text-[9px] text-slate-500 uppercase tracking-wider font-semibold">TMDB Rating</p>
                 </div>

@@ -6,7 +6,7 @@ import api from '../lib/api';
 import useWebSocket from '../lib/useWebSocket';
 import toast from 'react-hot-toast';
 import { 
-  Clock, Film, Tv, Play, ChevronRight, ChevronLeft, Trash2, Undo2, 
+  Clock, Film, Tv, Play, Pause, ChevronRight, ChevronLeft, Trash2, Undo2, 
   Calendar, CheckCircle2, TrendingUp, Zap, Sparkles
 } from 'lucide-react';
 import { tmdbImgUrl } from '../lib/posterUrl';
@@ -442,7 +442,15 @@ const Tracker = () => {
 
           {/* Active Now Watching Panel or Latest Watch Panel */}
           {activeWatching ? (
-            <div className="w-full lg:w-[400px] p-3.5 sm:p-4 rounded-xl bg-slate-950/70 border border-slate-800 backdrop-blur-sm flex items-center gap-3.5 group relative">
+            <div className="w-full lg:w-[430px] p-4 rounded-2xl bg-gradient-to-br from-slate-900/90 via-slate-950/80 to-slate-900/90 border border-slate-800/80 hover:border-slate-700/80 backdrop-blur-xl shadow-2xl shadow-black/50 flex items-center gap-4 group relative overflow-hidden transition-all duration-300">
+              {/* Ambient radial glow */}
+              <div 
+                className={`absolute -right-10 -top-10 w-44 h-44 rounded-full blur-3xl pointer-events-none transition-opacity duration-500 opacity-40 group-hover:opacity-70 ${
+                  activeWatching.state === 'paused' ? 'bg-amber-500/15' : 'bg-cyan-500/20'
+                }`} 
+              />
+              <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/10 to-transparent pointer-events-none" />
+
               <div 
                 onClick={() => {
                   const isMovie = activeWatching.type === 'movie';
@@ -450,7 +458,7 @@ const Tracker = () => {
                   else if (!isMovie && activeWatching.media_id) navigate(`/shows/${activeWatching.media_id}`);
                   else if (activeWatching.tmdb_id) navigate(`/${isMovie ? 'movies' : 'shows'}/${activeWatching.tmdb_id}`);
                 }}
-                className="w-14 sm:w-16 h-20 sm:h-24 rounded-lg overflow-hidden bg-slate-950 shrink-0 border border-slate-800 cursor-pointer relative group/poster"
+                className="w-16 sm:w-20 aspect-[2/3] rounded-xl overflow-hidden bg-slate-950 shrink-0 border border-white/10 shadow-lg shadow-black/70 cursor-pointer relative group/poster"
               >
                 {activeWatching.poster ? (
                   <img 
@@ -459,25 +467,41 @@ const Tracker = () => {
                     className="w-full h-full object-cover group-hover/poster:scale-105 transition-transform duration-300" 
                   />
                 ) : (
-                  <div className="w-full h-full flex items-center justify-center text-cyan-400"><Tv className="w-6 h-6" /></div>
+                  <div className="w-full h-full flex items-center justify-center text-cyan-400 bg-slate-900"><Tv className="w-6 h-6" /></div>
                 )}
+                <div className="absolute bottom-1 right-1 p-1 rounded-md bg-black/70 backdrop-blur-xs border border-white/10 shadow-xs">
+                  {activeWatching.state === 'paused' ? (
+                    <Pause className="w-2.5 h-2.5 text-amber-400 fill-amber-400" />
+                  ) : (
+                    <Play className="w-2.5 h-2.5 text-emerald-400 fill-emerald-400" />
+                  )}
+                </div>
               </div>
 
-              <div className="flex-1 min-w-0 space-y-1 z-10">
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded-md flex items-center gap-1.5 ${
+              <div className="flex-1 min-w-0 space-y-1.5 z-10">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className={`text-[10px] uppercase font-bold tracking-wider px-2.5 py-0.5 rounded-full flex items-center gap-1.5 border backdrop-blur-xs shadow-xs ${
                     activeWatching.state === 'paused'
-                      ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
-                      : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                      ? 'bg-amber-500/10 text-amber-300 border-amber-500/25'
+                      : 'bg-emerald-500/10 text-emerald-300 border-emerald-500/25'
                   }`}>
-                    <span className={`w-1.5 h-1.5 rounded-full ${
-                      activeWatching.state === 'paused' ? 'bg-amber-400' : 'bg-emerald-400 animate-pulse'
-                    }`} />
+                    {activeWatching.state === 'paused' ? (
+                      <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                    ) : (
+                      <span className="relative flex h-2 w-2">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-400"></span>
+                      </span>
+                    )}
                     {activeWatching.state === 'paused' ? 'Paused' : 'Now Watching'}
                   </span>
 
                   {activeWatching.server && (
-                    <span className="text-[10px] font-medium text-slate-400 bg-slate-800/80 px-2 py-0.5 rounded-md border border-slate-700/60">
+                    <span className={`text-[10px] font-semibold px-2.5 py-0.5 rounded-full border shadow-xs ${
+                      activeWatching.server.toLowerCase().includes('plex')
+                        ? 'bg-amber-500/10 text-amber-300 border-amber-500/20'
+                        : 'bg-white/5 text-slate-300 border-white/10'
+                    }`}>
                       {activeWatching.server}
                     </span>
                   )}
@@ -490,25 +514,36 @@ const Tracker = () => {
                     else if (!isMovie && activeWatching.media_id) navigate(`/shows/${activeWatching.media_id}`);
                     else if (activeWatching.tmdb_id) navigate(`/${isMovie ? 'movies' : 'shows'}/${activeWatching.tmdb_id}`);
                   }}
-                  className="text-slate-100 font-bold text-sm line-clamp-1 group-hover:text-cyan-400 transition-colors cursor-pointer leading-snug"
+                  className="text-slate-100 font-bold text-sm sm:text-base line-clamp-1 group-hover:text-cyan-300 transition-colors cursor-pointer leading-snug tracking-tight"
+                  title={activeWatching.title}
                 >
                   {activeWatching.title}
                 </h3>
 
                 {activeWatching.player && (
-                  <p className="text-[11px] text-slate-400 font-medium truncate">
-                    Streaming on <span className="text-slate-200 font-semibold">{activeWatching.player}</span>
-                  </p>
+                  <div className="flex items-center gap-1.5 text-xs text-slate-400 truncate">
+                    <Tv className="w-3.5 h-3.5 text-cyan-400/80 shrink-0" />
+                    <span className="truncate">
+                      Streaming on <span className="text-slate-200 font-medium">{activeWatching.player}</span>
+                    </span>
+                  </div>
                 )}
 
-                <div className="pt-1 space-y-1">
-                  <div className="flex justify-between items-center text-[10px] font-mono text-slate-400">
-                    <span>{Math.round(activeWatching.progress || 0)}%</span>
-                    {activeWatching.eta && <span>ETA {activeWatching.eta}</span>}
+                <div className="pt-1 space-y-1.5">
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="font-bold text-cyan-400 text-[11px] sm:text-xs">
+                      {Math.round(activeWatching.progress || 0)}%
+                    </span>
+                    {activeWatching.eta && (
+                      <span className="text-[11px] sm:text-xs text-slate-400 flex items-center gap-1 font-medium">
+                        <Clock className="w-3 h-3 text-slate-500" />
+                        ETA <span className="text-slate-200 font-semibold">{activeWatching.eta}</span>
+                      </span>
+                    )}
                   </div>
-                  <div className="w-full h-1 bg-slate-800 rounded-full overflow-hidden">
+                  <div className="w-full h-1.5 sm:h-2 bg-slate-800/80 rounded-full overflow-hidden p-[0.5px] border border-white/5 shadow-inner">
                     <div 
-                      className="h-full bg-cyan-400 rounded-full transition-all duration-500" 
+                      className="h-full bg-gradient-to-r from-cyan-500 via-sky-400 to-emerald-400 rounded-full transition-all duration-500 shadow-[0_0_8px_rgba(6,182,212,0.4)]" 
                       style={{ width: `${Math.min(100, Math.max(0, activeWatching.progress || 0))}%` }}
                     />
                   </div>
@@ -516,7 +551,8 @@ const Tracker = () => {
               </div>
             </div>
           ) : currently ? (
-            <div className="w-full lg:w-96 p-3 sm:p-4 rounded-xl bg-slate-950/70 border border-slate-800 backdrop-blur-sm flex items-center gap-3.5 group">
+            <div className="w-full lg:w-[420px] p-4 rounded-2xl bg-gradient-to-br from-slate-900/90 via-slate-950/80 to-slate-900/90 border border-slate-800/80 hover:border-slate-700/80 backdrop-blur-xl shadow-2xl shadow-black/50 flex items-center gap-4 group relative overflow-hidden transition-all duration-300">
+              <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/10 to-transparent pointer-events-none" />
               <div 
                 onClick={() => {
                   const isMovie = currently.type === 'movie';
@@ -524,17 +560,17 @@ const Tracker = () => {
                   else if (!isMovie && currently.show_id) navigate(`/shows/${currently.show_id}`);
                   else if (currently.tmdb_id) navigate(`/${isMovie ? 'movies' : 'shows'}/${currently.tmdb_id}`);
                 }}
-                className="w-14 sm:w-16 h-20 sm:h-22 rounded-lg overflow-hidden bg-slate-950 shrink-0 border border-slate-800 cursor-pointer"
+                className="w-16 sm:w-20 aspect-[2/3] rounded-xl overflow-hidden bg-slate-950 shrink-0 border border-white/10 shadow-lg shadow-black/70 cursor-pointer relative group/poster"
               >
                 {currently.poster ? (
-                  <img src={tmdbImgUrl(currently.poster, 'w200')} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                  <img src={tmdbImgUrl(currently.poster, 'w200')} alt="" className="w-full h-full object-cover group-hover/poster:scale-105 transition-transform duration-300" />
                 ) : (
-                  <div className="w-full h-full flex items-center justify-center text-slate-600"><Tv className="w-6 h-6" /></div>
+                  <div className="w-full h-full flex items-center justify-center text-slate-600 bg-slate-900"><Tv className="w-6 h-6" /></div>
                 )}
               </div>
-              <div className="flex-1 min-w-0">
-                <span className="text-[10px] uppercase font-semibold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-md border border-emerald-500/20">
-                  Latest Watch
+              <div className="flex-1 min-w-0 space-y-1.5">
+                <span className="text-[10px] uppercase font-bold tracking-wider text-emerald-300 bg-emerald-500/10 px-2.5 py-0.5 rounded-full border border-emerald-500/25 inline-flex items-center gap-1.5">
+                  <CheckCircle2 className="w-3 h-3 text-emerald-400" /> Latest Watch
                 </span>
                 <h3 
                   onClick={() => {
@@ -543,18 +579,28 @@ const Tracker = () => {
                     else if (!isMovie && currently.show_id) navigate(`/shows/${currently.show_id}`);
                     else if (currently.tmdb_id) navigate(`/${isMovie ? 'movies' : 'shows'}/${currently.tmdb_id}`);
                   }}
-                  className="text-slate-100 font-bold text-sm truncate mt-1 group-hover:text-cyan-400 transition-colors cursor-pointer"
+                  className="text-slate-100 font-bold text-sm sm:text-base truncate group-hover:text-cyan-300 transition-colors cursor-pointer leading-snug tracking-tight"
+                  title={currently.title}
                 >
                   {currently.title}
                 </h3>
                 {currently.season && (
-                  <p className="text-[11px] text-slate-400 font-mono truncate">S{currently.season} E{currently.episode} {currently.episode_title ? `— ${currently.episode_title}` : ''}</p>
+                  <p className="text-xs text-slate-400 font-medium truncate">
+                    <span className="text-cyan-400 font-semibold">S{currently.season} E{currently.episode}</span>
+                    {currently.episode_title ? ` · ${currently.episode_title}` : ''}
+                  </p>
                 )}
-                <div className="mt-2 flex items-center gap-2">
-                  <div className="flex-1 h-1 bg-slate-800 rounded-full overflow-hidden">
-                    <div className="h-full bg-cyan-400 rounded-full" style={{ width: `${currently.progress ?? 100}%` }}></div>
+                <div className="pt-1 flex items-center gap-2">
+                  <div className="flex-1 h-1.5 sm:h-2 bg-slate-800/80 rounded-full overflow-hidden p-[0.5px] border border-white/5 shadow-inner">
+                    <div 
+                      className="h-full bg-gradient-to-r from-cyan-500 to-sky-400 rounded-full shadow-[0_0_8px_rgba(6,182,212,0.4)]" 
+                      style={{ width: `${currently.progress ?? 100}%` }}
+                    />
                   </div>
-                  <span className="text-[10px] text-slate-400 font-mono">{formatRuntime(currently.runtime) || `${currently.runtime}m`}</span>
+                  <span className="text-xs text-slate-400 font-medium shrink-0 flex items-center gap-1">
+                    <Clock className="w-3 h-3 text-slate-500" />
+                    {formatRuntime(currently.runtime) || `${currently.runtime}m`}
+                  </span>
                 </div>
               </div>
             </div>

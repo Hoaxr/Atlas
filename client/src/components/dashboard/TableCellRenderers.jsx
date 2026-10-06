@@ -16,7 +16,12 @@ const RatingCell = ({ item }) => (
         <Star className="w-3.5 h-3.5 text-yellow-400 fill-yellow-400 drop-shadow-sm" />
         <span className="text-sm font-bold text-slate-600 dark:text-slate-200">{Number(item.rating).toFixed(1)}</span>
       </div>
-    ) : <span className="text-slate-600">—</span>}
+    ) : (
+      <div className="flex items-center gap-1.5 w-fit bg-slate-950/30 px-2 py-0.5 rounded-lg border border-white/5">
+        <Star className="w-3.5 h-3.5 text-slate-600" />
+        <span className="text-xs font-semibold text-slate-500">N/A</span>
+      </div>
+    )}
   </td>
 );
 
