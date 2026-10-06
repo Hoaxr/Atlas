@@ -321,11 +321,70 @@ const getRecentMovies = async () => {
   });
 };
 
+/**
+ * Get the earliest digital (4) or physical (5) release date for a movie.
+ * Falls back to theatrical release_date if no digital/physical date found.
+ */
+const getMovieReleaseDates = async (tmdbId) => {
+  try {
+    const res = await tmdbApi.get(`/movie/${tmdbId}/release_dates`);
+    const results = res.data.results || [];
+    let digitalDate = null;
+    let physicalDate = null;
+
+    for (const country of results) {
+      for (const rd of country.release_dates || []) {
+        // Type 4 = Digital, Type 5 = Physical
+        if (rd.type === 4 && rd.release_date) {
+          if (!digitalDate || rd.release_date < digitalDate) digitalDate = rd.release_date;
+        }
+        if (rd.type === 5 && rd.release_date) {
+          if (!physicalDate || rd.release_date < physicalDate) physicalDate = rd.release_date;
+        }
+      }
+    }
+
+    // Return earliest of digital or physical, or null if neither found
+    if (digitalDate && physicalDate) return digitalDate < physicalDate ? digitalDate : physicalDate;
+    if (digitalDate) return digitalDate;
+    if (physicalDate) return physicalDate;
+    return null;
+  } catch (err) {
+    console.error(`[TMDB] Failed to fetch release dates for movie ${tmdbId}:`, err.message);
+    return null;
+  }
+};
+
 const getUpcomingMovies = async () => {
   return withCache('upcoming_movies', async () => {
     try {
       const response = await tmdbApi.get('/movie/upcoming');
-      return response.data.results.map(r => ({ ...r, media_type: 'movie' }));
+      const movies = response.data.results.map(r => ({ ...r, media_type: 'movie' }));
+      const enriched = await Promise.all(movies.map(async m => {
+        try {
+          const digital = await getMovieReleaseDates(m.id);
+          let estimated = digital ? digital.split('T')[0] : null;
+          if (!estimated && m.release_date) {
+            const parts = m.release_date.split('-').map(Number);
+            if (parts.length === 3 && !parts.some(isNaN)) {
+              const d = new Date(parts[0], parts[1] - 1, parts[2]);
+              d.setDate(d.getDate() + 45); // standard ~45-day theatrical window
+              const y = d.getFullYear();
+              const mo = String(d.getMonth() + 1).padStart(2, '0');
+              const da = String(d.getDate()).padStart(2, '0');
+              estimated = `${y}-${mo}-${da}`;
+            }
+          }
+          return {
+            ...m,
+            digital_release_date: digital ? digital.split('T')[0] : null,
+            estimated_download_date: estimated
+          };
+        } catch {
+          return m;
+        }
+      }));
+      return enriched;
     } catch (error) {
       console.error('TMDB Upcoming Movies Error:', error.message);
       return [];
@@ -337,7 +396,11 @@ const getUpcomingShows = async () => {
   return withCache('upcoming_shows', async () => {
     try {
       const response = await tmdbApi.get('/tv/on_the_air');
-      return response.data.results.map(r => ({ ...r, media_type: 'tv' }));
+      return response.data.results.map(r => ({ 
+        ...r, 
+        media_type: 'tv',
+        estimated_download_date: r.first_air_date || null
+      }));
     } catch (error) {
       console.error('TMDB Upcoming Shows Error:', error.message);
       return [];
@@ -407,39 +470,7 @@ const getPersonById = async (personId) => {
   }
 };
 
-/**
- * Get the earliest digital (4) or physical (5) release date for a movie.
- * Falls back to theatrical release_date if no digital/physical date found.
- */
-const getMovieReleaseDates = async (tmdbId) => {
-  try {
-    const res = await tmdbApi.get(`/movie/${tmdbId}/release_dates`);
-    const results = res.data.results || [];
-    let digitalDate = null;
-    let physicalDate = null;
 
-    for (const country of results) {
-      for (const rd of country.release_dates || []) {
-        // Type 4 = Digital, Type 5 = Physical
-        if (rd.type === 4 && rd.release_date) {
-          if (!digitalDate || rd.release_date < digitalDate) digitalDate = rd.release_date;
-        }
-        if (rd.type === 5 && rd.release_date) {
-          if (!physicalDate || rd.release_date < physicalDate) physicalDate = rd.release_date;
-        }
-      }
-    }
-
-    // Return earliest of digital or physical, or null if neither found
-    if (digitalDate && physicalDate) return digitalDate < physicalDate ? digitalDate : physicalDate;
-    if (digitalDate) return digitalDate;
-    if (physicalDate) return physicalDate;
-    return null;
-  } catch (err) {
-    console.error(`[TMDB] Failed to fetch release dates for movie ${tmdbId}:`, err.message);
-    return null;
-  }
-};
 
 module.exports = {
   searchMovies,

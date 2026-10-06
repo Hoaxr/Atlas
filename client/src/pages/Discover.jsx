@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../lib/api';
-import { Search as SearchIcon, Plus, Tv, Film, Star, CheckCircle2, Check, ListFilter, Eye, LayoutGrid, Grid3x3 } from 'lucide-react';
+import { Search as SearchIcon, Plus, Tv, Film, Star, CheckCircle2, Check, ListFilter, Eye, LayoutGrid, Grid3x3, Calendar, DownloadCloud } from 'lucide-react';
 import MediaDetailsModal from '../components/MediaDetailsModal';
 import MediaRow from '../components/MediaRow';
 import InlineError from '../components/shared/InlineError';
@@ -83,6 +83,7 @@ export default function Discover() {
   const [mode, setMode] = useState(initialMode); // 'movies' or 'shows'
   const [libraryItems, setLibraryItems] = useState(new Map()); // tmdb_id → library DB id
   const [watchedMap, setWatchedMap] = useState(new Map());
+  const [downloadedSet, setDownloadedSet] = useState(new Set());
   
   // Modal state
   const [selectedMediaId, setSelectedMediaId] = useState(null);
@@ -130,6 +131,7 @@ export default function Discover() {
         setUpcomingResults(cacheRef.current[mode].upcoming || []);
         setRecentResults(cacheRef.current[mode].recent);
         setLibraryItems(cacheRef.current[mode].libraryIds);
+        setDownloadedSet(cacheRef.current[mode].downloadedIds || new Set());
         setLoading(false);
       }
 
@@ -183,7 +185,11 @@ export default function Discover() {
       if (libRes.data.status === 'success') {
         const items = libRes.data.data;
         const itemMap = new Map(items.map(item => [item.tmdb_id, item.id]));
-        const watched = new Map(items.map(item => [item.tmdb_id, !!item.watched]));
+        const downloaded = new Set(
+          items
+            .filter(item => item.status === 'downloaded' || (item.file_path && item.file_path.trim() !== ''))
+            .map(item => Number(item.tmdb_id))
+        );
         // Merge persistent watched_tmdb entries (survives library deletion)
         if (watchedRes.data.status === 'success') {
           for (const entry of watchedRes.data.data) {
@@ -194,6 +200,7 @@ export default function Discover() {
         }
         setLibraryItems(itemMap);
         setWatchedMap(watched);
+        setDownloadedSet(downloaded);
         
         // Map library format back to tmdb format for the cards
         const mappedRecent = items.slice(0, 20).map(i => ({
@@ -213,6 +220,7 @@ export default function Discover() {
         if (cacheRef.current[mode]) {
           cacheRef.current[mode].recent = mappedRecent;
           cacheRef.current[mode].libraryIds = itemMap;
+          cacheRef.current[mode].downloadedIds = downloaded;
         }
       }
     } catch (err) {
@@ -252,6 +260,7 @@ export default function Discover() {
         upcoming: results[2]?.data?.status === 'success' ? results[2].data.data : (cacheRef.current[mode]?.upcoming || []),
         recent: cacheRef.current[mode]?.recent || [],
         libraryIds: cacheRef.current[mode]?.libraryIds || new Map(),
+        downloadedIds: cacheRef.current[mode]?.downloadedIds || new Set(),
       };
     } catch (err) {
       if (!isBackgroundRefresh) {
@@ -288,7 +297,63 @@ export default function Discover() {
     setModalAction('add');
   };
 
-  const renderMediaCard = (media, isTrending = false, isGrid = false) => {
+  const getProbableDownloadInfo = (media) => {
+    if (!media) return null;
+
+    let targetDateStr = media.digital_release_date || media.estimated_download_date;
+    let isConfirmed = !!media.digital_release_date;
+
+    if (!targetDateStr) {
+      if (media.release_date) {
+        const parts = media.release_date.split('-').map(Number);
+        if (parts.length === 3 && !parts.some(isNaN)) {
+          const d = new Date(parts[0], parts[1] - 1, parts[2]);
+          d.setDate(d.getDate() + 45); // standard theatrical-to-digital estimate (~45 days)
+          const y = d.getFullYear();
+          const mo = String(d.getMonth() + 1).padStart(2, '0');
+          const da = String(d.getDate()).padStart(2, '0');
+          targetDateStr = `${y}-${mo}-${da}`;
+        }
+      } else if (media.first_air_date) {
+        targetDateStr = media.first_air_date.split('T')[0];
+        isConfirmed = true;
+      }
+    }
+
+    if (!targetDateStr) return null;
+    const parts = targetDateStr.split('T')[0].split('-').map(Number);
+    if (parts.length !== 3 || parts.some(isNaN)) return null;
+
+    const targetDate = new Date(parts[0], parts[1] - 1, parts[2]);
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+
+    if (targetDate <= now) {
+      return {
+        isAvailable: true,
+        text: 'Available Now',
+        shortText: 'Available',
+        dateStr: targetDateStr,
+      };
+    }
+
+    const isThisYear = targetDate.getFullYear() === now.getFullYear();
+    const shortMonth = targetDate.toLocaleDateString(undefined, { month: 'short' });
+    const day = targetDate.getDate();
+    const year = targetDate.getFullYear();
+
+    const formattedDate = isThisYear ? `${shortMonth} ${day}` : `${shortMonth} ${day}, ${year}`;
+    const prefix = isConfirmed ? '' : '~';
+
+    return {
+      isAvailable: false,
+      text: `${prefix}${formattedDate}`,
+      shortText: `${prefix}${shortMonth} ${day}`,
+      dateStr: targetDateStr,
+    };
+  };
+
+  const renderMediaCard = (media, isTrending = false, isGrid = false, isUpcoming = false) => {
     if (!media) return null;
 
     const title = media.title || media.name;
@@ -299,6 +364,8 @@ export default function Discover() {
     const tmdbId = media.ids?.tmdb || media.id;
     const keyId = tmdbId || media.title || media.name || Math.random().toString();
     const isInLibrary = tmdbId ? libraryItems.has(tmdbId) : false;
+    const isDownloaded = tmdbId ? downloadedSet.has(Number(tmdbId)) : false;
+    const downloadInfo = (isUpcoming && !isDownloaded) ? getProbableDownloadInfo(media) : null;
     const displayType = media.media_type === 'tv' ? 'show' : media.media_type === 'movie' ? 'movie' : mode === 'movies' ? 'movie' : 'show';
 
     const isCompact = posterSize <= 140;
@@ -376,8 +443,10 @@ export default function Discover() {
           {watchedMap.get(tmdbId) ? (
             <div 
               style={{
-                bottom: `${cardScale.cornerOffset}px`,
-                left: `${cardScale.cornerOffset}px`,
+                top: !(isTrending && watchers) ? `${cardScale.cornerOffset}px` : undefined,
+                bottom: (isTrending && watchers) ? `${cardScale.cornerOffset}px` : undefined,
+                right: !(isTrending && watchers) ? `${cardScale.cornerOffset}px` : undefined,
+                left: (isTrending && watchers) ? `${cardScale.cornerOffset}px` : undefined,
                 width: `${cardScale.badgeSize}px`,
                 height: `${cardScale.badgeSize}px`,
               }}
@@ -393,6 +462,33 @@ export default function Discover() {
               />
             </div>
           ) : null}
+
+          {downloadInfo && (
+            <div 
+              style={{
+                bottom: `${cardScale.cornerOffset}px`,
+                left: `${cardScale.cornerOffset}px`,
+                right: `${cardScale.cornerOffset}px`,
+              }}
+              className="absolute z-20 pointer-events-none group-hover:opacity-0 transition-opacity duration-200"
+              title={downloadInfo.isAvailable ? "Available to download now" : `Probable download release: ${downloadInfo.dateStr || downloadInfo.text}`}
+            >
+              <div className={`w-full backdrop-blur-md rounded-md flex items-center justify-center gap-1 shadow-lg shadow-black/80 font-bold tracking-tight truncate border ${
+                downloadInfo.isAvailable
+                  ? 'bg-emerald-950/90 border-emerald-500/40 text-emerald-300'
+                  : 'bg-slate-950/90 border-cyan-500/35 text-cyan-200'
+              } ${isCompact ? 'px-1 py-0.5 text-[9px]' : 'px-1.5 py-0.5 sm:py-1 text-[10px] sm:text-[11px]'}`}>
+                {downloadInfo.isAvailable ? (
+                  <DownloadCloud className={`${isCompact ? 'w-2.5 h-2.5' : 'w-3 h-3'} text-emerald-400 shrink-0`} />
+                ) : (
+                  <Calendar className={`${isCompact ? 'w-2.5 h-2.5' : 'w-3 h-3'} text-cyan-400 shrink-0`} />
+                )}
+                <span className="truncate">
+                  {isCompact ? downloadInfo.shortText : downloadInfo.text}
+                </span>
+              </div>
+            </div>
+          )}
           {poster ? (
             <img 
               src={poster} 
@@ -690,7 +786,14 @@ export default function Discover() {
           >
             {visibleRows.recent && <MediaRow title="Recently Added" items={recentResults} badgeText="From your library" renderMediaCard={renderMediaCard} />}
             {visibleRows.trending && <MediaRow title="Trending Right Now" items={trendingResults} badgeText="Powered by TMDB" isTrending={true} renderMediaCard={renderMediaCard} />}
-            {visibleRows.upcoming && <MediaRow title={mode === 'movies' ? "In Cinemas & Upcoming" : "Upcoming Shows"} items={upcomingResults} badgeText="Powered by TMDB" renderMediaCard={renderMediaCard} />}
+            {visibleRows.upcoming && (
+              <MediaRow 
+                title={mode === 'movies' ? "In Cinemas & Upcoming" : "Upcoming Shows"} 
+                items={upcomingResults} 
+                badgeText="Powered by TMDB" 
+                renderMediaCard={(item, isTrending, isGrid) => renderMediaCard(item, isTrending, isGrid, true)} 
+              />
+            )}
             {visibleRows.recommended && <MediaRow title="Recommended For You" items={recommendedResults} badgeText="Powered by TMDB" renderMediaCard={renderMediaCard} />}
           </div>
         </div>
