@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { Search, SlidersHorizontal, Film, ListTodo, Tv as TvIcon, DownloadCloud, Inbox, Calendar as CalendarIcon, BarChart3, Eye, X, TrendingUp, Music } from 'lucide-react';
+import bdekkerLogo from '../../assets/bdekker-logo.png';
 import AtlasLogo from '../common/AtlasLogo';
 import TopBar from './TopBar';
 import CommandPalette from './CommandPalette';
@@ -533,13 +534,24 @@ export default function Layout() {
           )}
         </div>
 
-        <div className="shrink-0 flex justify-center gap-2 px-3 py-3 border-t border-slate-200 dark:border-slate-800/80">
+        <div className="relative shrink-0 flex justify-end gap-2 px-3 py-3 border-t border-slate-200 dark:border-slate-800/80">
+          <a
+            href="https://bdekker.nl"
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={() => setSidebarOpen(false)}
+            className="absolute left-3 flex h-9 w-9 items-center justify-center rounded-lg hover:bg-slate-800/40 transition-colors"
+            aria-label="Created by BDekker.nl"
+            title="Created by BDekker.nl"
+          >
+            <img src={bdekkerLogo} alt="Created by BDekker.nl" className="h-6 w-6 object-contain" />
+          </a>
           <a
             href="https://github.com/Hoaxr/Atlas"
             target="_blank"
             rel="noopener noreferrer"
             onClick={() => setSidebarOpen(false)}
-            className="group flex items-center justify-center p-2 rounded-lg text-[#839eb5] hover:text-slate-100 hover:bg-slate-800/40 transition-colors"
+            className="group flex items-center justify-center p-2 rounded-lg text-white hover:bg-slate-800/40 transition-colors"
             aria-label="Atlas on GitHub (opens in new tab)"
             title="Atlas on GitHub"
           >
@@ -552,7 +564,7 @@ export default function Layout() {
             target="_blank"
             rel="noopener noreferrer"
             onClick={() => setSidebarOpen(false)}
-            className="group flex items-center justify-center p-2 rounded-lg text-[#839eb5] hover:text-slate-100 hover:bg-slate-800/40 transition-colors"
+            className="group flex items-center justify-center p-2 rounded-lg text-white hover:bg-slate-800/40 transition-colors"
             aria-label="Atlas on Docker Hub (opens in new tab)"
             title="Atlas on Docker Hub"
           >
