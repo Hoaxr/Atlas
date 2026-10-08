@@ -819,12 +819,20 @@ router.get('/issues', async (req, res) => {
     } else if (simklWatchedSync && simklToken && simklClientId) {
       const simklService = require('../services/simklService');
       const stats = await simklService.getUserStats();
-      if (stats.error) {
+      if (stats.authError) {
         issues.push({
           id: 'simkl_token_expired',
           type: 'error',
           message: 'Simkl authentication expired or invalid. Watched sync will fail.',
           actionText: 'Reconnect Simkl',
+          actionLink: '/settings'
+        });
+      } else if (stats.error) {
+        issues.push({
+          id: 'simkl_check_failed',
+          type: 'warning',
+          message: 'Could not verify Simkl right now. Your connection credentials are still configured.',
+          actionText: 'View Simkl Settings',
           actionLink: '/settings'
         });
       }

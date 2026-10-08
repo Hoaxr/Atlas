@@ -688,10 +688,10 @@ const getUserStats = async (force = false) => {
     return _userStatsCache;
   } catch (error) {
     if (error.response?.status === 401) {
-      return { error: 'Simkl authentication required. Connect Simkl in Settings.' };
+      return { error: 'Simkl authentication required. Connect Simkl in Settings.', authError: true };
     }
     console.error('[Simkl] Failed to fetch user stats:', error.message);
-    return { error: 'Failed to fetch Simkl stats.' };
+    return { error: 'Failed to fetch Simkl stats.', authError: false };
   }
 };
 
