@@ -576,15 +576,6 @@ export default function Layout() {
             watchers: watcherCount,
           }}
           alerts={alerts}
-          onDismissAlert={(id) => setAlerts((prev) => {
-            const next = prev.filter(a => a.id !== id);
-            try { sessionStorage.setItem('atlas_alerts', JSON.stringify(next)); } catch { /* ignore */ }
-            return next;
-          })}
-          onClearAlerts={() => {
-            setAlerts([]);
-            try { sessionStorage.removeItem('atlas_alerts'); } catch { /* ignore */ }
-          }}
           onOpenSearch={() => setPaletteOpen(true)}
           onOpenShortcuts={() => setShortcutsOpen(true)}
           onLogout={handleLogout}

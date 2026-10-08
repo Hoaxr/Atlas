@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import clsx from 'clsx';
-import { Search, Menu, SlidersHorizontal, Activity, Keyboard, Bell, AlertTriangle, Heart, DownloadCloud, Eye, CheckCircle2, Inbox, X, CircleUser, ArrowUpRight, ArrowUpCircle } from 'lucide-react';
+import { Search, Menu, SlidersHorizontal, Activity, Keyboard, Bell, AlertTriangle, Heart, DownloadCloud, Eye, CheckCircle2, Inbox, CircleUser, ArrowUpCircle } from 'lucide-react';
 
 function RunningManIcon({ className }) {
   return (
@@ -27,11 +27,10 @@ import { MOD_KEY } from '../../lib/platform';
  * @param {{ issues?: number, requests?: number, downloads?: number, watchers?: number }} [props.activity]
  *   Live counters surfaced by the notifications bell (owned by Layout).
  */
-export default function TopBar({ user, activity, updateUrl, alerts = [], onDismissAlert, onClearAlerts, onOpenSearch, onOpenShortcuts, onLogout }) {
+export default function TopBar({ user, activity, updateUrl, alerts = [], onOpenSearch, onOpenShortcuts, onLogout }) {
   const navigate = useNavigate();
   const [activityOpen, setActivityOpen] = useState(false);
   const [hasUnread, setHasUnread] = useState(true);
-  const [clearedSnapshots, setClearedSnapshots] = useState({});
   const activityRef = useRef(null);
   const activityMenuRef = useRef(null);
   const activityButtonRef = useRef(null);
@@ -81,28 +80,12 @@ export default function TopBar({ user, activity, updateUrl, alerts = [], onDismi
     };
   }, [activityOpen, updateMenuPosition]);
 
-  // Reset cleared snapshot if live count drops below snapshot
-  useEffect(() => {
-    setClearedSnapshots((prev) => {
-      let changed = false;
-      const next = { ...prev };
-      for (const k of ['requests', 'issues', 'downloads', 'watchers']) {
-        const live = activity?.[k] || 0;
-        if (next[k] && live < next[k]) {
-          next[k] = live;
-          changed = true;
-        }
-      }
-      return changed ? next : prev;
-    });
-  }, [activity]);
-
   // Only surface the signals that actually need the user's attention.
   const notifications = [
-    { key: 'requests', count: Math.max(0, (activity?.requests || 0) - (clearedSnapshots.requests || 0)), label: 'pending request', route: '/requests', icon: Inbox, tone: 'text-amber-500 dark:text-amber-400' },
-    { key: 'issues', count: Math.max(0, (activity?.issues || 0) - (clearedSnapshots.issues || 0)), label: 'system issue', route: '/status', icon: AlertTriangle, tone: 'text-rose-500 dark:text-rose-400' },
-    { key: 'downloads', count: Math.max(0, (activity?.downloads || 0) - (clearedSnapshots.downloads || 0)), label: 'active download', route: '/downloads', icon: DownloadCloud, tone: 'text-emerald-500 dark:text-emerald-400' },
-    { key: 'watchers', count: Math.max(0, (activity?.watchers || 0) - (clearedSnapshots.watchers || 0)), label: 'active stream', route: '/watcher', icon: Eye, tone: 'text-cyan-500 dark:text-cyan-400' },
+    { key: 'requests', count: activity?.requests || 0, label: 'pending request', route: '/requests', icon: Inbox, tone: 'text-amber-500 dark:text-amber-400' },
+    { key: 'issues', count: activity?.issues || 0, label: 'system issue', route: '/status', icon: AlertTriangle, tone: 'text-rose-500 dark:text-rose-400' },
+    { key: 'downloads', count: activity?.downloads || 0, label: 'active download', route: '/downloads', icon: DownloadCloud, tone: 'text-emerald-500 dark:text-emerald-400' },
+    { key: 'watchers', count: activity?.watchers || 0, label: 'active stream', route: '/watcher', icon: Eye, tone: 'text-cyan-500 dark:text-cyan-400' },
   ].filter((entry) => entry.count > 0);
 
   const notificationCount = notifications.reduce((total, entry) => total + entry.count, 0) + alerts.length + (updateUrl ? 1 : 0);
@@ -114,26 +97,6 @@ export default function TopBar({ user, activity, updateUrl, alerts = [], onDismi
     }
     prevCountRef.current = notificationCount;
   }, [notificationCount]);
-
-  const handleClearAll = (e) => {
-    e?.stopPropagation();
-    setClearedSnapshots({
-      requests: activity?.requests || 0,
-      issues: activity?.issues || 0,
-      downloads: activity?.downloads || 0,
-      watchers: activity?.watchers || 0,
-    });
-    onClearAlerts?.();
-    setHasUnread(false);
-  };
-
-  const handleDismissOne = (e, key) => {
-    e?.stopPropagation();
-    setClearedSnapshots((prev) => ({
-      ...prev,
-      [key]: activity?.[key] || 0,
-    }));
-  };
 
   const displayName = user?.displayName || user?.name || user?.username || 'Bart Dekker';
   const role = user?.role
@@ -238,14 +201,8 @@ export default function TopBar({ user, activity, updateUrl, alerts = [], onDismi
                         <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-sky-500/15 text-sky-600 dark:text-sky-300 border border-sky-500/20 leading-none">{notificationCount}</span>
                       )}
                     </div>
-                    <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                      {notificationCount > 0 ? 'A quick look at what needs your attention' : 'You’re all caught up'}
-                    </p>
                   </div>
                 </div>
-                {(notifications.length > 0 || alerts.length > 0) && (
-                  <button type="button" onClick={handleClearAll} className="text-xs font-medium text-slate-500 hover:text-cyan-600 dark:text-slate-400 dark:hover:text-cyan-300 transition-colors cursor-pointer px-2 py-1.5 rounded-lg hover:bg-slate-200/70 dark:hover:bg-slate-800">Clear all</button>
-                )}
               </div>
 
               {notifications.length === 0 && alerts.length === 0 && !updateUrl ? (
@@ -272,7 +229,6 @@ export default function TopBar({ user, activity, updateUrl, alerts = [], onDismi
                         <span className="block font-semibold text-slate-700 dark:text-slate-200">Atlas update available</span>
                         <span className="block text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">View newer commits on GitHub</span>
                       </span>
-                      <ArrowUpRight className="w-3.5 h-3.5 text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity" />
                     </a>
                   )}
                   {notifications.map((entry) => (
@@ -294,16 +250,6 @@ export default function TopBar({ user, activity, updateUrl, alerts = [], onDismi
                           <span className="block font-semibold text-slate-700 dark:text-slate-200">{entry.count} {entry.label}{entry.count === 1 ? '' : 's'}</span>
                           <span className="block text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">{entry.key === 'issues' ? 'Review your system status' : entry.key === 'requests' ? 'Requests are waiting for review' : entry.key === 'downloads' ? 'Currently in your download queue' : 'Someone is watching right now'}</span>
                         </span>
-                        <ArrowUpRight className="w-3.5 h-3.5 text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity" />
-                      </button>
-                      <button
-                        type="button"
-                        title="Dismiss notification"
-                        aria-label="Dismiss notification"
-                        onClick={(e) => handleDismissOne(e, entry.key)}
-                        className="opacity-0 group-hover:opacity-100 focus:opacity-100 p-1.5 mr-1 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-slate-200 dark:hover:bg-slate-700/60 transition-all cursor-pointer shrink-0"
-                      >
-                        <X className="w-3.5 h-3.5" />
                       </button>
                     </div>
                   ))}
@@ -345,15 +291,6 @@ export default function TopBar({ user, activity, updateUrl, alerts = [], onDismi
                                 {alert.message}
                               </span>
                             </span>
-                          </button>
-                          <button
-                            type="button"
-                            title="Dismiss"
-                            aria-label="Dismiss alert"
-                            onClick={(e) => { e.stopPropagation(); onDismissAlert?.(alert.id); }}
-                            className="opacity-0 group-hover:opacity-100 p-1.5 mt-1 mr-1.5 rounded-md text-slate-400 hover:text-rose-400 hover:bg-slate-200 dark:hover:bg-slate-700/60 transition-all cursor-pointer shrink-0"
-                          >
-                            <X className="w-3.5 h-3.5" />
                           </button>
                         </div>
                       ))}
