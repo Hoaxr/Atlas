@@ -1168,7 +1168,7 @@ router.get('/status', async (req, res) => {
         issue = `Unreachable: ${err.message}`;
         mountIssues.push({ path: lp.path, issue });
       }
-      mountEntries.push({ path: lp.path, status, issue });
+      mountEntries.push({ path: lp.path, type: lp.type, status, issue });
     }
   }
   services.mounts = { paths: libraryPaths.length, entries: mountEntries, issues: mountIssues };

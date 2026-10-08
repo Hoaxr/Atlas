@@ -93,6 +93,19 @@ const runSearchCycle = async () => {
     monitoredMovies = monitoredMovies.slice(0, 20);
 
     let movieFailures = 0;
+    const failureDetails = [];
+    const recordFailureDetail = (type, title, error) => {
+      if (failureDetails.length >= 8) return;
+      const detail = error.response?.data?.message || error.message || 'Unknown error';
+      failureDetails.push({
+        type,
+        title,
+        error: String(detail)
+          .replace(/([?&](?:api[_-]?key|apikey|token|client_secret)=)[^&\s]+/gi, '$1[redacted]')
+          .slice(0, 240),
+      });
+    };
+
     const processMovie = async (movie) => {
       if (movie.scene_name && activeTitles.has(movie.scene_name.toLowerCase().trim())) return;
       
@@ -165,6 +178,7 @@ const runSearchCycle = async () => {
         // Configuration errors (no indexer) are not transient — skip silently.
         if (err.statusCode === 400 && err.message.includes('No indexers')) return;
         movieFailures++;
+        recordFailureDetail('Movie', movie.title, err);
         console.error(`[Automation] Failed to process ${movie.title}:`, err.message);
         db.prepare("UPDATE movies SET last_provider_response = ?, last_failure_at = datetime('now') WHERE id = ?")
           .run(err.message, movie.id);
@@ -330,6 +344,7 @@ const runSearchCycle = async () => {
         // Configuration errors (no indexer) are not transient — skip silently.
         if (err.statusCode === 400 && err.message.includes('No indexers')) return;
         episodeFailures++;
+        recordFailureDetail('Episode', epLabel, err);
         console.error(`[Automation] Failed to process ${epLabel}:`, err.message);
         db.prepare("UPDATE episodes SET last_provider_response = ?, last_failure_at = datetime('now') WHERE id = ?")
           .run(err.message, ep.id);
@@ -343,7 +358,9 @@ const runSearchCycle = async () => {
         movieFailures, 
         episodeFailures,
         totalMovies: monitoredMovies.length,
-        totalEpisodes: monitoredEpisodes.length
+        totalEpisodes: monitoredEpisodes.length,
+        failureDetails,
+        omittedFailureDetails: movieFailures + episodeFailures - failureDetails.length,
       });
     }
   } finally {

@@ -6,7 +6,7 @@ import { motion } from 'framer-motion';
 import clsx from 'clsx';
 import {
   AlertCircle, CheckCircle2, Activity, Database, Zap,
-  Film, Tv, Server, Cloud, DownloadCloud, Globe, Cpu,
+  Film, Tv, Server, Cloud, DownloadCloud, Globe, Cpu, Music,
   Settings, BookOpen, MessageSquare, FolderTree, Clock, Trash2
 } from 'lucide-react';
 import useWebSocket from '../lib/useWebSocket';
@@ -40,9 +40,16 @@ const statusLabels = {
   claude: 'Claude',
 };
 
+const mountIcons = {
+  movies: Film,
+  tv: Tv,
+  downloads: DownloadCloud,
+  music: Music,
+};
+
 import StatusBadge from '../components/shared/StatusBadge';
 
-function ServiceCard({ name, service }) {
+function ServiceCard({ name, service, compact = false }) {
   const Icon = statusIcons[name] || Server;
 
   let displayMessage = 'Not configured';
@@ -61,9 +68,9 @@ function ServiceCard({ name, service }) {
   }
 
   return (
-    <div className="glass-panel rounded-2xl p-4 border border-white/10 flex items-center gap-3.5 hover:border-slate-700 transition-colors shadow-sm">
-      <div className="p-2.5 rounded-xl bg-slate-800/80 text-cyan-400 border border-slate-700/50 shrink-0">
-        <Icon className="w-5 h-5 text-cyan-400" />
+    <div className={compact ? 'flex min-h-16 items-center gap-3 px-4 py-3' : 'glass-panel rounded-2xl p-4 border border-white/10 flex items-center gap-3.5 hover:border-slate-700 transition-colors shadow-sm'}>
+      <div className={compact ? 'flex h-9 w-9 items-center justify-center rounded-lg bg-slate-800/80 border border-slate-700/50 shrink-0' : 'p-2.5 rounded-xl bg-slate-800/80 text-cyan-400 border border-slate-700/50 shrink-0'}>
+        <Icon className={compact ? 'w-4 h-4 text-cyan-400' : 'w-5 h-5 text-cyan-400'} />
       </div>
       <div className="flex-1 min-w-0">
         <p className="text-sm font-bold text-slate-200 truncate">{statusLabels[name] || name}</p>
@@ -158,10 +165,10 @@ export default function Status() {
   const hasIssues = issues.length > 0 || mounts.issues?.length > 0;
 
   const levelConfig = {
-    success: { bg: 'bg-emerald-500/10', text: 'text-emerald-400', dot: 'bg-emerald-400' },
-    info: { bg: 'bg-cyan-500/10', text: 'text-cyan-400', dot: 'bg-cyan-400' },
-    warn: { bg: 'bg-amber-500/10', text: 'text-amber-400', dot: 'bg-amber-400' },
-    error: { bg: 'bg-rose-500/10', text: 'text-rose-400', dot: 'bg-rose-400' },
+    success: { bg: 'bg-emerald-500/10', text: 'text-emerald-400', dot: 'bg-emerald-400', border: 'border-l-emerald-400' },
+    info: { bg: 'bg-cyan-500/10', text: 'text-cyan-400', dot: 'bg-cyan-400', border: 'border-l-cyan-400' },
+    warn: { bg: 'bg-amber-500/10', text: 'text-amber-400', dot: 'bg-amber-400', border: 'border-l-amber-400' },
+    error: { bg: 'bg-rose-500/10', text: 'text-rose-400', dot: 'bg-rose-400', border: 'border-l-rose-400' },
   };
 
   return (
@@ -299,52 +306,27 @@ export default function Status() {
             </section>
           )}
 
-          {/* API Services */}
-          {apiKeys.some(name => services[name] && services[name].status !== 'unconfigured') && (
-            <section>
-              <h2 className="text-sm sm:text-base font-bold text-slate-200 flex items-center gap-2 mb-3 sm:mb-4">
-                <Globe className="w-4 h-4 sm:w-5 sm:h-5 text-cyan-400" /> API Services
-              </h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 sm:gap-4">
-                {apiKeys.map(name => {
-                  const service = services[name];
-                  if (!service || service.status === 'unconfigured') return null;
-                  return <ServiceCard key={name} name={name} service={service} />;
-                })}
-              </div>
-            </section>
-          )}
-
-          {/* AI Translation Services */}
-          {aiServices.some(name => services[name] && services[name].status !== 'unconfigured') && (
-            <section>
-              <h2 className="text-sm sm:text-base font-bold text-slate-200 flex items-center gap-2 mb-3 sm:mb-4">
-                <MessageSquare className="w-4 h-4 sm:w-5 sm:h-5 text-cyan-400" /> AI Translation
-              </h2>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-4">
-                {aiServices.map(name => {
-                  const service = services[name];
-                  if (!service || service.status === 'unconfigured') return null;
-                  return <ServiceCard key={name} name={name} service={service} />;
-                })}
-              </div>
-            </section>
-          )}
-
-          {/* Download Clients */}
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 sm:gap-6 items-start">
+          {/* Connected services */}
           <section>
             <h2 className="text-sm sm:text-base font-bold text-slate-200 flex items-center gap-2 mb-3 sm:mb-4">
-              <DownloadCloud className="w-4 h-4 sm:w-5 sm:h-5 text-cyan-400" /> Download Clients
+              <Globe className="w-4 h-4 sm:w-5 sm:h-5 text-cyan-400" /> Services & Integrations
             </h2>
-            {downloadClients.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 sm:gap-4">
-                {downloadClients.map((client, i) => (
+            <div className="glass-panel rounded-2xl border border-white/10 divide-y divide-slate-800/70 overflow-hidden">
+              {apiKeys.map(name => {
+                const service = services[name];
+                if (!service || service.status === 'unconfigured') return null;
+                return <ServiceCard key={name} name={name} service={service} compact />;
+              })}
+
+              {downloadClients.length > 0 ? (
+                downloadClients.map((client, i) => (
                   <div
-                    key={`row-${i}`}
-                    className="glass-panel rounded-2xl p-4 border border-white/10 flex items-center gap-3.5 hover:border-slate-700 transition-colors shadow-sm"
+                    key={`client-${i}`}
+                    className="flex min-h-16 items-center gap-3 px-4 py-3"
                   >
-                    <div className="p-2.5 rounded-xl bg-slate-800/80 text-cyan-400 border border-slate-700/50 shrink-0">
-                      <Server className="w-5 h-5 text-cyan-400" />
+                    <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-slate-800/80 border border-slate-700/50 shrink-0">
+                      <Server className="w-4 h-4 text-cyan-400" />
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="font-bold text-sm text-slate-200 truncate">{client.name}</p>
@@ -354,56 +336,28 @@ export default function Status() {
                     </div>
                     <StatusBadge status={client.status} />
                   </div>
-                ))}
-              </div>
-            ) : (
-              <div className="glass-panel rounded-2xl p-6 border border-white/10 text-center">
-                <p className="text-slate-400 text-sm">No download clients configured</p>
-                <button
-                  onClick={() => navigate('/settings')}
-                  className="mt-3 text-sm text-cyan-400 hover:text-cyan-300 font-medium"
-                >
-                  Configure in Settings →
-                </button>
-              </div>
-            )}
-          </section>
+                ))
+              ) : (
+                <div className="flex min-h-16 items-center justify-between gap-3 px-4 py-3">
+                  <p className="text-slate-400 text-sm">No download clients configured</p>
+                  <button
+                    onClick={() => navigate('/settings')}
+                    className="shrink-0 text-sm text-cyan-400 hover:text-cyan-300 font-medium"
+                  >
+                    Configure
+                  </button>
+                </div>
+              )}
 
-          {/* Indexers & Library */}
-          <section>
-            <h2 className="text-sm sm:text-base font-bold text-slate-200 flex items-center gap-2 mb-3 sm:mb-4">
-              <Zap className="w-4 h-4 sm:w-5 sm:h-5 text-cyan-400" /> Indexers & Library
-            </h2>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-4">
-              <div className="glass-panel rounded-2xl p-4 sm:p-5 border border-white/10 flex items-center gap-4">
-                <div className="p-3 rounded-xl bg-slate-800/80 text-cyan-400 border border-slate-700/50">
-                  <Zap className="w-5 h-5 sm:w-6 sm:h-6 text-cyan-400" />
+              <div className="flex min-h-16 items-center gap-3 px-4 py-3">
+                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-slate-800/80 border border-slate-700/50 shrink-0">
+                  <Zap className="w-4 h-4 text-cyan-400" />
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="font-bold text-sm sm:text-base text-slate-200">Indexers</p>
                   <p className="text-xs text-slate-400 mt-0.5 truncate">{services.indexers?.status === 'connected' ? 'Prowlarr configured' : 'Not configured'}</p>
                 </div>
-                <StatusBadge status={services.indexers?.status} label={services.indexers?.status === 'connected' ? 'Active' : 'None'} />
-              </div>
-
-              <div className="glass-panel rounded-2xl p-4 sm:p-5 border border-white/10 flex items-center gap-4">
-                <div className="p-3 rounded-xl bg-slate-800/80 text-cyan-400 border border-slate-700/50">
-                  <Film className="w-5 h-5 sm:w-6 sm:h-6 text-cyan-400" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="font-bold text-sm sm:text-base text-slate-200">Movies</p>
-                  <p className="text-xs text-slate-400 mt-0.5 truncate">{services.library?.movies || 0} in library</p>
-                </div>
-              </div>
-
-              <div className="glass-panel rounded-2xl p-4 sm:p-5 border border-white/10 flex items-center gap-4">
-                <div className="p-3 rounded-xl bg-slate-800/80 text-cyan-400 border border-slate-700/50">
-                  <Tv className="w-5 h-5 sm:w-6 sm:h-6 text-cyan-400" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="font-bold text-sm sm:text-base text-slate-200">TV Shows</p>
-                  <p className="text-xs text-slate-400 mt-0.5 truncate">{services.library?.shows || 0} in library</p>
-                </div>
+                <StatusBadge status={services.indexers?.status} />
               </div>
             </div>
           </section>
@@ -412,19 +366,22 @@ export default function Status() {
           <section>
             <h2 className="text-sm sm:text-base font-bold text-slate-200 flex items-center gap-2 mb-3 sm:mb-4">
               <FolderTree className="w-4 h-4 sm:w-5 sm:h-5 text-cyan-400" /> Library Mounts
+              {mounts.paths > 0 && <span className="text-xs font-medium text-slate-400">{mounts.paths} paths</span>}
             </h2>
             {mounts.paths > 0 ? (
-              <div className="glass-panel rounded-2xl p-4 sm:p-5 border border-white/10 space-y-3">
-                <p className="text-slate-400 text-sm">{mounts.paths} path{mounts.paths !== 1 ? 's' : ''} configured</p>
+              <div className="glass-panel rounded-2xl border border-white/10 divide-y divide-slate-800/70 overflow-hidden">
                 {(mounts.entries || []).map((entry, i) => {
+                  const MountIcon = mountIcons[entry.type] || FolderTree;
                   const colors = entry.status === 'healthy'
-                    ? { bg: 'bg-emerald-500/10', text: 'text-emerald-400', dot: 'bg-emerald-400', border: 'border-emerald-500/20' }
+                    ? { bg: 'bg-emerald-500/10', text: 'text-emerald-400', border: 'border-emerald-500/20' }
                     : entry.status === 'warning'
-                    ? { bg: 'bg-amber-500/10', text: 'text-amber-400', dot: 'bg-amber-400', border: 'border-amber-500/20' }
-                    : { bg: 'bg-rose-500/10', text: 'text-rose-400', dot: 'bg-rose-400', border: 'border-rose-500/20' };
+                    ? { bg: 'bg-amber-500/10', text: 'text-amber-400', border: 'border-amber-500/20' }
+                    : { bg: 'bg-rose-500/10', text: 'text-rose-400', border: 'border-rose-500/20' };
                   return (
-                    <div key={`row-${i}`} className={`flex items-center gap-3 p-3 rounded-xl border ${colors.border} ${colors.bg}`}>
-                      <span className={`w-2 h-2 rounded-full shrink-0 ${colors.dot}`} />
+                    <div key={`row-${i}`} className="flex min-h-16 items-center gap-3 px-4 py-3">
+                      <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-slate-800/80 border border-slate-700/50 shrink-0">
+                        <MountIcon className="w-4 h-4 text-cyan-400" />
+                      </div>
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-slate-200 break-all">{entry.path}</p>
                         {entry.issue && <p className={`text-xs mt-0.5 ${colors.text}`}>{entry.issue}</p>}
@@ -442,6 +399,23 @@ export default function Status() {
               </div>
             )}
           </section>
+          </div>
+
+          {/* AI Translation Services */}
+          {aiServices.some(name => services[name] && services[name].status !== 'unconfigured') && (
+            <section>
+              <h2 className="text-sm sm:text-base font-bold text-slate-200 flex items-center gap-2 mb-3 sm:mb-4">
+                <MessageSquare className="w-4 h-4 sm:w-5 sm:h-5 text-cyan-400" /> AI Translation
+              </h2>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-4">
+                {aiServices.map(name => {
+                  const service = services[name];
+                  if (!service || service.status === 'unconfigured') return null;
+                  return <ServiceCard key={name} name={name} service={service} />;
+                })}
+              </div>
+            </section>
+          )}
         </div>
       ) : (
         /* Activity Feed Tab */
@@ -469,7 +443,7 @@ export default function Status() {
                 }
               }}
               disabled={logs.length === 0}
-              className="text-xs text-rose-400 hover:text-rose-300 disabled:opacity-50 flex items-center gap-1.5 transition-colors font-medium px-2.5 py-1 rounded-lg hover:bg-rose-500/10"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-rose-500/25 bg-rose-500/10 px-3 py-1.5 text-xs font-semibold text-rose-400 transition-colors hover:border-rose-500/40 hover:bg-rose-500/20 hover:text-rose-300 disabled:cursor-not-allowed disabled:opacity-50"
             >
               <Trash2 className="w-3.5 h-3.5" />
               Clear Logs
@@ -485,42 +459,54 @@ export default function Status() {
             />
           ) : (
             <Virtuoso
-              customScrollParent={scrollElement}
-              useWindowScroll={!scrollElement}
-              totalCount={logs.length}
-              data={logs}
-              overscan={400}
-              itemContent={(_index, log) => {
-                const cfg = levelConfig[log.level] || levelConfig.info;
-                const time = new Date(log.created_at).toLocaleTimeString();
-                return (
-                  <div key={log.id} className="pb-2">
-                    <div
-                      className={`glass-panel rounded-xl p-4 flex items-start gap-3 border-l-4 transition-all ${
-                        log._live ? 'animate-pulse border-l-cyan-400' : 'border-l-transparent'
-                      } ${cfg.bg}`}
-                    >
-                      <div className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${cfg.dot}`} />
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
+                customScrollParent={scrollElement}
+                useWindowScroll={!scrollElement}
+                totalCount={logs.length}
+                data={logs}
+                overscan={400}
+                itemContent={(_index, log) => {
+                  const cfg = levelConfig[log.level] || levelConfig.info;
+                  const time = new Date(log.created_at).toLocaleTimeString();
+                  const failureDetails = log.failureDetails || log.metadata?.failureDetails || [];
+                  const omittedFailureDetails = log.omittedFailureDetails || log.metadata?.omittedFailureDetails || 0;
+                  return (
+                    <div key={log.id} className="pb-2">
+                      <article className={`glass-panel flex items-start gap-3 rounded-xl border border-slate-800/80 border-l-2 p-3.5 transition-colors sm:px-4 ${log._live ? 'border-l-cyan-400 bg-cyan-500/5' : `${cfg.border} hover:border-slate-700`}`}>
+                        <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${log._live ? 'bg-cyan-400' : cfg.dot}`} />
+                        <div className="min-w-0 flex-1">
+                          <div className="mb-1.5 flex items-center gap-2">
                           <span className={`text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${cfg.bg} ${cfg.text}`}>
                             {log.level}
                           </span>
-                          <span className="text-xs text-slate-500">{time}</span>
+                          <time className="text-xs text-slate-500">{time}</time>
                         </div>
-                        <p className="text-sm text-slate-200 mt-1">{log.message}</p>
-                        {(log.title || log.metadata?.title || log.showId || log.metadata?.showId) && (
-                          <p className="text-xs text-slate-500 mt-0.5">
-                            {log.title || log.metadata?.title || `Show ID: ${log.showId || log.metadata?.showId}`}
-                            {(log.language || log.metadata?.language) ? ` (${log.language || log.metadata?.language})` : ''}
-                          </p>
-                        )}
-                      </div>
+                          <p className="text-sm text-slate-200 break-words">{log.message}</p>
+                          {failureDetails.length > 0 && (
+                            <div className="mt-2 space-y-1.5 border-t border-slate-800/70 pt-2">
+                              {failureDetails.map((failure, index) => (
+                                <p key={`${failure.type}-${failure.title}-${index}`} className="text-xs text-slate-400 break-words">
+                                  <span className="font-semibold text-slate-300">{failure.type}: {failure.title}</span>
+                                  <span className="text-slate-500"> — </span>
+                                  {failure.error}
+                                </p>
+                              ))}
+                              {omittedFailureDetails > 0 && (
+                                <p className="text-xs text-slate-500">And {omittedFailureDetails} more failure{omittedFailureDetails === 1 ? '' : 's'}.</p>
+                              )}
+                            </div>
+                          )}
+                          {(log.title || log.metadata?.title || log.showId || log.metadata?.showId) && (
+                            <p className="text-xs text-slate-500 mt-0.5 break-words">
+                              {log.title || log.metadata?.title || `Show ID: ${log.showId || log.metadata?.showId}`}
+                              {(log.language || log.metadata?.language) ? ` (${log.language || log.metadata?.language})` : ''}
+                            </p>
+                          )}
+                        </div>
+                      </article>
                     </div>
-                  </div>
-                );
-              }}
-            />
+                  );
+                }}
+              />
           )}
         </div>
       )}

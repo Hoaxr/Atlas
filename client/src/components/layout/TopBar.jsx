@@ -54,13 +54,16 @@ export default function TopBar({ user, activity, updateUrl, alerts = [], onOpenS
   const updateMenuPosition = useCallback(() => {
     if (!activityButtonRef.current) return;
     const rect = activityButtonRef.current.getBoundingClientRect();
-    const width = 360;
+    const width = Math.min(360, Math.max(0, window.innerWidth - 16));
+    const left = Math.max(8, Math.min(
+      rect.left + (rect.width - width) / 2,
+      window.innerWidth - width - 8
+    ));
     setMenuStyle({
       position: 'fixed',
-      top: `${Math.max(8, Math.min(rect.bottom + 10, window.innerHeight - 360))}px`,
-      right: `${Math.max(8, window.innerWidth - rect.right)}px`,
+      top: `${rect.bottom + 10}px`,
+      left: `${left}px`,
       width: `${width}px`,
-      maxWidth: `calc(100vw - 1rem)`,
       zIndex: 60,
     });
   }, []);
