@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Virtuoso } from 'react-virtuoso';
 import api from '../lib/api';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useOutletContext } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import clsx from 'clsx';
 import {
@@ -77,6 +77,7 @@ function ServiceCard({ name, service }) {
 }
 
 export default function Status() {
+  const { updateUrl, isLatest } = useOutletContext();
   const { headerRef, stickyVisible } = useStickyBar();
   const [statusData, setStatusData] = useState(null);
   const [issues, setIssues] = useState([]);
@@ -191,7 +192,7 @@ export default function Status() {
                 {hasIssues ? <AlertCircle className="w-3.5 h-3.5" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
                 <span>{hasIssues ? `${issues.length} ${issues.length === 1 ? 'Issue' : 'Issues'}` : 'All Systems Healthy'}</span>
               </div>
-              <VersionBadge version={statusData?.version} />
+              <VersionBadge version={statusData?.version} updateUrl={updateUrl} isLatest={isLatest} />
             </>
           )}
         </div>

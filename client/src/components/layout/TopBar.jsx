@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import clsx from 'clsx';
-import { Search, Menu, SlidersHorizontal, Activity, Keyboard, Bell, AlertTriangle, Heart, DownloadCloud, Eye, CheckCircle2, Inbox, X, CircleUser } from 'lucide-react';
+import { Search, Menu, SlidersHorizontal, Activity, Keyboard, Bell, AlertTriangle, Heart, DownloadCloud, Eye, CheckCircle2, Inbox, X, CircleUser, ArrowUpRight, ArrowUpCircle } from 'lucide-react';
 
 function RunningManIcon({ className }) {
   return (
@@ -27,7 +27,7 @@ import { MOD_KEY } from '../../lib/platform';
  * @param {{ issues?: number, requests?: number, downloads?: number, watchers?: number }} [props.activity]
  *   Live counters surfaced by the notifications bell (owned by Layout).
  */
-export default function TopBar({ user, activity, alerts = [], onDismissAlert, onClearAlerts, onOpenSearch, onOpenShortcuts, onLogout }) {
+export default function TopBar({ user, activity, updateUrl, alerts = [], onDismissAlert, onClearAlerts, onOpenSearch, onOpenShortcuts, onLogout }) {
   const navigate = useNavigate();
   const [activityOpen, setActivityOpen] = useState(false);
   const [hasUnread, setHasUnread] = useState(true);
@@ -55,10 +55,10 @@ export default function TopBar({ user, activity, alerts = [], onDismissAlert, on
   const updateMenuPosition = useCallback(() => {
     if (!activityButtonRef.current) return;
     const rect = activityButtonRef.current.getBoundingClientRect();
-    const width = 288; // matches w-72
+    const width = 360;
     setMenuStyle({
       position: 'fixed',
-      top: `${rect.bottom + 8}px`,
+      top: `${Math.max(8, Math.min(rect.bottom + 10, window.innerHeight - 360))}px`,
       right: `${Math.max(8, window.innerWidth - rect.right)}px`,
       width: `${width}px`,
       maxWidth: `calc(100vw - 1rem)`,
@@ -105,7 +105,7 @@ export default function TopBar({ user, activity, alerts = [], onDismissAlert, on
     { key: 'watchers', count: Math.max(0, (activity?.watchers || 0) - (clearedSnapshots.watchers || 0)), label: 'active stream', route: '/watcher', icon: Eye, tone: 'text-cyan-500 dark:text-cyan-400' },
   ].filter((entry) => entry.count > 0);
 
-  const notificationCount = notifications.reduce((total, entry) => total + entry.count, 0) + alerts.length;
+  const notificationCount = notifications.reduce((total, entry) => total + entry.count, 0) + alerts.length + (updateUrl ? 1 : 0);
   const prevCountRef = useRef(notificationCount);
 
   useEffect(() => {
@@ -224,39 +224,61 @@ export default function TopBar({ user, activity, alerts = [], onDismissAlert, on
               ref={activityMenuRef}
               role="menu"
               style={menuStyle}
-              className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xl shadow-black/10 dark:shadow-black/50 overflow-hidden"
+              className="bg-white dark:bg-[#111d30] border border-slate-200 dark:border-slate-700/80 rounded-2xl shadow-2xl shadow-black/15 dark:shadow-black/50 overflow-hidden"
             >
-              <div className="px-3.5 py-2.5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">Notifications</p>
-                  {notificationCount > 0 && (
-                    <span className="text-[10px] font-display font-bold px-1.5 py-0.5 rounded-md bg-sky-500/15 text-sky-400 border border-sky-500/20 leading-none">
-                      {notificationCount}
-                    </span>
-                  )}
+              <div className="px-4 py-3.5 border-b border-slate-200 dark:border-slate-800/90 bg-slate-50/70 dark:bg-slate-900/30 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-sky-500/10 border border-sky-500/15 flex items-center justify-center">
+                    <Bell className="w-4 h-4 text-sky-500 dark:text-sky-400" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">Notifications</p>
+                      {notificationCount > 0 && (
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-sky-500/15 text-sky-600 dark:text-sky-300 border border-sky-500/20 leading-none">{notificationCount}</span>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                      {notificationCount > 0 ? 'A quick look at what needs your attention' : 'You’re all caught up'}
+                    </p>
+                  </div>
                 </div>
-                {notificationCount > 0 && (
-                  <button
-                    type="button"
-                    onClick={handleClearAll}
-                    className="text-xs font-medium text-slate-400 hover:text-cyan-400 dark:hover:text-cyan-300 transition-colors cursor-pointer"
-                  >
-                    Clear all
-                  </button>
+                {(notifications.length > 0 || alerts.length > 0) && (
+                  <button type="button" onClick={handleClearAll} className="text-xs font-medium text-slate-500 hover:text-cyan-600 dark:text-slate-400 dark:hover:text-cyan-300 transition-colors cursor-pointer px-2 py-1.5 rounded-lg hover:bg-slate-200/70 dark:hover:bg-slate-800">Clear all</button>
                 )}
               </div>
 
-              {notifications.length === 0 && alerts.length === 0 ? (
-                <div className="flex flex-col items-center gap-1.5 px-4 py-7 text-center">
-                  <CheckCircle2 className="w-5 h-5 text-emerald-500 dark:text-emerald-400" />
-                  <p className="text-sm text-slate-500 dark:text-slate-400">You&apos;re all caught up</p>
+              {notifications.length === 0 && alerts.length === 0 && !updateUrl ? (
+                <div className="flex flex-col items-center gap-2 px-6 py-9 text-center">
+                  <div className="w-11 h-11 rounded-2xl bg-emerald-500/10 flex items-center justify-center"><CheckCircle2 className="w-5 h-5 text-emerald-500 dark:text-emerald-400" /></div>
+                  <p className="text-sm font-medium text-slate-700 dark:text-slate-200">You&apos;re all caught up</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">We&apos;ll let you know when something needs attention.</p>
                 </div>
               ) : (
-                <div className="p-1.5 space-y-0.5">
+                <div className="p-2.5 space-y-1 max-h-[min(60vh,420px)] overflow-y-auto">
+                  {updateUrl && (
+                    <a
+                      href={updateUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      role="menuitem"
+                      onClick={() => setActivityOpen(false)}
+                      className="group flex items-center gap-3 px-3 py-3 rounded-xl border border-transparent hover:border-emerald-500/20 hover:bg-emerald-500/5 transition-colors"
+                      aria-label="Update available: view newer commits on GitHub"
+                      title="A newer Atlas build is available"
+                    >
+                      <ArrowUpCircle className="w-4 h-4 shrink-0 text-emerald-500 dark:text-emerald-400" />
+                      <span className="min-w-0 flex-1">
+                        <span className="block font-semibold text-slate-700 dark:text-slate-200">Atlas update available</span>
+                        <span className="block text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">View newer commits on GitHub</span>
+                      </span>
+                      <ArrowUpRight className="w-3.5 h-3.5 text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+                    </a>
+                  )}
                   {notifications.map((entry) => (
                     <div
                       key={entry.key}
-                      className="group flex items-center justify-between rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                      className="group flex items-center justify-between rounded-xl border border-transparent hover:border-slate-200 dark:hover:border-slate-700/70 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors"
                     >
                       <button
                         type="button"
@@ -265,20 +287,21 @@ export default function TopBar({ user, activity, alerts = [], onDismissAlert, on
                           setActivityOpen(false);
                           navigate(entry.route);
                         }}
-                        className="flex-1 min-w-0 flex items-center gap-2.5 px-3 py-2 text-sm text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-slate-100 text-left transition-colors"
+                        className="flex-1 min-w-0 flex items-center gap-3 px-3 py-3 text-sm text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-slate-100 text-left transition-colors"
                       >
                         <entry.icon className={clsx('w-4 h-4 shrink-0', entry.tone)} />
-                        <span className="truncate">
-                          <span className="font-semibold">{entry.count}</span>{' '}
-                          {entry.label}{entry.count === 1 ? '' : 's'}
+                        <span className="min-w-0 flex-1">
+                          <span className="block font-semibold text-slate-700 dark:text-slate-200">{entry.count} {entry.label}{entry.count === 1 ? '' : 's'}</span>
+                          <span className="block text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">{entry.key === 'issues' ? 'Review your system status' : entry.key === 'requests' ? 'Requests are waiting for review' : entry.key === 'downloads' ? 'Currently in your download queue' : 'Someone is watching right now'}</span>
                         </span>
+                        <ArrowUpRight className="w-3.5 h-3.5 text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity" />
                       </button>
                       <button
                         type="button"
                         title="Dismiss notification"
                         aria-label="Dismiss notification"
                         onClick={(e) => handleDismissOne(e, entry.key)}
-                        className="opacity-0 group-hover:opacity-100 p-1.5 mr-1.5 rounded-md text-slate-400 hover:text-rose-400 hover:bg-slate-200 dark:hover:bg-slate-700/60 transition-all cursor-pointer shrink-0"
+                        className="opacity-0 group-hover:opacity-100 focus:opacity-100 p-1.5 mr-1 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-slate-200 dark:hover:bg-slate-700/60 transition-all cursor-pointer shrink-0"
                       >
                         <X className="w-3.5 h-3.5" />
                       </button>

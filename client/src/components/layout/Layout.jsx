@@ -82,7 +82,40 @@ export default function Layout() {
     }
   });
   const [watcherCount, setWatcherCount] = useState(0);
+  const [updateUrl, setUpdateUrl] = useState(null);
+  const [isLatest, setIsLatest] = useState(false);
   const { currentTrack } = useAudioPlayer();
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const checkForUpdates = async () => {
+      try {
+        const versionResponse = await api.get('/settings/version');
+        const currentCommit = versionResponse.data?.data?.fullCommit;
+        if (!currentCommit) return;
+
+        const comparisonResponse = await fetch(
+          `https://api.github.com/repos/Hoaxr/Atlas/compare/${currentCommit}...main`,
+          { headers: { Accept: 'application/vnd.github+json' } }
+        );
+        if (!comparisonResponse.ok) return;
+
+        const comparison = await comparisonResponse.json();
+        if (isMounted) {
+          setIsLatest(comparison.ahead_by === 0);
+          if (comparison.ahead_by > 0) {
+            setUpdateUrl(`https://github.com/Hoaxr/Atlas/compare/${currentCommit}...main`);
+          }
+        }
+      } catch {
+        // Update checks are optional and should not affect app startup.
+      }
+    };
+
+    checkForUpdates();
+    return () => { isMounted = false; };
+  }, []);
 
   const handleLogout = async () => {
     try {
@@ -500,12 +533,42 @@ export default function Layout() {
           )}
         </div>
 
+        <div className="shrink-0 flex justify-center gap-2 px-3 py-3 border-t border-slate-200 dark:border-slate-800/80">
+          <a
+            href="https://github.com/Hoaxr/Atlas"
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={() => setSidebarOpen(false)}
+            className="group flex items-center justify-center p-2 rounded-lg text-[#839eb5] hover:text-slate-100 hover:bg-slate-800/40 transition-colors"
+            aria-label="Atlas on GitHub (opens in new tab)"
+            title="Atlas on GitHub"
+          >
+            <svg className="w-[18px] h-[18px]" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path d="M12 .9a11.1 11.1 0 0 0-3.51 21.63c.56.1.76-.24.76-.54v-2.1c-3.1.67-3.76-1.32-3.76-1.32-.5-1.29-1.24-1.63-1.24-1.63-1.01-.69.08-.68.08-.68 1.12.08 1.71 1.15 1.71 1.15 1 .1.67 2.3 3.82 1.61.1-.72.39-1.21.71-1.49-2.47-.28-5.07-1.24-5.07-5.51 0-1.22.44-2.22 1.15-3-.12-.28-.5-1.42.11-2.95 0 0 .94-.3 3.05 1.15a10.6 10.6 0 0 1 5.55 0c2.11-1.45 3.05-1.15 3.05-1.15.61 1.53.23 2.67.11 2.95.71.78 1.15 1.78 1.15 3 0 4.28-2.61 5.23-5.09 5.51.4.35.76 1.02.76 2.06v3.05c0 .3.2.65.77.54A11.1 11.1 0 0 0 12 .9Z" />
+            </svg>
+          </a>
+          <a
+            href="https://hub.docker.com/r/bdekkernl/atlas"
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={() => setSidebarOpen(false)}
+            className="group flex items-center justify-center p-2 rounded-lg text-[#839eb5] hover:text-slate-100 hover:bg-slate-800/40 transition-colors"
+            aria-label="Atlas on Docker Hub (opens in new tab)"
+            title="Atlas on Docker Hub"
+          >
+            <svg className="w-[18px] h-[18px]" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path d="M1.5 13.5h20.2c-.3 3.8-3.2 6.5-7.4 6.5H9c-4.2 0-7.1-2.3-7.5-6.5Zm5.1-4.1h2.7v2.7H6.6V9.4Zm3.2 0h2.7v2.7H9.8V9.4Zm3.2 0h2.7v2.7H13V9.4Zm-3.2-3.2h2.7v2.7H9.8V6.2Zm3.2 0h2.7v2.7H13V6.2Zm3.2 3.2h2.7v2.7h-2.7V9.4Zm5.6 1.3c.1-.9-.3-1.7-1-2.2.7-.2 1.5-.1 2.2.3-.2.9-.6 1.5-1.2 1.9Z" />
+            </svg>
+          </a>
+        </div>
+
       </aside>
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col min-w-0 h-full">
         <TopBar
           user={user}
+          updateUrl={updateUrl}
           activity={{
             issues: systemIssues.length,
             requests: pendingRequests,
@@ -529,7 +592,7 @@ export default function Layout() {
 
         <main className={clsx("flex-1 min-h-0 min-w-0 w-full overflow-y-auto overflow-x-hidden relative z-10", currentTrack && "pb-24")}>
           <div className="p-3 sm:p-4 md:p-6 lg:p-8 w-full max-w-full overflow-x-clip">
-            <Outlet />
+            <Outlet context={{ updateUrl, isLatest }} />
           </div>
         </main>
       </div>

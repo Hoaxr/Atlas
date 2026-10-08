@@ -1,8 +1,8 @@
 import { useState } from 'react';
-import { GitBranch, GitCommit, ExternalLink, Check, Copy } from 'lucide-react';
+import { GitBranch, GitCommit, ExternalLink, Check, Copy, ArrowUpCircle } from 'lucide-react';
 import { BUILD_VERSION } from '../../lib/version';
 
-export default function VersionBadge({ version: propVersion, className = '' }) {
+export default function VersionBadge({ version: propVersion, updateUrl, isLatest, className = '' }) {
   const [copied, setCopied] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
 
@@ -49,6 +49,32 @@ export default function VersionBadge({ version: propVersion, className = '' }) {
           <GitCommit className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
           <span>{commit}</span>
         </div>
+
+        {updateUrl && (
+          <a
+            href={updateUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(event) => event.stopPropagation()}
+            className="flex items-center gap-1 text-emerald-400 hover:text-emerald-300"
+            aria-label="Update available: view newer commits on GitHub"
+            title="Update available"
+          >
+            <ArrowUpCircle className="w-3.5 h-3.5 shrink-0" />
+            <span className="text-[10px] font-semibold">Update</span>
+          </a>
+        )}
+
+        {!updateUrl && isLatest && (
+          <span
+            className="flex items-center gap-1 text-emerald-400"
+            aria-label="Running the latest Atlas version"
+            title="You're running the latest Atlas version"
+          >
+            <Check className="w-3.5 h-3.5 shrink-0" />
+            <span className="text-[10px] font-semibold">Latest</span>
+          </span>
+        )}
 
         {/* Date / Build if available */}
         {date && (
