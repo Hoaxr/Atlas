@@ -560,13 +560,15 @@ router.post('/service/test', requireAdmin, async (req, res) => {
       }
     } else if (service === 'opensubtitles') {
       try {
-        const r = await axios.get('https://api.opensubtitles.com/api/v1/infos/user', {
-          headers: { 'Api-Key': key, 'User-Agent': 'Atlas/1.0' },
+        const r = await axios.get('https://api.opensubtitles.com/api/v1/subtitles', {
+          headers: { 'Api-Key': key, 'User-Agent': 'Atlas v1.0' },
+          params: { tmdb_id: 603, languages: 'en' },
           timeout: 8000
         });
         if (r.status === 200) {
-          return res.json({ status: 'success', message: `Connected to OpenSubtitles (VIP: ${r.data?.data?.vip ? 'Yes' : 'No'}, downloads: ${r.data?.data?.downloads_count || 0})` });
+          return res.json({ status: 'success', message: 'Connected to OpenSubtitles successfully' });
         }
+        return res.status(400).json({ status: 'error', message: r.data?.message || 'OpenSubtitles test failed' });
       } catch (err) {
         if (err.response?.status === 401 || err.response?.status === 403) {
           return res.status(400).json({ status: 'error', message: 'Invalid OpenSubtitles API key' });
@@ -599,11 +601,12 @@ router.post('/service/test', requireAdmin, async (req, res) => {
       }
     } else if (service === 'tmdb') {
       try {
-        const r = await axios.get('https://api.themoviedb.org/3/authentication', {
-          headers: { Authorization: `Bearer ${key}` },
-          timeout: 8000
-        });
-        if (r.status === 200 && r.data?.success) {
+        const isJwt = key.startsWith('ey');
+        const reqConfig = isJwt
+          ? { headers: { Authorization: `Bearer ${key}` }, timeout: 8000 }
+          : { params: { api_key: key }, timeout: 8000 };
+        const r = await axios.get('https://api.themoviedb.org/3/configuration', reqConfig);
+        if (r.status === 200) {
           return res.json({ status: 'success', message: 'Connected to TMDB successfully' });
         }
         return res.status(400).json({ status: 'error', message: r.data?.status_message || 'TMDB test failed' });
