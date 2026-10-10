@@ -1,11 +1,34 @@
-import { Languages, CheckCircle2 } from 'lucide-react';
+import { useState } from 'react';
+import { Languages, CheckCircle2, Loader2 } from 'lucide-react';
 import CustomSelect from '../../components/shared/CustomSelect';
 import LanguageInput from './LanguageInput';
 import PasswordInput from '../../components/shared/PasswordInput';
 import { SettingsSection, SettingsHeader, SettingsGroup, SettingsLabel, SettingsHelper } from '../../components/settings/layout';
 import ToggleRow from '../../components/shared/ToggleRow';
+import api from '../../lib/api';
+import { customAlert } from '../../utils/alerts';
 
 export default function SubtitlesTab({ settings, setSettings, keyStatuses }) {
+  const [testingService, setTestingService] = useState({});
+  const [testResults, setTestResults] = useState({});
+
+  const handleTestService = async (serviceId, key) => {
+    setTestingService(prev => ({ ...prev, [serviceId]: true }));
+    try {
+      const res = await api.post('/settings/service/test', { service: serviceId, apiKey: key });
+      if (res.data.status === 'success' || res.data.status === 'warning') {
+        customAlert(res.data.message || `${serviceId} connected successfully`, 'success');
+        setTestResults(prev => ({ ...prev, [serviceId]: { status: res.data.status === 'warning' ? 'warning' : 'connected', message: res.data.message } }));
+      }
+    } catch (err) {
+      const msg = err.response?.data?.message || err.message || 'Connection test failed';
+      customAlert(msg, 'error');
+      setTestResults(prev => ({ ...prev, [serviceId]: { status: 'error', message: msg } }));
+    } finally {
+      setTestingService(prev => ({ ...prev, [serviceId]: false }));
+    }
+  };
+
   return (
     <div className="w-full space-y-8 animate-fade-in">
       <div>
@@ -39,31 +62,56 @@ export default function SubtitlesTab({ settings, setSettings, keyStatuses }) {
             { id: 'opensubtitles', name: 'OpenSubtitles', color: 'border-l-cyan-500', desc: 'Primary subtitle source.', key: settings.osApiKey, setter: (v) => setSettings({ ...settings, osApiKey: v }) },
             { id: 'subdl', name: 'SubDL', color: 'border-l-amber-500', desc: 'Alternative. Free: 2,000 requests/day.', key: settings.subdlApiKey, setter: (v) => setSettings({ ...settings, subdlApiKey: v }) },
             { id: 'subsource', name: 'SubSource', color: 'border-l-purple-500', desc: 'Alternative. Free: 7,200 requests/day.', key: settings.subsourceApiKey, setter: (v) => setSettings({ ...settings, subsourceApiKey: v }) },
-          ].map(provider => (
-            <div key={provider.id} className={`glass-panel p-5 rounded-2xl border-l-4 ${provider.color}`}>
-              <div className="flex items-center justify-between mb-2">
-                <label className="block text-base font-bold font-display text-slate-100">{provider.name}</label>
-                {keyStatuses[provider.id]?.status && (
-                  <span className={`flex items-center gap-1.5 text-xs font-semibold px-2.5 py-0.5 rounded-full ${
-                    keyStatuses[provider.id]?.status === 'connected'
-                      ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-                      : 'bg-red-500/20 text-red-400 border border-red-500/30'
-                  }`}>
-                    <span className={`w-1.5 h-1.5 rounded-full ${keyStatuses[provider.id]?.status === 'connected' ? 'bg-emerald-400' : 'bg-red-400'}`} />
-                    {keyStatuses[provider.id]?.status === 'connected' ? 'Connected' : 'Error'}
-                  </span>
+          ].map(provider => {
+            const status = testResults[provider.id] || keyStatuses[provider.id];
+            return (
+              <div key={provider.id} className={`glass-panel p-5 rounded-2xl border-l-4 ${provider.color}`}>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-base font-bold font-display text-slate-100">{provider.name}</label>
+                  {status?.status && (
+                    <span
+                      title={status.message || ''}
+                      className={`flex items-center gap-1.5 text-xs font-semibold px-2.5 py-0.5 rounded-full ${
+                        status.status === 'connected'
+                          ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                          : status.status === 'warning'
+                          ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+                          : 'bg-red-500/20 text-red-400 border border-red-500/30'
+                      }`}>
+                      <span className={`w-1.5 h-1.5 rounded-full ${status.status === 'connected' ? 'bg-emerald-400' : status.status === 'warning' ? 'bg-amber-400' : 'bg-red-400'}`} />
+                      {status.status === 'connected' ? 'Connected' : status.status === 'warning' ? 'Quota' : 'Error'}
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs sm:text-sm text-slate-400 mb-3">{provider.desc}</p>
+                <PasswordInput
+                  placeholder={`${provider.name} API Key`}
+                  className="glass-input w-full font-mono"
+                  value={provider.key}
+                  onChange={(e) => provider.setter(e.target.value)}
+                />
+                {status?.status === 'error' && status?.message && (
+                  <p className="text-xs text-red-400 mt-1.5 break-words">
+                    {status.message}
+                  </p>
                 )}
+                <div className="flex items-center justify-between mt-3 pt-2 border-t border-white/5">
+                  <p className="text-xs sm:text-sm text-slate-400">
+                    Get key from: <a href={`https://${provider.id === 'opensubtitles' ? 'opensubtitles.com' : provider.id === 'subdl' ? 'subdl.com/panel/login' : 'subsource.net/dashboard/profile'}`} target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:underline">{provider.id === 'opensubtitles' ? 'opensubtitles.com' : provider.id === 'subdl' ? 'subdl.com' : 'subsource.net'}</a>
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => handleTestService(provider.id, provider.key)}
+                    disabled={testingService[provider.id] || !provider.key}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700/60 hover:border-cyan-500/40 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                  >
+                    {testingService[provider.id] && <Loader2 className="w-3.5 h-3.5 animate-spin text-cyan-400" />}
+                    {testingService[provider.id] ? 'Testing...' : 'Test Connection'}
+                  </button>
+                </div>
               </div>
-              <p className="text-xs sm:text-sm text-slate-400 mb-3">{provider.desc}</p>
-              <PasswordInput
-                placeholder={`${provider.name} API Key`}
-                className="glass-input w-full font-mono"
-                value={provider.key}
-                onChange={(e) => provider.setter(e.target.value)}
-              />
-              <p className="text-xs sm:text-sm text-slate-400 mt-2">Get key from: <a href={`https://${provider.id === 'opensubtitles' ? 'opensubtitles.com' : provider.id === 'subdl' ? 'subdl.com/panel/login' : 'subsource.net/dashboard/profile'}`} target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:underline">{provider.id === 'opensubtitles' ? 'opensubtitles.com' : provider.id === 'subdl' ? 'subdl.com' : 'subsource.net'}</a></p>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </SettingsSection>
 
@@ -99,45 +147,63 @@ export default function SubtitlesTab({ settings, setSettings, keyStatuses }) {
             { id: 'gemini', key: settings.geminiApiKey, setter: (v) => setSettings({ ...settings, geminiApiKey: v }) },
             { id: 'deepseek', key: settings.deepseekApiKey, setter: (v) => setSettings({ ...settings, deepseekApiKey: v }) },
             { id: 'claude', key: settings.claudeApiKey, setter: (v) => setSettings({ ...settings, claudeApiKey: v }) },
-          ].filter(p => settings.translationProvider === p.id).map(p => (
-            <div key={p.id}>
-              <div className="flex items-center justify-between">
-                <label className="block text-xs sm:text-sm font-medium text-slate-300">{p.id.charAt(0).toUpperCase() + p.id.slice(1)} API Key</label>
-                {keyStatuses[p.id]?.status && (
-                  <span
-                    title={keyStatuses[p.id]?.message || ''}
-                    className={`flex items-center gap-1.5 text-xs font-semibold px-2.5 py-0.5 rounded-full ${
-                      keyStatuses[p.id]?.status === 'connected'
-                        ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-                        : 'bg-red-500/20 text-red-400 border border-red-500/30'
-                    }`}>
-                    <span className={`w-1.5 h-1.5 rounded-full ${keyStatuses[p.id]?.status === 'connected' ? 'bg-emerald-400' : 'bg-red-400'}`} />
-                    {keyStatuses[p.id]?.status === 'connected' ? 'Connected' : 'Error'}
-                  </span>
+          ].filter(p => settings.translationProvider === p.id).map(p => {
+            const status = testResults[p.id] || keyStatuses[p.id];
+            return (
+              <div key={p.id}>
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs sm:text-sm font-medium text-slate-300">{p.id.charAt(0).toUpperCase() + p.id.slice(1)} API Key</label>
+                  {status?.status && (
+                    <span
+                      title={status.message || ''}
+                      className={`flex items-center gap-1.5 text-xs font-semibold px-2.5 py-0.5 rounded-full ${
+                        status.status === 'connected'
+                          ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                          : status.status === 'warning'
+                          ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+                          : 'bg-red-500/20 text-red-400 border border-red-500/30'
+                      }`}>
+                      <span className={`w-1.5 h-1.5 rounded-full ${status.status === 'connected' ? 'bg-emerald-400' : status.status === 'warning' ? 'bg-amber-400' : 'bg-red-400'}`} />
+                      {status.status === 'connected' ? 'Connected' : status.status === 'warning' ? 'Quota' : 'Error'}
+                    </span>
+                  )}
+                </div>
+                <PasswordInput
+                  placeholder={`${p.id.charAt(0).toUpperCase() + p.id.slice(1)} API Key`}
+                  className="glass-input w-full mt-2 font-mono"
+                  value={p.key}
+                  onChange={(e) => p.setter(e.target.value)}
+                />
+                {status?.status === 'error' && status?.message && (
+                  <p className="text-xs text-red-400 mt-1.5 break-words">
+                    {status.message}
+                  </p>
                 )}
+                <div className="flex items-center justify-between mt-3 pt-2 border-t border-white/5">
+                  <p className="text-xs sm:text-sm text-slate-400">
+                    Get key from: <a href={{
+                      gemini: 'https://aistudio.google.com/apikey',
+                      deepseek: 'https://platform.deepseek.com/api_keys',
+                      claude: 'https://console.anthropic.com/settings/keys'
+                    }[p.id]} target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:underline">{{
+                      gemini: 'aistudio.google.com',
+                      deepseek: 'platform.deepseek.com',
+                      claude: 'console.anthropic.com'
+                    }[p.id]}</a>
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => handleTestService(p.id, p.key)}
+                    disabled={testingService[p.id] || !p.key}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700/60 hover:border-cyan-500/40 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                  >
+                    {testingService[p.id] && <Loader2 className="w-3.5 h-3.5 animate-spin text-cyan-400" />}
+                    {testingService[p.id] ? 'Testing...' : 'Test Connection'}
+                  </button>
+                </div>
               </div>
-              <PasswordInput
-                placeholder={`${p.id.charAt(0).toUpperCase() + p.id.slice(1)} API Key`}
-                className="glass-input w-full mt-2 font-mono"
-                value={p.key}
-                onChange={(e) => p.setter(e.target.value)}
-              />
-              {keyStatuses[p.id]?.status === 'error' && keyStatuses[p.id]?.message && (
-                <p className="text-xs text-red-400 mt-1.5 break-words">
-                  {keyStatuses[p.id].message}
-                </p>
-              )}
-              <p className="text-xs sm:text-sm text-slate-400 mt-2">Get key from: <a href={{
-                gemini: 'https://aistudio.google.com/apikey',
-                deepseek: 'https://platform.deepseek.com/api_keys',
-                claude: 'https://console.anthropic.com/settings/keys'
-              }[p.id]} target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:underline">{{
-                gemini: 'aistudio.google.com',
-                deepseek: 'platform.deepseek.com',
-                claude: 'console.anthropic.com'
-              }[p.id]}</a></p>
-            </div>
-          ))}
+            );
+          })}
 
             <div>
               <SettingsLabel title="Target Languages" />

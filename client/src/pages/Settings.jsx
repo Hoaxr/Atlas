@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, lazy, Suspense } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import api from '../lib/api';
@@ -7,17 +7,18 @@ import { customAlert } from '../utils/alerts';
 import { invalidateSettingsCache } from '../lib/useSettings';
 import StickyBar from '../components/shared/StickyBar';
 import { useStickyBar } from '../lib/useStickyBar';
+import LoadingState from '../components/shared/LoadingState';
 
-import IndexersTab from './settings/IndexersTab';
-import ClientsTab from './settings/ClientsTab';
-import ProfilesTab from './settings/ProfilesTab';
-import SubtitlesTab from './settings/SubtitlesTab';
-import LibraryTab from './settings/LibraryTab';
-import NamingTab from './settings/NamingTab';
-import ReleaseProfilesTab from './settings/ReleaseProfilesTab';
-import ConnectionsTab from './settings/ConnectionsTab';
-import GeneralTab from './settings/GeneralTab';
-import UsersTab from './settings/UsersTab';
+const IndexersTab = lazy(() => import('./settings/IndexersTab'));
+const ClientsTab = lazy(() => import('./settings/ClientsTab'));
+const ProfilesTab = lazy(() => import('./settings/ProfilesTab'));
+const SubtitlesTab = lazy(() => import('./settings/SubtitlesTab'));
+const LibraryTab = lazy(() => import('./settings/LibraryTab'));
+const NamingTab = lazy(() => import('./settings/NamingTab'));
+const ReleaseProfilesTab = lazy(() => import('./settings/ReleaseProfilesTab'));
+const ConnectionsTab = lazy(() => import('./settings/ConnectionsTab'));
+const GeneralTab = lazy(() => import('./settings/GeneralTab'));
+const UsersTab = lazy(() => import('./settings/UsersTab'));
 
 const SETTINGS_GROUPS = [
   {
@@ -749,111 +750,113 @@ export default function Settings() {
           </div>
         )}
 
-        {activeTab === 'connections' && (
-          <ConnectionsTab
-            settings={settings}
-            setSettings={setSettings}
-            handleSave={handleSave}
-            simklDeviceCode={simklDeviceCode}
-            setSimklDeviceCode={setSimklDeviceCode}
-            simklUserCode={simklUserCode}
-            simklVerificationUrl={simklVerificationUrl}
-            simklPolling={simklPolling}
-            setSimklPolling={setSimklPolling}
-            connectSimkl={connectSimkl}
-            fetchSettings={fetchSettings}
-            keyStatuses={keyStatuses}
-          />
-        )}
-        {(activeTab === 'general' || activeTab === 'security') && (
-          <GeneralTab
-            settings={settings}
-            setSettings={setSettings}
-            onNavigateTab={navigateToTab}
-            handleSave={handleSave}
-          />
-        )}
-        {activeTab === 'users' && <UsersTab />}
+        <Suspense fallback={<LoadingState className="py-16" />}>
+          {activeTab === 'connections' && (
+            <ConnectionsTab
+              settings={settings}
+              setSettings={setSettings}
+              handleSave={handleSave}
+              simklDeviceCode={simklDeviceCode}
+              setSimklDeviceCode={setSimklDeviceCode}
+              simklUserCode={simklUserCode}
+              simklVerificationUrl={simklVerificationUrl}
+              simklPolling={simklPolling}
+              setSimklPolling={setSimklPolling}
+              connectSimkl={connectSimkl}
+              fetchSettings={fetchSettings}
+              keyStatuses={keyStatuses}
+            />
+          )}
+          {(activeTab === 'general' || activeTab === 'security') && (
+            <GeneralTab
+              settings={settings}
+              setSettings={setSettings}
+              onNavigateTab={navigateToTab}
+              handleSave={handleSave}
+            />
+          )}
+          {activeTab === 'users' && <UsersTab />}
 
-        {activeTab === 'indexers' && (
-          <IndexersTab
-            settings={settings}
-            setSettings={setSettings}
-            handleSave={saveIndexers}
-          />
-        )}
+          {activeTab === 'indexers' && (
+            <IndexersTab
+              settings={settings}
+              setSettings={setSettings}
+              handleSave={saveIndexers}
+            />
+          )}
 
-        {activeTab === 'clients' && (
-          <ClientsTab
-            clients={clients}
-            newClient={newClient}
-            setNewClient={setNewClient}
-            clientStatuses={clientStatuses}
-            handleAddEntity={handleAddEntity}
-            handleDeleteEntity={handleDeleteEntity}
-            settings={settings}
-            setSettings={setSettings}
-            handleSave={saveClients}
-          />
-        )}
+          {activeTab === 'clients' && (
+            <ClientsTab
+              clients={clients}
+              newClient={newClient}
+              setNewClient={setNewClient}
+              clientStatuses={clientStatuses}
+              handleAddEntity={handleAddEntity}
+              handleDeleteEntity={handleDeleteEntity}
+              settings={settings}
+              setSettings={setSettings}
+              handleSave={saveClients}
+            />
+          )}
 
-        {activeTab === 'profiles' && (
-          <ProfilesTab
-            profiles={profiles}
-            newProfile={newProfile}
-            setNewProfile={setNewProfile}
-            editingProfile={editingProfile}
-            setEditingProfile={setEditingProfile}
-            handleAddEntity={handleAddEntity}
-            handleDeleteEntity={handleDeleteEntity}
-            fetchSettings={fetchSettings}
-            setStatus={setStatus}
-            settings={settings}
-            setSettings={setSettings}
-            handleSave={handleSave}
-          />
-        )}
+          {activeTab === 'profiles' && (
+            <ProfilesTab
+              profiles={profiles}
+              newProfile={newProfile}
+              setNewProfile={setNewProfile}
+              editingProfile={editingProfile}
+              setEditingProfile={setEditingProfile}
+              handleAddEntity={handleAddEntity}
+              handleDeleteEntity={handleDeleteEntity}
+              fetchSettings={fetchSettings}
+              setStatus={setStatus}
+              settings={settings}
+              setSettings={setSettings}
+              handleSave={handleSave}
+            />
+          )}
 
-        {activeTab === 'release-profiles' && (
-          <ReleaseProfilesTab
-            releaseProfiles={releaseProfiles}
-            indexers={indexers}
-            newProfile={newReleaseProfile}
-            setNewProfile={setNewReleaseProfile}
-            editingProfile={editingReleaseProfile}
-            setEditingProfile={setEditingReleaseProfile}
-            handleAddProfile={handleAddReleaseProfile}
-            handleUpdateProfile={handleUpdateReleaseProfile}
-            handleDeleteProfile={handleDeleteReleaseProfile}
-          />
-        )}
+          {activeTab === 'release-profiles' && (
+            <ReleaseProfilesTab
+              releaseProfiles={releaseProfiles}
+              indexers={indexers}
+              newProfile={newReleaseProfile}
+              setNewProfile={setNewReleaseProfile}
+              editingProfile={editingReleaseProfile}
+              setEditingProfile={setEditingReleaseProfile}
+              handleAddProfile={handleAddReleaseProfile}
+              handleUpdateProfile={handleUpdateReleaseProfile}
+              handleDeleteProfile={handleDeleteReleaseProfile}
+            />
+          )}
 
-        {activeTab === 'naming' && (
-          <NamingTab
-            settings={settings}
-            setSettings={setSettings}
-            handleSave={saveNaming}
-          />
-        )}
+          {activeTab === 'naming' && (
+            <NamingTab
+              settings={settings}
+              setSettings={setSettings}
+              handleSave={saveNaming}
+            />
+          )}
 
-        {activeTab === 'subtitles' && (
-          <SubtitlesTab
-            settings={settings}
-            setSettings={setSettings}
-            keyStatuses={keyStatuses}
-            handleSave={saveSubtitles}
-          />
-        )}
+          {activeTab === 'subtitles' && (
+            <SubtitlesTab
+              settings={settings}
+              setSettings={setSettings}
+              keyStatuses={keyStatuses}
+              handleSave={saveSubtitles}
+            />
+          )}
 
-        {activeTab === 'library' && (
-          <LibraryTab
-            paths={paths} newPath={newPath} newPathType={newPathType} setNewPath={setNewPath} setNewPathType={setNewPathType}
-            handleAddPath={handleAddPath} fetchPaths={fetchPaths}
-            handleScan={handleScan} handleStopScan={handleStopScan} isScanning={isScanning} scanProgress={scanProgress}
-            scanResults={scanResults} isStaleResults={isStaleResults} setScanResults={setScanResults} setIsStaleResults={setIsStaleResults}
-            settings={settings} setSettings={setSettings} onNavigateTab={navigateToTab}
-          />
-        )}
+          {activeTab === 'library' && (
+            <LibraryTab
+              paths={paths} newPath={newPath} newPathType={newPathType} setNewPath={setNewPath} setNewPathType={setNewPathType}
+              handleAddPath={handleAddPath} fetchPaths={fetchPaths}
+              handleScan={handleScan} handleStopScan={handleStopScan} isScanning={isScanning} scanProgress={scanProgress}
+              scanResults={scanResults} isStaleResults={isStaleResults} setScanResults={setScanResults} setIsStaleResults={setIsStaleResults}
+              settings={settings} setSettings={setSettings} onNavigateTab={navigateToTab}
+            />
+          )}
+        </Suspense>
       </div>
 
       {/* Bottom Fixed Bar */}

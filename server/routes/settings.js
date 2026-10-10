@@ -472,6 +472,154 @@ router.post('/media-server/test', requireAdmin, async (req, res) => {
   }
 });
 
+// Test external service/provider connection
+router.post('/service/test', requireAdmin, async (req, res) => {
+  try {
+    const { service, apiKey } = req.body;
+    if (!service) {
+      return res.status(400).json({ status: 'error', message: 'Service name is required' });
+    }
+
+    const _isMasked = (val) => val && (/^\*+$/.test(val) || val.startsWith('***'));
+    let key = apiKey;
+
+    if (!key || _isMasked(key)) {
+      const keyMap = {
+        gemini: 'geminiApiKey',
+        deepseek: 'deepseekApiKey',
+        claude: 'claudeApiKey',
+        opensubtitles: 'osApiKey',
+        subdl: 'subdlApiKey',
+        subsource: 'subsourceApiKey',
+        tmdb: 'tmdbApiKey',
+      };
+      if (keyMap[service]) {
+        key = getSetting(keyMap[service]) || '';
+      }
+    }
+
+    if (!key) {
+      return res.status(400).json({ status: 'error', message: `No API key provided or stored for ${service}.` });
+    }
+
+    if (service === 'gemini') {
+      try {
+        const r = await axios.get(`https://generativelanguage.googleapis.com/v1beta/models?key=${key}`, { timeout: 8000 });
+        if (r.status === 200 && Array.isArray(r.data?.models)) {
+          return res.json({ status: 'success', message: 'Connected to Gemini successfully' });
+        }
+      } catch (err) {
+        if (err.response?.status === 429 || err.message?.includes('429') || err.message?.toLowerCase().includes('quota')) {
+          return res.json({ status: 'warning', message: 'Quota limit reached (Connected)' });
+        }
+        if (err.response?.status === 400 || err.response?.status === 403) {
+          return res.status(400).json({ status: 'error', message: 'Invalid Gemini API key' });
+        }
+        return res.status(400).json({ status: 'error', message: err.response?.data?.error?.message || err.message || 'Gemini test failed' });
+      }
+    } else if (service === 'deepseek') {
+      try {
+        const r = await axios.post('https://api.deepseek.com/v1/chat/completions', {
+          model: 'deepseek-chat',
+          messages: [{ role: 'user', content: 'Reply with OK' }],
+          max_tokens: 5
+        }, { headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' }, timeout: 10000 });
+        if (r.status === 200) {
+          return res.json({ status: 'success', message: 'Connected to DeepSeek successfully' });
+        }
+      } catch (err) {
+        if (err.response?.status === 401 || err.response?.status === 403) {
+          return res.status(400).json({ status: 'error', message: 'Invalid DeepSeek API key' });
+        }
+        if (err.response?.status === 429) {
+          return res.json({ status: 'warning', message: 'DeepSeek quota / rate limit reached' });
+        }
+        return res.status(400).json({ status: 'error', message: err.response?.data?.error?.message || err.message || 'DeepSeek test failed' });
+      }
+    } else if (service === 'claude') {
+      try {
+        const r = await axios.post('https://api.anthropic.com/v1/messages', {
+          model: 'claude-3-haiku-20240307',
+          max_tokens: 5,
+          messages: [{ role: 'user', content: 'OK' }]
+        }, {
+          headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01', 'Content-Type': 'application/json' },
+          timeout: 10000
+        });
+        if (r.status === 200) {
+          return res.json({ status: 'success', message: 'Connected to Claude successfully' });
+        }
+      } catch (err) {
+        if (err.response?.status === 401 || err.response?.status === 403) {
+          return res.status(400).json({ status: 'error', message: 'Invalid Claude API key' });
+        }
+        if (err.response?.status === 429) {
+          return res.json({ status: 'warning', message: 'Claude rate limit reached' });
+        }
+        return res.status(400).json({ status: 'error', message: err.response?.data?.error?.message || err.message || 'Claude test failed' });
+      }
+    } else if (service === 'opensubtitles') {
+      try {
+        const r = await axios.get('https://api.opensubtitles.com/api/v1/infos/user', {
+          headers: { 'Api-Key': key, 'User-Agent': 'Atlas/1.0' },
+          timeout: 8000
+        });
+        if (r.status === 200) {
+          return res.json({ status: 'success', message: `Connected to OpenSubtitles (VIP: ${r.data?.data?.vip ? 'Yes' : 'No'}, downloads: ${r.data?.data?.downloads_count || 0})` });
+        }
+      } catch (err) {
+        if (err.response?.status === 401 || err.response?.status === 403) {
+          return res.status(400).json({ status: 'error', message: 'Invalid OpenSubtitles API key' });
+        }
+        return res.status(400).json({ status: 'error', message: err.response?.data?.message || err.message || 'OpenSubtitles test failed' });
+      }
+    } else if (service === 'subdl') {
+      try {
+        const r = await axios.get('https://api.subdl.com/api/v1/me', { params: { api_key: key }, timeout: 8000 });
+        if (r.data?.status) {
+          return res.json({ status: 'success', message: 'Connected to SubDL successfully' });
+        }
+        return res.status(400).json({ status: 'error', message: r.data?.error || 'Invalid SubDL key' });
+      } catch (err) {
+        return res.status(400).json({ status: 'error', message: err.response?.data?.error || err.message || 'SubDL test failed' });
+      }
+    } else if (service === 'subsource') {
+      try {
+        const r = await axios.get('https://api.subsource.net/api/v1/movies/search', {
+          params: { api_key: key, searchType: 'text', q: 'Inception' },
+          validateStatus: () => true,
+          timeout: 8000
+        });
+        if (r.status === 200 && r.data?.success !== false) {
+          return res.json({ status: 'success', message: 'Connected to SubSource successfully' });
+        }
+        return res.status(400).json({ status: 'error', message: r.data?.message || `SubSource returned HTTP ${r.status}` });
+      } catch (err) {
+        return res.status(400).json({ status: 'error', message: err.response?.data?.message || err.message || 'SubSource test failed' });
+      }
+    } else if (service === 'tmdb') {
+      try {
+        const r = await axios.get('https://api.themoviedb.org/3/authentication', {
+          headers: { Authorization: `Bearer ${key}` },
+          timeout: 8000
+        });
+        if (r.status === 200 && r.data?.success) {
+          return res.json({ status: 'success', message: 'Connected to TMDB successfully' });
+        }
+        return res.status(400).json({ status: 'error', message: r.data?.status_message || 'TMDB test failed' });
+      } catch (err) {
+        return res.status(400).json({ status: 'error', message: err.response?.data?.status_message || err.message || 'TMDB test failed' });
+      }
+    } else {
+      return res.status(400).json({ status: 'error', message: `Unsupported service: ${service}` });
+    }
+
+    res.json({ status: 'success', message: `Connected to ${service} successfully` });
+  } catch (err) {
+    res.status(500).json({ status: 'error', message: err.message });
+  }
+});
+
 // Plex OAuth PIN flow
 
 function getPlexClientId() {
