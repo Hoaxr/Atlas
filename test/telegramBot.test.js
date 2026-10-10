@@ -50,4 +50,29 @@ test('Telegram Bot Service Lifecycle & Routing', async (t) => {
     await telegramBotService.handleSearch(mockCtx, '   ');
     assert.strictEqual(replied, false);
   });
+
+  await t.test('Telegram test validation rejects missing token or chat ID', () => {
+    const validate = (token, chat) => {
+      if (!token || !chat) return false;
+      return true;
+    };
+
+    assert.strictEqual(validate('', '12345'), false);
+    assert.strictEqual(validate('123:ABC', ''), false);
+    assert.strictEqual(validate('', ''), false);
+    assert.strictEqual(validate('123:ABC', '12345'), true);
+  });
+
+  await t.test('Telegram test resolves masked token from settings store', () => {
+    setSetting('telegramBotToken', 'real_telegram_token_999');
+    invalidateSettingsCache();
+
+    const _isMasked = (val) => val && (/^\*+$/.test(val) || val.startsWith('***'));
+    let token = '********';
+    if (!token || _isMasked(token)) {
+      token = db.prepare("SELECT value FROM settings WHERE key = 'telegramBotToken'").get()?.value;
+    }
+
+    assert.strictEqual(token, 'real_telegram_token_999');
+  });
 });

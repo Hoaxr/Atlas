@@ -46,6 +46,10 @@ export default function ConnectionsTab({
   const [testingMedia, setTestingMedia] = useState({ plex: false, jellyfin: false, emby: false });
   const [detectedUsers, setDetectedUsers] = useState([]);
   const [purgingUntracked, setPurgingUntracked] = useState(false);
+  const [testingTelegram, setTestingTelegram] = useState(false);
+  const [telegramStatus, setTelegramStatus] = useState(null);
+  const [testingDiscord, setTestingDiscord] = useState(false);
+  const [discordStatus, setDiscordStatus] = useState(null);
     
   // Plex OAuth state
   const [plexOAuth, setPlexOAuth] = useState({
@@ -388,6 +392,55 @@ export default function ConnectionsTab({
       customAlert('Test notification triggered');
     } catch {
       customAlert('Test failed to send');
+    }
+  };
+
+  const handleTestTelegram = async () => {
+    if (!localSettings.telegramBotToken || !localSettings.telegramChatId) {
+      customAlert('Both Telegram Bot Token and Chat ID are required', 'error');
+      return;
+    }
+    setTestingTelegram(true);
+    setTelegramStatus(null);
+    try {
+      const res = await api.post('/settings/telegram/test', {
+        botToken: localSettings.telegramBotToken,
+        chatId: localSettings.telegramChatId
+      });
+      if (res.data?.status === 'success') {
+        customAlert(res.data.message || 'Test message sent to Telegram!', 'success');
+        setTelegramStatus('connected');
+      }
+    } catch (err) {
+      const msg = err.response?.data?.message || err.message || 'Failed to send Telegram test message';
+      customAlert(msg, 'error');
+      setTelegramStatus('error');
+    } finally {
+      setTestingTelegram(false);
+    }
+  };
+
+  const handleTestDiscord = async () => {
+    if (!localSettings.discordWebhookUrl) {
+      customAlert('Discord Webhook URL is required', 'error');
+      return;
+    }
+    setTestingDiscord(true);
+    setDiscordStatus(null);
+    try {
+      const res = await api.post('/settings/discord/test', {
+        webhookUrl: localSettings.discordWebhookUrl
+      });
+      if (res.data?.status === 'success') {
+        customAlert(res.data.message || 'Test notification sent to Discord!', 'success');
+        setDiscordStatus('connected');
+      }
+    } catch (err) {
+      const msg = err.response?.data?.message || err.message || 'Failed to send Discord test message';
+      customAlert(msg, 'error');
+      setDiscordStatus('error');
+    } finally {
+      setTestingDiscord(false);
     }
   };
 
@@ -800,9 +853,32 @@ export default function ConnectionsTab({
         <div className="space-y-4 sm:space-y-5">
           {/* Discord */}
           <div className="p-4 sm:p-5 bg-[#101e31] rounded-xl border border-[#1c2d46] hover:border-[#274063] transition-colors space-y-3.5">
-            <div>
-              <h3 className="text-base font-bold font-display text-slate-100">Discord Webhook</h3>
-              <p className="text-xs text-slate-400 mt-0.5">Discord receives grab, download, and playback notifications via webhook.</p>
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <div>
+                <div className="flex items-center gap-2.5">
+                  <h3 className="text-base font-bold font-display text-slate-100">Discord Webhook</h3>
+                  {discordStatus === 'connected' && (
+                    <span className="px-2.5 py-0.5 rounded-lg text-xs font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 whitespace-nowrap">
+                      Connected
+                    </span>
+                  )}
+                  {discordStatus === 'error' && (
+                    <span className="px-2.5 py-0.5 rounded-lg text-xs font-semibold bg-rose-500/15 text-rose-400 border border-rose-500/30 whitespace-nowrap">
+                      Failed
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-slate-400 mt-0.5">Discord receives grab, download, and playback notifications via webhook.</p>
+              </div>
+              <button
+                type="button"
+                onClick={handleTestDiscord}
+                disabled={testingDiscord || !localSettings.discordWebhookUrl}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700/60 hover:border-cyan-500/40 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer shrink-0 self-start sm:self-auto"
+              >
+                {testingDiscord && <Loader2 className="w-3.5 h-3.5 animate-spin text-cyan-400" />}
+                {testingDiscord ? 'Testing...' : 'Test Webhook'}
+              </button>
             </div>
             <div>
               <label className="block text-xs sm:text-sm font-medium text-slate-300 mb-1.5">Webhook URL</label>
@@ -819,9 +895,32 @@ export default function ConnectionsTab({
 
           {/* Telegram */}
           <div className="p-4 sm:p-5 bg-[#101e31] rounded-xl border border-[#1c2d46] hover:border-[#274063] transition-colors space-y-3.5">
-            <div>
-              <h3 className="text-base font-bold font-display text-slate-100">Telegram Bot</h3>
-              <p className="text-xs text-slate-400 mt-0.5">Telegram receives grab, download, and playback notifications via a bot.</p>
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <div>
+                <div className="flex items-center gap-2.5">
+                  <h3 className="text-base font-bold font-display text-slate-100">Telegram Bot</h3>
+                  {telegramStatus === 'connected' && (
+                    <span className="px-2.5 py-0.5 rounded-lg text-xs font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 whitespace-nowrap">
+                      Connected
+                    </span>
+                  )}
+                  {telegramStatus === 'error' && (
+                    <span className="px-2.5 py-0.5 rounded-lg text-xs font-semibold bg-rose-500/15 text-rose-400 border border-rose-500/30 whitespace-nowrap">
+                      Failed
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-slate-400 mt-0.5">Telegram receives grab, download, and playback notifications via a bot.</p>
+              </div>
+              <button
+                type="button"
+                onClick={handleTestTelegram}
+                disabled={testingTelegram || !localSettings.telegramBotToken || !localSettings.telegramChatId}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700/60 hover:border-cyan-500/40 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer shrink-0 self-start sm:self-auto"
+              >
+                {testingTelegram && <Loader2 className="w-3.5 h-3.5 animate-spin text-cyan-400" />}
+                {testingTelegram ? 'Testing...' : 'Test Message'}
+              </button>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>

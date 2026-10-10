@@ -1489,5 +1489,94 @@ router.post('/test-notification', requireAdmin, async (req, res) => {
   }
 });
 
+router.post('/telegram/test', requireAdmin, async (req, res) => {
+  try {
+    let { botToken, chatId } = req.body;
+    const _isMasked = (val) => val && (/^\*+$/.test(val) || val.startsWith('***'));
+
+    if (!botToken || _isMasked(botToken)) {
+      botToken = getSetting('telegramBotToken');
+    }
+    if (!chatId || _isMasked(chatId)) {
+      chatId = getSetting('telegramChatId');
+    }
+
+    if (!botToken || !chatId) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Both Telegram Bot Token and Chat ID are required'
+      });
+    }
+
+    const text = '🎉 *Atlas Test Notification*\n\nYour Telegram integration is configured and working perfectly!';
+    const response = await axios.post(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+      chat_id: chatId,
+      text,
+      parse_mode: 'Markdown'
+    }, { timeout: 10000 });
+
+    if (response.data?.ok) {
+      return res.json({ status: 'success', message: 'Test message sent to Telegram successfully' });
+    }
+
+    return res.status(400).json({
+      status: 'error',
+      message: response.data?.description || 'Telegram API returned an unexpected response'
+    });
+  } catch (err) {
+    const errorMsg = err.response?.data?.description || err.response?.data?.error || err.message || 'Failed to send Telegram test message';
+    return res.status(400).json({
+      status: 'error',
+      message: `Telegram error: ${errorMsg}`
+    });
+  }
+});
+
+router.post('/discord/test', requireAdmin, async (req, res) => {
+  try {
+    let { webhookUrl } = req.body;
+    const _isMasked = (val) => val && (/^\*+$/.test(val) || val.startsWith('***'));
+
+    if (!webhookUrl || _isMasked(webhookUrl)) {
+      webhookUrl = getSetting('discordWebhookUrl');
+    }
+
+    if (!webhookUrl) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Discord Webhook URL is required'
+      });
+    }
+
+    let parsed;
+    try {
+      parsed = new URL(webhookUrl);
+    } catch {
+      return res.status(400).json({ status: 'error', message: 'Invalid Discord Webhook URL' });
+    }
+    if (!['discord.com', 'discordapp.com'].includes(parsed.hostname.toLowerCase())) {
+      return res.status(400).json({ status: 'error', message: 'Must be a valid discord.com webhook URL' });
+    }
+
+    const embed = {
+      title: 'Atlas Test Notification',
+      description: 'Your Discord webhook integration is configured and working perfectly!',
+      color: 3447003,
+      timestamp: new Date().toISOString(),
+      footer: { text: 'Atlas Media Manager' }
+    };
+
+    const response = await axios.post(webhookUrl, { embeds: [embed] }, { timeout: 10000 });
+    if (response.status === 200 || response.status === 204) {
+      return res.json({ status: 'success', message: 'Test notification sent to Discord successfully' });
+    }
+
+    return res.status(400).json({ status: 'error', message: `Discord returned HTTP ${response.status}` });
+  } catch (err) {
+    const errorMsg = err.response?.data?.message || err.message || 'Failed to send Discord test message';
+    return res.status(400).json({ status: 'error', message: `Discord error: ${errorMsg}` });
+  }
+});
+
 module.exports = router;
 module.exports.restoreHandler = restoreHandler;
