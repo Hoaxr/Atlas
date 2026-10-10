@@ -1,5 +1,4 @@
-const TelegramBotPkg = require('node-telegram-bot-api');
-const TelegramBot = TelegramBotPkg.default || TelegramBotPkg.TelegramBot || TelegramBotPkg;
+const { Bot } = require('node-telegram-bot-api');
 const { getSetting } = require('../utils/settings');
 const tmdbService = require('./tmdbService');
 const libraryService = require('./libraryService');
@@ -14,7 +13,9 @@ class TelegramBotService {
     // Stop any existing polling bot instance first
     if (this.bot) {
       try {
-        this.bot.stopPolling();
+        if (typeof this.bot.stop === 'function' && this.bot.isRunning()) {
+          this.bot.stop();
+        }
       } catch { /* ignore */ }
       this.bot = null;
     }
@@ -28,65 +29,85 @@ class TelegramBotService {
     }
 
     this.chatId = String(chatId);
-    this.bot = new TelegramBot(token, { polling: true });
+    this.bot = new Bot(token);
 
-    console.log('[TelegramBot] Initialized interactive bot.');
+    console.log('[TelegramBot] Initialized interactive bot (v2).');
 
-    this.bot.onText(/\/(start|help)/, (msg) => this.handleStart(msg));
-    this.bot.onText(/\/(request|search) (.+)/, (msg, match) => this.handleSearch(msg, match[2]));
-    
-    // Also listen to normal text messages that aren't commands
-    this.bot.on('message', (msg) => {
-      if (msg.text && !msg.text.startsWith('/')) {
-        this.handleSearch(msg, msg.text);
+    // Handle polling & runtime errors gracefully
+    this.bot.catch((error) => {
+      // 409 Conflict means another Atlas instance is polling with the same token
+      if (String(error?.message || '').includes('409') || error?.code === 409) return;
+      console.error(`[TelegramBot] Error: ${error?.message || error}`);
+    });
+
+    // Guard: Only allow interaction from the configured trusted chatId
+    this.bot.use(async (ctx, next) => {
+      if (ctx.chatId !== undefined && String(ctx.chatId) !== this.chatId) {
+        return; // Ignore messages from unauthorized chats
+      }
+      await next();
+    });
+
+    // /start and /help commands
+    this.bot.command(['start', 'help'], async (ctx) => {
+      await ctx.reply("Welcome to Atlas! Send me the name of a movie or TV show, and I'll find it for you.");
+    });
+
+    // /request <query> or /search <query>
+    this.bot.command(['request', 'search'], async (ctx) => {
+      const query = typeof ctx.match === 'string' ? ctx.match.trim() : '';
+      if (query) {
+        await this.handleSearch(ctx, query);
+      } else {
+        await ctx.reply('Please provide a title to search for (e.g. /search Inception).');
       }
     });
 
-    this.bot.on('callback_query', (callbackQuery) => this.handleCallbackQuery(callbackQuery));
-    
-    this.bot.on('polling_error', (error) => {
-      // 409 Conflict means another Atlas instance is polling with the same
-      // token — expected when multiple instances run; don't spam the log.
-      if (error?.code === 'ETELEGRAM' && String(error.message || '').includes('409')) return;
-      console.error(`[TelegramBot] Polling error: ${error.code} - ${error.message}`);
+    // Plain text queries (not starting with '/')
+    this.bot.on('message', async (ctx) => {
+      const text = ctx.message?.text;
+      if (text && !text.startsWith('/')) {
+        await this.handleSearch(ctx, text);
+      }
+    });
+
+    // Callback queries for interactive inline buttons
+    this.bot.on('callback_query', async (ctx) => {
+      await this.handleCallbackQuery(ctx);
+    });
+
+    // Start background polling loop
+    this.bot.startPolling().catch((error) => {
+      if (String(error?.message || '').includes('409') || error?.code === 409) return;
+      console.error(`[TelegramBot] Polling failed: ${error?.message || error}`);
     });
   }
 
-  isAllowed(msg) {
-    return String(msg.chat.id) === this.chatId;
-  }
-
-  handleStart(msg) {
-    if (!this.isAllowed(msg)) return;
-    this.bot.sendMessage(msg.chat.id, "Welcome to Atlas! Send me the name of a movie or TV show, and I'll find it for you.");
-  }
-
-  async handleSearch(msg, query) {
-    if (!this.isAllowed(msg)) return;
+  async handleSearch(ctx, query) {
     if (!query || query.trim().length === 0) return;
 
-    this.bot.sendMessage(msg.chat.id, `🔍 Searching for "${query}"...`);
+    await ctx.reply(`🔍 Searching for "${query}"...`);
 
     try {
       const results = await tmdbService.searchMulti(query);
-      
+
       if (!results || results.length === 0) {
-        this.bot.sendMessage(msg.chat.id, `❌ No results found for "${query}".`);
+        await ctx.reply(`❌ No results found for "${query}".`);
         return;
       }
 
-      // Just take the top 3 results to not spam the chat
+      // Take top 3 results to avoid spamming the chat
       const topResults = results.slice(0, 3);
 
       for (const item of topResults) {
         const type = item.media_type === 'movie' ? 'Movie' : 'TV Show';
         const year = (item.release_date || item.first_air_date || '').split('-')[0] || 'Unknown';
         const title = item.title || item.name;
-        
+
         let text = `*${title}* (${year})\n${type} ⭐️ ${item.vote_average ? item.vote_average.toFixed(1) : 'N/A'}\n\n`;
         text += item.overview ? `${item.overview.substring(0, 200)}...` : 'No overview available.';
 
-        const keyboard = {
+        const replyMarkup = {
           inline_keyboard: [[
             {
               text: `📥 Request ${type}`,
@@ -95,29 +116,33 @@ class TelegramBotService {
           ]]
         };
 
-        const opts = { parse_mode: 'Markdown', reply_markup: JSON.stringify(keyboard) };
-
         if (item.poster_path) {
           const posterUrl = `https://image.tmdb.org/t/p/w500${item.poster_path}`;
-          await this.bot.sendPhoto(msg.chat.id, posterUrl, { ...opts, caption: text });
+          await this.bot.api.sendPhoto({
+            chat_id: ctx.chatId,
+            photo: posterUrl,
+            caption: text,
+            parse_mode: 'Markdown',
+            reply_markup: replyMarkup
+          });
         } else {
-          await this.bot.sendMessage(msg.chat.id, text, opts);
+          await ctx.reply(text, {
+            parse_mode: 'Markdown',
+            reply_markup: replyMarkup
+          });
         }
       }
     } catch (err) {
       console.error('[TelegramBot] Search error:', err.message);
-      this.bot.sendMessage(msg.chat.id, `❌ An error occurred while searching.`);
+      await ctx.reply(`❌ An error occurred while searching.`);
     }
   }
 
-  async handleCallbackQuery(callbackQuery) {
-    const msg = callbackQuery.message;
-    if (!this.isAllowed(msg)) {
-      this.bot.answerCallbackQuery(callbackQuery.id);
-      return;
-    }
+  async handleCallbackQuery(ctx) {
+    const callbackQuery = ctx.callbackQuery;
+    const data = callbackQuery?.data;
+    if (!data) return;
 
-    const data = callbackQuery.data;
     if (data.startsWith('req:')) {
       const parts = data.split(':');
       const type = parts[1]; // movie or tv
@@ -139,32 +164,36 @@ class TelegramBotService {
             }
           };
           eventBus.on('event', onEvent);
-          setTimeout(() => eventBus.off('event', onEvent), 60000); // 1 minute fallback cleanup
+          setTimeout(() => eventBus.off('event', onEvent), 60000);
         }
 
-        // Edit the message to remove the button and confirm
-        const newCaption = `${msg.caption || msg.text}\n\n✅ *Successfully requested!*`;
-        
-        if (msg.photo) {
-          this.bot.editMessageCaption(newCaption, {
-            chat_id: msg.chat.id,
+        // Edit the original message to reflect confirmation
+        const msg = callbackQuery.message;
+        const existingText = msg ? (msg.caption || msg.text || '') : '';
+        const newText = `${existingText}\n\n✅ *Successfully requested!*`;
+
+        if (msg?.photo) {
+          await this.bot.api.editMessageCaption({
+            chat_id: ctx.chatId,
             message_id: msg.message_id,
+            caption: newText,
             parse_mode: 'Markdown',
             reply_markup: { inline_keyboard: [] }
           });
-        } else {
-          this.bot.editMessageText(newCaption, {
-            chat_id: msg.chat.id,
+        } else if (msg) {
+          await this.bot.api.editMessageText({
+            chat_id: ctx.chatId,
             message_id: msg.message_id,
+            text: newText,
             parse_mode: 'Markdown',
             reply_markup: { inline_keyboard: [] }
           });
         }
 
-        this.bot.answerCallbackQuery(callbackQuery.id, { text: 'Request added to library!' });
+        await ctx.answerCallbackQuery({ text: 'Request added to library!' });
       } catch (err) {
         console.error('[TelegramBot] Request error:', err.message);
-        this.bot.answerCallbackQuery(callbackQuery.id, { text: 'Failed to add request. It might already exist.', show_alert: true });
+        await ctx.answerCallbackQuery({ text: 'Failed to add request. It might already exist.', show_alert: true });
       }
     }
   }
