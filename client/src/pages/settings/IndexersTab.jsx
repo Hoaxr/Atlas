@@ -1,10 +1,9 @@
 import { useState, useEffect } from 'react';
-import { Search, PlayCircle } from 'lucide-react';
+import { Search, Loader2 } from 'lucide-react';
 import api from '../../lib/api';
 import { customAlert } from '../../utils/alerts';
 import PasswordInput from '../../components/shared/PasswordInput';
-import Button from '../../components/shared/Button';
-import { SettingsSection, SettingsHeader, SettingsGroup, SettingsLabel } from '../../components/settings/layout';
+import { SettingsSection, SettingsHeader } from '../../components/settings/layout';
 
 export default function IndexersTab({ settings, setSettings, handleSave: _handleSave }) {
   const [isTesting, setIsTesting] = useState(false);
@@ -57,61 +56,80 @@ export default function IndexersTab({ settings, setSettings, handleSave: _handle
 
       <SettingsSection>
         <SettingsHeader 
-          title="Prowlarr Indexer Configuration" 
+          title="Indexer Configuration" 
           icon={Search}
-          description="Atlas uses Prowlarr's aggregate search API to query all your configured Usenet and torrent indexers simultaneously."
         />
 
-        <SettingsGroup>
-          <div>
-            <SettingsLabel title="Prowlarr Base URL" />
-            <input 
-              type="text" 
-              placeholder="e.g. http://192.168.1.100:9696" 
-              className="w-full bg-[#0c1624] border border-[#1c2d46] rounded-xl px-4 py-2.5 text-sm text-slate-200 focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/50 transition-colors placeholder:text-slate-600" 
-              value={settings.prowlarrUrl || ''} 
-              onChange={e => setSettings({...settings, prowlarrUrl: e.target.value})} 
-            />
-          </div>
-
-          <div>
-            <SettingsLabel title="Prowlarr API Key" />
-            <PasswordInput 
-              placeholder="Your Prowlarr API Key" 
-              className="w-full bg-[#0c1624] border border-[#1c2d46] rounded-xl px-4 py-2.5 text-sm text-slate-200 focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/50 transition-colors placeholder:text-slate-600 font-mono" 
-              value={settings.prowlarrApiKey || ''} 
-              onChange={e => setSettings({...settings, prowlarrApiKey: e.target.value})} 
-            />
-          </div>
-        </SettingsGroup>
-
-          <div className="pt-2 flex flex-col sm:flex-row sm:items-center gap-4 mt-6">
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => testConnection(false)} 
-              disabled={isTesting}
-              loading={isTesting}
-              icon={PlayCircle}
-            >
-              Test Connection
-            </Button>
-            
-            {testResult && (
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-slate-400">Status:</span>
-                <span className={`text-xs font-semibold flex items-center gap-1.5 ${testResult.ok ? 'text-emerald-400' : 'text-rose-400'}`}>
-                  <span className={`w-1.5 h-1.5 rounded-full ${testResult.ok ? 'bg-emerald-400' : 'bg-rose-400'}`}></span>
-                  {testResult.ok ? 'Connected' : 'Connection Failed'}
-                </span>
-                {!testResult.ok && testResult.message && (
-                  <span className="text-[11px] text-rose-400/80">({testResult.message})</span>
+        <div className="space-y-4 sm:space-y-5">
+          <div className="p-4 sm:p-5 bg-[#101e31] rounded-xl border border-[#1c2d46] hover:border-[#274063] transition-colors space-y-3.5">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <div className="flex items-center gap-3">
+                <h3 className="text-base font-bold font-display text-slate-100">Prowlarr</h3>
+                {!settings.prowlarrUrl || !settings.prowlarrApiKey ? (
+                  <span className="px-2.5 py-0.5 rounded-lg text-xs font-semibold bg-slate-800 text-slate-400 border border-slate-700/60 whitespace-nowrap">
+                    Not configured
+                  </span>
+                ) : testResult?.ok ? (
+                  <span className="px-2.5 py-0.5 rounded-lg text-xs font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 whitespace-nowrap">
+                    Connected
+                  </span>
+                ) : testResult?.ok === false ? (
+                  <span className="px-2.5 py-0.5 rounded-lg text-xs font-semibold bg-rose-500/15 text-rose-400 border border-rose-500/30 whitespace-nowrap">
+                    Error
+                  </span>
+                ) : (
+                  <span className="px-2.5 py-0.5 rounded-lg text-xs font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 whitespace-nowrap">
+                    Configured
+                  </span>
                 )}
               </div>
+              <button
+                type="button"
+                onClick={() => testConnection(false)} 
+                disabled={isTesting || !settings.prowlarrUrl || !settings.prowlarrApiKey}
+                className="px-3 py-1.5 text-xs font-semibold text-slate-300 bg-[#15243b] hover:bg-[#1a2d4a] border border-[#1c2d46] hover:border-cyan-500/30 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 cursor-pointer"
+              >
+                {isTesting && <Loader2 className="w-3.5 h-3.5 animate-spin text-cyan-400" />}
+                {isTesting ? 'Testing...' : 'Test Connection'}
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-400">
+              Atlas uses Prowlarr's aggregate search API to query all your configured Usenet and torrent indexers simultaneously.
+            </p>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs sm:text-sm font-medium text-slate-300 mb-1.5">Prowlarr Base URL</label>
+                <input 
+                  type="text" 
+                  placeholder="e.g. http://192.168.1.100:9696" 
+                  className="w-full bg-[#0c1624] border border-[#1c2d46] rounded-xl px-4 py-2.5 text-sm text-slate-200 focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/50 transition-colors placeholder:text-slate-600 font-mono" 
+                  value={settings.prowlarrUrl || ''} 
+                  onChange={e => setSettings({...settings, prowlarrUrl: e.target.value})} 
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs sm:text-sm font-medium text-slate-300 mb-1.5">Prowlarr API Key</label>
+                <PasswordInput 
+                  placeholder="Your Prowlarr API Key" 
+                  className="w-full bg-[#0c1624] border border-[#1c2d46] rounded-xl px-4 py-2.5 text-sm text-slate-200 focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/50 transition-colors placeholder:text-slate-600 font-mono" 
+                  value={settings.prowlarrApiKey || ''} 
+                  onChange={e => setSettings({...settings, prowlarrApiKey: e.target.value})} 
+                />
+              </div>
+            </div>
+
+            {testResult?.ok === false && testResult.message && (
+              <p className="text-xs text-rose-400 mt-1.5 break-words">
+                {testResult.message}
+              </p>
             )}
           </div>
+        </div>
       </SettingsSection>
-
     </div>
   );
 }
+
