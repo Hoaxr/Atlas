@@ -1,10 +1,10 @@
-import { Plus, Trash2, Download, Save, CheckSquare, Square } from 'lucide-react';
+import { Plus, Trash2, Download } from 'lucide-react';
 import api from '../../lib/api';
 import { customAlert } from '../../utils/alerts';
 import CustomSelect from '../../components/shared/CustomSelect';
 import PasswordInput from '../../components/shared/PasswordInput';
 import Button from '../../components/shared/Button';
-import { SettingsSection, SettingsHeader, SettingsGroup, SettingsLabel, SettingsHelper } from '../../components/settings/layout';
+import { SettingsSection, SettingsHeader, SettingsLabel } from '../../components/settings/layout';
 import ToggleRow from '../../components/shared/ToggleRow';
 
 export default function ClientsTab({ clients, newClient, setNewClient, clientStatuses, handleAddEntity, handleDeleteEntity, settings, setSettings }) {

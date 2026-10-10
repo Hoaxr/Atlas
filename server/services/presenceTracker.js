@@ -48,6 +48,7 @@ function handleAuthMessage(ws, data) {
 
     ws._userId = dbUser.id;
     ws._username = dbUser.username;
+    ws._role = dbUser.role;
     addConnection(dbUser.id, ws, dbUser.username);
     return true;
   } catch {

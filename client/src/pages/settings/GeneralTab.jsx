@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Shield, Save, CheckSquare, Square, Globe, Sliders, Users, ArrowRight } from 'lucide-react';
+import { Shield, Save, Globe, Sliders, Users, ArrowRight } from 'lucide-react';
 import Button from '../../components/shared/Button';
 import CustomSelect from '../../components/shared/CustomSelect';
 import ToggleRow from '../../components/shared/ToggleRow';

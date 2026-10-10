@@ -12,7 +12,7 @@ const adapters = {
   sabnzbd: require('./clients/sabnzbd'),
 };
 
-const DANGEROUS_EXTS_REGEX = /\.(exe|bat|cmd|com|msi|scr|pif|vbs|vbe|ps1|ps2|jar|apk|reg|hta|cpl)($|\?|\&|\#|\s)/i;
+const DANGEROUS_EXTS_REGEX = /\.(exe|bat|cmd|com|msi|scr|pif|vbs|vbe|ps1|ps2|jar|apk|reg|hta|cpl)($|\?|&|#|\s)/i;
 const DANGEROUS_FILE_REGEX = /\.(exe|bat|cmd|com|msi|scr|pif|vbs|vbe|ps1|ps2|jar|apk|reg|hta|cpl)$/i;
 
 const safeHashes = new Set();
@@ -278,7 +278,7 @@ const getTorrentFiles = async (hash, clientId = null) => {
     if (typeof adapter.getTorrentFiles === 'function') {
       try {
         return (await adapter.getTorrentFiles(client, hash)) || [];
-      } catch (err) {
+      } catch {
         return [];
       }
     }

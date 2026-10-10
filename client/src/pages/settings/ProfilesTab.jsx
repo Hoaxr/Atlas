@@ -12,7 +12,6 @@ const AUDIO_FORMAT_OPTIONS = ['FLAC', 'MP3', 'AAC', 'Opus', 'ALAC', 'OGG'];
 const VIDEO_QUALITY_OPTIONS = ['SD', '720p', '1080p', '2160p', 'Unknown'];
 
 // Visual tokens shared with the other settings tabs — keep in sync
-const PANEL_CLASS = 'glass-panel rounded-2xl p-5 sm:p-6 border border-white/10 shadow-sm';
 const INPUT_CLASS = 'w-full bg-[#0c1624] border border-[#1c2d46] rounded-xl px-4 py-2.5 text-sm text-slate-200 focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/50 transition-colors placeholder:text-slate-600';
 const LABEL_CLASS = 'block text-xs sm:text-sm font-medium text-slate-300 mb-1.5 flex items-center gap-1.5';
 const HELPER_CLASS = 'text-xs text-slate-400 mt-2';

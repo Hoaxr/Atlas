@@ -5,7 +5,7 @@ import { formatSize } from '../lib/format';
 import {
   BarChart3, Film, Tv, HardDrive, Star,
   CheckCircle2, Hash, Zap, PlayCircle, Activity, Languages, Trash2, FolderOpen,
-  Music2, Disc, Mic2, FileAudio, ChevronRight, AlertCircle
+  Music2, Disc, Mic2, FileAudio, ChevronRight
 } from 'lucide-react';
 import LoadingState from '../components/shared/LoadingState';
 import EmptyState from '../components/shared/EmptyState';

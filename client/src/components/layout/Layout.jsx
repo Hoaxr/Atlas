@@ -56,7 +56,7 @@ export default function Layout() {
       return { movies: 0, shows: 0, artists: 0 };
     }
   });
-  const [downloads, setDownloads] = useState([]);
+  const [, setDownloads] = useState([]);
   const [downloadCount, setDownloadCount] = useState(() => {
     try {
       const saved = localStorage.getItem('atlas_download_count');
@@ -132,8 +132,6 @@ export default function Layout() {
     closeWebSocket();
     navigate('/login');
   };
-
-  const hasToken = !!localStorage.getItem('atlas_token');
 
   // Prefetch library data into shared cache so Dashboard loads instantly
   const prefetchLibrary = async () => {

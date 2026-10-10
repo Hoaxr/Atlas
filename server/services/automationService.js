@@ -13,7 +13,7 @@ const musicScannerService = require('./musicScannerService');
 const eventBus = require('./eventBus');
 const { runWithConcurrency } = require('../utils/concurrency');
 const { registerJob } = require('../utils/cronRegistry');
-const { isVideoFile, deleteFolderRecursive, isRootLibraryPath, safelyDeleteMovieFiles } = require('../utils/fileUtils');
+const { isVideoFile, safelyDeleteMovieFiles } = require('../utils/fileUtils');
 const { calculateNextSearchAt, calculatePriority } = require('./schedulerLogic');
 const { parseResolution, isCutoffMet } = require('../utils/mediaParsing');
 

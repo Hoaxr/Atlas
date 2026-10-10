@@ -334,7 +334,7 @@ router.get('/jellyfin/quickconnect/status', generalLimiter, async (req, res) => 
   if (!secret) return res.status(400).json({ status: 'error', message: 'Secret is required' });
 
   try {
-    const statusRes = await axios.get(`${jellyfinUrl}/QuickConnect/Connect?Secret=${secret}`);
+    const statusRes = await axios.get(`${jellyfinUrl}/QuickConnect/Connect?Secret=${encodeURIComponent(secret)}`);
     // returns { Authenticated: true/false }
     res.json({ status: 'success', data: statusRes.data });
   } catch (err) {

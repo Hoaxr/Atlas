@@ -257,7 +257,7 @@ const matchMovieToTorrent = (torrent, movie) => {
   const yearMatches = [...rawName.matchAll(/\b(19\d{2}|20\d{2})\b/g)].map(m => parseInt(m[1], 10));
   
   // Find torrentYear: prioritize match with movie.year if available, else candidate years not part of movie title
-  let torrentYear = null;
+  let torrentYear;
   if (movie.year && yearMatches.some(y => Math.abs(movie.year - y) <= 1)) {
     torrentYear = yearMatches.find(y => Math.abs(movie.year - y) <= 1);
   } else {
@@ -734,7 +734,7 @@ const importMovie = async (torrent, movie) => {
       return;
     }
 
-    let contentPath = getMappedDownloadPath(torrent);
+    const contentPath = getMappedDownloadPath(torrent);
     if (!contentPath || !fs.existsSync(contentPath)) {
       console.warn(`[MediaManagement] Download content path for movie ${movie.title} not found on disk: ${contentPath}`);
       return;
@@ -1007,7 +1007,7 @@ const importEpisode = async (torrent, episode) => {
       return;
     }
 
-    let contentPath = getMappedDownloadPath(torrent);
+    const contentPath = getMappedDownloadPath(torrent);
     if (!contentPath || !fs.existsSync(contentPath)) {
       console.warn(`[MediaManagement] Download content path for episode ${episode.show_title} not found on disk: ${contentPath}`);
       return;
@@ -1380,7 +1380,7 @@ const importSeasonPack = async (torrent, { showId, showTitle, seasonNumber }) =>
   console.log(`[MediaManagement] Importing season pack: ${showTitle} S${seasonNumber.toString().padStart(2, '0')}`);
 
   try {
-    let contentPath = getMappedDownloadPath(torrent);
+    const contentPath = getMappedDownloadPath(torrent);
     if (!contentPath || !fs.existsSync(contentPath)) {
       console.warn(`[MediaManagement] Download content path for season pack ${showTitle} not found on disk: ${contentPath}`);
       return;

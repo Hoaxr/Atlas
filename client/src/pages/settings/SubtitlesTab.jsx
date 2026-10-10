@@ -1,4 +1,4 @@
-import { Save, Languages, CheckCircle2, CheckSquare, Square } from 'lucide-react';
+import { Languages, CheckCircle2 } from 'lucide-react';
 import CustomSelect from '../../components/shared/CustomSelect';
 import LanguageInput from './LanguageInput';
 import PasswordInput from '../../components/shared/PasswordInput';

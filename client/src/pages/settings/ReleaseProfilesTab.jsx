@@ -3,12 +3,10 @@ import { Save, Plus, Trash2, ShieldAlert, X, Edit } from 'lucide-react';
 import CustomSelect from '../../components/shared/CustomSelect';
 import Button from '../../components/shared/Button';
 import ToggleRow from '../../components/shared/ToggleRow';
-import { SettingsSection, SettingsHeader, SettingsGroup, SettingsLabel, SettingsHelper } from '../../components/settings/layout';
+import { SettingsSection, SettingsHeader, SettingsLabel, SettingsHelper } from '../../components/settings/layout';
 
 // Visual tokens shared with the other settings tabs — keep in sync
-const PANEL_CLASS = 'glass-panel rounded-2xl p-5 sm:p-6 border border-white/10 shadow-sm';
 const INPUT_CLASS = 'w-full bg-[#0c1624] border border-[#1c2d46] rounded-xl px-4 py-2.5 text-sm text-slate-200 focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/50 transition-colors placeholder:text-slate-600';
-const LABEL_CLASS = 'block text-xs sm:text-sm font-medium text-slate-300 mb-1.5 flex items-center gap-1.5';
 const HELPER_CLASS = 'text-xs text-slate-400 mt-2';
 const ROW_LIST_CLASS = 'rounded-xl border border-[#1c2d46] bg-[#0c1626]/90 overflow-hidden';
 const EMPTY_CLASS = 'py-10 px-4 text-center text-xs sm:text-sm text-slate-400';

@@ -1,4 +1,4 @@
-import { RefreshCw, Search, Star, Loader2 } from 'lucide-react';
+import { RefreshCw, Search, Star } from 'lucide-react';
 import Spinner from './shared/Spinner';
 import ModalShell from './shared/ModalShell';
 import Button from './shared/Button';

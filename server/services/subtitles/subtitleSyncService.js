@@ -24,8 +24,7 @@ const { registerJob } = require('../../utils/cronRegistry');
 const { runWithConcurrency } = require('../../utils/concurrency');
 const { readSubtitleFile, parseSubtitles, serializeSubtitles } = require('./parser');
 const { getSubtitlesInDir } = require('../../routes/library/helpers');
-const { CODE_TO_LANG } = require('../../utils/constants');
-const { parseSubtitleMetadata, LANGUAGE_NAMES } = require('../../utils/languages');
+const { parseSubtitleMetadata } = require('../../utils/languages');
 
 const execFileAsync = util.promisify(execFile);
 
@@ -143,7 +142,6 @@ const findOptimalReferenceTrack = async (subDir, currentFilename, videoDurationM
 
       if (cues.length < 20) continue;
 
-      const firstCue = cues[0];
       const lastCue = cues[cues.length - 1];
 
       // Disqualify reference tracks that have clear duration mismatches with the video
@@ -470,7 +468,7 @@ const computeSubtitleQualityScore = (arg1, arg2 = {}) => {
  * @param {number} [params.mediaId] - Media database ID
  * @returns {Promise<object>} Sync verification result
  */
-const verifySingleSubtitleSync = async ({ filePath, subPath, mediaType, mediaId }) => {
+const verifySingleSubtitleSync = async ({ filePath, subPath, mediaType, mediaId: _mediaId }) => {
   if (!fs.existsSync(filePath)) {
     return { status: 'error', synced: false, confidence: 0, qualityScore: 0, message: 'Video file missing on disk' };
   }

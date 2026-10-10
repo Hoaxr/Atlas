@@ -11,6 +11,8 @@
 
 const fs   = require('fs');
 const path = require('path');
+const net  = require('net');
+const dns  = require('dns').promises;
 const axios = require('axios');
 const { promisify } = require('util');
 const { execFile } = require('child_process');
@@ -32,8 +34,11 @@ const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
  * @param {'movies'|'shows'} type
  * @param {number|string} tmdbId
  */
-const posterPath = (type, tmdbId) =>
-  path.join(IMAGE_DIR, type, String(tmdbId), 'poster.jpg');
+const posterPath = (type, tmdbId) => {
+  const safeType = type === 'shows' ? 'shows' : 'movies';
+  const safeId = String(tmdbId).replace(/[^0-9]/g, '');
+  return path.join(IMAGE_DIR, safeType, safeId || '0', 'poster.jpg');
+};
 
 /**
  * Download an image from TMDB and save it to destPath.
@@ -138,15 +143,19 @@ const deletePoster = (type, tmdbId) => {
  * Absolute path for a cached album cover.
  * @param {string} mbid  MusicBrainz release group ID
  */
-const albumCoverPath = (mbid) =>
-  path.join(IMAGE_DIR, 'music', 'albums', String(mbid), 'cover.jpg');
+const albumCoverPath = (mbid) => {
+  const safeId = String(mbid).replace(/[^a-zA-Z0-9_-]/g, '');
+  return path.join(IMAGE_DIR, 'music', 'albums', safeId || 'unknown', 'cover.jpg');
+};
 
 /**
  * Absolute path for a cached artist image.
  * @param {string} mbid  MusicBrainz artist ID
  */
-const artistImagePath = (mbid) =>
-  path.join(IMAGE_DIR, 'music', 'artists', String(mbid), 'image.jpg');
+const artistImagePath = (mbid) => {
+  const safeId = String(mbid).replace(/[^a-zA-Z0-9_-]/g, '');
+  return path.join(IMAGE_DIR, 'music', 'artists', safeId || 'unknown', 'image.jpg');
+};
 
 // Common cover-art filenames used by scene/rip releases and taggers.
 const COVER_BASENAMES = ['cover', 'folder', 'front', 'album', 'albumart', 'artwork'];
@@ -276,15 +285,102 @@ const extractEmbeddedCover = async (audioFilePath, destPath) => {
   return null;
 };
 
+const isPrivateIp = (ip) => {
+  if (!ip) return true;
+  if (net.isIPv4(ip)) {
+    const parts = ip.split('.').map(Number);
+    if (parts[0] === 0 || parts[0] === 10 || parts[0] === 127) return true;
+    if (parts[0] === 169 && parts[1] === 254) return true;
+    if (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) return true;
+    if (parts[0] === 192 && parts[1] === 168) return true;
+    if (parts[0] === 100 && parts[1] >= 64 && parts[1] <= 127) return true;
+    if (parts[0] >= 224) return true;
+    return false;
+  }
+  if (net.isIPv6(ip)) {
+    const normalized = ip.toLowerCase();
+    if (normalized === '::1' || normalized === '::') return true;
+    if (/^fe[89ab]/i.test(normalized)) return true;
+    if (/^f[cd]/i.test(normalized)) return true;
+    if (normalized.startsWith('::ffff:')) {
+      return isPrivateIp(normalized.slice(7));
+    }
+    return false;
+  }
+  return true;
+};
+
+const validateSafeExternalUrl = async (rawUrl) => {
+  let parsed;
+  try {
+    parsed = new URL(rawUrl);
+  } catch {
+    throw new Error('Invalid URL format');
+  }
+
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    throw new Error('Disallowed URL protocol: only http and https are permitted');
+  }
+
+  const hostname = parsed.hostname.toLowerCase();
+  if (
+    hostname === 'localhost' ||
+    hostname.endsWith('.localhost') ||
+    hostname.endsWith('.local') ||
+    hostname.endsWith('.internal')
+  ) {
+    throw new Error('Access to local hostnames is forbidden');
+  }
+
+  if (net.isIP(hostname)) {
+    if (isPrivateIp(hostname)) {
+      throw new Error('Access to private IP addresses is forbidden');
+    }
+  } else {
+    try {
+      const addresses = await dns.lookup(hostname, { all: true });
+      for (const addr of addresses) {
+        if (isPrivateIp(addr.address)) {
+          throw new Error('Resolved IP is in a forbidden private network range');
+        }
+      }
+    } catch (dnsErr) {
+      if (dnsErr.message.includes('forbidden')) throw dnsErr;
+      throw new Error(`Hostname resolution failed: ${dnsErr.message}`, { cause: dnsErr });
+    }
+  }
+};
+
 /**
  * Download and cache an image from an arbitrary URL.
  * Used for Cover Art Archive and fanart.tv images.
  */
 const downloadExternalImage = async (url, destPath) => {
+  await validateSafeExternalUrl(url);
+
   const dir = path.dirname(destPath);
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 
-  const response = await axios({ method: 'GET', url, responseType: 'stream', timeout: 20000 });
+  const response = await axios({
+    method: 'GET',
+    url,
+    responseType: 'stream',
+    timeout: 20000,
+    maxRedirects: 3,
+    beforeRedirect: (options) => {
+      const redirectUrl = options.href || `${options.protocol}//${options.host}${options.path}`;
+      if (redirectUrl) {
+        let parsed;
+        try { parsed = new URL(redirectUrl); } catch { throw new Error('Invalid redirect URL'); }
+        if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+          throw new Error('Disallowed redirect protocol');
+        }
+        if (net.isIP(parsed.hostname) && isPrivateIp(parsed.hostname)) {
+          throw new Error('Redirected to private IP');
+        }
+      }
+    }
+  });
 
   const contentLength = parseInt(response.headers['content-length'], 10);
   if (!Number.isNaN(contentLength) && contentLength > MAX_IMAGE_BYTES) {
@@ -402,4 +498,5 @@ module.exports = {
   ensurePoster, deletePoster, posterPath, IMAGE_DIR,
   albumCoverPath, artistImagePath, ensureAlbumCover, ensureArtistImage, deleteAlbumCover,
   findAlbumFolderCover, extractEmbeddedCover, saveCoverToAlbumFolder, copyImageToCache,
+  downloadExternalImage, validateSafeExternalUrl,
 };

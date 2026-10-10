@@ -55,7 +55,7 @@ export default [
       },
     },
     settings: {
-      react: { version: '18.3' }, // Pin version to avoid getFilename() crash in plugin-react 7.x
+      react: { version: '19.0' }, // Pin version to avoid getFilename() crash in plugin-react 7.x
     },
     rules: {
       // React rules (manually listed to avoid plugin-react flat-config bug in ESLint 10)

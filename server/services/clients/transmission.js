@@ -116,7 +116,7 @@ const getTorrentFiles = async (client, hash) => {
       size: f.length,
       progress: f.length ? f.bytesCompleted / f.length : 0
     }));
-  } catch (err) {
+  } catch {
     return [];
   }
 };

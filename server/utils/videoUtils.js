@@ -4,7 +4,7 @@ const execFileAsync = util.promisify(execFile);
 const { parseAudio } = require('./mediaParsing');
 
 
-const { VALID_LANGUAGES, normalizeLanguageCode } = require('./languages');
+const { normalizeLanguageCode } = require('./languages');
 
 const getMediaMetadata = async (filePath) => {
   try {

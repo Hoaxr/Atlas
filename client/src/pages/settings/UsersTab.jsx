@@ -15,9 +15,7 @@ import ToggleRow from '../../components/shared/ToggleRow';
 import { SettingsSection, SettingsHeader, SettingsLabel, SettingsHelper } from '../../components/settings/layout';
 
 // Visual tokens shared with the other settings tabs — keep in sync
-const PANEL_CLASS = 'glass-panel rounded-2xl p-5 sm:p-6 border border-white/10 shadow-sm';
 const INPUT_CLASS = 'w-full bg-[#0c1624] border border-[#1c2d46] rounded-xl px-4 py-2.5 text-sm text-slate-200 focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/50 transition-colors placeholder:text-slate-600';
-const LABEL_CLASS = 'block text-xs sm:text-sm font-medium text-slate-300 mb-1.5 flex items-center gap-1.5';
 const CARD_CLASS = 'rounded-xl bg-[#101e31] border border-[#1c2d46] hover:border-[#274063] transition-colors';
 const BADGE_CLASS = 'inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold uppercase tracking-wider border whitespace-nowrap shrink-0';
 

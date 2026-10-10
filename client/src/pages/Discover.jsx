@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../lib/api';
@@ -93,89 +93,7 @@ export default function Discover() {
   // Cache data per mode so switching is instant
   const cacheRef = useRef({ movies: null, shows: null });
 
-  useEffect(() => {
-    const q = searchParams.get('q');
-    if (q !== null && q !== query) {
-      setQuery(q);
-    }
-  }, [searchParams]);
-
-
-  // Close rows menu on outside click — handled by useOutsideClick hook above
-
-  const { onEvent } = useWebSocket();
-  useEffect(() => {
-    return onEvent((data) => {
-      if (
-        data.type === 'MOVIE_ADDED' ||
-        data.type === 'SHOW_ADDED' ||
-        (data.message && data.message.toLowerCase().includes('scan complete'))
-      ) {
-        fetchLibrary();
-      }
-    });
-  }, [onEvent, mode]);
-
-  useEffect(() => {
-    let interval;
-    let searchTimer;
-    
-    if (!query) {
-      setIsTyping(false);
-      setResults([]);
-
-      if (cacheRef.current[mode]) {
-        // Cached data available — show immediately, no loading
-        setTrendingResults(cacheRef.current[mode].trending);
-        setRecommendedResults(cacheRef.current[mode].recommended);
-        setUpcomingResults(cacheRef.current[mode].upcoming || []);
-        setRecentResults(cacheRef.current[mode].recent);
-        setLibraryItems(cacheRef.current[mode].libraryIds || new Map());
-        setWatchedMap(cacheRef.current[mode].watchedMap || new Map());
-        setDownloadedSet(cacheRef.current[mode].downloadedIds || new Set());
-        setLoading(false);
-      }
-
-      // Fire requests concurrently. Don't block the UI for the slowest request.
-      const loadInitialData = async () => {
-        const hasCache = !!cacheRef.current[mode];
-        if (!hasCache) {
-          setLoading(true);
-        }
-        
-        const libraryPromise = fetchLibrary();
-        const allDataPromise = fetchAllData();
-        
-        if (!hasCache) {
-          // Wait for both library and external TMDB data to load before hiding the overlay
-          // This prevents the spinner from flashing and hiding too early.
-          await Promise.all([libraryPromise, allDataPromise]);
-          setLoading(false);
-        }
-      };
-      
-      loadInitialData();
-
-      interval = setInterval(() => {
-        fetchLibrary();
-        fetchAllData(true);
-      }, 60000);
-    } else {
-      setIsTyping(true);
-      searchTimer = setTimeout(() => {
-        executeSearch(query);
-      }, 500);
-    }
-    
-    return () => {
-      if (interval) clearInterval(interval);
-      if (searchTimer) clearTimeout(searchTimer);
-    };
-    // fetchLibrary/fetchAllData/executeSearch read only query & mode, both already deps
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query, mode]);
-
-  const fetchLibrary = async () => {
+  const fetchLibrary = useCallback(async () => {
     try {
       // Use ?badges=true to skip expensive subtitle scanning on movies, add cache-buster
       const endpoint = mode === 'movies' ? `/library/movies?badges=true&_t=${Date.now()}` : `/library/shows?_t=${Date.now()}`;
@@ -253,7 +171,89 @@ export default function Discover() {
     } catch (err) {
       console.error('Failed to fetch library', err);
     }
-  };
+  }, [mode]);
+
+  useEffect(() => {
+    const q = searchParams.get('q');
+    if (q !== null) {
+      setQuery((prev) => (prev !== q ? q : prev));
+    }
+  }, [searchParams]);
+
+
+  // Close rows menu on outside click — handled by useOutsideClick hook above
+
+  const { onEvent } = useWebSocket();
+  useEffect(() => {
+    return onEvent((data) => {
+      if (
+        data.type === 'MOVIE_ADDED' ||
+        data.type === 'SHOW_ADDED' ||
+        (data.message && data.message.toLowerCase().includes('scan complete'))
+      ) {
+        fetchLibrary();
+      }
+    });
+  }, [onEvent, fetchLibrary]);
+
+  useEffect(() => {
+    let interval;
+    let searchTimer;
+    
+    if (!query) {
+      setIsTyping(false);
+      setResults([]);
+
+      if (cacheRef.current[mode]) {
+        // Cached data available — show immediately, no loading
+        setTrendingResults(cacheRef.current[mode].trending);
+        setRecommendedResults(cacheRef.current[mode].recommended);
+        setUpcomingResults(cacheRef.current[mode].upcoming || []);
+        setRecentResults(cacheRef.current[mode].recent);
+        setLibraryItems(cacheRef.current[mode].libraryIds || new Map());
+        setWatchedMap(cacheRef.current[mode].watchedMap || new Map());
+        setDownloadedSet(cacheRef.current[mode].downloadedIds || new Set());
+        setLoading(false);
+      }
+
+      // Fire requests concurrently. Don't block the UI for the slowest request.
+      const loadInitialData = async () => {
+        const hasCache = !!cacheRef.current[mode];
+        if (!hasCache) {
+          setLoading(true);
+        }
+        
+        const libraryPromise = fetchLibrary();
+        const allDataPromise = fetchAllData();
+        
+        if (!hasCache) {
+          // Wait for both library and external TMDB data to load before hiding the overlay
+          // This prevents the spinner from flashing and hiding too early.
+          await Promise.all([libraryPromise, allDataPromise]);
+          setLoading(false);
+        }
+      };
+      
+      loadInitialData();
+
+      interval = setInterval(() => {
+        fetchLibrary();
+        fetchAllData(true);
+      }, 60000);
+    } else {
+      setIsTyping(true);
+      searchTimer = setTimeout(() => {
+        executeSearch(query);
+      }, 500);
+    }
+    
+    return () => {
+      if (interval) clearInterval(interval);
+      if (searchTimer) clearTimeout(searchTimer);
+    };
+    // fetchLibrary/fetchAllData/executeSearch read only query & mode, both already deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query, mode]);
 
   const fetchAllData = async (isBackgroundRefresh = false) => {
     if (!isBackgroundRefresh) setError('');

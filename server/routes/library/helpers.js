@@ -18,9 +18,9 @@ const getSubtitlesInDir = async (dir, fsp, pathLib) => {
   }
 };
 
-const { VALID_LANGUAGES, parseSubtitleMetadata } = require('../../utils/languages');
+const { parseSubtitleMetadata } = require('../../utils/languages');
 
-const extractLang = (filename, pathLib) => {
+const extractLang = (filename, _pathLib) => {
   const meta = parseSubtitleMetadata(filename);
   if (meta.langCode && meta.langCode !== 'und') {
     return meta.langCode;

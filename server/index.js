@@ -70,6 +70,7 @@ const app = express();
 // Trust one proxy hop so express-rate-limit sees real client IPs behind reverse proxies/docker.
 // Must match the number of proxy hops in front of this server.
 app.set('trust proxy', 1);
+app.set('query parser', 'extended');
 
 const server = http.createServer(app);
 const PORT = process.env.PORT || 9898;
@@ -433,7 +434,7 @@ app.use(helmet({
       defaultSrc: ["'self'"],
       scriptSrc: ["'self'", "'unsafe-inline'"],
       styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
-      imgSrc: ["'self'", "data:", "https://image.tmdb.org"],
+      imgSrc: ["'self'", "data:", "blob:", "https://image.tmdb.org"],
       fontSrc: ["'self'", "data:", "https://fonts.gstatic.com"],
       connectSrc: ["'self'", "ws:", "wss:", "https://api.github.com"],
       manifestSrc: ["'self'"],
@@ -635,7 +636,7 @@ app.use('/api', (_req, res) => res.status(404).json({ status: 'error', message: 
 // ---- Production: serve the built client ----
 if (process.env.NODE_ENV === 'production') {
   app.use(express.static(path.join(__dirname, '../client/dist')));
-  app.get('*', (req, res) => {
+  app.get('{*splat}', (req, res) => {
     res.sendFile(path.join(__dirname, '../client/dist', 'index.html'));
   });
 }

@@ -5,6 +5,7 @@ const db = require('../config/database');
 const userProvisioningService = require('../services/userProvisioningService');
 const presenceTracker = require('../services/presenceTracker');
 const requireAdmin = require('../middleware/requireAdmin');
+const { invalidateAuthCache } = require('../middleware/authMiddleware');
 
 const hashPassword = (password) => bcrypt.hash(password, 12);
 
@@ -107,6 +108,8 @@ router.delete('/:id', requireAdmin, (req, res, next) => {
       db.prepare('DELETE FROM users WHERE id = ?').run(id);
     })();
 
+    invalidateAuthCache(id);
+
     res.json({ status: 'success', message: 'User deleted' });
   } catch (err) {
     next(err);
@@ -185,6 +188,8 @@ router.put('/:id', requireAdmin, async (req, res, next) => {
     } catch (txErr) {
       return res.status(400).json({ status: 'error', message: txErr.message });
     }
+
+    invalidateAuthCache(id);
 
     res.json({ status: 'success', message: 'User updated successfully' });
   } catch (err) {

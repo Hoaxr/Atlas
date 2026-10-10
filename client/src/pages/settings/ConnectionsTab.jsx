@@ -1,10 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
-import { BellRing, Save, CheckSquare, Square, Link, Loader2, Key, Trash2, UserCheck } from 'lucide-react';
+import { BellRing, Save, Link, Loader2, Key, Trash2, UserCheck } from 'lucide-react';
 import api from '../../lib/api';
 import { customAlert, customConfirm } from '../../utils/alerts';
 import PasswordInput from '../../components/shared/PasswordInput';
 import Button from '../../components/shared/Button';
-import { SettingsSection, SettingsHeader, SettingsLabel, SettingsGroup, SettingsHelper } from '../../components/settings/layout';
+import { SettingsSection, SettingsHeader } from '../../components/settings/layout';
 import ToggleRow from '../../components/shared/ToggleRow';
 
 export default function ConnectionsTab({
@@ -19,7 +19,7 @@ export default function ConnectionsTab({
   setSimklPolling,
   connectSimkl,
   fetchSettings,
-  keyStatuses
+  keyStatuses: _keyStatuses
 }) {
   const [localSettings, setLocalSettings] = useState({
     plexUrl: settings?.plexUrl || '',

@@ -60,12 +60,13 @@ const SETTINGS_GROUPS = [
   }
 ];
 
+// Legacy tab ids that now live inside the General tab
+const LEGACY_TAB_ALIASES = { security: 'general', backup: 'general' };
+
 export default function Settings() {
   const { headerRef, stickyVisible } = useStickyBar();
   const [searchParams, setSearchParams] = useSearchParams();
   const initialTab = searchParams.get('tab');
-  // Legacy tab ids that now live inside the General tab
-  const LEGACY_TAB_ALIASES = { security: 'general', backup: 'general' };
   const [activeTab, setActiveTab] = useState(() => {
     if (initialTab && SETTINGS_GROUPS.some(g => g.tabs.some(t => t.id === initialTab))) {
       return initialTab;

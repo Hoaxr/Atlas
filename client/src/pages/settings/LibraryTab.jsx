@@ -6,7 +6,7 @@ import { useOutsideClick } from '../../lib/useOutsideClick';
 import DuplicateSection from './DuplicateSection';
 import CustomSelect from '../../components/shared/CustomSelect';
 import ToggleRow from '../../components/shared/ToggleRow';
-import { SettingsSection, SettingsHeader, SettingsGroup, SettingsLabel, SettingsHelper } from '../../components/settings/layout';
+import { SettingsSection, SettingsHeader, SettingsLabel, SettingsHelper } from '../../components/settings/layout';
 
 const SCAN_MODES = [
   { value: 'full',      label: 'Full Scan',       desc: 'Everything — movies, TV shows, music, metadata' },

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Clock, CheckCircle2, XCircle, Loader2, Trash2, Inbox, CalendarClock, Music2, Film, Tv } from 'lucide-react';
+import { Clock, CheckCircle2, XCircle, Trash2, Inbox, CalendarClock, Music2, Film, Tv } from 'lucide-react';
 import api from '../lib/api';
 import { customAlert, customConfirm } from '../utils/alerts';
 import MediaDetailsModal from '../components/MediaDetailsModal';

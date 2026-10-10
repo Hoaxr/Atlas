@@ -178,4 +178,72 @@ test('Executable Payload Blocking & Quarantine Security', async (t) => {
     assert.strictEqual(matchEpisodeToTorrent({ name: 'Dark.Matter.1x01-02.720p' }, ep1), true);
     assert.strictEqual(matchEpisodeToTorrent({ name: 'Dark.Matter.1x01-02.720p' }, ep2), true);
   });
+
+  await t.test('imageService sanitizes IDs to prevent path traversal in cache paths', () => {
+    const imageService = require('../server/services/imageService');
+
+    const poster = imageService.posterPath('movies', '../../12345/etc/passwd');
+    assert.ok(!poster.includes('..'), 'posterPath must sanitize path traversal');
+    assert.ok(poster.endsWith(path.join('movies', '12345', 'poster.jpg')));
+
+    const album = imageService.albumCoverPath('../../traversal/album_123');
+    assert.ok(!album.includes('..'), 'albumCoverPath must sanitize path traversal');
+    assert.ok(album.includes(path.join('music', 'albums', 'traversalalbum_123', 'cover.jpg')));
+
+    const artist = imageService.artistImagePath('../../../traversal/artist_456');
+    assert.ok(!artist.includes('..'), 'artistImagePath must sanitize path traversal');
+    assert.ok(artist.includes(path.join('music', 'artists', 'traversalartist_456', 'image.jpg')));
+  });
+
+  await t.test('imageService.downloadExternalImage blocks SSRF to localhost, private IPs, and non-http protocols', async () => {
+    const imageService = require('../server/services/imageService');
+    const dest = path.join(os.tmpdir(), 'atlas-ssrf-test.jpg');
+
+    await assert.rejects(
+      () => imageService.downloadExternalImage('http://127.0.0.1:9898/api/settings', dest),
+      /private IP/i
+    );
+
+    await assert.rejects(
+      () => imageService.downloadExternalImage('http://localhost:9898/api/settings', dest),
+      /local hostname/i
+    );
+
+    await assert.rejects(
+      () => imageService.downloadExternalImage('http://169.254.169.254/latest/meta-data', dest),
+      /private IP/i
+    );
+
+    await assert.rejects(
+      () => imageService.downloadExternalImage('ftp://example.com/image.jpg', dest),
+      /protocol/i
+    );
+  });
+
+  await t.test('authMiddleware rejects tokens missing valid user id', async () => {
+    const authMiddleware = require('../server/middleware/authMiddleware');
+    const jwt = require('../server/node_modules/jsonwebtoken');
+    const secret = process.env.JWT_SECRET || 'test-jwt-secret-for-atlas';
+    process.env.JWT_SECRET = secret;
+
+    const tokenWithoutId = jwt.sign({ username: 'ghost', role: 'admin' }, secret);
+    const req = {
+      method: 'GET',
+      headers: { authorization: `Bearer ${tokenWithoutId}` },
+      query: {}
+    };
+    let statusCode = null;
+    let jsonResponse = null;
+    const res = {
+      status(code) { statusCode = code; return this; },
+      json(data) { jsonResponse = data; }
+    };
+    let nextCalled = false;
+
+    authMiddleware(req, res, () => { nextCalled = true; });
+
+    assert.strictEqual(nextCalled, false, 'authMiddleware must not call next() for token missing user id');
+    assert.strictEqual(statusCode, 401);
+    assert.strictEqual(jsonResponse?.status, 'error');
+  });
 });

@@ -115,9 +115,10 @@ const findSourceSubtitle = async (resolved, preferredSourceFile) => {
 const getSafeFilePath = (dir, filename) => {
   if (!dir || !filename) return null;
   const safeName = path.basename(filename);
-  const resolved = path.join(dir, safeName);
-  // Ensure path is directly within dir
-  if (!resolved.startsWith(path.resolve(dir))) return null;
+  const resolvedDir = path.resolve(dir);
+  const resolved = path.resolve(resolvedDir, safeName);
+  // Ensure path is directly within dir and not traversing out
+  if (!resolved.startsWith(resolvedDir + path.sep)) return null;
   return resolved;
 };
 

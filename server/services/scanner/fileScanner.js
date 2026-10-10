@@ -27,7 +27,7 @@ const shouldSkipFile = (fileName) => {
   return false;
 };
 
-const { VALID_LANGUAGES, normalizeLanguageCode, parseSubtitleMetadata } = require('../../utils/languages');
+const { parseSubtitleMetadata } = require('../../utils/languages');
 
 const SUBTITLE_EXTS = [...SUBTITLE_EXTENSIONS];
 

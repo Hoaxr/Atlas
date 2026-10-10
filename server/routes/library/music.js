@@ -26,8 +26,15 @@ const FALLBACK_DISC_SVG = Buffer.from(
 
 const serveImage = (res, filePath) => {
   if (filePath && fs.existsSync(filePath)) {
+    const resolved = path.resolve(filePath);
+    const resolvedImageDir = path.resolve(imageService.IMAGE_DIR);
+    const isInImageDir = resolved === resolvedImageDir || resolved.startsWith(resolvedImageDir + path.sep);
+    const isLibraryContained = isPathContainedInLibrary(resolved);
+    if (!isInImageDir && !isLibraryContained) {
+      return res.status(403).json({ status: 'error', message: 'Access denied: File outside authorized image and library paths' });
+    }
     // Real art: allow a short cache window; ETag/Last-Modified still enable revalidation.
-    return res.sendFile(path.resolve(filePath), { maxAge: '1h' });
+    return res.sendFile(resolved, { maxAge: '1h' });
   }
   // The placeholder must never be cached. If it is, a temporarily-missing cover stays
   // "broken" in the browser for the whole max-age window even after real art appears.
@@ -173,6 +180,9 @@ const backfillExpectedTrackCounts = (albums, limit = 30) => {
 // ── Artist & Album Images ───────────────────────────────────────────────────
 router.get(['/artists/:idOrMbid/image', '/artists/:idOrMbid/poster'], async (req, res) => {
   const { idOrMbid } = req.params;
+  if (!idOrMbid || !/^[a-zA-Z0-9_-]+$/.test(idOrMbid)) {
+    return res.status(400).json({ status: 'error', message: 'Invalid artist identifier' });
+  }
   const isNumeric = /^\d+$/.test(idOrMbid);
 
   let artist = isNumeric
@@ -227,6 +237,9 @@ router.get(['/artists/:idOrMbid/image', '/artists/:idOrMbid/poster'], async (req
 
 router.get('/albums/:idOrMbid/cover', async (req, res) => {
   const { idOrMbid } = req.params;
+  if (!idOrMbid || !/^[a-zA-Z0-9_-]+$/.test(idOrMbid)) {
+    return res.status(400).json({ status: 'error', message: 'Invalid album identifier' });
+  }
   const isNumeric = /^\d+$/.test(idOrMbid);
 
   let album = isNumeric

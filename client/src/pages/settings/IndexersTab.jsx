@@ -1,12 +1,12 @@
 import { useState, useEffect } from 'react';
-import { Search, Loader2, PlayCircle, Save } from 'lucide-react';
+import { Search, PlayCircle } from 'lucide-react';
 import api from '../../lib/api';
 import { customAlert } from '../../utils/alerts';
 import PasswordInput from '../../components/shared/PasswordInput';
 import Button from '../../components/shared/Button';
-import { SettingsSection, SettingsHeader, SettingsGroup, SettingsLabel, SettingsHelper } from '../../components/settings/layout';
+import { SettingsSection, SettingsHeader, SettingsGroup, SettingsLabel } from '../../components/settings/layout';
 
-export default function IndexersTab({ settings, setSettings, handleSave }) {
+export default function IndexersTab({ settings, setSettings, handleSave: _handleSave }) {
   const [isTesting, setIsTesting] = useState(false);
   const [testResult, setTestResult] = useState(null);
 
@@ -43,10 +43,6 @@ export default function IndexersTab({ settings, setSettings, handleSave }) {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [settings.prowlarrUrl, settings.prowlarrApiKey]);
-
-  const handleLocalSave = async () => {
-    await handleSave();
-  };
 
   return (
     <div className="w-full space-y-6 animate-fade-in">

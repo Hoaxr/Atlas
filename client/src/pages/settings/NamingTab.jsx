@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { createPortal } from 'react-dom';
-import { HelpCircle, CheckSquare, Square, FileText, X, Tag, Save, Film, Tv, Music } from 'lucide-react';
+import { HelpCircle, FileText, X, Tag, Film, Tv, Music } from 'lucide-react';
 import CustomSelect from '../../components/shared/CustomSelect';
 import { SettingsSection, SettingsHeader, SettingsGroup, SettingsLabel, SettingsHelper } from '../../components/settings/layout';
 import ToggleRow from '../../components/shared/ToggleRow';

@@ -101,20 +101,24 @@ const authMiddleware = (req, res, next) => {
   if (token) {
     try {
       const decoded = jwt.verify(token, JWT_SECRET);
-      req.user = decoded;
-      
-      // Ensure we have the most up-to-date role and check jwt_version from the cached session / database
-      if (req.user && req.user.id) {
-        const dbUser = getUserSession(req.user.id);
-        if (!dbUser) {
-          return res.status(401).json({ status: 'error', message: 'User not found or deleted' });
-        }
-        if (dbUser.jwt_version !== req.user.jwt_version) {
-          return res.status(401).json({ status: 'error', message: 'Session invalidated' });
-        }
-        req.user.role = dbUser.role;
+      if (!decoded || !decoded.id) {
+        return res.status(401).json({ status: 'error', message: 'Unauthorized: Invalid token payload' });
       }
-      
+
+      const dbUser = getUserSession(decoded.id);
+      if (!dbUser) {
+        return res.status(401).json({ status: 'error', message: 'User not found or deleted' });
+      }
+      if (dbUser.jwt_version !== decoded.jwt_version) {
+        return res.status(401).json({ status: 'error', message: 'Session invalidated' });
+      }
+
+      req.user = {
+        ...decoded,
+        id: dbUser.id,
+        role: dbUser.role,
+      };
+
       return next();
     } catch {
       // Invalid token, we'll fall through to check bypass

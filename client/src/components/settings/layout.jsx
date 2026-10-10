@@ -1,5 +1,3 @@
-import React from 'react';
-
 export const SettingsSection = ({ children, className = '' }) => {
   return (
     <div className={`glass-panel rounded-2xl p-5 sm:p-6 border border-white/10 shadow-sm ${className}`}>

@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import tailwindcss from '@tailwindcss/vite';
 import { execSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
@@ -73,7 +74,7 @@ export default defineConfig({
       buildTime: new Date().toISOString()
     })
   },
-  plugins: [react()],
+  plugins: [tailwindcss(), react()],
   server: {
     proxy: {
       '/api': {

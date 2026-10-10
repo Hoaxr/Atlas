@@ -5,7 +5,7 @@ import useWebSocket from '../lib/useWebSocket';
 import {
   Play, Pause, Tv, Film, User, Trophy, Monitor, Zap, Wifi, Clock,
   Subtitles, HardDrive, Volume2, Video, TrendingUp, Hash, Eye,
-  MonitorPlay, RotateCcw, History, Loader2
+  MonitorPlay, RotateCcw, History
 } from 'lucide-react';
 import { customAlert, customConfirm } from '../utils/alerts';
 import { formatRelativeTime } from '../lib/format';
