@@ -1,4 +1,5 @@
-const TelegramBot = require('node-telegram-bot-api').default || require('node-telegram-bot-api');
+const TelegramBotPkg = require('node-telegram-bot-api');
+const TelegramBot = TelegramBotPkg.default || TelegramBotPkg.TelegramBot || TelegramBotPkg;
 const { getSetting } = require('../utils/settings');
 const tmdbService = require('./tmdbService');
 const libraryService = require('./libraryService');
