@@ -492,6 +492,7 @@ router.post('/service/test', requireAdmin, async (req, res) => {
         subdl: 'subdlApiKey',
         subsource: 'subsourceApiKey',
         tmdb: 'tmdbApiKey',
+        simkl: 'simklClientId',
       };
       if (keyMap[service]) {
         key = getSetting(keyMap[service]) || '';
@@ -612,6 +613,41 @@ router.post('/service/test', requireAdmin, async (req, res) => {
         return res.status(400).json({ status: 'error', message: r.data?.status_message || 'TMDB test failed' });
       } catch (err) {
         return res.status(400).json({ status: 'error', message: err.response?.data?.status_message || err.message || 'TMDB test failed' });
+      }
+    } else if (service === 'simkl') {
+      try {
+        const simklId = key || getSetting('simklClientId');
+        const simklToken = getSetting('simklAccessToken');
+        if (!simklId) {
+          return res.status(400).json({ status: 'error', message: 'Simkl Client ID is required' });
+        }
+        if (simklToken) {
+          const r = await axios.get('https://api.simkl.com/users/settings', {
+            headers: {
+              'simkl-api-key': simklId,
+              'Authorization': `Bearer ${simklToken}`
+            },
+            timeout: 8000
+          });
+          if (r.status === 200) {
+            const username = r.data?.user?.name || '';
+            return res.json({ status: 'success', message: `Connected to Simkl successfully${username ? ` (${username})` : ''}` });
+          }
+          return res.status(400).json({ status: 'error', message: 'Simkl connection test failed' });
+        } else {
+          const r = await axios.get(`https://api.simkl.com/oauth/pin?client_id=${simklId}`, {
+            timeout: 8000
+          });
+          if (r.status === 200 && r.data?.user_code) {
+            return res.json({ status: 'success', message: 'Simkl Client ID is valid' });
+          }
+          return res.status(400).json({ status: 'error', message: 'Invalid Simkl Client ID' });
+        }
+      } catch (err) {
+        if (err.response?.status === 401) {
+          return res.status(400).json({ status: 'error', message: 'Simkl authorization expired. Please reconnect.' });
+        }
+        return res.status(400).json({ status: 'error', message: err.response?.data?.message || err.message || 'Simkl test failed' });
       }
     } else {
       return res.status(400).json({ status: 'error', message: `Unsupported service: ${service}` });

@@ -39,13 +39,13 @@ test('External Service & AI Provider Connectivity Test Route Logic', async (t) =
   });
 
   await t.test('Unsupported service name is rejected', () => {
-    const supportedServices = ['gemini', 'deepseek', 'claude', 'opensubtitles', 'subdl', 'subsource', 'tmdb'];
+    const supportedServices = ['gemini', 'deepseek', 'claude', 'opensubtitles', 'subdl', 'subsource', 'tmdb', 'simkl'];
     const invalidService = 'unknown_ai_provider';
     assert.strictEqual(supportedServices.includes(invalidService), false);
   });
 
   await t.test('All AI and Subtitle provider types are recognized', () => {
-    const supportedServices = ['gemini', 'deepseek', 'claude', 'opensubtitles', 'subdl', 'subsource', 'tmdb'];
+    const supportedServices = ['gemini', 'deepseek', 'claude', 'opensubtitles', 'subdl', 'subsource', 'tmdb', 'simkl'];
     const aiProviders = ['gemini', 'deepseek', 'claude'];
     const subtitleProviders = ['opensubtitles', 'subdl', 'subsource'];
 
