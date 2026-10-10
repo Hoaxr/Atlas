@@ -627,7 +627,7 @@ export default function ConnectionsTab({
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold text-slate-300 hover:text-cyan-400 bg-[#131f33] hover:bg-[#182842] border border-[#1c2d46] hover:border-cyan-500/30 rounded-xl transition-all cursor-pointer"
                 >
-                  <span>Create App</span>
+                  <span>Get Key</span>
                   <ExternalLink className="w-3 h-3 text-slate-400" />
                 </a>
                 <button
