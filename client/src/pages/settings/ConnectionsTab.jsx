@@ -1022,20 +1022,15 @@ export default function ConnectionsTab({
                   <span className="px-2.5 py-0.5 rounded-lg text-xs font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 whitespace-nowrap">Configured</span>
                 )}
               </div>
-              <div className="flex items-center gap-3">
-                <a href="https://pushover.net/apps/build" target="_blank" rel="noopener noreferrer" className="text-xs text-cyan-400 hover:text-cyan-300 underline font-medium">
-                  Create App &rarr;
-                </a>
-                <button
-                  type="button"
-                  onClick={handleTestPushover}
-                  disabled={testingPushover || !localSettings.pushoverAppToken || !localSettings.pushoverUserKey}
-                  className="px-3 py-1.5 text-xs font-semibold text-slate-300 bg-[#15243b] hover:bg-[#1a2d4a] border border-[#1c2d46] hover:border-cyan-500/30 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 cursor-pointer"
-                >
-                  {testingPushover && <Loader2 className="w-3.5 h-3.5 animate-spin text-cyan-400" />}
-                  {testingPushover ? 'Testing...' : 'Test Message'}
-                </button>
-              </div>
+              <button
+                type="button"
+                onClick={handleTestPushover}
+                disabled={testingPushover || !localSettings.pushoverAppToken || !localSettings.pushoverUserKey}
+                className="px-3 py-1.5 text-xs font-semibold text-slate-300 bg-[#15243b] hover:bg-[#1a2d4a] border border-[#1c2d46] hover:border-cyan-500/30 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 cursor-pointer"
+              >
+                {testingPushover && <Loader2 className="w-3.5 h-3.5 animate-spin text-cyan-400" />}
+                {testingPushover ? 'Testing...' : 'Test Message'}
+              </button>
             </div>
             <p className="text-xs text-slate-400">Receive notifications natively on your iOS or Android devices.</p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
