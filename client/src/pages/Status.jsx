@@ -7,7 +7,7 @@ import clsx from 'clsx';
 import {
   AlertCircle, CheckCircle2, Activity, Database, Zap,
   Film, Tv, Server, Cloud, DownloadCloud, Globe, Cpu, Music,
-  Settings, BookOpen, MessageSquare, FolderTree, Clock, Trash2
+  Settings, BookOpen, FolderTree, Clock, Trash2
 } from 'lucide-react';
 import useWebSocket from '../lib/useWebSocket';
 import EmptyState from '../components/shared/EmptyState';
@@ -158,8 +158,7 @@ export default function Status() {
   }, []);
 
   const services = statusData?.services || {};
-  const apiKeys = ['tmdb', 'simkl', 'opensubtitles', 'subdl', 'subsource'];
-  const aiServices = ['gemini', 'deepseek', 'claude'];
+  const apiKeys = ['tmdb', 'simkl', 'opensubtitles', 'subdl', 'subsource', 'gemini', 'deepseek', 'claude'];
   const downloadClients = services.downloadClients || [];
   const mounts = services.mounts || {};
   const hasIssues = issues.length > 0 || mounts.issues?.length > 0;
@@ -400,22 +399,6 @@ export default function Status() {
             )}
           </section>
           </div>
-
-          {/* AI Translation Services */}
-          {aiServices.some(name => services[name] && services[name].status !== 'unconfigured') && (
-            <section>
-              <h2 className="text-sm sm:text-base font-bold text-slate-200 flex items-center gap-2 mb-3 sm:mb-4">
-                <MessageSquare className="w-4 h-4 sm:w-5 sm:h-5 text-cyan-400" /> AI Translation
-              </h2>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-4">
-                {aiServices.map(name => {
-                  const service = services[name];
-                  if (!service || service.status === 'unconfigured') return null;
-                  return <ServiceCard key={name} name={name} service={service} />;
-                })}
-              </div>
-            </section>
-          )}
         </div>
       ) : (
         /* Activity Feed Tab */
