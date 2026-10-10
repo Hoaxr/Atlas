@@ -57,57 +57,66 @@ export default function SubtitlesTab({ settings, setSettings, keyStatuses }) {
           </div>
         </div>
         
-        <div className="space-y-5">
+        <div className="space-y-4 sm:space-y-5">
           {[
-            { id: 'opensubtitles', name: 'OpenSubtitles', color: 'border-l-cyan-500', desc: 'Primary subtitle source.', key: settings.osApiKey, setter: (v) => setSettings({ ...settings, osApiKey: v }) },
-            { id: 'subdl', name: 'SubDL', color: 'border-l-amber-500', desc: 'Alternative. Free: 2,000 requests/day.', key: settings.subdlApiKey, setter: (v) => setSettings({ ...settings, subdlApiKey: v }) },
-            { id: 'subsource', name: 'SubSource', color: 'border-l-purple-500', desc: 'Alternative. Free: 7,200 requests/day.', key: settings.subsourceApiKey, setter: (v) => setSettings({ ...settings, subsourceApiKey: v }) },
+            { id: 'opensubtitles', name: 'OpenSubtitles', desc: 'Primary subtitle source.', key: settings.osApiKey, setter: (v) => setSettings({ ...settings, osApiKey: v }), link: 'https://opensubtitles.com' },
+            { id: 'subdl', name: 'SubDL', desc: 'Alternative. Free: 2,000 requests/day.', key: settings.subdlApiKey, setter: (v) => setSettings({ ...settings, subdlApiKey: v }), link: 'https://subdl.com/panel/login' },
+            { id: 'subsource', name: 'SubSource', desc: 'Alternative. Free: 7,200 requests/day.', key: settings.subsourceApiKey, setter: (v) => setSettings({ ...settings, subsourceApiKey: v }), link: 'https://subsource.net/dashboard/profile' },
           ].map(provider => {
             const status = testResults[provider.id] || keyStatuses[provider.id];
             return (
-              <div key={provider.id} className={`glass-panel p-5 rounded-2xl border-l-4 ${provider.color}`}>
-                <div className="flex items-center justify-between mb-2">
-                  <label className="block text-base font-bold font-display text-slate-100">{provider.name}</label>
-                  {status?.status && (
-                    <span
-                      title={status.message || ''}
-                      className={`flex items-center gap-1.5 text-xs font-semibold px-2.5 py-0.5 rounded-full ${
-                        status.status === 'connected'
-                          ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-                          : status.status === 'warning'
-                          ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
-                          : 'bg-red-500/20 text-red-400 border border-red-500/30'
-                      }`}>
-                      <span className={`w-1.5 h-1.5 rounded-full ${status.status === 'connected' ? 'bg-emerald-400' : status.status === 'warning' ? 'bg-amber-400' : 'bg-red-400'}`} />
-                      {status.status === 'connected' ? 'Connected' : status.status === 'warning' ? 'Quota' : 'Error'}
-                    </span>
-                  )}
+              <div key={provider.id} className="p-4 sm:p-5 bg-[#101e31] rounded-xl border border-[#1c2d46] hover:border-[#274063] transition-colors space-y-3.5">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div className="flex items-center gap-3">
+                    <h3 className="text-base font-bold font-display text-slate-100">{provider.name}</h3>
+                    {!provider.key ? (
+                      <span className="px-2.5 py-0.5 rounded-lg text-xs font-semibold bg-slate-800 text-slate-400 border border-slate-700/60 whitespace-nowrap">
+                        Not configured
+                      </span>
+                    ) : status?.status === 'connected' ? (
+                      <span className="px-2.5 py-0.5 rounded-lg text-xs font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 whitespace-nowrap">
+                        Connected
+                      </span>
+                    ) : status?.status === 'warning' ? (
+                      <span className="px-2.5 py-0.5 rounded-lg text-xs font-semibold bg-amber-500/15 text-amber-400 border border-amber-500/30 whitespace-nowrap">
+                        Quota
+                      </span>
+                    ) : (
+                      <span className="px-2.5 py-0.5 rounded-lg text-xs font-semibold bg-rose-500/15 text-rose-400 border border-rose-500/30 whitespace-nowrap">
+                        Error
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <a href={provider.link} target="_blank" rel="noopener noreferrer" className="text-xs text-cyan-400 hover:text-cyan-300 underline font-medium">
+                      Get key &rarr;
+                    </a>
+                    <button
+                      type="button"
+                      onClick={() => handleTestService(provider.id, provider.key)}
+                      disabled={testingService[provider.id] || !provider.key}
+                      className="px-3 py-1.5 text-xs font-semibold text-slate-300 bg-[#15243b] hover:bg-[#1a2d4a] border border-[#1c2d46] hover:border-cyan-500/30 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 cursor-pointer"
+                    >
+                      {testingService[provider.id] && <Loader2 className="w-3.5 h-3.5 animate-spin text-cyan-400" />}
+                      {testingService[provider.id] ? 'Testing...' : 'Test Connection'}
+                    </button>
+                  </div>
                 </div>
-                <p className="text-xs sm:text-sm text-slate-400 mb-3">{provider.desc}</p>
-                <PasswordInput
-                  placeholder={`${provider.name} API Key`}
-                  className="glass-input w-full font-mono"
-                  value={provider.key}
-                  onChange={(e) => provider.setter(e.target.value)}
-                />
-                {status?.status === 'error' && status?.message && (
-                  <p className="text-xs text-red-400 mt-1.5 break-words">
-                    {status.message}
-                  </p>
-                )}
-                <div className="flex items-center justify-between mt-3 pt-2 border-t border-white/5">
-                  <p className="text-xs sm:text-sm text-slate-400">
-                    Get key from: <a href={`https://${provider.id === 'opensubtitles' ? 'opensubtitles.com' : provider.id === 'subdl' ? 'subdl.com/panel/login' : 'subsource.net/dashboard/profile'}`} target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:underline">{provider.id === 'opensubtitles' ? 'opensubtitles.com' : provider.id === 'subdl' ? 'subdl.com' : 'subsource.net'}</a>
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => handleTestService(provider.id, provider.key)}
-                    disabled={testingService[provider.id] || !provider.key}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700/60 hover:border-cyan-500/40 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
-                  >
-                    {testingService[provider.id] && <Loader2 className="w-3.5 h-3.5 animate-spin text-cyan-400" />}
-                    {testingService[provider.id] ? 'Testing...' : 'Test Connection'}
-                  </button>
+
+                <p className="text-xs text-slate-400">{provider.desc}</p>
+
+                <div>
+                  <PasswordInput
+                    placeholder={`${provider.name} API Key`}
+                    className="w-full bg-[#0c1624] border border-[#1c2d46] rounded-xl px-4 py-2.5 text-sm text-slate-200 focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/50 transition-colors placeholder:text-slate-600 font-mono"
+                    value={provider.key}
+                    onChange={(e) => provider.setter(e.target.value)}
+                  />
+                  {status?.status === 'error' && status?.message && (
+                    <p className="text-xs text-rose-400 mt-1.5 break-words">
+                      {status.message}
+                    </p>
+                  )}
                 </div>
               </div>
             );
@@ -144,62 +153,64 @@ export default function SubtitlesTab({ settings, setSettings, keyStatuses }) {
             </div>
 
           {[
-            { id: 'gemini', key: settings.geminiApiKey, setter: (v) => setSettings({ ...settings, geminiApiKey: v }) },
-            { id: 'deepseek', key: settings.deepseekApiKey, setter: (v) => setSettings({ ...settings, deepseekApiKey: v }) },
-            { id: 'claude', key: settings.claudeApiKey, setter: (v) => setSettings({ ...settings, claudeApiKey: v }) },
+            { id: 'gemini', name: 'Gemini AI', key: settings.geminiApiKey, setter: (v) => setSettings({ ...settings, geminiApiKey: v }), link: 'https://aistudio.google.com/apikey', desc: 'Google Gemini API for fast, high-quality subtitle translation.' },
+            { id: 'deepseek', name: 'DeepSeek', key: settings.deepseekApiKey, setter: (v) => setSettings({ ...settings, deepseekApiKey: v }), link: 'https://platform.deepseek.com/api_keys', desc: 'DeepSeek API for cost-effective AI translation.' },
+            { id: 'claude', name: 'Claude', key: settings.claudeApiKey, setter: (v) => setSettings({ ...settings, claudeApiKey: v }), link: 'https://console.anthropic.com/settings/keys', desc: 'Anthropic Claude API for advanced natural language subtitle translation.' },
           ].filter(p => settings.translationProvider === p.id).map(p => {
             const status = testResults[p.id] || keyStatuses[p.id];
             return (
-              <div key={p.id}>
-                <div className="flex items-center justify-between">
-                  <label className="block text-xs sm:text-sm font-medium text-slate-300">{p.id.charAt(0).toUpperCase() + p.id.slice(1)} API Key</label>
-                  {status?.status && (
-                    <span
-                      title={status.message || ''}
-                      className={`flex items-center gap-1.5 text-xs font-semibold px-2.5 py-0.5 rounded-full ${
-                        status.status === 'connected'
-                          ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-                          : status.status === 'warning'
-                          ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
-                          : 'bg-red-500/20 text-red-400 border border-red-500/30'
-                      }`}>
-                      <span className={`w-1.5 h-1.5 rounded-full ${status.status === 'connected' ? 'bg-emerald-400' : status.status === 'warning' ? 'bg-amber-400' : 'bg-red-400'}`} />
-                      {status.status === 'connected' ? 'Connected' : status.status === 'warning' ? 'Quota' : 'Error'}
-                    </span>
-                  )}
+              <div key={p.id} className="p-4 sm:p-5 bg-[#101e31] rounded-xl border border-[#1c2d46] hover:border-[#274063] transition-colors space-y-3.5">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div className="flex items-center gap-3">
+                    <h3 className="text-base font-bold font-display text-slate-100">{p.name}</h3>
+                    {!p.key ? (
+                      <span className="px-2.5 py-0.5 rounded-lg text-xs font-semibold bg-slate-800 text-slate-400 border border-slate-700/60 whitespace-nowrap">
+                        Not configured
+                      </span>
+                    ) : status?.status === 'connected' ? (
+                      <span className="px-2.5 py-0.5 rounded-lg text-xs font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 whitespace-nowrap">
+                        Connected
+                      </span>
+                    ) : status?.status === 'warning' ? (
+                      <span className="px-2.5 py-0.5 rounded-lg text-xs font-semibold bg-amber-500/15 text-amber-400 border border-amber-500/30 whitespace-nowrap">
+                        Quota
+                      </span>
+                    ) : (
+                      <span className="px-2.5 py-0.5 rounded-lg text-xs font-semibold bg-rose-500/15 text-rose-400 border border-rose-500/30 whitespace-nowrap">
+                        Error
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <a href={p.link} target="_blank" rel="noopener noreferrer" className="text-xs text-cyan-400 hover:text-cyan-300 underline font-medium">
+                      Get key &rarr;
+                    </a>
+                    <button
+                      type="button"
+                      onClick={() => handleTestService(p.id, p.key)}
+                      disabled={testingService[p.id] || !p.key}
+                      className="px-3 py-1.5 text-xs font-semibold text-slate-300 bg-[#15243b] hover:bg-[#1a2d4a] border border-[#1c2d46] hover:border-cyan-500/30 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 cursor-pointer"
+                    >
+                      {testingService[p.id] && <Loader2 className="w-3.5 h-3.5 animate-spin text-cyan-400" />}
+                      {testingService[p.id] ? 'Testing...' : 'Test Connection'}
+                    </button>
+                  </div>
                 </div>
-                <PasswordInput
-                  placeholder={`${p.id.charAt(0).toUpperCase() + p.id.slice(1)} API Key`}
-                  className="glass-input w-full mt-2 font-mono"
-                  value={p.key}
-                  onChange={(e) => p.setter(e.target.value)}
-                />
-                {status?.status === 'error' && status?.message && (
-                  <p className="text-xs text-red-400 mt-1.5 break-words">
-                    {status.message}
-                  </p>
-                )}
-                <div className="flex items-center justify-between mt-3 pt-2 border-t border-white/5">
-                  <p className="text-xs sm:text-sm text-slate-400">
-                    Get key from: <a href={{
-                      gemini: 'https://aistudio.google.com/apikey',
-                      deepseek: 'https://platform.deepseek.com/api_keys',
-                      claude: 'https://console.anthropic.com/settings/keys'
-                    }[p.id]} target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:underline">{{
-                      gemini: 'aistudio.google.com',
-                      deepseek: 'platform.deepseek.com',
-                      claude: 'console.anthropic.com'
-                    }[p.id]}</a>
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => handleTestService(p.id, p.key)}
-                    disabled={testingService[p.id] || !p.key}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700/60 hover:border-cyan-500/40 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
-                  >
-                    {testingService[p.id] && <Loader2 className="w-3.5 h-3.5 animate-spin text-cyan-400" />}
-                    {testingService[p.id] ? 'Testing...' : 'Test Connection'}
-                  </button>
+
+                <p className="text-xs text-slate-400">{p.desc}</p>
+
+                <div>
+                  <PasswordInput
+                    placeholder={`${p.name} API Key`}
+                    className="w-full bg-[#0c1624] border border-[#1c2d46] rounded-xl px-4 py-2.5 text-sm text-slate-200 focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/50 transition-colors placeholder:text-slate-600 font-mono"
+                    value={p.key}
+                    onChange={(e) => p.setter(e.target.value)}
+                  />
+                  {status?.status === 'error' && status?.message && (
+                    <p className="text-xs text-rose-400 mt-1.5 break-words">
+                      {status.message}
+                    </p>
+                  )}
                 </div>
               </div>
             );

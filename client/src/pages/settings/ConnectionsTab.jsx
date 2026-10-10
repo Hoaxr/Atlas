@@ -50,6 +50,8 @@ export default function ConnectionsTab({
   const [telegramStatus, setTelegramStatus] = useState(null);
   const [testingDiscord, setTestingDiscord] = useState(false);
   const [discordStatus, setDiscordStatus] = useState(null);
+  const [testingTmdb, setTestingTmdb] = useState(false);
+  const [tmdbStatus, setTmdbStatus] = useState(null);
     
   // Plex OAuth state
   const [plexOAuth, setPlexOAuth] = useState({
@@ -444,6 +446,31 @@ export default function ConnectionsTab({
     }
   };
 
+  const handleTestTmdb = async () => {
+    if (!settings?.tmdbApiKey) {
+      customAlert('TMDB API Key is required', 'error');
+      return;
+    }
+    setTestingTmdb(true);
+    setTmdbStatus(null);
+    try {
+      const res = await api.post('/settings/service/test', {
+        service: 'tmdb',
+        apiKey: settings.tmdbApiKey
+      });
+      if (res.data?.status === 'success') {
+        customAlert(res.data.message || 'Connected to TMDB successfully!', 'success');
+        setTmdbStatus('connected');
+      }
+    } catch (err) {
+      const msg = err.response?.data?.message || err.message || 'Failed to connect to TMDB';
+      customAlert(msg, 'error');
+      setTmdbStatus('error');
+    } finally {
+      setTestingTmdb(false);
+    }
+  };
+
   if (loading) return null;
 
   return (
@@ -483,11 +510,24 @@ export default function ConnectionsTab({
                 <h3 className="text-base font-bold font-display text-cyan-400">TMDB</h3>
                 {!settings?.tmdbApiKey || settings.tmdbApiKey === '' ? (
                   <span className="px-2.5 py-0.5 rounded-lg text-xs font-semibold bg-slate-800 text-slate-400 border border-slate-700/60 whitespace-nowrap">Not configured</span>
+                ) : tmdbStatus === 'error' ? (
+                  <span className="px-2.5 py-0.5 rounded-lg text-xs font-semibold bg-rose-500/15 text-rose-400 border border-rose-500/30 whitespace-nowrap">Error</span>
                 ) : (
                   <span className="px-2.5 py-0.5 rounded-lg text-xs font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 whitespace-nowrap">Connected</span>
                 )}
               </div>
-              <a href="https://www.themoviedb.org/settings/api?language=en-US" target="_blank" rel="noopener noreferrer" className="text-xs text-cyan-400 hover:text-cyan-300 underline font-medium">Get key &rarr;</a>
+              <div className="flex items-center gap-3">
+                <a href="https://www.themoviedb.org/settings/api?language=en-US" target="_blank" rel="noopener noreferrer" className="text-xs text-cyan-400 hover:text-cyan-300 underline font-medium">Get key &rarr;</a>
+                <button
+                  type="button"
+                  onClick={handleTestTmdb}
+                  disabled={testingTmdb || !settings?.tmdbApiKey}
+                  className="px-3 py-1.5 text-xs font-semibold text-slate-300 bg-[#15243b] hover:bg-[#1a2d4a] border border-[#1c2d46] hover:border-cyan-500/30 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 cursor-pointer"
+                >
+                  {testingTmdb && <Loader2 className="w-3.5 h-3.5 animate-spin text-cyan-400" />}
+                  {testingTmdb ? 'Testing...' : 'Test Connection'}
+                </button>
+              </div>
             </div>
             <p className="text-xs text-slate-400">TMDB provides all metadata, posters, and search results.</p>
             <div>
@@ -853,33 +893,30 @@ export default function ConnectionsTab({
         <div className="space-y-4 sm:space-y-5">
           {/* Discord */}
           <div className="p-4 sm:p-5 bg-[#101e31] rounded-xl border border-[#1c2d46] hover:border-[#274063] transition-colors space-y-3.5">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-              <div>
-                <div className="flex items-center gap-2.5">
-                  <h3 className="text-base font-bold font-display text-slate-100">Discord Webhook</h3>
-                  {discordStatus === 'connected' && (
-                    <span className="px-2.5 py-0.5 rounded-lg text-xs font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 whitespace-nowrap">
-                      Connected
-                    </span>
-                  )}
-                  {discordStatus === 'error' && (
-                    <span className="px-2.5 py-0.5 rounded-lg text-xs font-semibold bg-rose-500/15 text-rose-400 border border-rose-500/30 whitespace-nowrap">
-                      Failed
-                    </span>
-                  )}
-                </div>
-                <p className="text-xs text-slate-400 mt-0.5">Discord receives grab, download, and playback notifications via webhook.</p>
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <div className="flex items-center gap-3">
+                <h3 className="text-base font-bold font-display text-slate-100">Discord Webhook</h3>
+                {!localSettings.discordWebhookUrl ? (
+                  <span className="px-2.5 py-0.5 rounded-lg text-xs font-semibold bg-slate-800 text-slate-400 border border-slate-700/60 whitespace-nowrap">Not configured</span>
+                ) : discordStatus === 'connected' ? (
+                  <span className="px-2.5 py-0.5 rounded-lg text-xs font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 whitespace-nowrap">Connected</span>
+                ) : discordStatus === 'error' ? (
+                  <span className="px-2.5 py-0.5 rounded-lg text-xs font-semibold bg-rose-500/15 text-rose-400 border border-rose-500/30 whitespace-nowrap">Error</span>
+                ) : (
+                  <span className="px-2.5 py-0.5 rounded-lg text-xs font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 whitespace-nowrap">Configured</span>
+                )}
               </div>
               <button
                 type="button"
                 onClick={handleTestDiscord}
                 disabled={testingDiscord || !localSettings.discordWebhookUrl}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700/60 hover:border-cyan-500/40 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer shrink-0 self-start sm:self-auto"
+                className="px-3 py-1.5 text-xs font-semibold text-slate-300 bg-[#15243b] hover:bg-[#1a2d4a] border border-[#1c2d46] hover:border-cyan-500/30 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 cursor-pointer"
               >
                 {testingDiscord && <Loader2 className="w-3.5 h-3.5 animate-spin text-cyan-400" />}
                 {testingDiscord ? 'Testing...' : 'Test Webhook'}
               </button>
             </div>
+            <p className="text-xs text-slate-400">Discord receives grab, download, and playback notifications via webhook.</p>
             <div>
               <label className="block text-xs sm:text-sm font-medium text-slate-300 mb-1.5">Webhook URL</label>
               <input
@@ -895,33 +932,30 @@ export default function ConnectionsTab({
 
           {/* Telegram */}
           <div className="p-4 sm:p-5 bg-[#101e31] rounded-xl border border-[#1c2d46] hover:border-[#274063] transition-colors space-y-3.5">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-              <div>
-                <div className="flex items-center gap-2.5">
-                  <h3 className="text-base font-bold font-display text-slate-100">Telegram Bot</h3>
-                  {telegramStatus === 'connected' && (
-                    <span className="px-2.5 py-0.5 rounded-lg text-xs font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 whitespace-nowrap">
-                      Connected
-                    </span>
-                  )}
-                  {telegramStatus === 'error' && (
-                    <span className="px-2.5 py-0.5 rounded-lg text-xs font-semibold bg-rose-500/15 text-rose-400 border border-rose-500/30 whitespace-nowrap">
-                      Failed
-                    </span>
-                  )}
-                </div>
-                <p className="text-xs text-slate-400 mt-0.5">Telegram receives grab, download, and playback notifications via a bot.</p>
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <div className="flex items-center gap-3">
+                <h3 className="text-base font-bold font-display text-slate-100">Telegram Bot</h3>
+                {!localSettings.telegramBotToken || !localSettings.telegramChatId ? (
+                  <span className="px-2.5 py-0.5 rounded-lg text-xs font-semibold bg-slate-800 text-slate-400 border border-slate-700/60 whitespace-nowrap">Not configured</span>
+                ) : telegramStatus === 'connected' ? (
+                  <span className="px-2.5 py-0.5 rounded-lg text-xs font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 whitespace-nowrap">Connected</span>
+                ) : telegramStatus === 'error' ? (
+                  <span className="px-2.5 py-0.5 rounded-lg text-xs font-semibold bg-rose-500/15 text-rose-400 border border-rose-500/30 whitespace-nowrap">Error</span>
+                ) : (
+                  <span className="px-2.5 py-0.5 rounded-lg text-xs font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 whitespace-nowrap">Configured</span>
+                )}
               </div>
               <button
                 type="button"
                 onClick={handleTestTelegram}
                 disabled={testingTelegram || !localSettings.telegramBotToken || !localSettings.telegramChatId}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700/60 hover:border-cyan-500/40 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer shrink-0 self-start sm:self-auto"
+                className="px-3 py-1.5 text-xs font-semibold text-slate-300 bg-[#15243b] hover:bg-[#1a2d4a] border border-[#1c2d46] hover:border-cyan-500/30 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 cursor-pointer"
               >
                 {testingTelegram && <Loader2 className="w-3.5 h-3.5 animate-spin text-cyan-400" />}
                 {testingTelegram ? 'Testing...' : 'Test Message'}
               </button>
             </div>
+            <p className="text-xs text-slate-400">Telegram receives grab, download, and playback notifications via a bot.</p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs sm:text-sm font-medium text-slate-300 mb-1.5">Bot Token</label>
@@ -948,10 +982,17 @@ export default function ConnectionsTab({
 
           {/* Pushover */}
           <div className="p-4 sm:p-5 bg-[#101e31] rounded-xl border border-[#1c2d46] hover:border-[#274063] transition-colors space-y-3.5">
-            <div>
-              <h3 className="text-base font-bold font-display text-slate-100">Pushover</h3>
-              <p className="text-xs text-slate-400 mt-0.5">Receive notifications natively on your iOS or Android devices.</p>
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <div className="flex items-center gap-3">
+                <h3 className="text-base font-bold font-display text-slate-100">Pushover</h3>
+                {!localSettings.pushoverAppToken || !localSettings.pushoverUserKey ? (
+                  <span className="px-2.5 py-0.5 rounded-lg text-xs font-semibold bg-slate-800 text-slate-400 border border-slate-700/60 whitespace-nowrap">Not configured</span>
+                ) : (
+                  <span className="px-2.5 py-0.5 rounded-lg text-xs font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 whitespace-nowrap">Configured</span>
+                )}
+              </div>
             </div>
+            <p className="text-xs text-slate-400">Receive notifications natively on your iOS or Android devices.</p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs sm:text-sm font-medium text-slate-300 mb-1.5">App Token</label>
