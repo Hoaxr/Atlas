@@ -59,9 +59,9 @@ export default function SubtitlesTab({ settings, setSettings, keyStatuses }) {
         
         <div className="space-y-4 sm:space-y-5">
           {[
-            { id: 'opensubtitles', name: 'OpenSubtitles', desc: 'Primary subtitle source.', key: settings.osApiKey, setter: (v) => setSettings({ ...settings, osApiKey: v }), link: 'https://opensubtitles.com' },
-            { id: 'subdl', name: 'SubDL', desc: 'Alternative. Free: 2,000 requests/day.', key: settings.subdlApiKey, setter: (v) => setSettings({ ...settings, subdlApiKey: v }), link: 'https://subdl.com/panel/login' },
-            { id: 'subsource', name: 'SubSource', desc: 'Alternative. Free: 7,200 requests/day.', key: settings.subsourceApiKey, setter: (v) => setSettings({ ...settings, subsourceApiKey: v }), link: 'https://subsource.net/dashboard/profile' },
+            { id: 'opensubtitles', name: 'OpenSubtitles', desc: 'Free: 20 downloads/day (VIP: 1,000/day).', key: settings.osApiKey, setter: (v) => setSettings({ ...settings, osApiKey: v }), link: 'https://opensubtitles.com' },
+            { id: 'subdl', name: 'SubDL', desc: 'Free: 2,000 requests/day.', key: settings.subdlApiKey, setter: (v) => setSettings({ ...settings, subdlApiKey: v }), link: 'https://subdl.com/panel/login' },
+            { id: 'subsource', name: 'SubSource', desc: 'Free: 7,200 requests/day.', key: settings.subsourceApiKey, setter: (v) => setSettings({ ...settings, subsourceApiKey: v }), link: 'https://subsource.net/dashboard/profile' },
           ].map(provider => {
             const status = testResults[provider.id] || keyStatuses[provider.id];
             return (
