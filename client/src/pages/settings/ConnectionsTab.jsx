@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { BellRing, Save, Link, Loader2, Key, Trash2, UserCheck } from 'lucide-react';
+import { BellRing, Save, Link, Loader2, Key, Trash2, UserCheck, ExternalLink } from 'lucide-react';
 import api from '../../lib/api';
 import { customAlert, customConfirm } from '../../utils/alerts';
 import PasswordInput from '../../components/shared/PasswordInput';
@@ -543,8 +543,16 @@ export default function ConnectionsTab({
                   <span className="px-2.5 py-0.5 rounded-lg text-xs font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 whitespace-nowrap">Connected</span>
                 )}
               </div>
-              <div className="flex items-center gap-3">
-                <a href="https://www.themoviedb.org/settings/api?language=en-US" target="_blank" rel="noopener noreferrer" className="text-xs text-cyan-400 hover:text-cyan-300 underline font-medium">Get key &rarr;</a>
+              <div className="flex items-center gap-2.5">
+                <a
+                  href="https://www.themoviedb.org/settings/api?language=en-US"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold text-slate-300 hover:text-cyan-400 bg-[#131f33] hover:bg-[#182842] border border-[#1c2d46] hover:border-cyan-500/30 rounded-xl transition-all cursor-pointer"
+                >
+                  <span>Get Key</span>
+                  <ExternalLink className="w-3 h-3 text-slate-400" />
+                </a>
                 <button
                   type="button"
                   onClick={handleTestTmdb}
@@ -582,7 +590,15 @@ export default function ConnectionsTab({
                 )}
               </div>
               <div className="flex items-center gap-2">
-                <a href="https://simkl.com/settings/developer/new/" target="_blank" rel="noopener noreferrer" className="text-xs text-cyan-400 hover:text-cyan-300 underline font-medium">Create API App &rarr;</a>
+                <a
+                  href="https://simkl.com/settings/developer/new/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold text-slate-300 hover:text-cyan-400 bg-[#131f33] hover:bg-[#182842] border border-[#1c2d46] hover:border-cyan-500/30 rounded-xl transition-all cursor-pointer"
+                >
+                  <span>Create App</span>
+                  <ExternalLink className="w-3 h-3 text-slate-400" />
+                </a>
                 {settings?.simklAccessToken && (
                   <button
                     onClick={async () => {
@@ -608,9 +624,10 @@ export default function ConnectionsTab({
                     href="https://simkl.com/settings/developer/"
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-[11px] text-cyan-400 hover:text-cyan-300 underline font-normal"
+                    className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-400 hover:text-cyan-300 transition-colors"
                   >
-                    Find Keys &rarr;
+                    <span>Find Keys</span>
+                    <ExternalLink className="w-2.5 h-2.5" />
                   </a>
                 </label>
                 <PasswordInput
