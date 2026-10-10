@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { BellRing, Save, Link, Loader2, Key, Trash2, UserCheck, ExternalLink } from 'lucide-react';
+import { BellRing, Link, Loader2, Key, Trash2, UserCheck, ExternalLink } from 'lucide-react';
 import api from '../../lib/api';
 import { customAlert, customConfirm } from '../../utils/alerts';
 import PasswordInput from '../../components/shared/PasswordInput';
@@ -10,7 +10,6 @@ import ToggleRow from '../../components/shared/ToggleRow';
 export default function ConnectionsTab({
   settings,
   setSettings,
-  handleSave: _parentHandleSave,
   simklDeviceCode,
   setSimklDeviceCode,
   simklUserCode,
@@ -40,7 +39,6 @@ export default function ConnectionsTab({
     notifyOnRequest: settings?.notifyOnRequest || false
   });
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
   const [simklPulling, setSimklPulling] = useState(false);
   const [testStatuses, setTestStatuses] = useState({ plex: null, jellyfin: null, emby: null });
   const [testingMedia, setTestingMedia] = useState({ plex: false, jellyfin: false, emby: false });
@@ -333,38 +331,6 @@ export default function ConnectionsTab({
     }
   };
 
-  const handleSave = async () => {
-    setSaving(true);
-    try {
-      // Save media server, tracked users, notifications, and API settings in one request
-      await api.post('/settings', {
-        ...localSettings,
-        notifyOnGrab: localSettings.notifyOnGrab?.toString(),
-        notifyOnDownload: localSettings.notifyOnDownload?.toString(),
-        notifyOnPlaybackStart: localSettings.notifyOnPlaybackStart?.toString(),
-        notifyOnRequest: localSettings.notifyOnRequest?.toString(),
-        tmdbApiKey: typeof settings?.tmdbApiKey === 'string' && settings.tmdbApiKey.startsWith('***')
-          ? undefined
-          : settings?.tmdbApiKey,
-        simklClientId: typeof settings?.simklClientId === 'string' && settings.simklClientId.startsWith('***')
-          ? undefined
-          : settings?.simklClientId,
-        simklClientSecret: typeof settings?.simklClientSecret === 'string' && settings.simklClientSecret.startsWith('***')
-          ? undefined
-          : settings?.simklClientSecret,
-        simklWatchedSync: settings?.simklWatchedSync,
-      });
-      if (fetchSettings) fetchSettings();
-      customAlert('Connection settings saved', 'success');
-    } catch (err) {
-      console.error(err);
-      const msg = err.response?.data?.errors?.join(', ') || err.response?.data?.message || 'Failed to save settings';
-      customAlert(msg, 'error');
-    } finally {
-      setSaving(false);
-    }
-  };
-
   const handleTestNotification = async () => {
     const hasDiscord = !!localSettings.discordWebhookUrl;
     const hasTelegramToken = !!localSettings.telegramBotToken;
@@ -529,24 +495,13 @@ export default function ConnectionsTab({
 
   return (
     <div className="space-y-6 w-full animate-fade-in">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h2 className="text-lg sm:text-xl font-bold font-display text-slate-100 flex items-center gap-2.5 mb-1.5">
-            <Link className="w-5 h-5 text-cyan-400 shrink-0" /> Connections
-          </h2>
-          <p className="text-xs sm:text-sm text-slate-400 leading-relaxed">
-            Connect Atlas to your media servers, tracking lists, and metadata providers.
-          </p>
-        </div>
-        <Button
-          variant="primary"
-          icon={Save}
-          disabled={saving}
-          onClick={handleSave}
-          className="shrink-0 w-fit"
-        >
-          {saving ? 'Saving...' : 'Save Changes'}
-        </Button>
+      <div>
+        <h2 className="text-lg sm:text-xl font-bold font-display text-slate-100 flex items-center gap-2.5 mb-1.5">
+          <Link className="w-5 h-5 text-cyan-400 shrink-0" /> Connections
+        </h2>
+        <p className="text-xs sm:text-sm text-slate-400 leading-relaxed">
+          Connect Atlas to your media servers, tracking lists, and metadata providers.
+        </p>
       </div>
 
       {/* ── API's & Integrations ── */}
