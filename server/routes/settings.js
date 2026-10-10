@@ -1578,5 +1578,48 @@ router.post('/discord/test', requireAdmin, async (req, res) => {
   }
 });
 
+router.post('/pushover/test', requireAdmin, async (req, res) => {
+  try {
+    let { appToken, userKey } = req.body;
+    const _isMasked = (val) => val && (/^\*+$/.test(val) || val.startsWith('***'));
+
+    if (!appToken || _isMasked(appToken)) {
+      appToken = getSetting('pushoverAppToken');
+    }
+    if (!userKey || _isMasked(userKey)) {
+      userKey = getSetting('pushoverUserKey');
+    }
+
+    if (!appToken || !userKey) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Both Pushover App Token and User Key are required'
+      });
+    }
+
+    const response = await axios.post('https://api.pushover.net/1/messages.json', null, {
+      params: {
+        token: appToken,
+        user: userKey,
+        title: 'Atlas Test Notification',
+        message: 'Your Pushover integration is configured and working perfectly!'
+      },
+      timeout: 10000,
+      validateStatus: () => true
+    });
+
+    if (response.status === 200 && response.data?.status === 1) {
+      return res.json({ status: 'success', message: 'Test message sent to Pushover successfully' });
+    }
+
+    const errDetail = response.data?.errors?.join(', ') || `Pushover returned HTTP ${response.status}`;
+    return res.status(400).json({ status: 'error', message: `Pushover error: ${errDetail}` });
+  } catch (err) {
+    const errorMsg = err.response?.data?.errors?.join(', ') || err.response?.data?.message || err.message || 'Failed to send Pushover test message';
+    return res.status(400).json({ status: 'error', message: `Pushover error: ${errorMsg}` });
+  }
+});
+
 module.exports = router;
 module.exports.restoreHandler = restoreHandler;
+

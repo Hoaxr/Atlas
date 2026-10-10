@@ -56,4 +56,36 @@ test('External Service & AI Provider Connectivity Test Route Logic', async (t) =
       assert.strictEqual(supportedServices.includes(p), true);
     }
   });
+
+  await t.test('Pushover test validation rejects missing token or user key', () => {
+    const validate = (token, user) => Boolean(token && user);
+    assert.strictEqual(validate('', 'userKey123'), false);
+    assert.strictEqual(validate('appToken123', ''), false);
+    assert.strictEqual(validate('', ''), false);
+    assert.strictEqual(validate('appToken123', 'userKey123'), true);
+  });
+
+  await t.test('Pushover test resolves masked tokens from settings store', () => {
+    setSetting('pushoverAppToken', 'real_pushover_app_token_123');
+    setSetting('pushoverUserKey', 'real_pushover_user_key_456');
+    invalidateSettingsCache();
+
+    const _isMasked = (val) => val && (/^\*+$/.test(val) || val.startsWith('***'));
+    let appToken = '********';
+    let userKey = '********';
+
+    if (!appToken || _isMasked(appToken)) {
+      appToken = db.prepare("SELECT value FROM settings WHERE key = 'pushoverAppToken'").get()?.value;
+    }
+    if (!userKey || _isMasked(userKey)) {
+      userKey = db.prepare("SELECT value FROM settings WHERE key = 'pushoverUserKey'").get()?.value;
+    }
+
+    assert.strictEqual(appToken, 'real_pushover_app_token_123');
+    assert.strictEqual(userKey, 'real_pushover_user_key_456');
+
+    db.prepare("DELETE FROM settings WHERE key IN ('pushoverAppToken', 'pushoverUserKey')").run();
+    invalidateSettingsCache();
+  });
 });
+

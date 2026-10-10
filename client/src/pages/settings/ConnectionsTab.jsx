@@ -50,6 +50,8 @@ export default function ConnectionsTab({
   const [telegramStatus, setTelegramStatus] = useState(null);
   const [testingDiscord, setTestingDiscord] = useState(false);
   const [discordStatus, setDiscordStatus] = useState(null);
+  const [testingPushover, setTestingPushover] = useState(false);
+  const [pushoverStatus, setPushoverStatus] = useState(null);
   const [testingTmdb, setTestingTmdb] = useState(false);
   const [tmdbStatus, setTmdbStatus] = useState(null);
     
@@ -443,6 +445,31 @@ export default function ConnectionsTab({
       setDiscordStatus('error');
     } finally {
       setTestingDiscord(false);
+    }
+  };
+
+  const handleTestPushover = async () => {
+    if (!localSettings.pushoverAppToken || !localSettings.pushoverUserKey) {
+      customAlert('Both Pushover App Token and User Key are required', 'error');
+      return;
+    }
+    setTestingPushover(true);
+    setPushoverStatus(null);
+    try {
+      const res = await api.post('/settings/pushover/test', {
+        appToken: localSettings.pushoverAppToken,
+        userKey: localSettings.pushoverUserKey
+      });
+      if (res.data?.status === 'success') {
+        customAlert(res.data.message || 'Test message sent to Pushover!', 'success');
+        setPushoverStatus('connected');
+      }
+    } catch (err) {
+      const msg = err.response?.data?.message || err.message || 'Failed to send Pushover test message';
+      customAlert(msg, 'error');
+      setPushoverStatus('error');
+    } finally {
+      setTestingPushover(false);
     }
   };
 
@@ -987,9 +1014,27 @@ export default function ConnectionsTab({
                 <h3 className="text-base font-bold font-display text-slate-100">Pushover</h3>
                 {!localSettings.pushoverAppToken || !localSettings.pushoverUserKey ? (
                   <span className="px-2.5 py-0.5 rounded-lg text-xs font-semibold bg-slate-800 text-slate-400 border border-slate-700/60 whitespace-nowrap">Not configured</span>
+                ) : pushoverStatus === 'connected' ? (
+                  <span className="px-2.5 py-0.5 rounded-lg text-xs font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 whitespace-nowrap">Connected</span>
+                ) : pushoverStatus === 'error' ? (
+                  <span className="px-2.5 py-0.5 rounded-lg text-xs font-semibold bg-rose-500/15 text-rose-400 border border-rose-500/30 whitespace-nowrap">Error</span>
                 ) : (
                   <span className="px-2.5 py-0.5 rounded-lg text-xs font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 whitespace-nowrap">Configured</span>
                 )}
+              </div>
+              <div className="flex items-center gap-3">
+                <a href="https://pushover.net/apps/build" target="_blank" rel="noopener noreferrer" className="text-xs text-cyan-400 hover:text-cyan-300 underline font-medium">
+                  Create App &rarr;
+                </a>
+                <button
+                  type="button"
+                  onClick={handleTestPushover}
+                  disabled={testingPushover || !localSettings.pushoverAppToken || !localSettings.pushoverUserKey}
+                  className="px-3 py-1.5 text-xs font-semibold text-slate-300 bg-[#15243b] hover:bg-[#1a2d4a] border border-[#1c2d46] hover:border-cyan-500/30 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 cursor-pointer"
+                >
+                  {testingPushover && <Loader2 className="w-3.5 h-3.5 animate-spin text-cyan-400" />}
+                  {testingPushover ? 'Testing...' : 'Test Message'}
+                </button>
               </div>
             </div>
             <p className="text-xs text-slate-400">Receive notifications natively on your iOS or Android devices.</p>
