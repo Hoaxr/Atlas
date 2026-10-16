@@ -253,6 +253,9 @@ class WatcherService {
                 db.prepare('INSERT INTO watch_history (tmdb_id, type, watched_at, runtime, user_id) VALUES (?, ?, ?, ?, ?)').run(tmdbId, 'movie', watchedAt, runtime, userId);
                 console.log(`[WatcherService] Backfilled watch_history for movie "${play.title}" (TMDB: ${tmdbId})`);
               }
+              if (movie) {
+                db.prepare('UPDATE movies SET watched = 1, watched_at = COALESCE(watched_at, ?), watch_progress = 0 WHERE id = ?').run(watchedAt, movie.id);
+              }
             } catch { /* ignore */ }
           }
         } else if (play.type === 'episode') {
@@ -281,6 +284,9 @@ class WatcherService {
                 if (!existing) {
                   db.prepare('INSERT INTO watch_history (tmdb_id, type, season_number, episode_number, watched_at, runtime, user_id) VALUES (?, ?, ?, ?, ?, ?, ?)').run(tmdbId, 'episode', seasonNum, epNum, watchedAt, null, userId);
                   console.log(`[WatcherService] Backfilled watch_history for episode "${play.title}" (TMDB: ${tmdbId})`);
+                }
+                if (show) {
+                  db.prepare('UPDATE episodes SET watched = 1, watched_at = COALESCE(watched_at, ?), watch_progress = 0 WHERE show_id = ? AND season_number = ? AND episode_number = ?').run(watchedAt, show.id, seasonNum, epNum);
                 }
               } catch { /* ignore */ }
             }
