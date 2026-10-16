@@ -15,7 +15,7 @@ const tmdbService = require('../../services/tmdbService');
 const subtitleService = require('../../services/subtitles');
 const { decodeSubtitleBuffer } = require('../../services/subtitles/parser');
 const { getMediaMetadata, parseAudioFromFileName } = require('../../utils/videoUtils');
-const { isWatchedSyncEnabled, getSubtitlesInDir, extractLang, translateSrt, LANG_CODE } = require('./helpers');
+const { getSubtitlesInDir, extractLang, translateSrt, LANG_CODE } = require('./helpers');
 const simklService = require('../../services/simklService');
 const imageService = require('../../services/imageService');
 const { syncEpisodeSubtitles, invalidateStats } = require('../../services/subtitles/sync');
@@ -114,7 +114,6 @@ router.get('/shows/:id', async (req, res, next) => {
       show = db.prepare(`${query} WHERE s.tmdb_id = ?`).get(paramId);
     }
     if (!show) return res.status(404).json({ status: 'error', message: 'Show not found' });
-    if (!isWatchedSyncEnabled()) show.watched = 0;
     
     // folder_size is already loaded from the database via scannerService.
     
@@ -428,7 +427,7 @@ router.get('/shows/:id/episodes', async (req, res, next) => {
     const episodesWithSubtitles = episodes.map(ep => ({
       ...ep,
       air_date: localizeAirDate(ep.air_date, show?.network, show?.origin_country),
-      watched: isWatchedSyncEnabled() ? ep.watched : (ep.watched || 0),
+      watched: ep.watched || 0,
       subtitles: ep.subtitles || []
     }));
 

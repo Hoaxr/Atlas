@@ -12,10 +12,6 @@ const { parseResolution, parseCodec } = require('../utils/mediaParsing');
 const { parseAudioFromFileName } = require('../utils/videoUtils');
 const { scanSubtitleLangs } = require('./scanner/fileScanner');
 
-const sanitizeWatched = (items) => {
-  if (isWatchedSyncEnabled()) return items;
-  return items.map(item => ({ ...item, watched: 0 }));
-};
 
 const addMovie = async (tmdbId, rootFolderPath = null) => {
   // Check if it already exists
@@ -206,7 +202,7 @@ const getMovies = (limit = 0, offset = 0, sort = 'added_desc', filters = {}) => 
     params.push(safeLimit, safeOffset);
   }
 
-  return sanitizeWatched(db.prepare(sql).all(...params));
+  return db.prepare(sql).all(...params);
 };
 
 const addShow = async (tmdbId, rootFolderPath = null, monitorLevel = 'all') => {
@@ -498,7 +494,7 @@ const getShows = (limit = 0, offset = 0, sort = 'added_desc', filters = {}) => {
     params.push(safeLimit, safeOffset);
   }
 
-  return sanitizeWatched(db.prepare(sql).all(...params));
+  return db.prepare(sql).all(...params);
 };
 
 const getPaths = () => {

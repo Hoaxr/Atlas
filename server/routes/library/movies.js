@@ -14,7 +14,7 @@ const tmdbService = require('../../services/tmdbService');
 const subtitleService = require('../../services/subtitles');
 const { decodeSubtitleBuffer } = require('../../services/subtitles/parser');
 const { getMediaMetadata, parseAudioFromFileName } = require('../../utils/videoUtils');
-const { isWatchedSyncEnabled, extractLang, translateSrt, LANG_CODE } = require('./helpers');
+const { extractLang, translateSrt, LANG_CODE } = require('./helpers');
 const { findLargestVideoFile, safelyDeleteMovieFiles } = require('../../utils/fileUtils');
 const { scanSubtitleLangs } = require('../../services/scanner/fileScanner');
 const requireAdmin = require('../../middleware/requireAdmin');
@@ -106,7 +106,6 @@ router.get('/:id', async (req, res, next) => {
       movie = db.prepare('SELECT m.*, qp.name as quality_profile_name FROM movies m LEFT JOIN quality_profiles qp ON m.quality_profile_id = qp.id WHERE m.tmdb_id = ?').get(paramId);
     }
     if (!movie) return res.status(404).json({ status: 'error', message: 'Movie not found' });
-    if (!isWatchedSyncEnabled()) movie.watched = 0;
     
     let subtitles = [];
     if (movie.file_path) {
