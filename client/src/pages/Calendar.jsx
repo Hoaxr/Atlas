@@ -323,6 +323,7 @@ export default function Calendar() {
                           if (!grouped[ep.show_id]) grouped[ep.show_id] = [];
                           grouped[ep.show_id].push(ep);
                         });
+                        const showEntries = Object.entries(grouped);
                         const allEntries = [
                           ...showEntries.map(([showId, eps]) => ({ type: 'show', eps, showId })),
                           ...movies.map(m => ({ type: 'movie', item: m }))
