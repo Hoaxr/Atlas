@@ -315,59 +315,39 @@ export default function Calendar() {
                       </div>
 
                       {/* Episode/movie content */}
-                      {(() => {
-                        const movies = cell.episodes.filter(e => e.type === 'movie');
-                        const tvEps = cell.episodes.filter(e => e.type !== 'movie');
-                        const grouped = {};
-                        tvEps.forEach(ep => {
-                          if (!grouped[ep.show_id]) grouped[ep.show_id] = [];
-                          grouped[ep.show_id].push(ep);
-                        });
-                        const showEntries = Object.entries(grouped);
-                        const allEntries = [
-                          ...showEntries.map(([showId, eps]) => ({ type: 'show', eps, showId })),
-                          ...movies.map(m => ({ type: 'movie', item: m }))
-                        ];
+                      {cell.episodes.length > 0 && (
+                        <div className="space-y-1.5 flex-1 min-w-0">
+                          {cell.episodes.map((item, j) => {
+                            const isMovie = item.type === 'movie';
+                            const showTitle = isMovie ? item.title : item.show_title;
+                            const epCode = !isMovie && item.season_number != null && item.episode_number != null
+                              ? `S${String(item.season_number).padStart(2, '0')}E${String(item.episode_number).padStart(2, '0')}`
+                              : '';
 
-                        if (allEntries.length === 0) return null;
-
-                        return (
-                          <div className="space-y-1.5 flex-1 min-w-0">
-                            {allEntries.map((entry, j) => {
-                              if (entry.type === 'show') {
-                                const ep = entry.eps[0];
-                                return (
-                                  <div
-                                    key={`show-${j}`}
-                                    onClick={(e) => { e.stopPropagation(); navigate(`/shows/${ep.show_id}`); }}
-                                    className="group/item flex items-center gap-1.5 px-2 py-1 rounded-md bg-[#101e31] hover:bg-[#16273f] border border-[#1c2d46] hover:border-slate-500/60 transition-all cursor-pointer shadow-xs min-w-0"
-                                    title={`${ep.show_title}${entry.eps.length > 1 ? ` (${entry.eps.length} eps)` : ''} — ${entry.eps.length === 1 ? `S${String(ep.season_number).padStart(2,'0')}E${String(ep.episode_number).padStart(2,'0')}` : `${entry.eps.length} episodes`}`}
-                                  >
-                                    <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 shrink-0 group-hover/item:scale-125 transition-transform" />
-                                    <span className="text-[11px] font-medium text-slate-200 group-hover/item:text-white truncate flex-1 min-w-0">
-                                      {ep.show_title}
-                                    </span>
-                                  </div>
-                                );
-                              }
-                              // Movie
-                              return (
-                                <div
-                                  key={`movie-${j}`}
-                                  onClick={(e) => { e.stopPropagation(); navigate(`/movies/${entry.item.show_id}`); }}
-                                  className="group/item flex items-center gap-1.5 px-2 py-1 rounded-md bg-[#101e31] hover:bg-[#16273f] border border-[#1c2d46] hover:border-slate-500/60 transition-all cursor-pointer shadow-xs min-w-0"
-                                  title={entry.item.title}
-                                >
-                                  <span className="w-1.5 h-1.5 rounded-full bg-purple-400 shrink-0 group-hover/item:scale-125 transition-transform" />
-                                  <span className="text-[11px] font-medium text-slate-200 group-hover/item:text-white truncate flex-1 min-w-0">
-                                    {entry.item.title}
+                            return (
+                              <div
+                                key={`item-${j}`}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  navigate(isMovie ? `/movies/${item.show_id}` : `/shows/${item.show_id}`);
+                                }}
+                                className="group/item flex items-center gap-1.5 px-2 py-1 rounded-md bg-[#101e31] hover:bg-[#16273f] border border-[#1c2d46] hover:border-slate-500/60 transition-all cursor-pointer shadow-xs min-w-0"
+                                title={isMovie ? item.title : `${item.show_title}${epCode ? ` — ${epCode}` : ''}${item.title ? `: ${item.title}` : ''}`}
+                              >
+                                <span className={`w-1.5 h-1.5 rounded-full shrink-0 group-hover/item:scale-125 transition-transform ${isMovie ? 'bg-purple-400' : 'bg-cyan-400'}`} />
+                                <span className="text-[11px] font-medium text-slate-200 group-hover/item:text-white truncate flex-1 min-w-0">
+                                  {showTitle}
+                                </span>
+                                {epCode && (
+                                  <span className="text-[9px] font-mono text-slate-400 shrink-0">
+                                    {epCode}
                                   </span>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        );
-                      })()}
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
                     </>
                   )}
                 </div>
