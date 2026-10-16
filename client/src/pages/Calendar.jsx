@@ -323,17 +323,16 @@ export default function Calendar() {
                           if (!grouped[ep.show_id]) grouped[ep.show_id] = [];
                           grouped[ep.show_id].push(ep);
                         });
-                        const showEntries = Object.entries(grouped);
-                        const maxVisible = 3;
-                        const visibleShows = showEntries.slice(0, maxVisible);
-                        const remainingShows = showEntries.length - maxVisible;
-                        const remainingMovies = Math.max(0, movies.length - Math.max(0, maxVisible - visibleShows.length));
+                        const allEntries = [
+                          ...showEntries.map(([showId, eps]) => ({ type: 'show', eps, showId })),
+                          ...movies.map(m => ({ type: 'movie', item: m }))
+                        ];
 
-                        if (movies.length === 0 && showEntries.length === 0) return null;
+                        if (allEntries.length === 0) return null;
 
                         return (
                           <div className="space-y-1.5 flex-1 min-w-0">
-                            {[...visibleShows.map(([showId, eps]) => ({ type: 'show', eps, showId })), ...movies.slice(0, maxVisible - visibleShows.length).map(m => ({ type: 'movie', item: m }))].map((entry, j) => {
+                            {allEntries.map((entry, j) => {
                               if (entry.type === 'show') {
                                 const ep = entry.eps[0];
                                 return (
@@ -365,11 +364,6 @@ export default function Calendar() {
                                 </div>
                               );
                             })}
-                            {(remainingShows > 0 || remainingMovies > 0) && (
-                              <p className="text-[10px] font-semibold text-cyan-400 hover:text-cyan-300 pl-1">
-                                +{remainingShows + remainingMovies} more
-                              </p>
-                            )}
                           </div>
                         );
                       })()}
