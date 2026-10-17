@@ -5,7 +5,10 @@ import { useEffect } from 'react';
 export default function TrailerModal({ trailerKey, onClose }) {
   useEffect(() => {
     const handleEsc = (e) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') {
+        e.stopPropagation();
+        onClose();
+      }
     };
     window.addEventListener('keydown', handleEsc);
     return () => window.removeEventListener('keydown', handleEsc);
@@ -14,12 +17,21 @@ export default function TrailerModal({ trailerKey, onClose }) {
   if (!trailerKey) return null;
 
   return createPortal(
-    <div className="fixed inset-0 z-40 flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-md" onClick={onClose}>
+    <div 
+      className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-md" 
+      onClick={(e) => {
+        e.stopPropagation();
+        onClose();
+      }}
+    >
       <div className="relative w-full max-w-5xl" role="dialog" aria-modal="true" aria-label="Movie trailer" onClick={(e) => e.stopPropagation()}>
         <div className="flex justify-end mb-3">
           <button 
-            onClick={onClose}
-            className="text-slate-400 hover:text-white transition-colors bg-slate-900 border border-slate-800 p-2 rounded-lg hover:bg-slate-800"
+            onClick={(e) => {
+              e.stopPropagation();
+              onClose();
+            }}
+            className="text-slate-400 hover:text-white transition-colors bg-slate-900 border border-slate-800 p-2 rounded-lg hover:bg-slate-800 cursor-pointer"
             aria-label="Close trailer"
           >
             <X className="w-5 h-5" />

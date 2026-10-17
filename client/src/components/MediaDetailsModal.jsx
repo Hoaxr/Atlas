@@ -168,10 +168,11 @@ export default function MediaDetailsModal({
   const runtime = details?.runtime || (details?.episode_run_time && details.episode_run_time[0]) || null;
 
   return createPortal(
-    <div 
-      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-slate-950/85 backdrop-blur-md animate-fade-in" 
-      onClick={onClose}
-    >
+    <>
+      <div 
+        className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-slate-950/85 backdrop-blur-md animate-fade-in" 
+        onClick={onClose}
+      >
       <div 
         className="bg-slate-900 border border-slate-800/80 rounded-2xl w-full max-w-xl max-h-[90vh] flex flex-col relative shadow-2xl overflow-hidden" 
         onClick={(e) => e.stopPropagation()}
@@ -533,12 +534,13 @@ export default function MediaDetailsModal({
           </div>
         )}
       </div>
+      </div>
 
       {/* Trailer Modal */}
       {isTrailerOpen && trailerKey && (
         <TrailerModal trailerKey={trailerKey} onClose={() => setIsTrailerOpen(false)} />
       )}
-    </div>,
+    </>,
     document.body
   );
 }
