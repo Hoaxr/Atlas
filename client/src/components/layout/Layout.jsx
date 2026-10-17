@@ -283,7 +283,7 @@ export default function Layout() {
     'g t': () => navigate('/tasks'),
     'g k': () => navigate('/tracker'),
     'g x': () => navigate('/stats'),
-    '/': () => setPaletteOpen(true),
+    '/': () => window.dispatchEvent(new CustomEvent('atlas-focus-search')),
     '?': () => setShortcutsOpen(true),
     'escape': () => {
       setShortcutsOpen(false);

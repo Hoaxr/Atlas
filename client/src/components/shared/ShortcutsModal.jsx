@@ -3,7 +3,7 @@ import ModalShell from './ModalShell';
 import { MOD_KEY } from '../../lib/platform';
 
 const SHORTCUTS = [
-  { keys: [MOD_KEY, 'K'], desc: 'Open global search' },
+  { keys: [MOD_KEY, 'K'], desc: 'Open command menu' },
   { keys: ['G', 'M'], desc: 'Go to Movies' },
   { keys: ['G', 'S'], desc: 'Go to TV Shows' },
   { keys: ['G', 'U'], desc: 'Go to Music' },
@@ -11,7 +11,7 @@ const SHORTCUTS = [
   { keys: ['G', 'C'], desc: 'Go to Calendar' },
   { keys: ['G', 'T'], desc: 'Go to Tasks' },
   { keys: ['G', 'X'], desc: 'Go to Statistics' },
-  { keys: ['/'],      desc: 'Open search' },
+  { keys: ['/'],      desc: 'Focus search bar' },
   { keys: ['?'],      desc: 'Show keyboard shortcuts' },
   { keys: ['Esc'],    desc: 'Close modal / clear focus' },
 ];
