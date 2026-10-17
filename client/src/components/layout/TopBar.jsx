@@ -414,7 +414,7 @@ export default function TopBar({ user, activity, updateUrl, alerts = [], onOpenS
                         onClick={item.run}
                         onMouseMove={() => setActiveIndex(idx)}
                         className={clsx(
-                          'flex items-center gap-3 p-2 rounded-xl cursor-pointer transition-all',
+                          'flex items-center gap-3 p-2 rounded-xl cursor-pointer transition-all group',
                           isSelected
                             ? 'bg-gradient-to-r from-cyan-500/20 to-blue-500/10 border border-cyan-500/30 text-white shadow-md'
                             : 'hover:bg-white/5 border border-transparent text-slate-300'
@@ -449,13 +449,26 @@ export default function TopBar({ user, activity, updateUrl, alerts = [], onOpenS
 
                         {item.badge && (
                           <span className={clsx(
-                            'text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider shrink-0 flex items-center gap-1',
+                            'text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider shrink-0 flex items-center gap-1 transition-all duration-150',
                             item.badge === 'In library'
-                              ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/25'
+                              ? isSelected
+                                ? 'bg-cyan-500/25 text-cyan-300 border border-cyan-400/50 shadow-sm'
+                                : 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/25 group-hover:bg-cyan-500/25 group-hover:text-cyan-300 group-hover:border-cyan-400/50'
                               : 'bg-cyan-500/15 text-cyan-400 border border-cyan-500/25'
                           )}>
                             {item.badge === 'Add' && <Plus className="w-2.5 h-2.5" />}
-                            {item.badge}
+                            {item.badge === 'In library' ? (
+                              <>
+                                <span className={isSelected ? 'hidden' : 'inline group-hover:hidden'}>
+                                  In library
+                                </span>
+                                <span className={isSelected ? 'inline' : 'hidden group-hover:inline'}>
+                                  View
+                                </span>
+                              </>
+                            ) : (
+                              item.badge
+                            )}
                           </span>
                         )}
 

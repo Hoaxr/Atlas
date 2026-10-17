@@ -455,7 +455,7 @@ export default function CommandPalette({ open, onClose }) {
                               onMouseMove={() => setActiveIndex(index)}
                               onClick={item.run}
                               className={clsx(
-                                'w-full flex items-center gap-3 rounded-xl text-left transition-all duration-200 cursor-pointer',
+                                'w-full flex items-center gap-3 rounded-xl text-left transition-all duration-200 cursor-pointer group',
                                 item.thumb ? 'px-3 py-2' : 'px-3 py-2',
                                 isActive 
                                   ? 'bg-gradient-to-r from-cyan-500/15 via-blue-500/10 to-transparent border border-cyan-500/40 shadow-lg shadow-cyan-950/40' 
@@ -516,16 +516,29 @@ export default function CommandPalette({ open, onClose }) {
                               {item.badge && (
                                 <span
                                   className={clsx(
-                                    'shrink-0 inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-md border shadow-sm transition-colors',
+                                    'shrink-0 inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-md border shadow-sm transition-all duration-150',
                                     item.badge === 'In library'
-                                      ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                                      ? isActive
+                                        ? 'bg-cyan-500/25 text-cyan-300 border-cyan-400/50 shadow-sm'
+                                        : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20 group-hover:bg-cyan-500/25 group-hover:text-cyan-300 group-hover:border-cyan-400/50'
                                       : item.badge === 'Add'
                                       ? 'bg-blue-500/10 text-blue-400 border-blue-500/20 hover:bg-blue-500/20'
                                       : 'bg-slate-800/80 text-slate-400 border-white/5',
                                   )}
                                 >
                                   {item.badge === 'Add' && <Plus className="w-3 h-3" />}
-                                  {item.badge}
+                                  {item.badge === 'In library' ? (
+                                    <>
+                                      <span className={isActive ? 'hidden' : 'inline group-hover:hidden'}>
+                                        In library
+                                      </span>
+                                      <span className={isActive ? 'inline' : 'hidden group-hover:inline'}>
+                                        View
+                                      </span>
+                                    </>
+                                  ) : (
+                                    item.badge
+                                  )}
                                 </span>
                               )}
 
