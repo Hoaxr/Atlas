@@ -111,7 +111,8 @@ test('Authentication System & Defaults', async (t) => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Content-Length': Buffer.byteLength(postData)
+          'Content-Length': Buffer.byteLength(postData),
+          'x-atlas-test': 'true'
         }
       }, (res) => {
         let body = '';
