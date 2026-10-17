@@ -29,14 +29,16 @@ export default function ProtectedRoute({ adminOnly = false }) {
       .then(res => {
         if (!isMounted) return;
         if (res.data.status === 'success') {
-          const { authEnabled } = res.data.data;
+          const { authEnabled, needsSetup } = res.data.data;
           let userRole = 'admin';
           try {
             const user = JSON.parse(localStorage.getItem('atlas_user'));
             if (user?.role) userRole = user.role;
           } catch { /* ignore */ }
 
-          if (!authEnabled) {
+          if (needsSetup) {
+            setAuthState({ checking: false, allowed: false, isAdmin: false, needsSetup: true });
+          } else if (!authEnabled) {
             setAuthState({ checking: false, allowed: true, isAdmin: true });
           } else if (localStorage.getItem('atlas_token')) {
             setAuthState({
@@ -74,6 +76,10 @@ export default function ProtectedRoute({ adminOnly = false }) {
         <Spinner size="lg" />
       </div>
     );
+  }
+
+  if (authState.needsSetup) {
+    return <Navigate to="/setup" replace />;
   }
 
   if (!authState.allowed) {

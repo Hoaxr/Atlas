@@ -51,8 +51,10 @@ export default function Login() {
 
     api.get('/auth/status').then(res => {
       if (res.data.status === 'success') {
-        const { authEnabled, plexConfigured, jellyfinConfigured } = res.data.data;
-        if (!authEnabled) {
+        const { authEnabled, plexConfigured, jellyfinConfigured, needsSetup } = res.data.data;
+        if (needsSetup) {
+          navigate('/setup');
+        } else if (!authEnabled) {
           navigate('/');
         } else {
           setAuthOptions({ plexConfigured, jellyfinConfigured });

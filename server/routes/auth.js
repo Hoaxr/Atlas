@@ -149,13 +149,95 @@ router.post('/simkl/disconnect', authMiddleware, (req, res) => {
   res.json({ status: 'success', message: 'Simkl account disconnected.' });
 });
 
-// Check if authentication is enabled
+// Check if authentication is enabled and if initial setup is needed
 router.get('/status', (req, res) => {
   const authEnabled = isAuthEnabled();
   const plexConfigured = !!getSetting('plexUrl');
   const jellyfinConfigured = !!getSetting('jellyfinUrl');
+  const adminCount = db.prepare("SELECT COUNT(*) as count FROM users WHERE role = 'admin'").get()?.count || 0;
+  const needsSetup = adminCount === 0;
 
-  res.json({ status: 'success', data: { authEnabled, plexConfigured, jellyfinConfigured } });
+  res.json({ status: 'success', data: { authEnabled, plexConfigured, jellyfinConfigured, needsSetup } });
+});
+
+// Initial Setup Endpoint: create the first administrator account (can only be run once)
+router.post('/setup', loginLimiter, async (req, res) => {
+  const adminExists = db.prepare("SELECT id FROM users WHERE role = 'admin' LIMIT 1").get();
+  const setupFlag = getSetting('initialSetupCompleted');
+
+  if (adminExists || setupFlag === 'true') {
+    return res.status(403).json({ 
+      status: 'error', 
+      message: 'Access denied: Initial setup has already been completed. Only one administrator account can be created.' 
+    });
+  }
+
+  const { username, password, email } = req.body;
+  if (!username || typeof username !== 'string' || username.trim().length < 3) {
+    return res.status(400).json({ status: 'error', message: 'Username must be at least 3 characters long.' });
+  }
+
+  if (!password || typeof password !== 'string' || password.length < 8) {
+    return res.status(400).json({ status: 'error', message: 'Password must be at least 8 characters long.' });
+  }
+
+  try {
+    const trimmedUser = username.trim();
+    const existing = db.prepare('SELECT id FROM users WHERE username = ?').get(trimmedUser);
+    if (existing) {
+      return res.status(400).json({ status: 'error', message: 'A user with this username already exists.' });
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 12);
+
+    // Run atomically inside transaction to eliminate race conditions
+    let newUserId;
+    try {
+      const executeSetup = db.transaction(() => {
+        const checkAdmin = db.prepare("SELECT id FROM users WHERE role = 'admin' LIMIT 1").get();
+        if (checkAdmin) {
+          throw new Error('SETUP_ALREADY_COMPLETED');
+        }
+
+        const result = db.prepare("INSERT INTO users (username, password, email, role) VALUES (?, ?, ?, 'admin')").run(
+          trimmedUser,
+          hashedPassword,
+          email ? email.trim() : null
+        );
+
+        setSetting('initialSetupCompleted', 'true');
+        return result.lastInsertRowid;
+      });
+
+      newUserId = executeSetup();
+    } catch (txErr) {
+      if (txErr.message === 'SETUP_ALREADY_COMPLETED') {
+        return res.status(403).json({ 
+          status: 'error', 
+          message: 'Access denied: Initial setup has already been completed.' 
+        });
+      }
+      throw txErr;
+    }
+
+    const token = jwt.sign(
+      { id: newUserId, username: trimmedUser, role: 'admin', jwt_version: 1 },
+      JWT_SECRET,
+      { expiresIn: '7d' }
+    );
+
+    res.json({
+      status: 'success',
+      message: 'Administrator account created successfully!',
+      data: {
+        token,
+        user: { id: newUserId, username: trimmedUser, role: 'admin', origin: 'atlas' }
+      }
+    });
+  } catch (err) {
+    console.error('[Auth Setup] Error creating admin:', err.message);
+    res.status(500).json({ status: 'error', message: 'Failed to create administrator account.' });
+  }
 });
 
 // Plex Auth endpoint

@@ -22,6 +22,7 @@ const MediaHealth = lazy(() => import('./pages/MediaHealth'));
 const CleanupCandidates = lazy(() => import('./pages/CleanupCandidates'));
 const PersonDetails = lazy(() => import('./pages/PersonDetails'));
 const Login = lazy(() => import('./pages/Login'));
+const Setup = lazy(() => import('./pages/Setup'));
 const UserPortal = lazy(() => import('./pages/UserPortal'));
 const Requests = lazy(() => import('./pages/Requests'));
 const Watcher = lazy(() => import('./pages/Watcher'));
@@ -156,6 +157,7 @@ function App() {
             <ScrollToTop />
             <Routes>
               <Route path="/login" element={<LazyPage><Login /></LazyPage>} />
+              <Route path="/setup" element={<LazyPage><Setup /></LazyPage>} />
               <Route element={<ProtectedRoute />}>
                 <Route path="/" element={<Layout />}>
                   <Route index element={<Navigate to={getDefaultLandingPage()} replace />} />

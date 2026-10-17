@@ -87,5 +87,49 @@ test('Authentication System & Defaults', async (t) => {
       invalidateUserCache(userId);
     }
   });
+
+  await t.test('needsSetup correctly reflects whether any admin user exists in DB', () => {
+    const adminCount = db.prepare("SELECT COUNT(*) as count FROM users WHERE role = 'admin'").get()?.count || 0;
+    const hasAdmin = adminCount > 0;
+    assert.strictEqual(adminCount === 0, !hasAdmin);
+  });
+
+  await t.test('POST /setup endpoint strictly forbids execution when an admin exists', async () => {
+    const request = require('node:http');
+
+    // Simulate calling the setup endpoint
+    const postData = JSON.stringify({
+      username: 'hacker_admin',
+      password: 'password12345'
+    });
+
+    const res = await new Promise((resolve, reject) => {
+      const req = request.request({
+        hostname: 'localhost',
+        port: 3000,
+        path: '/api/auth/setup',
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(postData)
+        }
+      }, (res) => {
+        let body = '';
+        res.on('data', chunk => { body += chunk; });
+        res.on('end', () => resolve({ statusCode: res.statusCode, body: JSON.parse(body) }));
+      });
+      req.on('error', reject);
+      req.write(postData);
+      req.end();
+    });
+
+    assert.strictEqual(res.statusCode, 403, 'Should return HTTP 403 Forbidden');
+    assert.strictEqual(res.body.status, 'error');
+    assert.match(res.body.message, /Initial setup has already been completed/i);
+
+    // Verify hacker_admin was NOT created
+    const hacker = db.prepare("SELECT id FROM users WHERE username = 'hacker_admin'").get();
+    assert.strictEqual(hacker, undefined, 'Hacker admin should not exist in database');
+  });
 });
 
