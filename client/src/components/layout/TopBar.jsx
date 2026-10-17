@@ -5,7 +5,7 @@ import clsx from 'clsx';
 import { 
   Search, Menu, SlidersHorizontal, Activity, Keyboard, Bell, AlertTriangle, 
   Heart, DownloadCloud, Eye, CheckCircle2, Inbox, CircleUser, ArrowUpCircle,
-  X, Loader2, Film, Tv, Plus, ChevronRight, User as UserIcon
+  X, Loader2, Film, Tv, Plus, ChevronRight, User as UserIcon, Command
 } from 'lucide-react';
 import api from '../../lib/api';
 import { posterUrl, tmdbImgUrl } from '../../lib/posterUrl';
@@ -482,21 +482,43 @@ export default function TopBar({ user, activity, updateUrl, alerts = [], onOpenS
               </div>
 
               {/* Dropdown footer with navigation & command menu action */}
-              <div className="px-3.5 py-2 bg-[#060c16] flex items-center justify-between text-[11px] text-slate-400 border-t border-[#1c2d46]">
-                <span className="flex items-center gap-2">
-                  <span><kbd className="px-1 py-0.5 rounded bg-white/5 border border-white/10 font-mono text-[10px]">↑</kbd> <kbd className="px-1 py-0.5 rounded bg-white/5 border border-white/10 font-mono text-[10px]">↓</kbd> navigate</span>
-                  <span><kbd className="px-1 py-0.5 rounded bg-white/5 border border-white/10 font-mono text-[10px]">↵</kbd> select</span>
-                </span>
+              <div className="px-4 py-2.5 bg-gradient-to-r from-[#070e1b] via-[#091322] to-[#070e1b] flex items-center justify-between text-[11px] text-slate-400 border-t border-[#1c2d46]/80 rounded-b-2xl">
+                <div className="flex items-center flex-wrap gap-y-1">
+                  <div className="flex items-center gap-1.5">
+                    <kbd className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-md bg-gradient-to-b from-[#1e2a3c] to-[#0f1724] border-t border-white/20 border-x border-b border-[#050912] text-slate-200 font-mono text-[10px] font-bold shadow-[0_1.5px_0_0_#050912]">↑</kbd>
+                    <kbd className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-md bg-gradient-to-b from-[#1e2a3c] to-[#0f1724] border-t border-white/20 border-x border-b border-[#050912] text-slate-200 font-mono text-[10px] font-bold shadow-[0_1.5px_0_0_#050912]">↓</kbd>
+                    <span className="text-slate-400 font-medium">navigate</span>
+                  </div>
+
+                  <span className="w-1 h-1 rounded-full bg-slate-700 mx-2" />
+
+                  <div className="flex items-center gap-1.5">
+                    <kbd className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-md bg-gradient-to-b from-[#1e2a3c] to-[#0f1724] border-t border-white/20 border-x border-b border-[#050912] text-slate-200 font-mono text-[10px] font-bold shadow-[0_1.5px_0_0_#050912]">↵</kbd>
+                    <span className="text-slate-400 font-medium">select</span>
+                  </div>
+
+                  <span className="w-1 h-1 rounded-full bg-slate-700 mx-2 hidden sm:inline" />
+
+                  <div className="hidden sm:flex items-center gap-1.5">
+                    <kbd className="inline-flex items-center justify-center min-w-[24px] h-5 px-1.5 rounded-md bg-gradient-to-b from-[#1e2a3c] to-[#0f1724] border-t border-white/20 border-x border-b border-[#050912] text-slate-300 font-mono text-[10px] font-bold shadow-[0_1.5px_0_0_#050912]">esc</kbd>
+                    <span className="text-slate-400 font-medium">dismiss</span>
+                  </div>
+                </div>
+
                 <button
                   type="button"
                   onClick={() => {
                     setIsSearchOpen(false);
                     onOpenSearch();
                   }}
-                  className="text-cyan-400 hover:text-cyan-300 font-medium flex items-center gap-1 cursor-pointer transition-colors"
+                  className="group flex items-center gap-2 px-2.5 py-1 rounded-lg bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/25 hover:border-cyan-500/40 text-cyan-400 hover:text-cyan-300 font-medium transition-all shadow-sm cursor-pointer ml-3 shrink-0"
                 >
-                  <span>Command Menu</span>
-                  <kbd className="px-1 py-0.5 rounded bg-cyan-500/15 border border-cyan-500/30 text-[10px] font-mono text-cyan-300">{MOD_KEY} K</kbd>
+                  <Command className="w-3 h-3 text-cyan-400 group-hover:scale-110 transition-transform" />
+                  <span className="text-[11px] font-semibold">Command Menu</span>
+                  <span className="flex items-center gap-0.5">
+                    <kbd className="px-1.5 py-0.5 rounded bg-black/40 border border-cyan-500/30 text-[10px] font-mono text-cyan-300 shadow-sm">{MOD_KEY}</kbd>
+                    <kbd className="px-1.5 py-0.5 rounded bg-black/40 border border-cyan-500/30 text-[10px] font-mono text-cyan-300 shadow-sm">K</kbd>
+                  </span>
                 </button>
               </div>
             </div>
