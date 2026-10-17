@@ -385,7 +385,7 @@ export default function CommandPalette({ open, onClose }) {
                   onKeyDown={handleKeyDown}
                   placeholder="Find movies, shows, music, and more..."
                   aria-label="Find movies, shows, music, and more..."
-                  className="flex-1 min-w-0 bg-transparent border-0 outline-none text-base font-medium text-slate-100 placeholder-slate-500"
+                  className="flex-1 min-w-0 bg-transparent border-0 outline-none text-base font-medium text-slate-100 placeholder-slate-500 focus:placeholder-transparent placeholder:focus:text-transparent"
                 />
                 {loading && <Loader2 className="w-4 h-4 text-cyan-400 animate-spin shrink-0" />}
                 {hasQuery && (

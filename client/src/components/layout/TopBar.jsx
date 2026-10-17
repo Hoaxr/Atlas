@@ -117,6 +117,7 @@ export default function TopBar({ user, activity, updateUrl, alerts = [], onOpenS
   const [tmdbResults, setTmdbResults] = useState([]);
   const [activeIndex, setActiveIndex] = useState(-1);
   const [addTarget, setAddTarget] = useState(null);
+  const [isSearchFocused, setIsSearchFocused] = useState(false);
 
   const searchInputRef = useRef(null);
   const searchContainerRef = useRef(null);
@@ -331,11 +332,15 @@ export default function TopBar({ user, activity, updateUrl, alerts = [], onOpenS
               }}
               onFocus={() => {
                 setIsSearchOpen(true);
+                setIsSearchFocused(true);
+              }}
+              onBlur={() => {
+                setIsSearchFocused(false);
               }}
               onKeyDown={handleSearchKeyDown}
-              placeholder="Search movies, shows, music... (press / to type)"
+              placeholder={isSearchFocused ? '' : 'Search movies, shows, music... (press / to type)'}
               aria-label="Search movies, shows, music"
-              className="flex-1 min-w-0 bg-transparent border-0 outline-none text-xs sm:text-sm text-slate-800 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-400 font-normal"
+              className="flex-1 min-w-0 bg-transparent border-0 outline-none text-xs sm:text-sm text-slate-800 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-400 focus:placeholder-transparent placeholder:focus:text-transparent font-normal"
             />
 
             <div className="flex items-center gap-1.5 shrink-0 ml-2">
