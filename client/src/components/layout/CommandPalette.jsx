@@ -374,10 +374,10 @@ export default function CommandPalette({ open, onClose }) {
               role="dialog"
               aria-modal="true"
               aria-label="Global search"
-              className="relative w-full max-w-2xl bg-[#091220]/95 backdrop-blur-2xl border border-cyan-500/25 rounded-2xl shadow-[0_25px_70px_rgba(0,0,0,0.85),0_0_40px_rgba(34,211,238,0.08)] overflow-hidden flex flex-col max-h-[85vh] sm:max-h-[88vh] ring-1 ring-white/10"
+              className="relative w-full max-w-2xl bg-[#0b1320] border border-cyan-500/25 rounded-2xl shadow-[0_25px_70px_rgba(0,0,0,0.9),0_0_40px_rgba(34,211,238,0.08)] overflow-hidden flex flex-col max-h-[85vh] sm:max-h-[88vh] ring-1 ring-white/10"
             >
               {/* Input */}
-              <div className="flex items-center gap-3 px-5 py-4 border-b border-[#1c2d46] bg-[#070e1a]/85 relative">
+              <div className="flex items-center gap-3 px-5 py-4 border-b border-[#1c2d46] bg-[#070e1a] relative">
                 <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-cyan-500/20 to-blue-600/20 border border-cyan-500/30 flex items-center justify-center text-cyan-400 shrink-0 shadow-sm shadow-cyan-950/40">
                   <Search className="w-4 h-4" />
                 </div>
@@ -553,7 +553,7 @@ export default function CommandPalette({ open, onClose }) {
               </div>
 
               {/* Footer */}
-              <div className="flex items-center gap-4 px-5 py-3 border-t border-[#1c2d46] bg-[#070d17]/90 text-[11px] font-medium text-slate-400 rounded-b-2xl">
+              <div className="flex items-center gap-4 px-5 py-3 border-t border-[#1c2d46] bg-[#070d17] text-[11px] font-medium text-slate-400 rounded-b-2xl">
                 <span className="flex items-center gap-2">
                   <span className="flex items-center gap-1">
                     <kbd className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-md bg-[#131f31] border-t border-white/20 border-x border-b border-[#050912] text-slate-200 font-mono text-[10px] font-bold shadow-sm">↑</kbd>

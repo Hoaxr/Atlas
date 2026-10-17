@@ -391,7 +391,7 @@ export default function TopBar({ user, activity, updateUrl, alerts = [], onOpenS
 
           {/* Live Search Results Dropdown */}
           {isSearchOpen && searchQuery.trim() && (
-            <div className="absolute top-full left-0 right-0 mt-2 bg-[#091220]/95 backdrop-blur-xl border border-[#1c2d46] rounded-2xl shadow-2xl shadow-black/60 overflow-hidden z-50 animate-fade-in divide-y divide-white/5 max-h-[75vh] flex flex-col">
+            <div className="absolute top-full left-0 right-0 mt-2 bg-[#0b1320] border border-[#1c2d46] rounded-2xl shadow-[0_20px_60px_rgba(0,0,0,0.9)] overflow-hidden z-50 animate-fade-in divide-y divide-white/5 max-h-[75vh] flex flex-col">
               <div className="overflow-y-auto p-2 space-y-1">
                 {flatRows.length === 0 ? (
                   <div className="py-8 text-center text-xs text-slate-400">
@@ -417,7 +417,7 @@ export default function TopBar({ user, activity, updateUrl, alerts = [], onOpenS
                           'flex items-center gap-3 p-2 rounded-xl cursor-pointer transition-all group',
                           isSelected
                             ? 'bg-gradient-to-r from-cyan-500/20 to-blue-500/10 border border-cyan-500/30 text-white shadow-md'
-                            : 'hover:bg-white/5 border border-transparent text-slate-300'
+                            : 'hover:bg-[#121f33] border border-transparent text-slate-300'
                         )}
                       >
                         <div className={clsx(
@@ -482,7 +482,7 @@ export default function TopBar({ user, activity, updateUrl, alerts = [], onOpenS
               </div>
 
               {/* Dropdown footer with navigation & command menu action */}
-              <div className="px-4 py-2.5 bg-gradient-to-r from-[#070e1b] via-[#091322] to-[#070e1b] flex items-center justify-between text-[11px] text-slate-400 border-t border-[#1c2d46]/80 rounded-b-2xl">
+              <div className="px-4 py-2.5 bg-gradient-to-r from-[#070e1b] via-[#091322] to-[#070e1b] flex items-center justify-between text-[11px] text-slate-400 border-t border-[#1c2d46] rounded-b-2xl">
                 <div className="flex items-center flex-wrap gap-y-1">
                   <div className="flex items-center gap-1.5">
                     <kbd className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-md bg-gradient-to-b from-[#1e2a3c] to-[#0f1724] border-t border-white/20 border-x border-b border-[#050912] text-slate-200 font-mono text-[10px] font-bold shadow-[0_1.5px_0_0_#050912]">↑</kbd>
