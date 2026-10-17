@@ -34,17 +34,17 @@ import {
 import MediaDetailsModal from '../MediaDetailsModal';
 
 const QUICK_LINKS = [
-  { label: 'Dashboard', hint: 'Overview', route: '/', icon: LayoutDashboard, color: 'text-sky-400 bg-sky-500/10 border-sky-500/20' },
-  { label: 'Discover', hint: 'Browse TMDB', route: '/discover', icon: Compass, color: 'text-purple-400 bg-purple-500/10 border-purple-500/20', chord: ['G', 'D'] },
-  { label: 'Movies', hint: 'Your collection', route: '/movies', icon: Film, color: 'text-amber-400 bg-amber-500/10 border-amber-500/20', chord: ['G', 'M'] },
-  { label: 'TV Shows', hint: 'Your collection', route: '/shows', icon: Tv, color: 'text-cyan-400 bg-cyan-500/10 border-cyan-500/20', chord: ['G', 'S'] },
-  { label: 'Music', hint: 'Artists & albums', route: '/music', icon: Music, color: 'text-rose-400 bg-rose-500/10 border-rose-500/20', chord: ['G', 'U'] },
-  { label: 'Calendar', hint: 'Upcoming releases', route: '/calendar', icon: CalendarDays, color: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20', chord: ['G', 'C'] },
-  { label: 'Downloads', hint: 'Active transfers', route: '/downloads', icon: DownloadCloud, color: 'text-blue-400 bg-blue-500/10 border-blue-500/20' },
-  { label: 'Requests', hint: 'User requests', route: '/requests', icon: Inbox, color: 'text-amber-300 bg-amber-400/10 border-amber-400/20' },
-  { label: 'Tasks', hint: 'Scheduled jobs', route: '/tasks', icon: ListTodo, color: 'text-indigo-400 bg-indigo-500/10 border-indigo-500/20', chord: ['G', 'T'] },
-  { label: 'Statistics', hint: 'Library insights', route: '/stats', icon: BarChart3, color: 'text-teal-400 bg-teal-500/10 border-teal-500/20', chord: ['G', 'X'] },
-  { label: 'Settings', hint: 'Configuration', route: '/settings', icon: SettingsIcon, color: 'text-slate-300 bg-slate-500/10 border-slate-500/20' },
+  { label: 'Dashboard', hint: 'Overview', route: '/', icon: LayoutDashboard },
+  { label: 'Discover', hint: 'Browse TMDB', route: '/discover', icon: Compass },
+  { label: 'Movies', hint: 'Your collection', route: '/movies', icon: Film },
+  { label: 'TV Shows', hint: 'Your collection', route: '/shows', icon: Tv },
+  { label: 'Music', hint: 'Artists & albums', route: '/music', icon: Music },
+  { label: 'Calendar', hint: 'Upcoming releases', route: '/calendar', icon: CalendarDays },
+  { label: 'Downloads', hint: 'Active transfers', route: '/downloads', icon: DownloadCloud },
+  { label: 'Requests', hint: 'User requests', route: '/requests', icon: Inbox },
+  { label: 'Tasks', hint: 'Scheduled jobs', route: '/tasks', icon: ListTodo },
+  { label: 'Statistics', hint: 'Library insights', route: '/stats', icon: BarChart3 },
+  { label: 'Settings', hint: 'Configuration', route: '/settings', icon: SettingsIcon },
 ];
 
 const SETTINGS_SEARCH_ITEMS = [
@@ -201,8 +201,6 @@ export default function CommandPalette({ open, onClose }) {
           title: link.label,
           subtitle: link.hint,
           icon: link.icon,
-          color: link.color,
-          chord: link.chord,
           run: () => go(link.route),
         })),
       });
@@ -368,28 +366,26 @@ export default function CommandPalette({ open, onClose }) {
       {open &&
         createPortal(
           <div className="fixed inset-0 z-[70] flex items-start justify-center px-3 sm:px-4 pt-[5vh] sm:pt-[7vh] pb-4">
-            <div className="absolute inset-0 bg-black/75 backdrop-blur-md animate-fade-in-fast" onClick={onClose} />
+            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-fade-in-fast" onClick={onClose} />
 
             <div
               role="dialog"
               aria-modal="true"
               aria-label="Global search"
-              className="relative w-full max-w-2xl bg-[#0b1320] border border-cyan-500/25 rounded-2xl shadow-[0_25px_70px_rgba(0,0,0,0.9),0_0_40px_rgba(34,211,238,0.08)] overflow-hidden flex flex-col max-h-[85vh] sm:max-h-[88vh] ring-1 ring-white/10"
+              className="relative w-full max-w-2xl bg-[#0c1624]/95 backdrop-blur-2xl border border-[#1c2d46] rounded-2xl shadow-2xl shadow-black overflow-hidden flex flex-col max-h-[85vh] sm:max-h-[88vh] ring-1 ring-white/5"
             >
               {/* Input */}
-              <div className="flex items-center gap-3 px-5 py-4 border-b border-[#1c2d46] bg-[#070e1a] relative">
-                <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-cyan-500/20 to-blue-600/20 border border-cyan-500/30 flex items-center justify-center text-cyan-400 shrink-0 shadow-sm shadow-cyan-950/40">
-                  <Search className="w-4 h-4" />
-                </div>
+              <div className="flex items-center gap-3 px-5 py-4 border-b border-[#1c2d46] bg-[#080e17]/50 relative">
+                <Search className="w-5 h-5 text-cyan-400 shrink-0" />
                 <input
                   ref={inputRef}
                   type="text"
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                   onKeyDown={handleKeyDown}
-                  placeholder="Find movies, shows, music, settings, or jump to..."
+                  placeholder="Find movies, shows, music, and more..."
                   aria-label="Find movies, shows, music, and more..."
-                  className="flex-1 min-w-0 bg-transparent border-0 outline-none text-base sm:text-lg font-medium text-white placeholder-slate-500"
+                  className="flex-1 min-w-0 bg-transparent border-0 outline-none text-base font-medium text-slate-100 placeholder-slate-500"
                 />
                 {loading && <Loader2 className="w-4 h-4 text-cyan-400 animate-spin shrink-0" />}
                 {hasQuery && (
@@ -398,18 +394,18 @@ export default function CommandPalette({ open, onClose }) {
                       setQuery('');
                       inputRef.current?.focus();
                     }}
-                    className="p-1.5 text-slate-500 hover:text-slate-300 transition-colors shrink-0 rounded-full hover:bg-white/5 cursor-pointer"
+                    className="p-1.5 text-slate-500 hover:text-slate-300 transition-colors shrink-0 rounded-full hover:bg-white/5"
                     aria-label="Clear search"
                   >
                     <X className="w-4 h-4" />
                   </button>
                 )}
-                <kbd
+                <button
                   onClick={onClose}
-                  className="hidden sm:inline-flex items-center justify-center min-w-[28px] h-6 px-2 rounded-md bg-gradient-to-b from-[#1f2d42] to-[#0f1724] border-t border-white/20 border-x border-b border-[#050912] text-[10px] font-bold text-slate-300 font-mono shadow-[0_2px_0_0_#050912] cursor-pointer hover:text-white transition-colors select-none"
+                  className="hidden sm:block px-2 py-1 rounded-md bg-white/5 border border-white/10 text-[10px] font-bold text-slate-400 font-mono hover:text-slate-200 hover:bg-white/10 transition-colors shrink-0 shadow-sm"
                 >
                   ESC
-                </kbd>
+                </button>
               </div>
 
               {/* Results */}
@@ -436,11 +432,11 @@ export default function CommandPalette({ open, onClose }) {
                 ) : (
                   sections.map((section) => (
                     <div key={section.key} className="mb-2.5 last:mb-0">
-                      <div className="px-3 py-1 text-[10px] font-bold text-cyan-400 uppercase tracking-widest flex items-center gap-2">
+                      <div className="px-3 py-1 text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2">
                         {SECTION_LABELS[section.key] || section.key}
-                        <div className="h-px bg-gradient-to-r from-cyan-500/30 to-transparent flex-1" />
+                        <div className="h-px bg-gradient-to-r from-white/10 to-transparent flex-1" />
                       </div>
-                      <div className="space-y-1">
+                      <div className="space-y-0.5">
                         {section.items.map((item) => {
                           const index = rows.indexOf(item);
                           const isActive = index === activeIndex;
@@ -455,22 +451,16 @@ export default function CommandPalette({ open, onClose }) {
                               onMouseMove={() => setActiveIndex(index)}
                               onClick={item.run}
                               className={clsx(
-                                'w-full flex items-center gap-3 rounded-xl text-left transition-all duration-200 cursor-pointer group',
-                                item.thumb ? 'px-3 py-2' : 'px-3 py-2',
-                                isActive 
-                                  ? 'bg-gradient-to-r from-cyan-500/15 via-blue-500/10 to-transparent border border-cyan-500/40 shadow-lg shadow-cyan-950/40' 
-                                  : 'hover:bg-white/5 border border-transparent',
+                                'w-full flex items-center gap-3 rounded-xl text-left transition-all duration-200',
+                                item.thumb ? 'px-3 py-2' : 'px-3 py-1.5',
+                                isActive ? 'bg-gradient-to-r from-cyan-500/15 to-blue-500/5 ring-1 ring-inset ring-cyan-500/30 shadow-lg shadow-cyan-900/20' : 'hover:bg-white/5',
                               )}
                             >
                               {item.thumb ? (
                                 <Thumb src={item.thumb.src} icon={item.thumb.icon} round={item.thumb.round} />
                               ) : (
-                                <span className={clsx(
-                                  "w-8 h-8 shrink-0 rounded-xl border flex items-center justify-center shadow-sm transition-transform duration-200",
-                                  item.color || "bg-[#101e31] border-white/10 text-slate-400",
-                                  isActive && "scale-105"
-                                )}>
-                                  {Icon && <Icon className="w-4 h-4" />}
+                                <span className="w-7 h-7 shrink-0 rounded-lg bg-[#101e31] border border-white/10 flex items-center justify-center shadow-sm">
+                                  {Icon && <Icon className={clsx("w-3.5 h-3.5", isActive ? "text-cyan-400" : "text-slate-400")} />}
                                 </span>
                               )}
 
@@ -487,28 +477,14 @@ export default function CommandPalette({ open, onClose }) {
                                   </>
                                 ) : (
                                   <div className="flex items-center justify-between gap-3">
-                                    <span className={clsx("truncate text-sm font-semibold transition-colors", isActive ? "text-white font-bold" : "text-slate-200")}>
+                                    <span className={clsx("truncate text-sm font-semibold transition-colors", isActive ? "text-white" : "text-slate-200")}>
                                       {item.title}
                                     </span>
-                                    <div className="flex items-center gap-2 shrink-0">
-                                      {item.subtitle && (
-                                        <span className={clsx("text-xs transition-colors", isActive ? "text-slate-300" : "text-slate-500")}>
-                                          {item.subtitle}
-                                        </span>
-                                      )}
-                                      {item.chord && (
-                                        <div className="flex items-center gap-1 shrink-0">
-                                          {item.chord.map((k) => (
-                                            <kbd
-                                              key={k}
-                                              className="inline-flex items-center justify-center min-w-[20px] h-5 px-1 rounded bg-[#101b2a] border border-white/10 text-[10px] font-mono font-bold text-slate-400 shadow-sm"
-                                            >
-                                              {k}
-                                            </kbd>
-                                          ))}
-                                        </div>
-                                      )}
-                                    </div>
+                                    {item.subtitle && (
+                                      <span className={clsx("text-xs shrink-0 transition-colors", isActive ? "text-slate-300" : "text-slate-500")}>
+                                        {item.subtitle}
+                                      </span>
+                                    )}
                                   </div>
                                 )}
                               </span>
@@ -516,29 +492,16 @@ export default function CommandPalette({ open, onClose }) {
                               {item.badge && (
                                 <span
                                   className={clsx(
-                                    'shrink-0 inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-md border shadow-sm transition-all duration-150',
+                                    'shrink-0 inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-md border shadow-sm transition-colors',
                                     item.badge === 'In library'
-                                      ? isActive
-                                        ? 'bg-cyan-500/25 text-cyan-300 border-cyan-400/50 shadow-sm'
-                                        : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20 group-hover:bg-cyan-500/25 group-hover:text-cyan-300 group-hover:border-cyan-400/50'
+                                      ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
                                       : item.badge === 'Add'
                                       ? 'bg-blue-500/10 text-blue-400 border-blue-500/20 hover:bg-blue-500/20'
                                       : 'bg-slate-800/80 text-slate-400 border-white/5',
                                   )}
                                 >
                                   {item.badge === 'Add' && <Plus className="w-3 h-3" />}
-                                  {item.badge === 'In library' ? (
-                                    <>
-                                      <span className={isActive ? 'hidden' : 'inline group-hover:hidden'}>
-                                        In library
-                                      </span>
-                                      <span className={isActive ? 'inline' : 'hidden group-hover:inline'}>
-                                        View
-                                      </span>
-                                    </>
-                                  ) : (
-                                    item.badge
-                                  )}
+                                  {item.badge}
                                 </span>
                               )}
 
@@ -553,20 +516,20 @@ export default function CommandPalette({ open, onClose }) {
               </div>
 
               {/* Footer */}
-              <div className="flex items-center gap-4 px-5 py-3 border-t border-[#1c2d46] bg-[#070d17] text-[11px] font-medium text-slate-400 rounded-b-2xl">
+              <div className="flex items-center gap-4 px-5 py-2.5 border-t border-[#1c2d46] bg-[#080e17]/80 text-[11px] font-medium text-slate-400 rounded-b-2xl">
                 <span className="flex items-center gap-2">
                   <span className="flex items-center gap-1">
-                    <kbd className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-md bg-[#131f31] border-t border-white/20 border-x border-b border-[#050912] text-slate-200 font-mono text-[10px] font-bold shadow-sm">↑</kbd>
-                    <kbd className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-md bg-[#131f31] border-t border-white/20 border-x border-b border-[#050912] text-slate-200 font-mono text-[10px] font-bold shadow-sm">↓</kbd>
+                    <kbd className="px-1.5 py-0.5 rounded-md bg-white/5 border border-white/10 font-mono shadow-sm">↑</kbd>
+                    <kbd className="px-1.5 py-0.5 rounded-md bg-white/5 border border-white/10 font-mono shadow-sm">↓</kbd>
                   </span>
                   Navigate
                 </span>
                 <span className="flex items-center gap-2">
-                  <kbd className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-md bg-[#131f31] border-t border-white/20 border-x border-b border-[#050912] text-slate-200 font-mono text-[10px] font-bold shadow-sm">↵</kbd>
+                  <kbd className="px-1.5 py-0.5 rounded-md bg-white/5 border border-white/10 font-mono shadow-sm">↵</kbd>
                   Select
                 </span>
                 <span className="flex items-center gap-2 ml-auto text-slate-500">
-                  <kbd className="inline-flex items-center justify-center min-w-[28px] h-5 px-1.5 rounded-md bg-[#131f31] border-t border-white/20 border-x border-b border-[#050912] text-slate-300 font-mono text-[10px] font-bold shadow-sm">esc</kbd>
+                  <kbd className="px-1.5 py-0.5 rounded-md bg-white/5 border border-white/10 font-mono shadow-sm">esc</kbd>
                   Close
                 </span>
               </div>
