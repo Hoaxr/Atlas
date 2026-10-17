@@ -60,3 +60,12 @@ jobs:
           platforms: linux/amd64
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Update Docker Hub Description
+        uses: peter-evans/dockerhub-description@v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME || 'bdekkernl' }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          repository: bdekkernl/atlas
+          short-description: "The modern, all-in-one media command center replacing the *arr stack."
+          readme-filepath: ./README.md
