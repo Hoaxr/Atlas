@@ -134,7 +134,7 @@ export default function GeneralTab({ settings, setSettings, onNavigateTab }) {
         </SettingsGroup>
       </SettingsSection>
 
-      {/* Backup & Restore */}
+      {/* Database: Backup, Restore, Purge */}
       <BackupTab />
     </div>
   );

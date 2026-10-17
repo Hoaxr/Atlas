@@ -1475,6 +1475,103 @@ const restoreHandler = async (req, res, next) => {
   }
 };
 
+// Database Purge Endpoint
+router.post('/database/purge', requireAdmin, async (req, res, next) => {
+  try {
+    const { mode = 'library' } = req.body;
+    const dbPath = path.join(__dirname, '../data/database.sqlite');
+
+    // 1. Automatically create a safety backup of the database before purging
+    const backupPath = path.join(__dirname, `../data/database-backup-${Date.now()}.sqlite`);
+    if (fs.existsSync(dbPath)) {
+      try {
+        db.exec('PRAGMA wal_checkpoint(TRUNCATE);');
+        fs.copyFileSync(dbPath, backupPath);
+        console.log(`[purge] Safety backup created at: ${path.basename(backupPath)}`);
+      } catch (bErr) {
+        console.warn('[purge] Safety backup warning:', bErr.message);
+      }
+    }
+
+    if (mode === 'full') {
+      // Full Factory Reset: purge all tables except schema_migrations
+      const fullTables = [
+        'movies', 'shows', 'episodes', 'collections', 'movie_collections',
+        'music_artists', 'music_albums', 'music_tracks', 'music_requests',
+        'requests', 'play_history', 'watch_history', 'watched_tmdb',
+        'subtitle_jobs', 'subtitle_tracks', 'unmanaged_files', 'logs',
+        'indexer_stats', 'auth_login_attempts', 'users', 'settings'
+      ];
+
+      db.transaction(() => {
+        for (const tbl of fullTables) {
+          try {
+            db.exec(`DELETE FROM ${tbl};`);
+          } catch (tblErr) {
+            console.warn(`[purge] Table ${tbl} delete warning:`, tblErr.message);
+          }
+        }
+      })();
+
+      invalidateSettingsCache();
+      try {
+        const { invalidateAuthCache } = require('../middleware/authMiddleware');
+        invalidateAuthCache();
+      } catch { /* ignore */ }
+
+      try {
+        db.exec('VACUUM;');
+      } catch (vacErr) {
+        console.warn('[purge] VACUUM warning:', vacErr.message);
+      }
+
+      console.log('[purge] Full factory database purge completed.');
+      return res.json({
+        status: 'success',
+        message: 'Database completely purged. Atlas has been reset to its initial state.',
+        mode: 'full',
+        safetyBackup: path.basename(backupPath)
+      });
+    }
+
+    // Default mode: 'library' — purge media, history, and requests while preserving users, settings, and connections
+    const libraryTables = [
+      'movies', 'shows', 'episodes', 'collections', 'movie_collections',
+      'music_artists', 'music_albums', 'music_tracks', 'music_requests',
+      'requests', 'play_history', 'watch_history', 'watched_tmdb',
+      'subtitle_jobs', 'subtitle_tracks', 'unmanaged_files', 'logs',
+      'indexer_stats'
+    ];
+
+    db.transaction(() => {
+      for (const tbl of libraryTables) {
+        try {
+          db.exec(`DELETE FROM ${tbl};`);
+        } catch (tblErr) {
+          console.warn(`[purge] Table ${tbl} delete warning:`, tblErr.message);
+        }
+      }
+    })();
+
+    try {
+      db.exec('VACUUM;');
+    } catch (vacErr) {
+      console.warn('[purge] VACUUM warning:', vacErr.message);
+    }
+
+    console.log('[purge] Library data and history purged successfully.');
+    return res.json({
+      status: 'success',
+      message: 'Library data, history, and logs have been purged.',
+      mode: 'library',
+      safetyBackup: path.basename(backupPath)
+    });
+  } catch (err) {
+    console.error('[purge] Error during database purge:', err);
+    next(err);
+  }
+});
+
 // ─── Feature 5: Task Schedule Editor ─────────────────────────────────────────
 
 const DEFAULT_SCHEDULES = {

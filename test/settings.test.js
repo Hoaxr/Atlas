@@ -81,4 +81,14 @@ test('Settings System & Masking Rules', async (t) => {
     invalidateSettingsCache();
     assert.strictEqual(getSetting(testKey), null);
   });
+
+  await t.test('Database purge endpoint is registered on settings router', () => {
+    const router = require('../server/routes/settings');
+    const purgeRoute = router.stack.find(
+      (layer) => layer.route && layer.route.path === '/database/purge' && layer.route.methods.post
+    );
+    assert.ok(purgeRoute, 'POST /database/purge route should be registered');
+    assert.strictEqual(purgeRoute.route.methods.post, true);
+  });
 });
+
