@@ -1,13 +1,13 @@
 import { 
   Keyboard, Command, Search, Film, Tv, Music, Compass, 
-  CalendarDays, ListTodo, BarChart3, HelpCircle, X, LogOut
+  CalendarDays, ListTodo, BarChart3, HelpCircle, X, LogOut, CheckCircle2, PlayCircle
 } from 'lucide-react';
 import ModalShell from './ModalShell';
 import { MOD_KEY } from '../../lib/platform';
 
-function KeyCap({ children }) {
+function KeyCap({ children, className = '' }) {
   return (
-    <kbd className="inline-flex items-center justify-center min-w-[24px] h-6 px-1.5 rounded-md bg-gradient-to-b from-[#1f2d42] to-[#0f1724] border-t border-white/20 border-x border-b border-[#050912] text-slate-200 font-mono text-[11px] font-bold shadow-[0_2px_0_0_#050912] select-none transition-transform active:translate-y-0.5">
+    <kbd className={`inline-flex items-center justify-center min-w-[22px] h-[22px] px-1.5 rounded-md bg-[#131f31] border border-white/10 text-slate-200 font-sans text-xs font-semibold shadow-sm select-none shrink-0 ${className}`}>
       {children}
     </kbd>
   );
@@ -19,25 +19,24 @@ const GLOBAL_SHORTCUTS = [
     icon: Command, 
     color: 'text-cyan-400 bg-cyan-500/10 border-cyan-500/20',
     keys: [MOD_KEY, 'K'], 
-    isCombo: true 
   },
   { 
     desc: 'Focus search bar', 
     icon: Search, 
     color: 'text-sky-400 bg-sky-500/10 border-sky-500/20',
-    keys: ['/'] 
+    keys: ['/'], 
   },
   { 
     desc: 'Show keyboard shortcuts', 
     icon: HelpCircle, 
     color: 'text-amber-400 bg-amber-500/10 border-amber-500/20',
-    keys: ['?'] 
+    keys: ['?'], 
   },
   { 
-    desc: 'Close modal / clear focus', 
+    desc: 'Close modal / dismiss', 
     icon: LogOut, 
     color: 'text-slate-400 bg-slate-500/10 border-slate-500/20',
-    keys: ['Esc'] 
+    keys: ['Esc'], 
   },
 ];
 
@@ -48,16 +47,26 @@ const NAVIGATION_SHORTCUTS = [
   { desc: 'Discover', icon: Compass, color: 'text-purple-400 bg-purple-500/10 border-purple-500/20', key: 'D' },
   { desc: 'Calendar', icon: CalendarDays, color: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20', key: 'C' },
   { desc: 'Tasks', icon: ListTodo, color: 'text-blue-400 bg-blue-500/10 border-blue-500/20', key: 'T' },
-  { desc: 'Statistics', icon: BarChart3, color: 'text-teal-400 bg-teal-500/10 border-teal-500/20', key: 'X' },
+  { desc: 'Watch Tracker', icon: PlayCircle, color: 'text-teal-400 bg-teal-500/10 border-teal-500/20', key: 'K' },
+  { desc: 'Statistics', icon: BarChart3, color: 'text-indigo-400 bg-indigo-500/10 border-indigo-500/20', key: 'X' },
 ];
 
 export default function ShortcutsModal({ onClose }) {
   return (
-    <ModalShell open onClose={onClose} size="lg" noHeader backdropClass="bg-black/70 backdrop-blur-md">
+    <ModalShell 
+      open 
+      onClose={onClose} 
+      size="2xl" 
+      noHeader 
+      noPadding
+      noFloatingClose
+      backdropClass="bg-black/75"
+      className="bg-[#0b1320] border-[#1c2d46] text-slate-200 shadow-[0_25px_70px_rgba(0,0,0,0.9)] overflow-hidden"
+    >
       {/* Header */}
-      <div className="flex items-center justify-between pb-4 mb-4 border-b border-[#1c2d46]">
+      <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-[#1c2d46]">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-500/20 to-blue-600/20 border border-cyan-500/30 flex items-center justify-center text-cyan-400 shadow-lg shadow-cyan-950/40">
+          <div className="w-10 h-10 rounded-xl bg-cyan-500/10 border border-cyan-500/25 flex items-center justify-center text-cyan-400 shadow-sm">
             <Keyboard className="w-5 h-5" />
           </div>
           <div>
@@ -65,7 +74,7 @@ export default function ShortcutsModal({ onClose }) {
               Keyboard Shortcuts
             </h2>
             <p className="text-xs text-slate-400">
-              Navigate and command Atlas at the speed of thought
+              Navigate and command Atlas from your keyboard
             </p>
           </div>
         </div>
@@ -78,74 +87,37 @@ export default function ShortcutsModal({ onClose }) {
         </button>
       </div>
 
-      {/* Shortcuts Grid: 2 Columns */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* Column 1: Global & System */}
-        <div className="space-y-2.5">
-          <div className="flex items-center gap-2 px-1">
-            <span className="text-[11px] font-bold text-cyan-400 uppercase tracking-widest">
-              General & Actions
-            </span>
-            <div className="h-px bg-gradient-to-r from-cyan-500/30 to-transparent flex-1" />
-          </div>
-
-          <div className="space-y-1.5 bg-[#080e18]/60 p-2.5 rounded-xl border border-[#1c2d46]/70">
-            {GLOBAL_SHORTCUTS.map((item) => {
-              const Icon = item.icon;
-              return (
-                <div
-                  key={item.desc}
-                  className="flex items-center justify-between p-2 rounded-lg hover:bg-white/5 transition-colors group"
-                >
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <div className={`w-7 h-7 rounded-lg border flex items-center justify-center shrink-0 ${item.color}`}>
-                      <Icon className="w-3.5 h-3.5" />
-                    </div>
-                    <span className="text-xs font-medium text-slate-300 group-hover:text-white transition-colors truncate">
-                      {item.desc}
-                    </span>
-                  </div>
-
-                  <div className="flex items-center gap-1 shrink-0 ml-2">
-                    {item.keys.map((k) => (
-                      <KeyCap key={k}>{k}</KeyCap>
-                    ))}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Column 2: Navigation (G chords) */}
-        <div className="space-y-2.5">
-          <div className="flex items-center gap-2 px-1">
-            <span className="text-[11px] font-bold text-cyan-400 uppercase tracking-widest">
+      {/* Body Grid: Navigation Chords (Left) & General Actions + Tip (Right) */}
+      <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6 overflow-y-auto">
+        {/* Navigation Chords */}
+        <div className="space-y-3">
+          <div className="flex items-center justify-between pb-1 border-b border-white/5">
+            <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
               Navigation Chords
             </span>
-            <div className="h-px bg-gradient-to-r from-cyan-500/30 to-transparent flex-1" />
+            <span className="text-[11px] text-slate-500 font-mono">Press G then key</span>
           </div>
 
-          <div className="space-y-1.5 bg-[#080e18]/60 p-2.5 rounded-xl border border-[#1c2d46]/70">
+          <div className="space-y-1">
             {NAVIGATION_SHORTCUTS.map((item) => {
               const Icon = item.icon;
               return (
                 <div
                   key={item.desc}
-                  className="flex items-center justify-between p-2 rounded-lg hover:bg-white/5 transition-colors group"
+                  className="flex items-center justify-between px-3 py-2 rounded-lg hover:bg-white/[0.04] transition-colors group"
                 >
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <div className={`w-7 h-7 rounded-lg border flex items-center justify-center shrink-0 ${item.color}`}>
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className={`w-6 h-6 rounded-md border flex items-center justify-center shrink-0 ${item.color}`}>
                       <Icon className="w-3.5 h-3.5" />
                     </div>
-                    <span className="text-xs font-medium text-slate-300 group-hover:text-white transition-colors truncate">
-                      Go to {item.desc}
+                    <span className="text-xs font-medium text-slate-300 group-hover:text-white transition-colors">
+                      {item.desc}
                     </span>
                   </div>
 
-                  <div className="flex items-center gap-1 shrink-0 ml-2">
+                  <div className="flex items-center gap-1.5 shrink-0 ml-3">
                     <KeyCap>G</KeyCap>
-                    <span className="text-[10px] text-slate-500 font-semibold px-0.5">then</span>
+                    <span className="text-[10px] text-slate-500 font-medium">then</span>
                     <KeyCap>{item.key}</KeyCap>
                   </div>
                 </div>
@@ -153,17 +125,64 @@ export default function ShortcutsModal({ onClose }) {
             })}
           </div>
         </div>
+
+        {/* General Actions & Tips */}
+        <div className="space-y-5">
+          <div className="space-y-3">
+            <div className="pb-1 border-b border-white/5">
+              <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+                General & Actions
+              </span>
+            </div>
+
+            <div className="space-y-1">
+              {GLOBAL_SHORTCUTS.map((item) => {
+                const Icon = item.icon;
+                return (
+                  <div
+                    key={item.desc}
+                    className="flex items-center justify-between px-3 py-2 rounded-lg hover:bg-white/[0.04] transition-colors group"
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className={`w-6 h-6 rounded-md border flex items-center justify-center shrink-0 ${item.color}`}>
+                        <Icon className="w-3.5 h-3.5" />
+                      </div>
+                      <span className="text-xs font-medium text-slate-300 group-hover:text-white transition-colors">
+                        {item.desc}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-1 shrink-0 ml-3">
+                      {item.keys.map((k, idx) => (
+                        <KeyCap key={idx}>{k}</KeyCap>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Quick Tip Box */}
+          <div className="p-3.5 rounded-xl bg-cyan-500/[0.06] border border-cyan-500/20 text-xs text-slate-300 space-y-1.5">
+            <div className="flex items-center gap-2 text-cyan-400 font-semibold text-[11px]">
+              <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+              <span>Pro Tip: Instant Search</span>
+            </div>
+            <p className="text-[11px] leading-relaxed text-slate-400">
+              Press <KeyCap className="inline-flex mx-0.5 scale-90">/{' '}</KeyCap> from anywhere to immediately focus the top search bar, or <KeyCap className="inline-flex mx-0.5 scale-90">{MOD_KEY}</KeyCap><KeyCap className="inline-flex mx-0.5 scale-90">K</KeyCap> to open the Command Menu.
+            </p>
+          </div>
+        </div>
       </div>
 
-      {/* Footer Notice */}
-      <div className="mt-4 pt-3 border-t border-[#1c2d46]/60 flex items-center justify-between text-[11px] text-slate-500">
-        <span className="flex items-center gap-1.5">
-          <span>Tip: Chords are pressed in sequence (press <strong className="text-slate-400 font-mono">G</strong>, then press letter)</span>
-        </span>
-        <span className="flex items-center gap-1">
+      {/* Footer */}
+      <div className="px-6 py-3 border-t border-[#1c2d46] bg-[#070e1b] flex items-center justify-between text-[11px] text-slate-400 rounded-b-xl">
+        <span>Navigation chords are pressed in sequence (e.g. <strong className="text-slate-300 font-mono">G</strong> then <strong className="text-slate-300 font-mono">M</strong>)</span>
+        <div className="flex items-center gap-1.5">
           <KeyCap>Esc</KeyCap>
           <span>to dismiss</span>
-        </span>
+        </div>
       </div>
     </ModalShell>
   );
