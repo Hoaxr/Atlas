@@ -182,11 +182,44 @@ async function main() {
       delete_references: true
     });
 
+    let success = false;
     if (delRes.status === 200 || delRes.status === 204) {
       deletedCount += batch.length;
-      console.log(`✓ Successfully deleted batch of ${batch.length}`);
+      console.log(`✓ Successfully deleted batch of ${batch.length} via Hub API`);
+      success = true;
     } else {
-      console.error(`✗ Error deleting batch (status ${delRes.status}):`, delRes.body);
+      console.log(`Hub API returned ${delRes.status} (${JSON.stringify(delRes.body)}). Attempting Registry API deletion...`);
+      // Try deleting individually via Registry-1 API
+      try {
+        const authHeader = 'Basic ' + Buffer.from(`${DOCKERHUB_USERNAME}:${DOCKERHUB_TOKEN}`).toString('base64');
+        const tokenRes = await request({
+          hostname: 'auth.docker.io',
+          path: `/token?service=registry.docker.io&scope=repository:${DOCKERHUB_USERNAME}/${REPO}:pull,delete`,
+          method: 'GET',
+          headers: { 'Authorization': authHeader }
+        });
+
+        if (tokenRes.status === 200 && tokenRes.body.token) {
+          const regToken = tokenRes.body.token;
+          for (const d of batch) {
+            const regDelRes = await request({
+              hostname: 'registry-1.docker.io',
+              path: `/v2/${DOCKERHUB_USERNAME}/${REPO}/manifests/${d}`,
+              method: 'DELETE',
+              headers: { 'Authorization': `Bearer ${regToken}` }
+            });
+            if (regDelRes.status === 202 || regDelRes.status === 200) {
+              deletedCount++;
+            } else {
+              console.log(`Registry API delete for ${d.slice(0, 19)}... returned ${regDelRes.status}`);
+            }
+          }
+        } else {
+          console.error('Failed to obtain Registry delete token:', tokenRes.status, tokenRes.body);
+        }
+      } catch (err) {
+        console.error('Registry API error:', err.message);
+      }
     }
   }
 
