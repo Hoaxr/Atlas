@@ -131,7 +131,7 @@ export const FilterSelect = memo(function FilterSelect({
         <div
           ref={menuRef}
           style={{ left: `${menuOffset}px` }}
-          className="absolute top-full mt-1.5 w-48 max-w-[calc(100vw-1rem)] bg-[#0e1a2b] border border-[#1c2d46] rounded-xl shadow-xl shadow-black/50 z-[60] overflow-hidden py-1 max-h-80 overflow-y-auto hide-scrollbar"
+          className="absolute top-full mt-1.5 w-48 max-w-[calc(100vw-1rem)] bg-[#0e1a2b] border border-[#1c2d46] rounded-xl shadow-xl shadow-black/50 z-[60] overflow-hidden py-1 max-h-[85vh] overflow-y-auto hide-scrollbar"
         >
           {options.map(opt => (
             <button
@@ -271,7 +271,7 @@ export const MultiFilterSelect = memo(function MultiFilterSelect({
         <div
           ref={menuRef}
           style={{ left: `${menuOffset}px` }}
-          className="absolute top-full mt-1.5 w-56 max-w-[calc(100vw-1rem)] max-h-80 overflow-y-auto bg-[#0e1a2b] border border-[#1c2d46] rounded-xl shadow-xl shadow-black/50 z-[60] py-1.5 hide-scrollbar"
+          className="absolute top-full mt-1.5 w-56 max-w-[calc(100vw-1rem)] max-h-[85vh] overflow-y-auto bg-[#0e1a2b] border border-[#1c2d46] rounded-xl shadow-xl shadow-black/50 z-[60] py-1.5 hide-scrollbar"
         >
           {options.map(opt => {
             const isSelected = values.includes(opt.value);
