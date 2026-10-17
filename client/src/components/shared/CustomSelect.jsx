@@ -249,7 +249,7 @@ export default function CustomSelect({
             </div>
           )}
 
-          <div className="max-h-64 overflow-y-auto custom-scrollbar py-0.5">
+          <div className="max-h-80 overflow-y-auto hide-scrollbar py-0.5">
             {filteredOptions.length === 0 ? (
               <div className="px-4 py-3 text-xs text-slate-500 text-center">
                 No matching options
