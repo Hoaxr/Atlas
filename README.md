@@ -3,10 +3,10 @@
     <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Hoaxr/Atlas/main/assets/logo.png">
     <img src="https://raw.githubusercontent.com/Hoaxr/Atlas/main/assets/logo-light.png" alt="Atlas — media manager" width="420">
   </picture>
-  <p><strong>An elegant, all-in-one media management dashboard — track, search, download, and stream your Movies, TV Shows, and Music.</strong></p>
+  <p><strong>The modern, all-in-one media command center — discovery, downloads, subtitles, and lossless streaming in a single lightweight container.</strong></p>
   <p>
-    <strong>Replaces Radarr • Sonarr • Lidarr • Bazarr • Tautulli • Overseerr/Jellyseerr</strong><br>
-    <em>One lightweight container to manage, automate, and stream your entire media stack.</em>
+    <strong>Replace the *arr stack</strong> — Radarr • Sonarr • Lidarr • Bazarr • Tautulli • Overseerr<br>
+    <em>Built for speed, simplicity, and complete control over your home media.</em>
   </p>
   <p>
     <a href="https://hub.docker.com/r/bdekkernl/atlas"><img src="https://img.shields.io/docker/pulls/bdekkernl/atlas?style=flat-square&logo=docker&logoColor=white&label=Docker%20Pulls" alt="Docker Pulls" /></a>
@@ -22,9 +22,9 @@
 
 ## What is Atlas?
 
-**Atlas** is an ultra-fast, self-hosted media management dashboard that unites the capabilities of **Radarr**, **Sonarr**, **Lidarr**, **Bazarr**, **Tautulli**, and **Overseerr** into a single cohesive, high-performance web application built with **Node.js 22**, **React 18**, and native **SQLite**. 
+**Atlas** is a fast, beautiful, self-hosted media management platform designed to replace the complexity and resource bloat of running half a dozen separate services. 
 
-Eliminate the resource overhead of running 6 separate containers — Atlas manages discovery, automated downloads, quality profiles, multi-track subtitle synchronization, artist discographies, and continuous lossless audio streaming from one unified interface.
+Instead of juggling Radarr, Sonarr, Lidarr, Bazarr, Tautulli, and Overseerr across multiple ports and containers, Atlas unifies your entire media ecosystem into **one sleek interface**. From one-click movie and show discovery to automated download client routing, lossless FLAC streaming, real-time activity tracking, and AI-assisted subtitle repair — Atlas handles the heavy lifting with zero bloat.
 
 ---
 
