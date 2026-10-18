@@ -42,6 +42,7 @@ const QUICK_LINKS = [
   { label: 'Calendar', hint: 'Upcoming releases', route: '/calendar', icon: CalendarDays },
   { label: 'Downloads', hint: 'Active transfers', route: '/downloads', icon: DownloadCloud },
   { label: 'Requests', hint: 'User requests', route: '/requests', icon: Inbox },
+  { label: 'User Portal', hint: 'Browse & request media', route: '/portal', icon: Sparkles },
   { label: 'Tasks', hint: 'Scheduled jobs', route: '/tasks', icon: ListTodo },
   { label: 'Statistics', hint: 'Library insights', route: '/stats', icon: BarChart3 },
   { label: 'Settings', hint: 'Configuration', route: '/settings', icon: SettingsIcon },

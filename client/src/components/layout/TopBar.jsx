@@ -5,7 +5,8 @@ import clsx from 'clsx';
 import { 
   Search, Menu, SlidersHorizontal, Activity, Keyboard, Bell, AlertTriangle, 
   Heart, DownloadCloud, Eye, CheckCircle2, Inbox, CircleUser, ArrowUpCircle,
-  X, Loader2, Film, Tv, Plus, ChevronRight, User as UserIcon, Command
+  X, Loader2, Film, Tv, Plus, ChevronRight, User as UserIcon, Command,
+  ChevronDown, ArrowRightLeft
 } from 'lucide-react';
 import api from '../../lib/api';
 import { posterUrl, tmdbImgUrl } from '../../lib/posterUrl';
@@ -43,6 +44,28 @@ export default function TopBar({ user, activity, updateUrl, alerts = [], onOpenS
   const activityMenuRef = useRef(null);
   const activityButtonRef = useRef(null);
   const [menuStyle, setMenuStyle] = useState(null);
+
+  const [accountMenuOpen, setAccountMenuOpen] = useState(false);
+  const accountRef = useRef(null);
+
+  // Close the account menu on any click outside or Escape key
+  useEffect(() => {
+    if (!accountMenuOpen) return;
+    const handleClickOutside = (e) => {
+      if (accountRef.current && !accountRef.current.contains(e.target)) {
+        setAccountMenuOpen(false);
+      }
+    };
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') setAccountMenuOpen(false);
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [accountMenuOpen]);
 
   // Close the notifications menu on any click outside both the bell button and
   // the (portaled) menu panel.
@@ -710,17 +733,64 @@ export default function TopBar({ user, activity, updateUrl, alerts = [], onOpenS
         {/* Divider */}
         <div className="h-6 w-px bg-slate-200 dark:bg-slate-700/60 mx-1 hidden sm:block" />
 
-        {/* Account — text only, no avatar */}
-        <div className="hidden sm:flex items-center gap-2 cursor-default select-none shrink-0">
-          <CircleUser className="w-5 h-5 text-slate-500 dark:text-slate-400 shrink-0" />
-          <div className="flex flex-col items-start justify-center leading-tight min-w-0">
-            <span className="text-[13px] font-medium text-slate-800 dark:text-slate-200 truncate max-w-[120px]">
-              {displayName}
-            </span>
-            <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-500 truncate max-w-[120px]">
-              {role}
-            </span>
-          </div>
+        {/* Account Menu */}
+        <div ref={accountRef} className="relative hidden sm:block shrink-0">
+          <button
+            type="button"
+            onClick={() => setAccountMenuOpen((prev) => !prev)}
+            aria-expanded={accountMenuOpen}
+            aria-haspopup="menu"
+            aria-label="User account menu"
+            className={clsx(
+              "flex items-center gap-2 py-1 px-2 -my-1 rounded-xl transition-all select-none cursor-pointer group text-left",
+              accountMenuOpen
+                ? "bg-slate-200/80 dark:bg-slate-800/80 text-slate-900 dark:text-white shadow-sm ring-1 ring-slate-300 dark:ring-slate-700"
+                : "hover:bg-slate-200/60 dark:hover:bg-slate-800/50 text-slate-700 dark:text-slate-200"
+            )}
+          >
+            <CircleUser className="w-5 h-5 text-slate-500 dark:text-slate-400 group-hover:text-cyan-500 dark:group-hover:text-cyan-400 transition-colors shrink-0" />
+            <div className="flex flex-col items-start justify-center leading-tight min-w-0">
+              <span className="text-[13px] font-medium text-slate-800 dark:text-slate-200 truncate max-w-[120px]">
+                {displayName}
+              </span>
+              <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-500 dark:text-slate-400 truncate max-w-[120px]">
+                {role}
+              </span>
+            </div>
+            <ChevronDown className={clsx(
+              "w-3.5 h-3.5 text-slate-400 dark:text-slate-500 group-hover:text-slate-600 dark:group-hover:text-slate-300 transition-transform duration-200 shrink-0",
+              accountMenuOpen && "rotate-180 text-cyan-500 dark:text-cyan-400"
+            )} />
+          </button>
+
+          {accountMenuOpen && (
+            <div
+              role="menu"
+              className="absolute right-0 top-full mt-2 w-60 bg-white dark:bg-[#111d30] border border-slate-200 dark:border-slate-700/80 rounded-2xl shadow-2xl shadow-black/15 dark:shadow-black/50 overflow-hidden z-50 animate-fade-in p-1.5"
+            >
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  setAccountMenuOpen(false);
+                  navigate('/portal');
+                }}
+                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left font-medium text-slate-700 dark:text-slate-200 hover:text-cyan-500 dark:hover:text-cyan-400 hover:bg-cyan-500/10 dark:hover:bg-cyan-500/10 transition-colors group cursor-pointer"
+              >
+                <div className="w-8 h-8 rounded-lg bg-cyan-500/10 text-cyan-500 dark:text-cyan-400 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform border border-cyan-500/20">
+                  <ArrowRightLeft className="w-4 h-4" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm font-semibold text-slate-800 dark:text-slate-100 group-hover:text-cyan-500 dark:group-hover:text-cyan-300">
+                    Switch to User Portal
+                  </div>
+                  <div className="text-[11px] text-slate-500 dark:text-slate-400 font-normal truncate">
+                    Request & browse content
+                  </div>
+                </div>
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Divider */}

@@ -1,5 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
-import { Search, Loader2, Plus, Clock, CheckCircle2, XCircle, Key, Star, X, Film, Tv, CalendarClock, Sparkles, Check, TrendingUp, DownloadCloud, Heart } from 'lucide-react';
+import clsx from 'clsx';
+import { 
+  Search, Loader2, Plus, Clock, CheckCircle2, XCircle, Key, Star, X, Film, 
+  Tv, CalendarClock, Dices, Check, TrendingUp, DownloadCloud, Heart,
+  CircleUser, ChevronDown, ArrowRightLeft
+} from 'lucide-react';
 
 function RunningManIcon({ className }) {
   return (
@@ -36,6 +41,8 @@ export default function UserPortal() {
   const [trendingMovies, setTrendingMovies] = useState([]);
   const [trendingShows, setTrendingShows] = useState([]);
   const [requestFilter, setRequestFilter] = useState('all');
+  const [accountMenuOpen, setAccountMenuOpen] = useState(false);
+  const accountRef = useRef(null);
   const navigate = useNavigate();
   const searchTimerRef = useRef(null);
 
@@ -46,6 +53,31 @@ export default function UserPortal() {
   } catch {
     user = null;
   }
+
+  const displayName = user?.displayName || user?.name || user?.username || 'User';
+  const role = user?.role
+    ? user.role.charAt(0).toUpperCase() + user.role.slice(1).toLowerCase()
+    : 'User';
+  const isAdmin = user?.role === 'admin';
+
+  // Close the account menu on any click outside or Escape key
+  useEffect(() => {
+    if (!accountMenuOpen) return;
+    const handleClickOutside = (e) => {
+      if (accountRef.current && !accountRef.current.contains(e.target)) {
+        setAccountMenuOpen(false);
+      }
+    };
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') setAccountMenuOpen(false);
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [accountMenuOpen]);
 
   const fetchData = async () => {
     try {
@@ -343,45 +375,120 @@ export default function UserPortal() {
         <div className="absolute top-1/4 -left-40 w-[500px] h-[500px] bg-purple-500/10 rounded-full blur-[100px] animate-pulse" style={{ animationDelay: '2s' }}></div>
       </div>
 
-      <header className="sticky top-0 z-50 bg-slate-900/60 backdrop-blur-xl border-b border-white/10 shadow-lg overflow-hidden">
+      <header className="sticky top-0 z-40 bg-slate-100/90 dark:bg-[#101b2b] border-b border-slate-200 dark:border-slate-800/80 backdrop-blur-md shadow-sm">
         <div className="max-w-[1600px] mx-auto px-4 sm:px-8 h-16 flex items-center justify-between">
           <div className="cursor-pointer select-none py-1" onClick={() => { setQuery(''); setResults([]); }}>
             <AtlasLogo variant="lockup" className="h-8 w-auto" />
           </div>
-          <div className="flex items-center gap-2">
+
+          <div className="flex items-center gap-1 sm:gap-3 shrink-0">
+            {/* Donate */}
+            <a
+              href="https://www.paypal.com/donate/?business=C5EDZZUFSMX4J&no_recurring=0&item_name=Thanks+for+the+coffee&currency_code=EUR"
+              target="_blank"
+              rel="noopener noreferrer"
+              title="Donate"
+              aria-label="Donate"
+              className="hidden sm:flex p-2 rounded-xl text-rose-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors items-center justify-center group"
+            >
+              <Heart className="w-5 h-5 text-rose-500 fill-rose-500 group-hover:scale-110 transition-transform duration-200" />
+            </a>
+
+            {/* Divider */}
+            <div className="h-6 w-px bg-slate-200 dark:bg-slate-700/60 mx-1 hidden sm:block" />
+
+            {/* Account Menu */}
             {user && (
-              <div className="flex items-center gap-3">
-                <span className="hidden sm:block text-slate-400 text-sm font-medium">
-                  Hi, <span className="text-white font-bold">{user.username}</span>
-                </span>
-                <div className="w-px h-5 bg-white/10 hidden sm:block"></div>
-                {(!user || user.origin === 'atlas') && (
-                  <button
-                    onClick={() => setIsPasswordModalOpen(true)}
-                    className="p-2 rounded-xl hover:bg-white/10 transition-colors text-slate-400 hover:text-white group relative"
-                    title="Change Password"
-                  >
-                    <Key className="w-5 h-5 group-hover:scale-110 transition-transform" />
-                  </button>
-                )}
-                <a
-                  href="https://www.paypal.com/donate/?business=C5EDZZUFSMX4J&no_recurring=0&item_name=Thanks+for+the+coffee&currency_code=EUR"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="p-2 rounded-xl hover:bg-rose-500/10 transition-colors text-slate-400 hover:text-rose-400 group relative"
-                  title="Support Atlas"
-                >
-                  <Heart className="w-5 h-5 group-hover:scale-110 transition-transform fill-rose-400/30 group-hover:fill-rose-400/60" />
-                </a>
+              <div ref={accountRef} className="relative shrink-0">
                 <button
-                  onClick={handleLogout}
-                  className="p-2 rounded-xl hover:bg-rose-500/10 hover:text-rose-400 transition-colors text-slate-400 group relative"
-                  title="Logout"
+                  type="button"
+                  onClick={() => setAccountMenuOpen((prev) => !prev)}
+                  aria-expanded={accountMenuOpen}
+                  aria-haspopup="menu"
+                  aria-label="User account menu"
+                  className={clsx(
+                    "flex items-center gap-2 py-1 px-2.5 -my-1 rounded-xl transition-all select-none cursor-pointer group text-left",
+                    accountMenuOpen
+                      ? "bg-slate-200/80 dark:bg-slate-800/80 text-slate-900 dark:text-white shadow-sm ring-1 ring-slate-300 dark:ring-slate-700"
+                      : "hover:bg-slate-200/60 dark:hover:bg-slate-800/50 text-slate-700 dark:text-slate-200"
+                  )}
                 >
-                  <RunningManIcon className="w-5 h-5 group-hover:scale-110 transition-transform" />
+                  <CircleUser className="w-5 h-5 text-slate-500 dark:text-slate-400 group-hover:text-cyan-500 dark:group-hover:text-cyan-400 transition-colors shrink-0" />
+                  <div className="flex flex-col items-start justify-center leading-tight min-w-0">
+                    <span className="text-[13px] font-medium text-slate-800 dark:text-slate-200 truncate max-w-[120px]">
+                      {displayName}
+                    </span>
+                    <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-500 dark:text-slate-400 truncate max-w-[120px]">
+                      {role}
+                    </span>
+                  </div>
+                  <ChevronDown className={clsx(
+                    "w-3.5 h-3.5 text-slate-400 dark:text-slate-500 group-hover:text-slate-600 dark:group-hover:text-slate-300 transition-transform duration-200 shrink-0",
+                    accountMenuOpen && "rotate-180 text-cyan-500 dark:text-cyan-400"
+                  )} />
                 </button>
+
+                {accountMenuOpen && (
+                  <div
+                    role="menu"
+                    className="absolute right-0 top-full mt-2 w-60 bg-white dark:bg-[#111d30] border border-slate-200 dark:border-slate-700/80 rounded-2xl shadow-2xl shadow-black/15 dark:shadow-black/50 overflow-hidden z-50 animate-fade-in p-1.5 space-y-1"
+                  >
+                    {isAdmin && (
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={() => {
+                          setAccountMenuOpen(false);
+                          navigate('/');
+                        }}
+                        className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left font-medium text-slate-700 dark:text-slate-200 hover:text-cyan-500 dark:hover:text-cyan-400 hover:bg-cyan-500/10 dark:hover:bg-cyan-500/10 transition-colors group cursor-pointer"
+                      >
+                        <div className="w-8 h-8 rounded-lg bg-cyan-500/10 text-cyan-500 dark:text-cyan-400 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform border border-cyan-500/20">
+                          <ArrowRightLeft className="w-4 h-4" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="text-sm font-semibold text-slate-800 dark:text-slate-100 group-hover:text-cyan-500 dark:group-hover:text-cyan-300">
+                            Switch to Admin Panel
+                          </div>
+                          <div className="text-[11px] text-slate-500 dark:text-slate-400 font-normal truncate">
+                            Return to dashboard
+                          </div>
+                        </div>
+                      </button>
+                    )}
+
+                    {(!user || user.origin === 'atlas') && (
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={() => {
+                          setAccountMenuOpen(false);
+                          setIsPasswordModalOpen(true);
+                        }}
+                        className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-left text-xs font-medium text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-colors group cursor-pointer"
+                      >
+                        <Key className="w-4 h-4 text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-200" />
+                        <span>Change Password</span>
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
             )}
+
+            {/* Divider */}
+            <div className="h-6 w-px bg-slate-200 dark:bg-slate-700/60 mx-1 hidden sm:block" />
+
+            {/* Logout */}
+            <button
+              type="button"
+              onClick={handleLogout}
+              title="Logout"
+              aria-label="Logout"
+              className="flex p-2 rounded-xl text-slate-400 dark:text-slate-500 hover:text-rose-500 dark:hover:text-rose-400 hover:bg-rose-500/10 dark:hover:bg-rose-500/10 transition-colors shrink-0"
+            >
+              <RunningManIcon className="w-4 h-4 sm:w-5 sm:h-5" />
+            </button>
           </div>
         </div>
       </header>
@@ -399,42 +506,43 @@ export default function UserPortal() {
             <motion.h1 layout className="text-4xl md:text-5xl font-black text-white tracking-tight mb-3">
               What do you want to <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-sky-400">watch?</span>
             </motion.h1>
-            <motion.p layout className="text-slate-400 text-lg mb-6">
+            <motion.p layout className="text-slate-400 text-lg">
               Search for movies and TV shows to request them to the server.
             </motion.p>
-            <motion.button
-              layout
-              onClick={handleSurpriseMe}
-              className="inline-flex items-center gap-2 px-6 py-2.5 rounded-full bg-gradient-to-r from-purple-500/20 to-pink-500/20 border border-purple-500/30 text-purple-300 hover:text-white hover:border-purple-400 hover:from-purple-500/40 hover:to-pink-500/40 transition-all font-semibold shadow-[0_0_20px_rgba(168,85,247,0.15)] hover:shadow-[0_0_30px_rgba(168,85,247,0.3)]"
-            >
-              <Sparkles className="w-5 h-5" />
-              Surprise Me
-            </motion.button>
           </div>
 
           <form onSubmit={handleSearch} className="relative group">
             <div className="absolute inset-0 bg-cyan-500/20 rounded-3xl blur-xl group-hover:bg-cyan-500/30 transition-colors duration-500"></div>
-            <div className="relative flex items-center bg-slate-900/80 backdrop-blur-lg border border-white/10 hover:border-cyan-500/50 rounded-3xl shadow-2xl transition-all overflow-hidden">
-              <Search className="w-6 h-6 text-slate-400 ml-6" />
+            <div className="relative flex items-center bg-slate-900/80 backdrop-blur-lg border border-white/10 hover:border-cyan-500/50 rounded-3xl shadow-2xl transition-all overflow-hidden pl-5 sm:pl-6 pr-2 sm:pr-3 py-1.5 sm:py-2">
+              <Search className="w-6 h-6 text-slate-400 shrink-0" />
               <input
                 type="text"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Search by title..."
-                className="w-full pl-4 pr-16 py-5 bg-transparent text-xl text-white placeholder-slate-500 focus:outline-none"
+                className="flex-1 min-w-0 pl-3 sm:pl-4 pr-3 py-3 sm:py-3.5 bg-transparent text-lg sm:text-xl text-white placeholder-slate-500 focus:outline-none font-normal"
               />
-              {query && (
+              <div className="flex items-center gap-2 shrink-0">
+                {query && (
+                  <button
+                    type="button"
+                    onClick={() => setQuery('')}
+                    className="p-2 text-slate-400 hover:text-white hover:bg-white/10 rounded-full transition-colors cursor-pointer"
+                    title="Clear search"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                )}
+                {searching && <Loader2 className="w-5 h-5 text-cyan-400 animate-spin mr-1" />}
                 <button
                   type="button"
-                  onClick={() => setQuery('')}
-                  className="absolute right-14 p-2 text-slate-400 hover:text-white hover:bg-white/10 rounded-full transition-colors"
-                  title="Clear search"
+                  onClick={handleSurpriseMe}
+                  title="Surprise me with a random title"
+                  className="flex items-center gap-2 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-2xl bg-slate-800/90 hover:bg-slate-700/90 border border-slate-700/80 hover:border-cyan-500/40 text-slate-300 hover:text-white transition-all text-xs sm:text-sm font-semibold shadow-sm cursor-pointer group shrink-0"
                 >
-                  <X className="w-5 h-5" />
+                  <Dices className="w-4 h-4 text-cyan-400 group-hover:rotate-12 transition-transform duration-200" />
+                  <span className="hidden sm:inline">Surprise Me</span>
                 </button>
-              )}
-              <div className="absolute right-4">
-                {searching && <Loader2 className="w-6 h-6 text-cyan-400 animate-spin" />}
               </div>
             </div>
           </form>
