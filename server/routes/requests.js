@@ -3,6 +3,7 @@ const router = express.Router();
 const db = require('../config/database');
 const requireAdmin = require('../middleware/requireAdmin');
 const notificationService = require('../services/notificationService');
+const libraryService = require('../services/libraryService');
 const { getSetting } = require('../utils/settings');
 
 // GET /api/requests/pending-count
@@ -141,8 +142,11 @@ router.post('/', (req, res, next) => {
         throw err;
       }
 
-      const result = db.prepare("INSERT INTO requests (user_id, tmdb_id, type, title, status, release_date, poster_path) VALUES (?, ?, ?, ?, 'pending', ?, ?)").run(
-        user_id, tmdb_id, type, title, release_date || null, poster_path || null
+      const autoApprove = getSetting('autoApproveRequests') === 'true';
+      const initialStatus = autoApprove ? 'approved' : 'pending';
+
+      const result = db.prepare("INSERT INTO requests (user_id, tmdb_id, type, title, status, release_date, poster_path) VALUES (?, ?, ?, ?, ?, ?, ?)").run(
+        user_id, tmdb_id, type, title, initialStatus, release_date || null, poster_path || null
       );
       return result.lastInsertRowid;
     });
@@ -157,6 +161,21 @@ router.post('/', (req, res, next) => {
         return res.status(400).json({ status: 'error', message: 'This item has already been requested' });
       }
       throw txErr;
+    }
+
+    // If auto-approve is enabled, attempt to add the item directly to the library so it is monitored
+    if (getSetting('autoApproveRequests') === 'true') {
+      setImmediate(async () => {
+        try {
+          if (type === 'movie') {
+            await libraryService.addMovie(tmdb_id);
+          } else if (type === 'tv') {
+            await libraryService.addShow(tmdb_id);
+          }
+        } catch (autoErr) {
+          console.warn('[Requests] Auto-approve library addition notice:', autoErr.message);
+        }
+      });
     }
 
     // Send notification if enabled

@@ -220,7 +220,7 @@ export default function BackupTab() {
               <Trash2 className="w-4 h-4 text-rose-400 shrink-0" /> Purge
             </h3>
             <p className="text-xs text-slate-400 mt-1 leading-relaxed">
-              Purge all media items and history, or perform a complete reset to initial setup.
+              Purge media database records and history without touching any files on your disk, or perform a complete reset.
             </p>
           </div>
 
@@ -271,10 +271,15 @@ export default function BackupTab() {
           }
         >
           <div className="space-y-4">
-            <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-300 text-xs flex items-start gap-2.5">
-              <ShieldAlert className="w-4 h-4 shrink-0 mt-0.5 text-rose-400" />
-              <div>
-                <strong>Safety Notice:</strong> A complete backup snapshot of your current database will be saved automatically before purging.
+            <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-300 text-xs space-y-2">
+              <div className="flex items-start gap-2.5">
+                <ShieldAlert className="w-4 h-4 shrink-0 mt-0.5 text-rose-400" />
+                <div>
+                  <strong>Safety Notice:</strong> A complete backup snapshot of your current database will be saved automatically before purging.
+                </div>
+              </div>
+              <div className="text-[11px] text-slate-300 pl-6.5 leading-relaxed">
+                <strong>Your media files are safe:</strong> Purging only removes database records inside Atlas. It will <strong>never delete or modify any actual video, show, movie, or music files</strong> on your disks or storage drives.
               </div>
             </div>
 
@@ -300,7 +305,7 @@ export default function BackupTab() {
                   <span className="text-[10px] font-semibold text-cyan-400 bg-cyan-500/15 px-2 py-0.5 rounded">Recommended</span>
                 </div>
                 <p className="text-[11px] text-slate-400 leading-relaxed">
-                  Removes movies, shows, music, episodes, requests, watch history, and logs. Preserves user accounts, server settings, indexers, and quality profiles.
+                  Removes movies, shows, music, episodes, requests, watch history, and logs from the Atlas database. <strong>Files on disk are untouched.</strong> Preserves user accounts, server settings, indexers, and quality profiles.
                 </p>
               </div>
 
@@ -321,7 +326,7 @@ export default function BackupTab() {
                   <span className="text-[10px] font-semibold text-rose-400 bg-rose-500/15 px-2 py-0.5 rounded">Wipes All</span>
                 </div>
                 <p className="text-[11px] text-slate-400 leading-relaxed">
-                  Completely wipes all database records including users and settings. Atlas will restart into the first-time setup wizard.
+                  Completely wipes all database records including users and settings (media files on disk are untouched). Atlas will restart into the first-time setup wizard.
                 </p>
               </div>
             </div>

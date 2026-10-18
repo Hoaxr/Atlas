@@ -136,7 +136,8 @@ router.get('/', (req, res, next) => {
         pushoverUserKey: mask(getSetting('pushoverUserKey')),
         autoDeleteWatchedEnabled: getSetting('autoDeleteWatchedEnabled') === 'true',
         autoDeleteWatchedDays: getSetting('autoDeleteWatchedDays') || '',
-        autoWatchUser: isAdmin ? (getSetting('autoWatchUser') || '') : ''
+        autoWatchUser: isAdmin ? (getSetting('autoWatchUser') || '') : '',
+        autoApproveRequests: getSetting('autoApproveRequests') === 'true'
       }
     });
   } catch (e) {
@@ -206,6 +207,7 @@ const SETTING_SCHEMA = {
   autoWatchUser:            { type: 'string' },
   timezone:                 { type: 'string' },
   blockPrivateTorrentHosts: { type: 'boolean' },
+  autoApproveRequests:      { type: 'boolean' },
 };
 
 const isMasked = (val) => typeof val === 'string' && (/^\*+$/.test(val) || val.startsWith('***'));

@@ -148,7 +148,8 @@ export default function Settings() {
     notifyOnGrab: false,
     notifyOnDownload: false,
     notifyOnPlaybackStart: false,
-    notifyOnRequest: false
+    notifyOnRequest: false,
+    autoApproveRequests: false
   });
   const [paths, setPaths] = useState([]);
   const [indexers, setIndexers] = useState([]);
@@ -377,7 +378,8 @@ export default function Settings() {
           notifyOnGrab: res.data.data.notifyOnGrab === 'true',
           notifyOnDownload: res.data.data.notifyOnDownload === 'true',
           notifyOnPlaybackStart: res.data.data.notifyOnPlaybackStart === 'true',
-          notifyOnRequest: res.data.data.notifyOnRequest === 'true'
+          notifyOnRequest: res.data.data.notifyOnRequest === 'true',
+          autoApproveRequests: res.data.data.autoApproveRequests === true || res.data.data.autoApproveRequests === 'true'
         });
         setIndexers(res.data.data.indexers || []);
         setClients(res.data.data.clients || []);
@@ -494,6 +496,7 @@ export default function Settings() {
       if (payload.notifyOnDownload !== undefined) payload.notifyOnDownload = payload.notifyOnDownload.toString();
       if (payload.notifyOnPlaybackStart !== undefined) payload.notifyOnPlaybackStart = payload.notifyOnPlaybackStart.toString();
       if (payload.notifyOnRequest !== undefined) payload.notifyOnRequest = payload.notifyOnRequest.toString();
+      if (payload.autoApproveRequests !== undefined) payload.autoApproveRequests = payload.autoApproveRequests.toString();
       await api.post('/settings', payload);
       invalidateSettingsCache();
       customAlert('Settings saved!', 'success');

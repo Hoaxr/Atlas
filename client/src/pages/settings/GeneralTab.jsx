@@ -132,6 +132,15 @@ export default function GeneralTab({ settings, setSettings, onNavigateTab }) {
             <SettingsHelper text="The page loaded automatically when navigating to the root URL." />
           </div>
         </SettingsGroup>
+
+        <div className="mt-5 pt-5 border-t border-[#1c2d46]">
+          <ToggleRow
+            checked={Boolean(settings.autoApproveRequests)}
+            onChange={(e) => handleChange({ target: { name: 'autoApproveRequests', type: 'checkbox', checked: e.target.checked } })}
+            title="Auto-Approve User Requests"
+            description="Automatically approve media requests submitted by users and add them to your library."
+          />
+        </div>
       </SettingsSection>
 
       {/* Database: Backup, Restore, Purge */}
