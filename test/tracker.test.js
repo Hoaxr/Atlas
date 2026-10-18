@@ -1,7 +1,8 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const db = require('../server/config/database');
-const { getAiredCutoffSql } = require('../server/utils/airDate');
+const { getAiredCutoffSql, getAirDateShiftSql, invalidateTimezoneCache } = require('../server/utils/airDate');
+const { setSetting } = require('../server/utils/settings');
 
 test('Tracker & Continue Watching System', async (t) => {
   const testShowId = 888881;
@@ -74,9 +75,9 @@ test('Tracker & Continue Watching System', async (t) => {
         WHERE e.season_number > 0
           AND e.watched = 0
           AND (
-            e.status = 'downloaded' OR (
+            e.status = 'downloaded' OR e.watch_progress > 0 OR (
               e.air_date IS NOT NULL AND 
-              date(e.air_date) <= ${getAiredCutoffSql()} AND 
+              ${getAirDateShiftSql('e.air_date')} < date('now', 'localtime') AND 
               ((e.status IN ('monitored', 'missing') AND e.monitored = 1) OR e.show_id IN (SELECT show_id FROM episodes WHERE watched = 1))
             )
           )
@@ -135,9 +136,9 @@ test('Tracker & Continue Watching System', async (t) => {
         WHERE e.season_number > 0
           AND e.watched = 0
           AND (
-            e.status = 'downloaded' OR (
+            e.status = 'downloaded' OR e.watch_progress > 0 OR (
               e.air_date IS NOT NULL AND 
-              date(e.air_date) <= ${getAiredCutoffSql()} AND 
+              ${getAirDateShiftSql('e.air_date')} < date('now', 'localtime') AND 
               ((e.status IN ('monitored', 'missing') AND e.monitored = 1) OR e.show_id IN (SELECT show_id FROM episodes WHERE watched = 1))
             )
           )
@@ -163,6 +164,70 @@ test('Tracker & Continue Watching System', async (t) => {
     assert.ok(matched, 'In-progress show should appear in Continue Watching');
     assert.strictEqual(matched.watch_progress, 25);
     assert.strictEqual(matched.watched_episodes, 0);
+  });
+
+  await t.test('Upcoming or same-day un-downloaded episodes do not appear in Continue Watching until downloaded or aired', () => {
+    setSetting('timezone', 'Europe/Amsterdam');
+    invalidateTimezoneCache();
+
+    const futureShowId = 888889;
+    const futureTmdbId = 9999989;
+
+    db.prepare('DELETE FROM episodes WHERE show_id = ?').run(futureShowId);
+    db.prepare('DELETE FROM shows WHERE id = ?').run(futureShowId);
+
+    // US network show
+    db.prepare("INSERT INTO shows (id, tmdb_id, title, status, watched, network, origin_country) VALUES (?, ?, 'Future Show', 'continuing', 0, 'CBS', 'US')").run(futureShowId, futureTmdbId);
+    // Ep 1 watched
+    db.prepare("INSERT INTO episodes (id, show_id, season_number, episode_number, title, status, watched, watch_progress, air_date) VALUES (99891, ?, 1, 1, 'Ep 1', 'downloaded', 1, 0, '2026-10-10')").run(futureShowId);
+    // Ep 2 today (un-downloaded, shifts to tomorrow in Europe)
+    const todayStr = new Date().toISOString().split('T')[0];
+    db.prepare("INSERT INTO episodes (id, show_id, season_number, episode_number, title, status, watched, watch_progress, air_date, monitored) VALUES (99892, ?, 1, 2, 'Ep 2', 'monitored', 0, 0, ?, 1)").run(futureShowId, todayStr);
+
+    const shiftSql = getAirDateShiftSql('e.air_date');
+    const query = `
+      WITH ShowHasStarted AS (
+        SELECT DISTINCT show_id
+        FROM episodes 
+        WHERE season_number > 0 AND (watched = 1 OR watch_progress > 0)
+      ),
+      ShowFirstUnwatched AS (
+        SELECT 
+          e.id as episode_id, 
+          e.show_id,
+          ROW_NUMBER() OVER (
+            PARTITION BY e.show_id 
+            ORDER BY e.season_number, e.episode_number
+          ) as rn
+        FROM episodes e
+        JOIN shows s ON e.show_id = s.id
+        JOIN ShowHasStarted shs ON e.show_id = shs.show_id
+        WHERE e.season_number > 0
+          AND e.watched = 0
+          AND (
+            e.status = 'downloaded' OR e.watch_progress > 0 OR (
+              e.air_date IS NOT NULL AND 
+              ${shiftSql} < date('now', 'localtime') AND 
+              ((e.status IN ('monitored', 'missing') AND e.monitored = 1) OR e.show_id IN (SELECT show_id FROM episodes WHERE watched = 1))
+            )
+          )
+      )
+      SELECT * FROM ShowFirstUnwatched WHERE rn = 1;
+    `;
+
+    const res = db.prepare(query).all();
+    const found = res.find(r => r.show_id === futureShowId);
+    assert.strictEqual(found, undefined, 'Unreleased un-downloaded episode must not appear in Continue Watching');
+
+    // Once downloaded, it immediately appears
+    db.prepare("UPDATE episodes SET status = 'downloaded' WHERE id = 99892").run();
+    const resDownloaded = db.prepare(query).all();
+    const foundDownloaded = resDownloaded.find(r => r.show_id === futureShowId);
+    assert.ok(foundDownloaded, 'Downloaded episode must appear in Continue Watching');
+
+    // Cleanup
+    db.prepare('DELETE FROM episodes WHERE show_id = ?').run(futureShowId);
+    db.prepare('DELETE FROM shows WHERE id = ?').run(futureShowId);
   });
 
   await t.test('Unwatching episode resets watched_at to NULL and watch_progress to 0', () => {

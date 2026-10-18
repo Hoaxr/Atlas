@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../config/database');
-const { localizeAirDate, getAiredCutoffSql } = require('../utils/airDate');
+const { localizeAirDate, getAirDateShiftSql } = require('../utils/airDate');
 const tmdbService = require('../services/tmdbService');
 const watcherService = require('../services/watcherService');
 const { runWithConcurrency } = require('../utils/concurrency');
@@ -527,9 +527,9 @@ router.get('/up-next', async (req, res) => {
         WHERE e.season_number > 0
           AND e.watched = 0
           AND (
-            e.status = 'downloaded' OR (
+            e.status = 'downloaded' OR e.watch_progress > 0 OR (
               e.air_date IS NOT NULL AND 
-              date(e.air_date) <= ${getAiredCutoffSql()} AND 
+              ${getAirDateShiftSql('e.air_date')} < date('now', 'localtime') AND 
               ((e.status IN ('monitored', 'missing') AND e.monitored = 1) OR e.show_id IN (SELECT show_id FROM episodes WHERE watched = 1))
             )
           )
@@ -543,20 +543,19 @@ router.get('/up-next', async (req, res) => {
           SUM(COALESCE(e2.runtime, ?)) as total_time_left
         FROM ShowFirstUnwatched sf
         JOIN episodes e2 ON e2.show_id = sf.show_id 
-          AND (
+        JOIN shows s ON e2.show_id = s.id
+        WHERE (
             (e2.season_number = sf.season_number AND e2.episode_number >= sf.episode_number)
             OR (e2.season_number > sf.season_number)
           )
           AND e2.watched = 0 
           AND (
-            e2.status = 'downloaded' 
-            OR (
+            e2.status = 'downloaded' OR e2.watch_progress > 0 OR (
               e2.air_date IS NOT NULL AND 
-              date(e2.air_date) <= ${getAiredCutoffSql()} AND 
+              ${getAirDateShiftSql('e2.air_date')} < date('now', 'localtime') AND 
               ((e2.status IN ('monitored', 'missing') AND e2.monitored = 1) OR e2.show_id IN (SELECT show_id FROM episodes WHERE watched = 1))
             )
           )
-        WHERE sf.rn = 1
         GROUP BY sf.episode_id, sf.show_id, sf.season_number
       ),
       WatchedCount AS (
@@ -576,13 +575,14 @@ router.get('/up-next', async (req, res) => {
         GROUP BY show_id
       ),
       TotalCount AS (
-        -- Count only episodes that are actually watchable (aired or downloaded)
+        -- Count only episodes that are actually watchable (aired or downloaded or already watched)
         -- so unaired placeholders don't create phantom progress in the bar
-        SELECT show_id, COUNT(*) as total_episodes
-        FROM episodes
-        WHERE season_number > 0
-          AND (status = 'downloaded' OR (air_date IS NOT NULL AND air_date <= ${getAiredCutoffSql()}))
-        GROUP BY show_id
+        SELECT e.show_id, COUNT(*) as total_episodes
+        FROM episodes e
+        JOIN shows s ON e.show_id = s.id
+        WHERE e.season_number > 0
+          AND (e.watched = 1 OR e.status = 'downloaded' OR (e.air_date IS NOT NULL AND ${getAirDateShiftSql('e.air_date')} < date('now', 'localtime')))
+        GROUP BY e.show_id
       )
       SELECT 
         sf.episode_id,
