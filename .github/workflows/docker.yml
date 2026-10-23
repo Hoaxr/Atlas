@@ -1,13 +1,53 @@
-name: Build and Push Docker Image
+name: Test, Audit & Build Docker Image
 
 on:
   push:
     branches:
       - main
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
 
 jobs:
+  test-and-audit:
+    name: Test, Lint & Security Audit
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: |
+          npm ci
+          npm ci --prefix server
+          npm ci --prefix client
+
+      - name: Lint codebase
+        run: npm run lint
+
+      - name: Audit high & critical dependencies
+        run: |
+          npm audit --prefix server --audit-level=high
+          npm audit --prefix client --audit-level=high
+
+      - name: Run test suite
+        run: npm test
+
+      - name: Verify frontend production build
+        run: npm run build --prefix client
+
   build-and-push:
+    name: Build & Push Docker Image
+    needs: test-and-audit
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
