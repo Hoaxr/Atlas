@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { User, Lock, ArrowRight, ShieldCheck, Mail, Terminal, RotateCcw } from 'lucide-react';
 import api from '../lib/api';
@@ -50,13 +50,13 @@ export default function Setup() {
       .finally(() => setChecking(false));
   }, [navigate]);
 
-  const clearAllBootTimers = () => {
+  const clearAllBootTimers = useCallback(() => {
     timersRef.current.forEach(t => clearTimeout(t));
     timersRef.current = [];
-  };
+  }, []);
 
   // Boot sequence animation
-  const runBootSequence = () => {
+  const runBootSequence = useCallback(() => {
     clearAllBootTimers();
     setBootStage('booting');
     setBootIndex(0);
@@ -85,12 +85,12 @@ export default function Setup() {
       }, delay);
       timersRef.current.push(timer);
     });
-  };
+  }, [clearAllBootTimers]);
 
   useEffect(() => {
     runBootSequence();
     return () => clearAllBootTimers();
-  }, []);
+  }, [runBootSequence, clearAllBootTimers]);
 
   const handleSkipBoot = () => {
     clearAllBootTimers();

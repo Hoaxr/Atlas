@@ -23,7 +23,7 @@ export default function MediaDetailsModal({
   libraryId, 
   onAdded, 
   onRequest, 
-  mode = 'add', 
+  mode: _mode = 'add', 
   requestStatus, 
   onDelete 
 }) {
@@ -33,7 +33,6 @@ export default function MediaDetailsModal({
   const [error, setError] = useState('');
   const [profiles, setProfiles] = useState([]);
   const [selectedProfile, setSelectedProfile] = useState('');
-  const [libraryPaths, setLibraryPaths] = useState([]);
   const [selectedPath, setSelectedPath] = useState('');
   const [autoSearch, setAutoSearch] = useState(true);
   const [trailerKey, setTrailerKey] = useState(null);
@@ -65,7 +64,6 @@ export default function MediaDetailsModal({
           }
         }
         if (data.libraryPaths) {
-          setLibraryPaths(data.libraryPaths);
           const preferredPath = data.libraryPaths.find(p => 
             p.path.toLowerCase().includes(mediaType === 'movie' ? 'movie' : (mediaType === 'tv' || mediaType === 'show' ? 'tv' : 'show'))
           );
