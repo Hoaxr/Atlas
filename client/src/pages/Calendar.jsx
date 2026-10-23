@@ -320,7 +320,7 @@ export default function Calendar() {
                           {cell.episodes.map((item, j) => {
                             const isMovie = item.type === 'movie';
                             const showTitle = isMovie ? item.title : item.show_title;
-                            const epCode = !isMovie && item.season_number != null && item.episode_number != null
+                            const epCode = !isMovie && item.season_number !== null && item.season_number !== undefined && item.episode_number !== null && item.episode_number !== undefined
                               ? `S${String(item.season_number).padStart(2, '0')}E${String(item.episode_number).padStart(2, '0')}`
                               : '';
 

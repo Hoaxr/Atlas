@@ -14,11 +14,11 @@ const JWT_SECRET = process.env.JWT_SECRET;
 
 const authMiddleware = require('../middleware/authMiddleware');
 
-// Rate limiter: max 5 attempts per 15 minutes per IP (skipped in tests)
+// Rate limiter: max 5 attempts per 15 minutes per IP (skipped in test environment)
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 5,
-  skip: (req) => process.env.NODE_ENV === 'test' || req.headers['x-atlas-test'] === 'true',
+  skip: () => process.env.NODE_ENV === 'test',
   standardHeaders: true,
   legacyHeaders: false,
   message: { status: 'error', message: 'Too many login attempts. Please try again in 15 minutes.' },

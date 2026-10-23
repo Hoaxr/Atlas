@@ -95,42 +95,37 @@ test('Authentication System & Defaults', async (t) => {
   });
 
   await t.test('POST /setup endpoint strictly forbids execution when an admin exists', async () => {
-    const request = require('node:http');
+    const express = require('../server/node_modules/express');
+    const authRoutes = require('../server/routes/auth');
 
-    // Simulate calling the setup endpoint
-    const postData = JSON.stringify({
-      username: 'hacker_admin',
-      password: 'password12345'
-    });
+    const app = express();
+    app.use(express.json());
+    app.use('/api/auth', authRoutes);
 
-    const res = await new Promise((resolve, reject) => {
-      const req = request.request({
-        hostname: 'localhost',
-        port: 3000,
-        path: '/api/auth/setup',
+    const server = app.listen(0);
+    const port = server.address().port;
+
+    try {
+      const response = await fetch(`http://127.0.0.1:${port}/api/auth/setup`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Content-Length': Buffer.byteLength(postData),
-          'x-atlas-test': 'true'
-        }
-      }, (res) => {
-        let body = '';
-        res.on('data', chunk => { body += chunk; });
-        res.on('end', () => resolve({ statusCode: res.statusCode, body: JSON.parse(body) }));
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          username: 'hacker_admin',
+          password: 'password12345'
+        })
       });
-      req.on('error', reject);
-      req.write(postData);
-      req.end();
-    });
 
-    assert.strictEqual(res.statusCode, 403, 'Should return HTTP 403 Forbidden');
-    assert.strictEqual(res.body.status, 'error');
-    assert.match(res.body.message, /Initial setup has already been completed/i);
+      const body = await response.json();
+      assert.strictEqual(response.status, 403, 'Should return HTTP 403 Forbidden');
+      assert.strictEqual(body.status, 'error');
+      assert.match(body.message, /Initial setup has already been completed/i);
 
-    // Verify hacker_admin was NOT created
-    const hacker = db.prepare("SELECT id FROM users WHERE username = 'hacker_admin'").get();
-    assert.strictEqual(hacker, undefined, 'Hacker admin should not exist in database');
+      // Verify hacker_admin was NOT created
+      const hacker = db.prepare("SELECT id FROM users WHERE username = 'hacker_admin'").get();
+      assert.strictEqual(hacker, undefined, 'Hacker admin should not exist in database');
+    } finally {
+      server.close();
+    }
   });
 });
 

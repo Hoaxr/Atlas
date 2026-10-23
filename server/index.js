@@ -133,6 +133,10 @@ wss.on('connection', (ws, req) => {
     onEvent = (data) => {
       try {
         if (ws.readyState === 1) {
+          // Sensitive watcher updates (stream sessions, user play history) are only delivered to admins
+          if (data?.type === 'WATCHERS_UPDATE' && ws._role !== 'admin') {
+            return;
+          }
           ws.send(JSON.stringify(data));
         }
       } catch { /* ignore */ }
@@ -140,7 +144,9 @@ wss.on('connection', (ws, req) => {
     eventBus.on('event', onEvent);
     setTimeout(() => {
       broadcastLayoutUpdate(false, ws);
-      broadcastTorrentsUpdate(ws);
+      if (ws._role === 'admin') {
+        broadcastTorrentsUpdate(ws);
+      }
     }, 50);
   };
 
@@ -333,7 +339,7 @@ const broadcastTorrentsUpdate = async (targetWs = null) => {
           clientConnected: _clientConnected,
         }
       };
-      if (targetWs.readyState === 1 && targetWs._userId) {
+      if (targetWs.readyState === 1 && targetWs._userId && targetWs._role === 'admin') {
         try { targetWs.send(JSON.stringify(payload)); } catch { /* ignore */ }
       }
       return;
@@ -377,14 +383,14 @@ const broadcastTorrentsUpdate = async (targetWs = null) => {
 
     const msg = JSON.stringify(payload);
     if (targetWs) {
-      if (targetWs.readyState === 1 && targetWs._userId) {
+      if (targetWs.readyState === 1 && targetWs._userId && targetWs._role === 'admin') {
         try { targetWs.send(msg); } catch { /* ignore */ }
       }
       return;
     }
 
     wss.clients.forEach((ws) => {
-      if (ws.readyState === 1 && ws._userId) {
+      if (ws.readyState === 1 && ws._userId && ws._role === 'admin') {
         try { ws.send(msg); } catch { /* ignore */ }
       }
     });
@@ -464,17 +470,25 @@ const parseCorsOrigins = (raw) => {
   return raw.split(',').map(s => s.trim().replace(/\/$/, '')).filter(Boolean);
 };
 const allowedCorsOrigins = parseCorsOrigins(process.env.CORS_ORIGIN);
+const allowsWildcardCors = allowedCorsOrigins.includes('*');
+
+if (allowsWildcardCors) {
+  console.warn('[CORS] WARNING: CORS_ORIGIN contains "*". Credentials disabled for security.');
+}
 
 app.use(cors({
   origin: (origin, callback) => {
     if (!origin) return callback(null, true);
+    if (allowsWildcardCors) {
+      return callback(null, true);
+    }
     const normalized = origin.replace(/\/$/, '');
-    if (allowedCorsOrigins.includes('*') || allowedCorsOrigins.includes(normalized)) {
+    if (allowedCorsOrigins.includes(normalized)) {
       return callback(null, true);
     }
     return callback(null, false);
   },
-  credentials: true
+  credentials: !allowsWildcardCors
 }));
 // Restore uploads are large — register above the global 500kb JSON parser with
 // its own limit. Auth must be applied explicitly since this bypasses later routers.
@@ -499,16 +513,35 @@ app.use('/api', (req, res, next) => {
 
 app.use('/api', apiRoutes);
 
-// Safe routes wrapper for settings (only GET /api/settings is safe)
+// Safe routes wrapper for settings (only GET /api/settings and GET /api/settings/version are safe for non-admins)
 const settingsAdminWrapper = (req, res, next) => {
-  if (req.method === 'GET' && req.path === '/') return next();
+  if (req.method === 'GET' && (req.path === '/' || req.path === '/version')) return next();
   return requireAdmin(req, res, next);
 };
 
-// Safe routes wrapper for library (only GET is safe for users, but administrative routes require admin)
+// Safe routes wrapper for library (only standard library browsing is safe for non-admin users;
+// administrative data, filesystem info, torrent queues, health, and manual indexer searches require admin)
 const libraryAdminWrapper = (req, res, next) => {
-  if (req.path === '/filesystem/browse') return requireAdmin(req, res, next);
-  if (req.path === '/export' || req.path.startsWith('/export')) return requireAdmin(req, res, next);
+  const adminOnlyPaths = [
+    '/filesystem/browse',
+    '/export',
+    '/paths',
+    '/downloads',
+    '/system-health',
+    '/duplicates',
+    '/cleanup-candidates',
+    '/missing-subs'
+  ];
+
+  if (adminOnlyPaths.some(p => req.path === p || req.path.startsWith(p + '/'))) {
+    return requireAdmin(req, res, next);
+  }
+
+  // Manual indexer search endpoints trigger external queries and must be admin-only
+  if (req.path.endsWith('/search') || req.path.includes('/search/') || req.path.endsWith('/search-subs')) {
+    return requireAdmin(req, res, next);
+  }
+
   if (req.method === 'GET') return next();
   return requireAdmin(req, res, next);
 };

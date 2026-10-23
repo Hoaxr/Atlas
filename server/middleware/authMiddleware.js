@@ -100,7 +100,7 @@ const authMiddleware = (req, res, next) => {
 
   if (token) {
     try {
-      const decoded = jwt.verify(token, JWT_SECRET);
+      const decoded = jwt.verify(token, process.env.JWT_SECRET || JWT_SECRET);
       if (!decoded || !decoded.id) {
         return res.status(401).json({ status: 'error', message: 'Unauthorized: Invalid token payload' });
       }
