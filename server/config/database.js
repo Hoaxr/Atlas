@@ -48,7 +48,7 @@ db.transaction = function (fn) {
   };
 };
 
-db.exec('PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000;');
+db.exec('PRAGMA busy_timeout=30000; PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;');
 // Performance tuning — safe with WAL mode, dramatically reduces I/O
 db.exec(`
   PRAGMA synchronous = NORMAL;

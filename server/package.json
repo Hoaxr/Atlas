@@ -7,7 +7,7 @@
     "dev": "node --watch --watch-path=./routes --watch-path=./services --watch-path=./middleware --watch-path=./config index.js",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
-    "test": "node --test ../test/*.test.js"
+    "test": "node --test --test-concurrency=1 ../test/*.test.js"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
