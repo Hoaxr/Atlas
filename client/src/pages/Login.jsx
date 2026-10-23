@@ -315,15 +315,21 @@ export default function Login() {
 
               <div className="space-y-2">
                 <div className="relative">
-                  <KeyRound className="absolute inset-y-0 left-0 pl-3.5 my-auto w-5 h-5 text-slate-500 pointer-events-none" />
+                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                    {totpCode.includes('-') || /[a-zA-Z]/.test(totpCode) ? (
+                      <KeyRound className="w-5 h-5 text-amber-400 transition-colors" />
+                    ) : (
+                      <Smartphone className="w-5 h-5 text-cyan-400/80 transition-colors" />
+                    )}
+                  </div>
                   <input
                     type="text"
                     autoFocus
                     required
                     value={totpCode}
                     onChange={e => setTotpCode(e.target.value)}
-                    placeholder="123456 or a1b2-c3d4"
-                    className="w-full bg-slate-950/60 border border-slate-800 rounded-xl pl-11 pr-4 py-3 text-center text-lg font-mono tracking-widest text-cyan-300 placeholder:text-sm placeholder:tracking-normal placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500/50 shadow-inner"
+                    placeholder="6-digit code or recovery code"
+                    className="w-full bg-slate-950/60 border border-slate-800 rounded-xl px-11 py-3 text-center text-lg font-mono tracking-widest text-cyan-300 placeholder:text-sm placeholder:font-sans placeholder:tracking-normal placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500/50 shadow-inner transition-all"
                   />
                 </div>
                 {totpError && (

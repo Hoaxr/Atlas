@@ -213,7 +213,7 @@ export default function TwoFactorAuthModal({ isOpen, onClose, onStatusChange }) 
                     type="text"
                     value={disableCode}
                     onChange={e => setDisableCode(e.target.value)}
-                    placeholder="e.g. 123456 or a1b2-c3d4"
+                    placeholder="6-digit code or recovery code"
                     className="w-full bg-slate-950/60 border border-slate-800 rounded-xl px-3.5 py-2 text-xs text-slate-200 focus:outline-none focus:border-rose-500/50 focus:ring-1 focus:ring-rose-500/50"
                     required
                   />
