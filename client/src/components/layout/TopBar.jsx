@@ -157,7 +157,7 @@ export default function TopBar({ user, activity, updateUrl, alerts = [], onOpenS
     return () => window.removeEventListener('atlas-focus-search', handler);
   }, []);
 
-  // Close search dropdown on click outside
+  // Close search dropdown on click or tap outside
   useEffect(() => {
     const handleClickOutside = (e) => {
       if (searchContainerRef.current && !searchContainerRef.current.contains(e.target)) {
@@ -165,7 +165,11 @@ export default function TopBar({ user, activity, updateUrl, alerts = [], onOpenS
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    document.addEventListener('touchstart', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('touchstart', handleClickOutside);
+    };
   }, []);
 
   // Fetch library index on search open
@@ -341,7 +345,7 @@ export default function TopBar({ user, activity, updateUrl, alerts = [], onOpenS
         </button>
 
         {/* Global search input & live dropdown */}
-        <div ref={searchContainerRef} className="flex-1 min-w-0 max-w-xl md:max-w-2xl relative">
+        <div ref={searchContainerRef} className="flex-1 min-w-0 max-w-xl md:max-w-2xl sm:relative">
           <div className="flex items-center bg-white dark:bg-[#101e31] border border-slate-200 dark:border-[#1c2d46] focus-within:border-cyan-500/70 focus-within:ring-2 focus-within:ring-cyan-500/20 rounded-xl px-2.5 sm:px-4 py-1.5 sm:py-2 transition-all shadow-sm group">
             <Search className="w-4 h-4 text-slate-400 dark:text-slate-300 group-focus-within:text-cyan-400 transition-colors shrink-0 mr-2 sm:mr-3" />
             <input
@@ -361,7 +365,7 @@ export default function TopBar({ user, activity, updateUrl, alerts = [], onOpenS
                 setIsSearchFocused(false);
               }}
               onKeyDown={handleSearchKeyDown}
-              placeholder={isSearchFocused ? '' : 'Search movies, shows, music... (press / to type)'}
+              placeholder={isSearchFocused ? '' : 'Search movies, shows, music...'}
               aria-label="Search movies, shows, music"
               className="flex-1 min-w-0 bg-transparent border-0 outline-none text-xs sm:text-sm text-slate-800 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-400 focus:placeholder-transparent placeholder:focus:text-transparent font-normal"
             />
@@ -410,7 +414,7 @@ export default function TopBar({ user, activity, updateUrl, alerts = [], onOpenS
                 onClick={onOpenShortcuts}
                 title="Keyboard shortcuts (?)"
                 aria-label="Keyboard shortcuts"
-                className="p-1 sm:p-1.5 -mr-1 sm:-mr-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/80 transition-colors shrink-0"
+                className="hidden sm:inline-flex p-1 sm:p-1.5 -mr-1 sm:-mr-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/80 transition-colors shrink-0"
               >
                 <Keyboard className="w-4 h-4" />
               </button>
@@ -419,7 +423,15 @@ export default function TopBar({ user, activity, updateUrl, alerts = [], onOpenS
 
           {/* Live Search Results Dropdown */}
           {isSearchOpen && searchQuery.trim() && (
-            <div className="absolute top-full left-0 right-0 mt-2 bg-[#0b1320] border border-[#1c2d46] rounded-2xl shadow-[0_20px_60px_rgba(0,0,0,0.9)] overflow-hidden z-50 animate-fade-in divide-y divide-white/5 max-h-[75vh] flex flex-col">
+            <>
+              {/* Mobile backdrop to dim the page and dismiss search on tap */}
+              <div
+                className="sm:hidden fixed inset-0 top-16 bg-black/60 backdrop-blur-[2px] z-40 animate-fade-in-fast"
+                onClick={() => setIsSearchOpen(false)}
+                aria-hidden="true"
+              />
+
+              <div className="absolute top-full left-2 right-2 sm:left-0 sm:right-0 mt-2 bg-[#0b1320] border border-[#1c2d46] rounded-2xl shadow-[0_20px_60px_rgba(0,0,0,0.9)] overflow-hidden z-50 animate-fade-in divide-y divide-white/5 max-h-[calc(100dvh-5.5rem)] sm:max-h-[75vh] flex flex-col">
               <div className="overflow-y-auto p-2 space-y-1">
                 {flatRows.length === 0 ? (
                   <div className="py-8 text-center text-xs text-slate-400">
@@ -510,8 +522,8 @@ export default function TopBar({ user, activity, updateUrl, alerts = [], onOpenS
               </div>
 
               {/* Dropdown footer with navigation & command menu action */}
-              <div className="px-4 py-2.5 bg-gradient-to-r from-[#070e1b] via-[#091322] to-[#070e1b] flex items-center justify-between text-[11px] text-slate-400 border-t border-[#1c2d46] rounded-b-2xl">
-                <div className="flex items-center flex-wrap gap-y-1">
+              <div className="px-3.5 sm:px-4 py-2.5 bg-gradient-to-r from-[#070e1b] via-[#091322] to-[#070e1b] flex items-center justify-between text-[11px] text-slate-400 border-t border-[#1c2d46] rounded-b-2xl">
+                <div className="hidden sm:flex items-center flex-wrap gap-y-1">
                   <div className="flex items-center gap-1.5">
                     <kbd className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-md bg-gradient-to-b from-[#1e2a3c] to-[#0f1724] border-t border-white/20 border-x border-b border-[#050912] text-slate-200 font-mono text-[10px] font-bold shadow-[0_1.5px_0_0_#050912]">↑</kbd>
                     <kbd className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-md bg-gradient-to-b from-[#1e2a3c] to-[#0f1724] border-t border-white/20 border-x border-b border-[#050912] text-slate-200 font-mono text-[10px] font-bold shadow-[0_1.5px_0_0_#050912]">↓</kbd>
@@ -525,12 +537,17 @@ export default function TopBar({ user, activity, updateUrl, alerts = [], onOpenS
                     <span className="text-slate-400 font-medium">select</span>
                   </div>
 
-                  <span className="w-1 h-1 rounded-full bg-slate-700 mx-2 hidden sm:inline" />
+                  <span className="w-1 h-1 rounded-full bg-slate-700 mx-2" />
 
-                  <div className="hidden sm:flex items-center gap-1.5">
+                  <div className="flex items-center gap-1.5">
                     <kbd className="inline-flex items-center justify-center min-w-[24px] h-5 px-1.5 rounded-md bg-gradient-to-b from-[#1e2a3c] to-[#0f1724] border-t border-white/20 border-x border-b border-[#050912] text-slate-300 font-mono text-[10px] font-bold shadow-[0_1.5px_0_0_#050912]">esc</kbd>
                     <span className="text-slate-400 font-medium">dismiss</span>
                   </div>
+                </div>
+
+                {/* Mobile result count */}
+                <div className="sm:hidden text-[11px] text-slate-400 font-medium">
+                  {flatRows.length} {flatRows.length === 1 ? 'result' : 'results'}
                 </div>
 
                 <button
@@ -539,19 +556,20 @@ export default function TopBar({ user, activity, updateUrl, alerts = [], onOpenS
                     setIsSearchOpen(false);
                     onOpenSearch();
                   }}
-                  className="group flex items-center gap-2 px-2.5 py-1 rounded-lg bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/25 hover:border-cyan-500/40 text-cyan-400 hover:text-cyan-300 font-medium transition-all shadow-sm cursor-pointer ml-3 shrink-0"
+                  className="group flex items-center gap-1.5 sm:gap-2 px-2.5 py-1 rounded-lg bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/25 hover:border-cyan-500/40 text-cyan-400 hover:text-cyan-300 font-medium transition-all shadow-sm cursor-pointer ml-auto shrink-0"
                 >
                   <Command className="w-3 h-3 text-cyan-400 group-hover:scale-110 transition-transform" />
                   <span className="text-[11px] font-semibold">Command Menu</span>
-                  <span className="flex items-center gap-0.5">
+                  <span className="hidden sm:flex items-center gap-0.5">
                     <kbd className="px-1.5 py-0.5 rounded bg-black/40 border border-cyan-500/30 text-[10px] font-mono text-cyan-300 shadow-sm">{MOD_KEY}</kbd>
                     <kbd className="px-1.5 py-0.5 rounded bg-black/40 border border-cyan-500/30 text-[10px] font-mono text-cyan-300 shadow-sm">K</kbd>
                   </span>
                 </button>
               </div>
             </div>
-          )}
-        </div>
+          </>
+        )}
+      </div>
 
       {/* Action icons: donate, notifications, status, settings, account */}
       <div className="ml-auto flex items-center gap-1 sm:gap-3 md:gap-4 shrink-0">
