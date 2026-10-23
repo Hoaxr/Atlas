@@ -13,6 +13,15 @@ const JWT_SECRET = process.env.JWT_SECRET;
 // Using the value here is safe.
 
 const authMiddleware = require('../middleware/authMiddleware');
+const {
+  generateSecret,
+  verifyTOTP,
+  generateOtpAuthUri,
+  generateQRCodeDataUrl,
+  generateBackupCodes,
+  hashBackupCode,
+  findMatchingBackupCodeIndex
+} = require('../utils/totp');
 
 // Rate limiter: max 5 attempts per 15 minutes per IP (skipped in test environment)
 const loginLimiter = rateLimit({
@@ -33,28 +42,83 @@ const generalLimiter = rateLimit({
   message: { status: 'error', message: 'Too many requests. Please try again in 15 minutes.' },
 });
 
+// Dedicated rate limiter for 2FA verification attempts (10 attempts per 15 min)
+const totpLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  skip: () => process.env.NODE_ENV === 'test',
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { status: 'error', message: 'Too many 2FA verification attempts. Please try again in 15 minutes.' },
+});
+
 // Login endpoint
 router.post('/login', loginLimiter, async (req, res) => {
-  const { username, password } = req.body;
+  const { username, password, totp_code } = req.body;
   const authEnabled = isAuthEnabled();
 
   if (!authEnabled) {
     return res.json({ status: 'success', message: 'Authentication is disabled' });
   }
 
-  const user = db.prepare('SELECT id, username, password, role, origin, jwt_version FROM users WHERE username = ?').get(username);
+  const user = db.prepare('SELECT id, username, password, role, origin, jwt_version, totp_enabled, totp_secret, totp_backup_codes FROM users WHERE username = ?').get(username);
 
   // Always run a bcrypt comparison so response timing doesn't reveal whether the username exists
   const DUMMY_HASH = '$2a$12$C6UzMDM.H6dfI/f/IKcEeO7ZBpQ0D3NtRSm7oHFCjP.QfHm3XW1Bu';
   const passwordMatches = await bcrypt.compare(password, user?.password || DUMMY_HASH);
 
-  if (user && passwordMatches) {
-    const token = jwt.sign({ id: user.id, username: user.username, role: user.role, jwt_version: user.jwt_version }, JWT_SECRET, { expiresIn: '7d' });
-    db.prepare('UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = ?').run(user.id);
-    res.json({ status: 'success', data: { token, user: { id: user.id, username: user.username, role: user.role, origin: user.origin } } });
-  } else {
-    res.status(401).json({ status: 'error', message: 'Invalid credentials' });
+  if (!user || !passwordMatches) {
+    return res.status(401).json({ status: 'error', message: 'Invalid credentials' });
   }
+
+  // If 2FA is enabled for this account
+  if (user.totp_enabled) {
+    if (!totp_code) {
+      // Return temporary challenge token valid for 5 minutes
+      const tempToken = jwt.sign(
+        { id: user.id, username: user.username, role: user.role, stage: 'totp_pending' },
+        process.env.JWT_SECRET || JWT_SECRET,
+        { expiresIn: '5m' }
+      );
+      return res.json({
+        status: 'totp_required',
+        message: 'Two-factor authentication code required',
+        data: { temp_token: tempToken }
+      });
+    }
+
+    // Verify code against TOTP or single-use backup codes
+    const isTotpValid = verifyTOTP(totp_code, user.totp_secret);
+    let isBackupValid = false;
+    let backupCodes = [];
+    try {
+      backupCodes = user.totp_backup_codes ? JSON.parse(user.totp_backup_codes) : [];
+    } catch { /* ignore */ }
+
+    if (!isTotpValid) {
+      const matchIdx = findMatchingBackupCodeIndex(totp_code, backupCodes);
+      if (matchIdx !== -1) {
+        isBackupValid = true;
+        backupCodes.splice(matchIdx, 1);
+        db.prepare('UPDATE users SET totp_backup_codes = ? WHERE id = ?').run(
+          JSON.stringify(backupCodes),
+          user.id
+        );
+      }
+    }
+
+    if (!isTotpValid && !isBackupValid) {
+      return res.status(401).json({ status: 'error', message: 'Invalid two-factor authentication code or backup code' });
+    }
+  }
+
+  const token = jwt.sign(
+    { id: user.id, username: user.username, role: user.role, jwt_version: user.jwt_version },
+    process.env.JWT_SECRET || JWT_SECRET,
+    { expiresIn: '7d' }
+  );
+  db.prepare('UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = ?').run(user.id);
+  res.json({ status: 'success', data: { token, user: { id: user.id, username: user.username, role: user.role, origin: user.origin } } });
 });
 
 // Change password endpoint
@@ -473,6 +537,186 @@ router.post('/jellyfin/quickconnect/login', loginLimiter, async (req, res) => {
     console.error('[Jellyfin QC] Login failed:', err.response?.data || err.message);
     res.status(401).json({ status: 'error', message: 'Quick Connect authentication failed or server unreachable' });
   }
+});
+
+// ── Two-Factor Authentication (TOTP) Endpoints ──────────────────────────────
+
+// Verify login with TOTP code or backup code
+router.post('/2fa/verify-login', totpLimiter, async (req, res) => {
+  const { temp_token, totp_code } = req.body;
+  if (!temp_token || !totp_code) {
+    return res.status(400).json({ status: 'error', message: 'Missing token or 2FA code' });
+  }
+
+  try {
+    const decoded = jwt.verify(temp_token, process.env.JWT_SECRET || JWT_SECRET);
+    if (!decoded || decoded.stage !== 'totp_pending' || !decoded.id) {
+      return res.status(401).json({ status: 'error', message: 'Invalid or expired 2FA session' });
+    }
+
+    const user = db.prepare('SELECT id, username, role, origin, jwt_version, totp_enabled, totp_secret, totp_backup_codes FROM users WHERE id = ?').get(decoded.id);
+    if (!user || !user.totp_enabled) {
+      return res.status(400).json({ status: 'error', message: '2FA is not enabled for this user' });
+    }
+
+    const isTotpValid = verifyTOTP(totp_code, user.totp_secret);
+    let isBackupValid = false;
+    let backupCodes = [];
+    try {
+      backupCodes = user.totp_backup_codes ? JSON.parse(user.totp_backup_codes) : [];
+    } catch { /* ignore */ }
+
+    if (!isTotpValid) {
+      const matchIdx = findMatchingBackupCodeIndex(totp_code, backupCodes);
+      if (matchIdx !== -1) {
+        isBackupValid = true;
+        backupCodes.splice(matchIdx, 1);
+        db.prepare('UPDATE users SET totp_backup_codes = ? WHERE id = ?').run(
+          JSON.stringify(backupCodes),
+          user.id
+        );
+      }
+    }
+
+    if (!isTotpValid && !isBackupValid) {
+      return res.status(401).json({ status: 'error', message: 'Invalid two-factor authentication code or backup code' });
+    }
+
+    const token = jwt.sign(
+      { id: user.id, username: user.username, role: user.role, jwt_version: user.jwt_version },
+      process.env.JWT_SECRET || JWT_SECRET,
+      { expiresIn: '7d' }
+    );
+    db.prepare('UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = ?').run(user.id);
+    res.json({
+      status: 'success',
+      data: { token, user: { id: user.id, username: user.username, role: user.role, origin: user.origin } }
+    });
+  } catch {
+    return res.status(401).json({ status: 'error', message: 'Invalid or expired 2FA session' });
+  }
+});
+
+// Check current user 2FA status
+router.get('/2fa/status', authMiddleware, (req, res) => {
+  const user = db.prepare('SELECT totp_enabled FROM users WHERE id = ?').get(req.user.id);
+  res.json({
+    status: 'success',
+    data: {
+      enabled: !!(user && user.totp_enabled)
+    }
+  });
+});
+
+// Initiate 2FA setup: generate new secret and QR code
+router.post('/2fa/setup', authMiddleware, async (req, res) => {
+  try {
+    const user = db.prepare('SELECT id, username FROM users WHERE id = ?').get(req.user.id);
+    if (!user) {
+      return res.status(404).json({ status: 'error', message: 'User not found' });
+    }
+
+    const secret = generateSecret();
+    const otpauthUri = generateOtpAuthUri({
+      secret,
+      username: user.username,
+      issuer: 'Atlas'
+    });
+    const qrCodeDataUrl = await generateQRCodeDataUrl(otpauthUri);
+
+    // Save pending secret (not yet enabled until verified)
+    db.prepare('UPDATE users SET totp_secret = ? WHERE id = ?').run(secret, user.id);
+
+    res.json({
+      status: 'success',
+      data: {
+        secret,
+        qr_code: qrCodeDataUrl,
+        otpauth_url: otpauthUri
+      }
+    });
+  } catch (err) {
+    console.error('[2FA Setup] Failed:', err.message);
+    res.status(500).json({ status: 'error', message: 'Failed to initialize 2FA setup' });
+  }
+});
+
+// Confirm 2FA setup with first code and receive emergency recovery codes
+router.post('/2fa/enable', authMiddleware, (req, res) => {
+  const { code } = req.body;
+  if (!code) {
+    return res.status(400).json({ status: 'error', message: 'Verification code is required' });
+  }
+
+  const user = db.prepare('SELECT id, totp_secret FROM users WHERE id = ?').get(req.user.id);
+  if (!user || !user.totp_secret) {
+    return res.status(400).json({ status: 'error', message: '2FA setup was not initiated. Please start setup again.' });
+  }
+
+  const isValid = verifyTOTP(code, user.totp_secret);
+  if (!isValid) {
+    return res.status(400).json({ status: 'error', message: 'Invalid verification code. Please check your authenticator app and try again.' });
+  }
+
+  // Generate 8 emergency backup codes
+  const rawBackupCodes = generateBackupCodes(8);
+  const hashedBackupCodes = rawBackupCodes.map(hashBackupCode);
+
+  db.prepare('UPDATE users SET totp_enabled = 1, totp_backup_codes = ? WHERE id = ?').run(
+    JSON.stringify(hashedBackupCodes),
+    user.id
+  );
+
+  res.json({
+    status: 'success',
+    message: 'Two-factor authentication has been enabled successfully',
+    data: {
+      backup_codes: rawBackupCodes
+    }
+  });
+});
+
+// Disable 2FA (requires password confirmation and TOTP/backup code)
+router.post('/2fa/disable', authMiddleware, async (req, res) => {
+  const { password, code } = req.body;
+  if (!password || !code) {
+    return res.status(400).json({ status: 'error', message: 'Current password and verification code are required' });
+  }
+
+  const user = db.prepare('SELECT id, password, totp_secret, totp_backup_codes FROM users WHERE id = ?').get(req.user.id);
+  if (!user) {
+    return res.status(404).json({ status: 'error', message: 'User not found' });
+  }
+
+  const passwordMatches = await bcrypt.compare(password, user.password);
+  if (!passwordMatches) {
+    return res.status(400).json({ status: 'error', message: 'Incorrect current password' });
+  }
+
+  const isTotpValid = verifyTOTP(code, user.totp_secret);
+  let isBackupValid = false;
+  let backupCodes = [];
+  try {
+    backupCodes = user.totp_backup_codes ? JSON.parse(user.totp_backup_codes) : [];
+  } catch { /* ignore */ }
+
+  if (!isTotpValid) {
+    const matchIdx = findMatchingBackupCodeIndex(code, backupCodes);
+    if (matchIdx !== -1) {
+      isBackupValid = true;
+    }
+  }
+
+  if (!isTotpValid && !isBackupValid) {
+    return res.status(400).json({ status: 'error', message: 'Invalid verification code or backup code' });
+  }
+
+  db.prepare('UPDATE users SET totp_secret = NULL, totp_enabled = 0, totp_backup_codes = NULL WHERE id = ?').run(user.id);
+
+  res.json({
+    status: 'success',
+    message: 'Two-factor authentication has been disabled successfully'
+  });
 });
 
 module.exports = router;

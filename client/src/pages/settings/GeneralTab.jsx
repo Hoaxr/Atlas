@@ -1,8 +1,10 @@
-import { useState } from 'react';
-import { Shield, Globe, Sliders, Users, ArrowRight } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Shield, Globe, Sliders, Users, ArrowRight, ShieldCheck } from 'lucide-react';
+import api from '../../lib/api';
 import CustomSelect from '../../components/shared/CustomSelect';
 import ToggleRow from '../../components/shared/ToggleRow';
 import BackupTab from './BackupTab';
+import TwoFactorAuthModal from '../../components/TwoFactorAuthModal';
 import { SettingsSection, SettingsHeader, SettingsGroup, SettingsLabel, SettingsHelper } from '../../components/settings/layout';
 
 const TIMEZONE_OPTIONS = [
@@ -35,6 +37,18 @@ const LANDING_PAGE_OPTIONS = [
 
 export default function GeneralTab({ settings, setSettings, onNavigateTab }) {
   const [landingPage, setLandingPage] = useState(() => localStorage.getItem('atlas_landing_page') || '/tracker');
+  const [twoFactorModalOpen, setTwoFactorModalOpen] = useState(false);
+  const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
+
+  useEffect(() => {
+    api.get('/auth/2fa/status')
+      .then(res => {
+        if (res.data?.status === 'success') {
+          setTwoFactorEnabled(!!res.data.data?.enabled);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
@@ -70,31 +84,79 @@ export default function GeneralTab({ settings, setSettings, onNavigateTab }) {
           />
 
           {settings.authEnabled && (
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3.5 p-4 rounded-xl bg-[#0c1624] border border-[#1c2d46]">
-              <div className="flex items-center gap-3 min-w-0">
-                <div className="p-2.5 rounded-xl bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 shrink-0">
-                  <Users className="w-4 h-4" />
+            <>
+              {/* Two-Factor Authentication (2FA) */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3.5 p-4 rounded-xl bg-[#0c1624] border border-[#1c2d46]">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className={`p-2.5 rounded-xl shrink-0 border ${
+                    twoFactorEnabled
+                      ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                      : 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20'
+                  }`}>
+                    <ShieldCheck className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-semibold text-slate-200">Two-Factor Authentication (2FA / TOTP)</p>
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border ${
+                        twoFactorEnabled
+                          ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+                          : 'bg-slate-800 text-slate-400 border-slate-700'
+                      }`}>
+                        {twoFactorEnabled ? 'Active' : 'Disabled'}
+                      </span>
+                    </div>
+                    <p className="text-xs sm:text-sm text-slate-400 mt-0.5">
+                      Protect your admin account with Google Authenticator, Authy, or emergency backup codes.
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-sm font-semibold text-slate-200">User Accounts & Roles</p>
-                  <p className="text-xs sm:text-sm text-slate-400 mt-0.5">
-                    User credentials, admin roles, and password management are handled in the Users tab.
-                  </p>
-                </div>
-              </div>
-              {onNavigateTab && (
                 <button
                   type="button"
-                  onClick={() => onNavigateTab('users')}
-                  className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold text-cyan-400 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 transition-colors shrink-0 w-fit"
+                  onClick={() => setTwoFactorModalOpen(true)}
+                  className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold border transition-colors shrink-0 w-fit ${
+                    twoFactorEnabled
+                      ? 'text-slate-200 bg-slate-800/80 hover:bg-slate-800 border-slate-700'
+                      : 'text-cyan-400 bg-cyan-500/10 hover:bg-cyan-500/20 border-cyan-500/30'
+                  }`}
                 >
-                  Manage Users <ArrowRight className="w-3.5 h-3.5" />
+                  {twoFactorEnabled ? 'Manage 2FA' : 'Configure 2FA'} <ArrowRight className="w-3.5 h-3.5" />
                 </button>
-              )}
-            </div>
+              </div>
+
+              {/* User Accounts & Roles */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3.5 p-4 rounded-xl bg-[#0c1624] border border-[#1c2d46]">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="p-2.5 rounded-xl bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 shrink-0">
+                    <Users className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-slate-200">User Accounts & Roles</p>
+                    <p className="text-xs sm:text-sm text-slate-400 mt-0.5">
+                      User credentials, admin roles, and password management are handled in the Users tab.
+                    </p>
+                  </div>
+                </div>
+                {onNavigateTab && (
+                  <button
+                    type="button"
+                    onClick={() => onNavigateTab('users')}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold text-cyan-400 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 transition-colors shrink-0 w-fit"
+                  >
+                    Manage Users <ArrowRight className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+            </>
           )}
         </div>
       </SettingsSection>
+
+      <TwoFactorAuthModal
+        isOpen={twoFactorModalOpen}
+        onClose={() => setTwoFactorModalOpen(false)}
+        onStatusChange={setTwoFactorEnabled}
+      />
 
       {/* Preferences */}
       <SettingsSection>

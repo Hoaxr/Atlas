@@ -1,7 +1,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Shield, Lock, User, ArrowRight, X, Smartphone } from 'lucide-react';
+import { Shield, Lock, User, ArrowRight, X, Smartphone, ShieldCheck, KeyRound } from 'lucide-react';
 import api from '../lib/api';
 import { customAlert } from '../utils/alerts';
 import PasswordInput from '../components/shared/PasswordInput';
@@ -37,6 +37,12 @@ export default function Login() {
   const [showAtlasLogin, setShowAtlasLogin] = useState(false);
   const [qcCode, setQcCode] = useState('');
   const [, setQcSecret] = useState('');
+
+  // Two-Factor Authentication (2FA) State
+  const [totpRequired, setTotpRequired] = useState(false);
+  const [totpTempToken, setTotpTempToken] = useState('');
+  const [totpCode, setTotpCode] = useState('');
+  const [totpError, setTotpError] = useState('');
   
   const navigate = useNavigate();
   const pollIntervalRef = useRef(null);
@@ -98,6 +104,11 @@ export default function Login() {
       
       if (res.data.status === 'success') {
         handleSuccessfulLogin(res);
+      } else if (res.data.status === 'totp_required') {
+        setTotpRequired(true);
+        setTotpTempToken(res.data.data?.temp_token || '');
+        setTotpCode('');
+        setTotpError('');
       } else {
         customAlert(res.data.message || 'Login failed');
       }
@@ -110,6 +121,32 @@ export default function Login() {
     } finally {
       setLoading(false);
       setLoadingMethod(null);
+    }
+  };
+
+  const handleTotpSubmit = async (e) => {
+    e.preventDefault();
+    if (!totpCode.trim()) {
+      setTotpError('Please enter your 6-digit code or recovery code');
+      return;
+    }
+
+    setLoading(true);
+    setTotpError('');
+    try {
+      const res = await api.post('/auth/2fa/verify-login', {
+        temp_token: totpTempToken,
+        totp_code: totpCode.trim()
+      });
+      if (res.data?.status === 'success') {
+        handleSuccessfulLogin(res);
+      } else {
+        setTotpError(res.data?.message || 'Verification failed');
+      }
+    } catch (err) {
+      setTotpError(err.response?.data?.message || 'Invalid 2FA code or expired session');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -259,10 +296,75 @@ export default function Login() {
                 className="h-12 w-auto drop-shadow-[0_0_18px_rgba(56,189,248,0.35)] group-hover/logo:scale-105 transition-transform duration-300"
               />
             </div>
-            <p className="text-slate-400 mt-2 text-sm font-medium">Sign in to access your media manager</p>
+            <p className="text-slate-400 mt-2 text-sm font-medium">
+              {totpRequired ? 'Complete two-factor authentication' : 'Sign in to access your media manager'}
+            </p>
           </div>
 
-          <form onSubmit={handleAtlasLogin} className="space-y-6">
+          {totpRequired ? (
+            <form onSubmit={handleTotpSubmit} className="space-y-6 animate-fade-in">
+              <div className="flex flex-col items-center text-center space-y-2">
+                <div className="w-12 h-12 rounded-2xl bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 flex items-center justify-center shadow-lg shadow-cyan-500/10">
+                  <ShieldCheck className="w-6 h-6" />
+                </div>
+                <h3 className="text-base font-bold text-slate-100">Two-Factor Authentication</h3>
+                <p className="text-xs text-slate-400 leading-relaxed max-w-xs">
+                  Enter the 6-digit code from your authenticator app or an emergency backup recovery code.
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <div className="relative">
+                  <KeyRound className="absolute inset-y-0 left-0 pl-3.5 my-auto w-5 h-5 text-slate-500 pointer-events-none" />
+                  <input
+                    type="text"
+                    autoFocus
+                    required
+                    value={totpCode}
+                    onChange={e => setTotpCode(e.target.value)}
+                    placeholder="123456 or a1b2-c3d4"
+                    className="w-full bg-slate-950/60 border border-slate-800 rounded-xl pl-11 pr-4 py-3 text-center text-lg font-mono tracking-widest text-cyan-300 placeholder:text-sm placeholder:tracking-normal placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500/50 shadow-inner"
+                  />
+                </div>
+                {totpError && (
+                  <p className="text-xs text-rose-400 text-center font-medium animate-fade-in">
+                    {totpError}
+                  </p>
+                )}
+              </div>
+
+              <div className="space-y-3">
+                <button
+                  type="submit"
+                  disabled={loading || !totpCode.trim()}
+                  className="w-full py-3 px-4 font-bold rounded-xl shadow-lg flex items-center justify-center gap-2 transition-all hover:scale-[1.01] hover:brightness-105 active:scale-[0.99] disabled:opacity-50 bg-gradient-to-r from-cyan-500 via-sky-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white shadow-cyan-500/20"
+                >
+                  {loading ? (
+                    <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  ) : (
+                    <>
+                      Verify & Sign In
+                      <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+                    </>
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTotpRequired(false);
+                    setTotpTempToken('');
+                    setTotpCode('');
+                    setTotpError('');
+                  }}
+                  className="w-full py-2.5 text-xs font-semibold text-slate-400 hover:text-slate-200 transition-colors"
+                >
+                  Cancel and return to sign in
+                </button>
+              </div>
+            </form>
+          ) : (
+            <form onSubmit={handleAtlasLogin} className="space-y-6">
             <div className="flex flex-col gap-3">
               {authOptions.jellyfinConfigured && (
                 <button
@@ -376,6 +478,7 @@ export default function Login() {
               )}
             </div>
           </form>
+          )}
         </div>
       </div>
 

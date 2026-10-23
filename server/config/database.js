@@ -79,7 +79,10 @@ db.exec(`
     last_login DATETIME,
     jwt_version INTEGER DEFAULT 1,
     request_limit INTEGER DEFAULT NULL,
-    permissions TEXT DEFAULT '{}'
+    permissions TEXT DEFAULT '{}',
+    totp_secret TEXT DEFAULT NULL,
+    totp_enabled INTEGER DEFAULT 0,
+    totp_backup_codes TEXT DEFAULT NULL
   );
 
   CREATE TABLE IF NOT EXISTS requests (
@@ -1753,6 +1756,24 @@ const MIGRATIONS = [
         if (!hasColumn('subtitle_tracks', col)) {
           try {
             db.exec(`ALTER TABLE subtitle_tracks ADD COLUMN ${col} ${colType};`);
+          } catch { /* ignore */ }
+        }
+      }
+    }
+  },
+  {
+    id: 58,
+    name: 'add_totp_2fa_columns_to_users',
+    run: (db) => {
+      const cols = [
+        ['totp_secret', 'TEXT DEFAULT NULL'],
+        ['totp_enabled', 'INTEGER DEFAULT 0'],
+        ['totp_backup_codes', 'TEXT DEFAULT NULL']
+      ];
+      for (const [col, colType] of cols) {
+        if (!hasColumn('users', col)) {
+          try {
+            db.exec(`ALTER TABLE users ADD COLUMN ${col} ${colType};`);
           } catch { /* ignore */ }
         }
       }
