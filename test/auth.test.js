@@ -105,6 +105,15 @@ test('Authentication System & Defaults', async (t) => {
     const server = app.listen(0);
     const port = server.address().port;
 
+    // Ensure an admin user exists in DB so /setup strictly triggers the 403 branch
+    const seedAdminId = 888991;
+    const existingAdmin = db.prepare("SELECT id FROM users WHERE role = 'admin' LIMIT 1").get();
+    let seeded = false;
+    if (!existingAdmin) {
+      db.prepare("INSERT INTO users (id, username, password, role) VALUES (?, 'seed_admin_setup', 'hash123', 'admin')").run(seedAdminId);
+      seeded = true;
+    }
+
     try {
       const response = await fetch(`http://127.0.0.1:${port}/api/auth/setup`, {
         method: 'POST',
@@ -124,6 +133,9 @@ test('Authentication System & Defaults', async (t) => {
       const hacker = db.prepare("SELECT id FROM users WHERE username = 'hacker_admin'").get();
       assert.strictEqual(hacker, undefined, 'Hacker admin should not exist in database');
     } finally {
+      if (seeded) {
+        db.prepare('DELETE FROM users WHERE id = ?').run(seedAdminId);
+      }
       server.close();
     }
   });
