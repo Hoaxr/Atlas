@@ -557,6 +557,70 @@ test('Tracker & Continue Watching System', async (t) => {
       db.prepare('DELETE FROM shows WHERE id = ?').run(showId);
     }
   });
+
+  await t.test('watcherService sends playback notifications on initial play and consecutive autoplayed episodes with same session id', async () => {
+    const watcherService = require('../server/services/watcherService');
+    const notificationService = require('../server/services/notificationService');
+    const { setSetting } = require('../server/utils/settings');
+
+    setSetting('notifyOnPlaybackStart', 'true');
+
+    const sentNotifications = [];
+    const origSend = notificationService.sendNotification;
+    notificationService.sendNotification = async (subject, message, data) => {
+      sentNotifications.push({ subject, message, data });
+    };
+
+    const origGetAllSessions = watcherService.getAllSessions;
+    let mockSessions = [];
+    watcherService.getAllSessions = async () => mockSessions;
+
+    watcherService.activeSessions.clear();
+    watcherService.recentPlaybackNotifications.clear();
+
+    try {
+      // 1. Initial episode starts on session 'plex_42'
+      mockSessions = [{
+        id: 'plex_42',
+        user: 'testuser',
+        title: 'Show - S02E01',
+        type: 'episode',
+        player: 'Plex Web',
+        timeTotal: 1800000,
+        progress: 10
+      }];
+      await watcherService.pollSessions();
+
+      assert.strictEqual(sentNotifications.length, 1);
+      assert.strictEqual(sentNotifications[0].data.title, 'Show - S02E01');
+
+      // 2. Same episode still playing (subsequent poll tick) -> no duplicate notification
+      mockSessions[0].progress = 30;
+      await watcherService.pollSessions();
+      assert.strictEqual(sentNotifications.length, 1, 'Should not notify again for same episode in-progress');
+
+      // 3. Autoplay advances to S02E02 on SAME session id 'plex_42'
+      mockSessions = [{
+        id: 'plex_42',
+        user: 'testuser',
+        title: 'Show - S02E02',
+        type: 'episode',
+        player: 'Plex Web',
+        timeTotal: 1800000,
+        progress: 5
+      }];
+      await watcherService.pollSessions();
+
+      assert.strictEqual(sentNotifications.length, 2, 'Should notify when next episode autoplays on same session');
+      assert.strictEqual(sentNotifications[1].data.title, 'Show - S02E02');
+    } finally {
+      notificationService.sendNotification = origSend;
+      watcherService.getAllSessions = origGetAllSessions;
+      watcherService.activeSessions.clear();
+      watcherService.recentPlaybackNotifications.clear();
+      setSetting('notifyOnPlaybackStart', 'false');
+    }
+  });
 });
 
 

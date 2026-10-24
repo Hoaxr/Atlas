@@ -55,7 +55,7 @@ class WatcherService {
     // Ensure player column exists (self-healing migration)
     try { db.exec("ALTER TABLE play_history ADD COLUMN player TEXT;"); } catch { /* ignore */ }
     
-    this.activeSessions = new Set();
+    this.activeSessions = new Map(); // Track sessionId -> currentTitle to detect new sessions and autoplay title changes
     this.autoWatchedSet = new Set(); // Track sessions already auto-marked to avoid duplicate calls
     this.recordedPlaySet = new Set(); // Track session+title already recorded in play_history
     this.recentPlaybackNotifications = new Map(); // Cooldown map: key = `${user}:${title}`, value = timestamp
@@ -589,8 +589,11 @@ class WatcherService {
     const PLAYBACK_NOTIFY_COOLDOWN = 2 * 60 * 1000; // 2 minutes
 
     for (const session of sessions) {
-      if (!this.activeSessions.has(session.id)) {
-        // New session detected
+      const isNewSession = !this.activeSessions.has(session.id);
+      const isTitleChanged = this.activeSessions.get(session.id) !== session.title;
+
+      if (isNewSession || isTitleChanged) {
+        // New session or title change on existing session (e.g. autoplay) detected
         const playbackKey = `${session.user}:${session.title}`;
         const lastNotified = this.recentPlaybackNotifications.get(playbackKey);
 
@@ -779,8 +782,8 @@ class WatcherService {
       }
     }
 
-    // Update active sessions
-    this.activeSessions = currentSessionIds;
+    // Update active sessions (sessionId -> current title)
+    this.activeSessions = new Map(sessions.map(s => [s.id, s.title]));
 
     // Skip the 9 aggregate play_history queries when nobody is watching
     // and no WS clients are connected to receive the stats
