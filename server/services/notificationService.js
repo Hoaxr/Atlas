@@ -183,6 +183,27 @@ class NotificationService {
       );
       return;
     }
+
+    // 10. Failed Login Attempt
+    const notifyOnFailedLogin = getSetting('notifyOnFailedLogin') === 'true';
+    if (notifyOnFailedLogin && event.message === 'Failed login attempt') {
+      const username = event.metadata?.username || 'Unknown';
+      const ip = event.metadata?.ip ? ` from ${event.metadata.ip}` : '';
+      const reason = event.metadata?.reason ? ` (${event.metadata.reason})` : '';
+      const now = Date.now();
+      const throttleKey = `${username}_${event.metadata?.ip || 'ip'}`;
+      if (!this._lastFailedLoginTimes) this._lastFailedLoginTimes = {};
+      const lastSent = this._lastFailedLoginTimes[throttleKey] || 0;
+      if (now - lastSent < 60 * 1000) return; // 1 min throttle per user/IP
+      this._lastFailedLoginTimes[throttleKey] = now;
+
+      await this.sendNotification(
+        'Failed Login Attempt',
+        `Failed login attempt for user "${username}"${ip}${reason}.`,
+        event.metadata
+      );
+      return;
+    }
   }
 
   async sendNotification(title, message, metadata = {}, overrides = {}) {
@@ -227,7 +248,7 @@ class NotificationService {
       embedColor = 10181046; // Cyan
     } else if (title === 'Low Disk Space Warning') {
       embedColor = 16705372; // Yellow
-    } else if (title === 'Malicious Release Blocked' || title === 'Download Failed' || title === 'Request Denied' || title === 'Backup Failed' || title === 'System Health Issue' || title === 'Task Failed') {
+    } else if (title === 'Malicious Release Blocked' || title === 'Download Failed' || title === 'Request Denied' || title === 'Backup Failed' || title === 'System Health Issue' || title === 'Task Failed' || title === 'Failed Login Attempt') {
       embedColor = 15158332; // Red
     }
 
@@ -362,7 +383,8 @@ class NotificationService {
             'Backup Failed': '💾',
             'System Health Issue': '🚨',
             'Task Completed': '⏱️',
-            'Task Failed': '❌'
+            'Task Failed': '❌',
+            'Failed Login Attempt': '🔒'
           };
           const emoji = emojiMap[title] ? `${emojiMap[title]} ` : '';
           if (itemTitle) {
@@ -385,7 +407,7 @@ class NotificationService {
           } catch (posterErr) {
             console.error('[NotificationService] Telegram poster failed, sending text fallback:', posterErr.message);
           }
-        } else if (title === 'Atlas' || title === 'Backup Complete' || title === 'Backup Failed' || title === 'Low Disk Space Warning' || title === 'System Health Issue' || title === 'Task Completed' || title === 'Task Failed') {
+        } else if (title === 'Atlas' || title === 'Backup Complete' || title === 'Backup Failed' || title === 'Low Disk Space Warning' || title === 'System Health Issue' || title === 'Task Completed' || title === 'Task Failed' || title === 'Failed Login Attempt') {
           photoBuffer = this.getAtlasLogoBuffer();
           photoFilename = 'atlas-logo.png';
         }

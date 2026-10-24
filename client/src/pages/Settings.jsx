@@ -160,6 +160,7 @@ export default function Settings() {
     notifyOnBackup: false,
     notifyOnHealthIssue: false,
     notifyOnTaskRun: false,
+    notifyOnFailedLogin: false,
     autoApproveRequests: false
   });
   const [paths, setPaths] = useState([]);
@@ -401,6 +402,7 @@ export default function Settings() {
           notifyOnBackup: res.data.data.notifyOnBackup === 'true',
           notifyOnHealthIssue: res.data.data.notifyOnHealthIssue === 'true',
           notifyOnTaskRun: res.data.data.notifyOnTaskRun === 'true',
+          notifyOnFailedLogin: res.data.data.notifyOnFailedLogin === 'true',
           autoApproveRequests: res.data.data.autoApproveRequests === true || res.data.data.autoApproveRequests === 'true'
         });
         setIndexers(res.data.data.indexers || []);

@@ -47,7 +47,8 @@ export default function ConnectionsTab({
     notifyOnLowDiskSpace: settings?.notifyOnLowDiskSpace || false,
     notifyOnBackup: settings?.notifyOnBackup || false,
     notifyOnHealthIssue: settings?.notifyOnHealthIssue || false,
-    notifyOnTaskRun: settings?.notifyOnTaskRun || false
+    notifyOnTaskRun: settings?.notifyOnTaskRun || false,
+    notifyOnFailedLogin: settings?.notifyOnFailedLogin || false
   });
   const [loading, setLoading] = useState(true);
   const [simklPulling, setSimklPulling] = useState(false);
@@ -162,7 +163,8 @@ export default function ConnectionsTab({
           notifyOnLowDiskSpace: data.notifyOnLowDiskSpace === 'true',
           notifyOnBackup: data.notifyOnBackup === 'true',
           notifyOnHealthIssue: data.notifyOnHealthIssue === 'true',
-          notifyOnTaskRun: data.notifyOnTaskRun === 'true'
+          notifyOnTaskRun: data.notifyOnTaskRun === 'true',
+          notifyOnFailedLogin: data.notifyOnFailedLogin === 'true'
         };
         setLocalSettings(newVals);
         if (setSettings) {
@@ -1170,6 +1172,12 @@ export default function ConnectionsTab({
                 onChange={(e) => handleChange({ target: { name: 'notifyOnRequestAvailable', type: 'checkbox', checked: e.target.checked } })}
                 title="Notify on Requested Media Ready"
                 description="When requested media finishes downloading and is ready"
+              />
+              <ToggleRow
+                checked={localSettings.notifyOnFailedLogin}
+                onChange={(e) => handleChange({ target: { name: 'notifyOnFailedLogin', type: 'checkbox', checked: e.target.checked } })}
+                title="Notify on Failed Login"
+                description="When invalid password or authentication attempts occur"
               />
             </div>
           </div>

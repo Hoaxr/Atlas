@@ -5,6 +5,7 @@ const bcrypt = require('bcrypt');
 const rateLimit = require('express-rate-limit');
 const db = require('../config/database');
 const { getSetting, setSetting, isAuthEnabled } = require('../utils/settings');
+const eventBus = require('../services/eventBus');
 
 const jwt = require('jsonwebtoken');
 
@@ -69,6 +70,8 @@ router.post('/login', loginLimiter, async (req, res) => {
   const passwordMatches = await bcrypt.compare(password, user?.password || DUMMY_HASH);
 
   if (!user || !passwordMatches) {
+    const clientIp = req.headers['x-forwarded-for'] || req.socket?.remoteAddress || req.ip || 'unknown';
+    eventBus.warn('Failed login attempt', { username: username || 'unknown', ip: clientIp, reason: 'Invalid credentials' });
     return res.status(401).json({ status: 'error', message: 'Invalid credentials' });
   }
 
@@ -109,6 +112,8 @@ router.post('/login', loginLimiter, async (req, res) => {
     }
 
     if (!isTotpValid && !isBackupValid) {
+      const clientIp = req.headers['x-forwarded-for'] || req.socket?.remoteAddress || req.ip || 'unknown';
+      eventBus.warn('Failed login attempt', { username: user.username, ip: clientIp, reason: 'Invalid 2FA code' });
       return res.status(401).json({ status: 'error', message: 'Invalid two-factor authentication code or backup code' });
     }
   }

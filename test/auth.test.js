@@ -139,5 +139,41 @@ test('Authentication System & Defaults', async (t) => {
       server.close();
     }
   });
+
+  await t.test('notifyOnFailedLogin triggers alert on failed login attempt', async () => {
+    const notificationService = require('../server/services/notificationService');
+    const eventBus = require('../server/services/eventBus');
+
+    const origSetting = getSetting('notifyOnFailedLogin');
+    setSetting('notifyOnFailedLogin', 'true');
+    invalidateSettingsCache();
+
+    let notifiedTitle = null;
+    let notifiedMsg = null;
+    const origSend = notificationService.sendNotification;
+    notificationService.sendNotification = async (title, msg) => {
+      notifiedTitle = title;
+      notifiedMsg = msg;
+    };
+
+    try {
+      eventBus.warn('Failed login attempt', { username: 'intruder', ip: '192.168.1.100', reason: 'Invalid credentials' });
+
+      // Give event loop tick for async event handler
+      await new Promise(r => setTimeout(r, 10));
+
+      assert.strictEqual(notifiedTitle, 'Failed Login Attempt');
+      assert.ok(notifiedMsg.includes('intruder'));
+      assert.ok(notifiedMsg.includes('192.168.1.100'));
+    } finally {
+      notificationService.sendNotification = origSend;
+      if (origSetting !== null) {
+        setSetting('notifyOnFailedLogin', origSetting);
+      } else {
+        db.prepare('DELETE FROM settings WHERE key = ?').run('notifyOnFailedLogin');
+      }
+      invalidateSettingsCache();
+    }
+  });
 });
 
