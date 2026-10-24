@@ -401,16 +401,16 @@ export default function ConnectionsTab({
     <button
       type="button"
       title={`Test ${triggerLabel} notification`}
+      aria-label={`Test ${triggerLabel} notification`}
       disabled={testingTrigger === triggerKey}
       onClick={() => handleTestTrigger(triggerKey, triggerLabel)}
-      className="px-2.5 py-1 text-xs font-semibold text-slate-300 hover:text-cyan-300 bg-[#15243b] hover:bg-[#1a2d4a] border border-[#1c2d46] hover:border-cyan-500/40 rounded-lg transition-all disabled:opacity-50 flex items-center gap-1.5 cursor-pointer shadow-sm"
+      className="p-1.5 text-slate-400 hover:text-cyan-400 bg-[#15243b] hover:bg-[#1a2d4a] border border-[#1c2d46] hover:border-cyan-500/40 rounded-lg transition-all disabled:opacity-50 flex items-center justify-center cursor-pointer shadow-sm"
     >
       {testingTrigger === triggerKey ? (
-        <Loader2 className="w-3 h-3 animate-spin text-cyan-400" />
+        <Loader2 className="w-3.5 h-3.5 animate-spin text-cyan-400" />
       ) : (
-        <Bell className="w-3 h-3 text-cyan-400" />
+        <Bell className="w-3.5 h-3.5" />
       )}
-      <span>Test</span>
     </button>
   );
 
