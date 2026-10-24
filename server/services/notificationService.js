@@ -502,8 +502,108 @@ class NotificationService {
     return Buffer.from(response.data);
   }
 
-  async testNotification(overrides = {}) {
-    await this.sendNotification('Atlas', 'This is a test notification from Atlas Media Manager.', { title: 'Test Notification' }, overrides);
+  async testNotification(triggerOrOverrides = 'default', maybeOverrides = {}) {
+    let trigger = 'default';
+    let overrides = {};
+
+    if (typeof triggerOrOverrides === 'string') {
+      trigger = triggerOrOverrides;
+      overrides = maybeOverrides || {};
+    } else if (typeof triggerOrOverrides === 'object' && triggerOrOverrides !== null) {
+      overrides = triggerOrOverrides;
+      trigger = overrides.trigger || 'default';
+    }
+
+    const samples = {
+      notifyOnGrab: {
+        title: 'Media Grabbed',
+        message: 'Grabbed: Inception (2010) [1080p Bluray x264]',
+        metadata: { title: 'Inception (2010)', type: 'movie' }
+      },
+      notifyOnDownload: {
+        title: 'Download Complete',
+        message: 'Imported: Stranger Things S04E01 into library',
+        metadata: { title: 'Stranger Things S04E01', type: 'tv' }
+      },
+      notifyOnUpgrade: {
+        title: 'Media Upgraded',
+        message: 'Upgraded: Interstellar (2014) from 720p to 1080p REMUX',
+        metadata: { title: 'Interstellar (2014)', type: 'movie' }
+      },
+      notifyOnDownloadFailed: {
+        title: 'Download Failed',
+        message: 'Download import failed: Dune (2021) — CRC mismatch in archive',
+        metadata: { title: 'Dune (2021)', type: 'movie' }
+      },
+      notifyOnPlaybackStart: {
+        title: 'Playback Started',
+        message: 'alice started watching Breaking Bad S01E01 on Plex Web',
+        metadata: { title: 'Breaking Bad S01E01', type: 'Episode', server: 'Plex', player: 'Plex Web' }
+      },
+      notifyOnPlaybackStop: {
+        title: 'Playback Finished',
+        message: 'alice stopped watching Breaking Bad S01E01 on Plex Web at 85%',
+        metadata: { title: 'Breaking Bad S01E01', type: 'Episode', server: 'Plex', player: 'Plex Web' }
+      },
+      notifyOnRequest: {
+        title: 'New Request',
+        message: 'alice requested Oppenheimer (2023)',
+        metadata: { title: 'Oppenheimer (2023)', type: 'movie' }
+      },
+      notifyOnRequestStatus: {
+        title: 'Request Approved',
+        message: 'Request for "The Matrix (1999)" by alice was approved',
+        metadata: { title: 'The Matrix (1999)', type: 'movie' }
+      },
+      notifyOnRequestAvailable: {
+        title: 'Requested Media Available',
+        message: 'Requested media "The Batman (2022)" has finished downloading and is ready to watch!',
+        metadata: { title: 'The Batman (2022)', type: 'movie' }
+      },
+      notifyOnFailedLogin: {
+        title: 'Failed Login Attempt',
+        message: 'Failed login attempt for user "admin" from 192.168.1.42 (Invalid credentials).',
+        metadata: { username: 'admin', ip: '192.168.1.42' }
+      },
+      notifyOnQuarantine: {
+        title: 'Malicious Release Blocked',
+        message: 'Blocked release containing dangerous executable: setup.exe',
+        metadata: { release: 'Movie.2024.1080p-FakeGroup', file: 'setup.exe' }
+      },
+      notifyOnSubtitle: {
+        title: 'Subtitle Available',
+        message: 'Downloaded English subtitles for Gladiator (2000)',
+        metadata: { title: 'Gladiator (2000)' }
+      },
+      notifyOnLowDiskSpace: {
+        title: 'Low Disk Space Warning',
+        message: 'Storage volume /media is low on disk space: 14.2% remaining (42 GB free).',
+        metadata: { path: '/media', freePercent: 14.2 }
+      },
+      notifyOnBackup: {
+        title: 'Backup Complete',
+        message: 'Atlas SQLite database backup created successfully: database-backup.sqlite',
+        metadata: {}
+      },
+      notifyOnHealthIssue: {
+        title: 'System Health Issue',
+        message: 'Indexer circuit breaker tripped: 3 consecutive timeouts on Prowlarr',
+        metadata: { message: 'Indexer circuit breaker tripped: 3 consecutive timeouts on Prowlarr' }
+      },
+      notifyOnTaskRun: {
+        title: 'Task Completed',
+        message: 'Task "Torrent Search Cycle" completed successfully (took 1.4s).',
+        metadata: { taskName: 'Torrent Search Cycle', duration: '1.4s' }
+      }
+    };
+
+    const target = samples[trigger] || {
+      title: 'Atlas',
+      message: 'This is a test notification from Atlas Media Manager.',
+      metadata: { title: 'Test Notification' }
+    };
+
+    await this.sendNotification(target.title, target.message, target.metadata, overrides);
   }
 }
 

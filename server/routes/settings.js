@@ -1648,10 +1648,11 @@ router.post('/schedules', requireAdmin, (req, res, next) => {
 router.post('/test-notification', requireAdmin, async (req, res) => {
   try {
     const notificationService = require('../services/notificationService');
-    await notificationService.testNotification(req.body || {});
+    const { trigger = 'default', ...overrides } = req.body || {};
+    await notificationService.testNotification(trigger, overrides);
     res.json({ status: 'success', message: 'Test notification sent' });
-  } catch {
-    res.status(500).json({ status: 'error', message: 'Failed to send test notification' });
+  } catch (err) {
+    res.status(500).json({ status: 'error', message: err.message || 'Failed to send test notification' });
   }
 });
 

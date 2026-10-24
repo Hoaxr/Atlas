@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { BellRing, Link, Loader2, Key, Trash2, UserCheck, ExternalLink } from 'lucide-react';
+import { BellRing, Bell, Link, Loader2, Key, Trash2, UserCheck, ExternalLink } from 'lucide-react';
 import api from '../../lib/api';
 import { customAlert, customConfirm } from '../../utils/alerts';
 import PasswordInput from '../../components/shared/PasswordInput';
@@ -355,7 +355,9 @@ export default function ConnectionsTab({
     }
   };
 
-  const handleTestNotification = async () => {
+  const [testingTrigger, setTestingTrigger] = useState(null);
+
+  const handleTestTrigger = async (triggerKey, triggerLabel) => {
     const hasDiscord = !!localSettings.discordWebhookUrl;
     const hasTelegramToken = !!localSettings.telegramBotToken;
     const hasTelegramChat = !!localSettings.telegramChatId;
@@ -363,33 +365,54 @@ export default function ConnectionsTab({
     const hasPushoverUser = !!localSettings.pushoverUserKey;
 
     if (!hasDiscord && !hasTelegramToken && !hasTelegramChat && !hasPushoverApp && !hasPushoverUser) {
-      customAlert('Please configure at least one notification service to test');
+      customAlert('Please configure at least one notification service (Discord, Telegram, or Pushover) to test.');
       return;
     }
 
     if ((hasTelegramToken && !hasTelegramChat) || (!hasTelegramToken && hasTelegramChat)) {
-      customAlert('Telegram requires both a Bot Token and a Chat ID');
+      customAlert('Telegram requires both a Bot Token and a Chat ID.');
       return;
     }
 
     if ((hasPushoverApp && !hasPushoverUser) || (!hasPushoverApp && hasPushoverUser)) {
-      customAlert('Pushover requires both an App Token and a User Key');
+      customAlert('Pushover requires both an App Token and a User Key.');
       return;
     }
 
+    setTestingTrigger(triggerKey);
     try {
       await api.post('/settings/test-notification', {
+        trigger: triggerKey,
         discordWebhookUrl: localSettings.discordWebhookUrl,
         telegramBotToken: localSettings.telegramBotToken,
         telegramChatId: localSettings.telegramChatId,
         pushoverAppToken: localSettings.pushoverAppToken,
         pushoverUserKey: localSettings.pushoverUserKey
       });
-      customAlert('Test notification triggered');
-    } catch {
-      customAlert('Test failed to send');
+      customAlert(`Sent test notification for ${triggerLabel}.`, 'success');
+    } catch (err) {
+      customAlert(err.response?.data?.message || 'Failed to send test notification', 'error');
+    } finally {
+      if (mountedRef.current) setTestingTrigger(null);
     }
   };
+
+  const renderTestButton = (triggerKey, triggerLabel) => (
+    <button
+      type="button"
+      title={`Test ${triggerLabel} notification`}
+      disabled={testingTrigger === triggerKey}
+      onClick={() => handleTestTrigger(triggerKey, triggerLabel)}
+      className="px-2.5 py-1 text-xs font-semibold text-slate-300 hover:text-cyan-300 bg-[#15243b] hover:bg-[#1a2d4a] border border-[#1c2d46] hover:border-cyan-500/40 rounded-lg transition-all disabled:opacity-50 flex items-center gap-1.5 cursor-pointer shadow-sm"
+    >
+      {testingTrigger === triggerKey ? (
+        <Loader2 className="w-3 h-3 animate-spin text-cyan-400" />
+      ) : (
+        <Bell className="w-3 h-3 text-cyan-400" />
+      )}
+      <span>Test</span>
+    </button>
+  );
 
   const handleTestTelegram = async () => {
     if (!localSettings.telegramBotToken || !localSettings.telegramChatId) {
@@ -1110,24 +1133,28 @@ export default function ConnectionsTab({
                 onChange={(e) => handleChange({ target: { name: 'notifyOnGrab', type: 'checkbox', checked: e.target.checked } })}
                 title="Notify on Grab"
                 description="When release is sent to download client"
+                action={renderTestButton('notifyOnGrab', 'Grab')}
               />
               <ToggleRow
                 checked={localSettings.notifyOnDownload}
                 onChange={(e) => handleChange({ target: { name: 'notifyOnDownload', type: 'checkbox', checked: e.target.checked } })}
                 title="Notify on Download Complete"
                 description="When client finishes and Atlas imports new media"
+                action={renderTestButton('notifyOnDownload', 'Download Complete')}
               />
               <ToggleRow
                 checked={localSettings.notifyOnUpgrade}
                 onChange={(e) => handleChange({ target: { name: 'notifyOnUpgrade', type: 'checkbox', checked: e.target.checked } })}
                 title="Notify on Media Upgrade"
                 description="When existing media is replaced with higher quality"
+                action={renderTestButton('notifyOnUpgrade', 'Media Upgrade')}
               />
               <ToggleRow
                 checked={localSettings.notifyOnDownloadFailed}
                 onChange={(e) => handleChange({ target: { name: 'notifyOnDownloadFailed', type: 'checkbox', checked: e.target.checked } })}
                 title="Notify on Download Failure"
                 description="When a download or import encounters an error"
+                action={renderTestButton('notifyOnDownloadFailed', 'Download Failure')}
               />
             </div>
           </div>
@@ -1141,12 +1168,14 @@ export default function ConnectionsTab({
                 onChange={(e) => handleChange({ target: { name: 'notifyOnPlaybackStart', type: 'checkbox', checked: e.target.checked } })}
                 title="Notify on Playback Start"
                 description="When media starts playing on a server"
+                action={renderTestButton('notifyOnPlaybackStart', 'Playback Start')}
               />
               <ToggleRow
                 checked={localSettings.notifyOnPlaybackStop}
                 onChange={(e) => handleChange({ target: { name: 'notifyOnPlaybackStop', type: 'checkbox', checked: e.target.checked } })}
                 title="Notify on Playback Finished"
                 description="When viewer completes or stops playing a title"
+                action={renderTestButton('notifyOnPlaybackStop', 'Playback Finished')}
               />
             </div>
           </div>
@@ -1160,24 +1189,28 @@ export default function ConnectionsTab({
                 onChange={(e) => handleChange({ target: { name: 'notifyOnRequest', type: 'checkbox', checked: e.target.checked } })}
                 title="Notify on Request Created"
                 description="When a user submits a movie or show request"
+                action={renderTestButton('notifyOnRequest', 'Request Created')}
               />
               <ToggleRow
                 checked={localSettings.notifyOnRequestStatus}
                 onChange={(e) => handleChange({ target: { name: 'notifyOnRequestStatus', type: 'checkbox', checked: e.target.checked } })}
                 title="Notify on Request Status Change"
                 description="When an admin approves or denies a user request"
+                action={renderTestButton('notifyOnRequestStatus', 'Request Status Change')}
               />
               <ToggleRow
                 checked={localSettings.notifyOnRequestAvailable}
                 onChange={(e) => handleChange({ target: { name: 'notifyOnRequestAvailable', type: 'checkbox', checked: e.target.checked } })}
                 title="Notify on Requested Media Ready"
                 description="When requested media finishes downloading and is ready"
+                action={renderTestButton('notifyOnRequestAvailable', 'Requested Media Ready')}
               />
               <ToggleRow
                 checked={localSettings.notifyOnFailedLogin}
                 onChange={(e) => handleChange({ target: { name: 'notifyOnFailedLogin', type: 'checkbox', checked: e.target.checked } })}
                 title="Notify on Failed Login"
                 description="When invalid password or authentication attempts occur"
+                action={renderTestButton('notifyOnFailedLogin', 'Failed Login')}
               />
             </div>
           </div>
@@ -1191,49 +1224,45 @@ export default function ConnectionsTab({
                 onChange={(e) => handleChange({ target: { name: 'notifyOnQuarantine', type: 'checkbox', checked: e.target.checked } })}
                 title="Notify on Malware Quarantine"
                 description="When fake release with executable files is blocked"
+                action={renderTestButton('notifyOnQuarantine', 'Malware Quarantine')}
               />
               <ToggleRow
                 checked={localSettings.notifyOnSubtitle}
                 onChange={(e) => handleChange({ target: { name: 'notifyOnSubtitle', type: 'checkbox', checked: e.target.checked } })}
                 title="Notify on Subtitle Added"
                 description="When subtitles are downloaded or translated"
+                action={renderTestButton('notifyOnSubtitle', 'Subtitle Added')}
               />
               <ToggleRow
                 checked={localSettings.notifyOnLowDiskSpace}
                 onChange={(e) => handleChange({ target: { name: 'notifyOnLowDiskSpace', type: 'checkbox', checked: e.target.checked } })}
                 title="Notify on Low Disk Space"
                 description="When storage on library drives drops below safe limit"
+                action={renderTestButton('notifyOnLowDiskSpace', 'Low Disk Space')}
               />
               <ToggleRow
                 checked={localSettings.notifyOnBackup}
                 onChange={(e) => handleChange({ target: { name: 'notifyOnBackup', type: 'checkbox', checked: e.target.checked } })}
                 title="Notify on Database Backup"
                 description="When automated or manual database backup completes"
+                action={renderTestButton('notifyOnBackup', 'Database Backup')}
               />
               <ToggleRow
                 checked={localSettings.notifyOnHealthIssue}
                 onChange={(e) => handleChange({ target: { name: 'notifyOnHealthIssue', type: 'checkbox', checked: e.target.checked } })}
                 title="Notify on System Health Issues"
                 description="When an indexer circuit breaker trips or downloader errors"
+                action={renderTestButton('notifyOnHealthIssue', 'System Health')}
               />
               <ToggleRow
                 checked={localSettings.notifyOnTaskRun}
                 onChange={(e) => handleChange({ target: { name: 'notifyOnTaskRun', type: 'checkbox', checked: e.target.checked } })}
                 title="Notify on Scheduled Task Run"
                 description="When background automation tasks finish executing"
+                action={renderTestButton('notifyOnTaskRun', 'Scheduled Task Run')}
               />
             </div>
           </div>
-        </div>
-        
-        <div className="pt-2 flex justify-end">
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={handleTestNotification}
-          >
-            Test Notification
-          </Button>
         </div>
       </SettingsSection>
     </div>
