@@ -993,6 +993,7 @@ const importMovie = async (torrent, movie) => {
 
   } catch (err) {
     console.error(`[MediaManagement] Failed to import movie ${movie.title}:`, err);
+    eventBus.error('Download import failed', { title: movie.title, error: err.message });
     return false;
   }
 };
@@ -1370,6 +1371,7 @@ const importEpisode = async (torrent, episode) => {
 
   } catch (err) {
     console.error(`[MediaManagement] Failed to import episode:`, err);
+    eventBus.error('Download import failed', { title: episode?.show_title ? `${episode.show_title} S${episode.season_number}E${episode.episode_number}` : 'Episode', error: err.message });
     return false;
   }
 };

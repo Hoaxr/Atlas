@@ -584,15 +584,37 @@ class WatcherService {
     const currentSessionIds = new Set(sessions.map(s => s.id));
     const currentPlayKeys = new Set(sessions.map(s => `${s.id}:${s.title}`));
     const notifyOnPlayback = getSetting('notifyOnPlaybackStart') === 'true';
+    const notifyOnPlaybackStop = getSetting('notifyOnPlaybackStop') === 'true';
 
     const now = Date.now();
     const PLAYBACK_NOTIFY_COOLDOWN = 2 * 60 * 1000; // 2 minutes
 
     for (const session of sessions) {
-      const isNewSession = !this.activeSessions.has(session.id);
-      const isTitleChanged = this.activeSessions.get(session.id) !== session.title;
+      const prev = this.activeSessions.get(session.id);
+      const prevTitle = typeof prev === 'string' ? prev : prev?.title;
+      const isNewSession = !prev;
+      const isTitleChanged = Boolean(prevTitle && prevTitle !== session.title);
 
       if (isNewSession || isTitleChanged) {
+        // If title changed on existing session, notify playback finished for previous item
+        if (isTitleChanged && notifyOnPlaybackStop && prevTitle) {
+          const prevUser = prev.user || session.user;
+          const prevDevice = prev.device || session.product || session.player || 'device';
+          const prevProgress = prev.progress || 0;
+          const stopLabel = prevProgress >= 80 ? 'finished watching' : `stopped watching at ${Math.round(prevProgress)}%`;
+          notificationService.sendNotification(
+            'Playback Finished',
+            `${prevUser} ${stopLabel} on ${prevDevice}`,
+            {
+              title: prevTitle,
+              type: prev.type || session.type,
+              poster: prev.poster,
+              player: prev.player,
+              server: prev.server
+            }
+          ).catch(() => {});
+        }
+
         // New session or title change on existing session (e.g. autoplay) detected
         const playbackKey = `${session.user}:${session.title}`;
         const lastNotified = this.recentPlaybackNotifications.get(playbackKey);
@@ -782,8 +804,41 @@ class WatcherService {
       }
     }
 
-    // Update active sessions (sessionId -> current title)
-    this.activeSessions = new Map(sessions.map(s => [s.id, s.title]));
+    // Check for ended sessions to trigger notifyOnPlaybackStop
+    if (notifyOnPlaybackStop) {
+      for (const [id, prev] of this.activeSessions.entries()) {
+        const prevTitle = typeof prev === 'string' ? prev : prev?.title;
+        if (!currentSessionIds.has(id) && prevTitle) {
+          const prevUser = prev.user || 'Viewer';
+          const prevDevice = prev.device || 'device';
+          const prevProgress = prev.progress || 0;
+          const stopLabel = prevProgress >= 80 ? 'finished watching' : `stopped watching at ${Math.round(prevProgress)}%`;
+          notificationService.sendNotification(
+            'Playback Finished',
+            `${prevUser} ${stopLabel} on ${prevDevice}`,
+            {
+              title: prevTitle,
+              type: prev.type || 'Media',
+              poster: prev.poster,
+              player: prev.player,
+              server: prev.server
+            }
+          ).catch(() => {});
+        }
+      }
+    }
+
+    // Update active sessions (sessionId -> session details)
+    this.activeSessions = new Map(sessions.map(s => [s.id, {
+      title: s.title,
+      user: s.user,
+      device: s.product || s.player || 'Unknown device',
+      player: s.player,
+      server: s.server,
+      type: s.type === 'movie' ? 'Movie' : s.type === 'episode' ? 'Episode' : 'Live TV',
+      poster: s.poster,
+      progress: s.progress || 0
+    }]));
 
     // Skip the 9 aggregate play_history queries when nobody is watching
     // and no WS clients are connected to receive the stats

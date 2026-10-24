@@ -32,19 +32,131 @@ class NotificationService {
     const grabEvents = ['Download started', 'Manual grab started', 'Auto-search download started'];
     const downloadEvent = 'Download complete';
 
-    // Skip DB lookup entirely for events that can never trigger a notification
-    const isRelevant = grabEvents.includes(event.message) || event.message === downloadEvent;
-    if (!isRelevant) return;
-
+    // 1. Grab
     const notifyOnGrab = getSetting('notifyOnGrab') === 'true';
-    const notifyOnDownload = getSetting('notifyOnDownload') === 'true';
-
     if (grabEvents.includes(event.message) && notifyOnGrab) {
       console.log('[NotificationService] Grab notification triggered:', event.metadata?.title);
       await this.sendNotification('Media Grabbed', `Sent to download client`, event.metadata);
-    } else if (event.message === downloadEvent && notifyOnDownload) {
-      console.log('[NotificationService] Download notification triggered:', event.metadata?.title);
-      await this.sendNotification('Download Complete', `Has been imported`, event.metadata);
+      return;
+    }
+
+    // 2. Download / Upgrade / Request Fulfillment
+    if (event.message === downloadEvent) {
+      const isUpgrade = Boolean(event.metadata?.isUpgrade);
+      const notifyOnUpgrade = getSetting('notifyOnUpgrade') === 'true';
+      const notifyOnDownload = getSetting('notifyOnDownload') === 'true';
+
+      if (isUpgrade && notifyOnUpgrade) {
+        console.log('[NotificationService] Upgrade notification triggered:', event.metadata?.title);
+        await this.sendNotification('Media Upgraded', `Upgraded to higher quality release`, event.metadata);
+      } else if (!isUpgrade && notifyOnDownload) {
+        console.log('[NotificationService] Download notification triggered:', event.metadata?.title);
+        await this.sendNotification('Download Complete', `Has been imported`, event.metadata);
+      }
+
+      // Check if this fulfills an active user request
+      const notifyOnRequestAvailable = getSetting('notifyOnRequestAvailable') === 'true';
+      if (notifyOnRequestAvailable && event.metadata?.title) {
+        try {
+          const db = require('../config/database');
+          const cleanShowTitle = event.metadata.title.replace(/\s+S\d+E\d+.*$/i, '').trim();
+          const reqItem = db.prepare(`
+            SELECT r.*, u.username 
+            FROM requests r 
+            LEFT JOIN users u ON u.id = r.user_id 
+            WHERE r.status IN ('pending', 'approved') 
+              AND (r.title = ? COLLATE NOCASE OR r.title = ? COLLATE NOCASE)
+            LIMIT 1
+          `).get(event.metadata.title, cleanShowTitle);
+
+          if (reqItem) {
+            db.prepare("UPDATE requests SET status = 'available' WHERE id = ?").run(reqItem.id);
+            const userMsg = reqItem.username ? ` (requested by ${reqItem.username})` : '';
+            await this.sendNotification(
+              'Requested Media Available',
+              `"${reqItem.title}"${userMsg} has finished downloading and is now available to watch!`,
+              { title: reqItem.title, poster: reqItem.poster_path || event.metadata.poster }
+            );
+          }
+        } catch (reqErr) {
+          console.error('[NotificationService] Request availability check error:', reqErr.message);
+        }
+      }
+      return;
+    }
+
+    // 3. Security / Malware Quarantine
+    const notifyOnQuarantine = getSetting('notifyOnQuarantine') === 'true';
+    if (notifyOnQuarantine && (event.message === 'Malicious Download Quarantined' || event.message === 'Malicious Download Removed')) {
+      const details = event.metadata?.message || 'Blocked fake release containing dangerous executable payload.';
+      await this.sendNotification('Malicious Release Blocked', details, event.metadata);
+      return;
+    }
+
+    // 4. Download / Import Failed
+    const notifyOnDownloadFailed = getSetting('notifyOnDownloadFailed') === 'true';
+    if (notifyOnDownloadFailed && (event.message === 'Download import failed' || event.message === 'Download failed')) {
+      await this.sendNotification(
+        'Download Failed',
+        event.metadata?.error || 'A download failed or could not be imported.',
+        event.metadata
+      );
+      return;
+    }
+
+    // 5. Subtitle Available
+    const notifyOnSubtitle = getSetting('notifyOnSubtitle') === 'true';
+    if (notifyOnSubtitle && (event.message?.startsWith('Subtitle downloaded') || event.message?.startsWith('Subtitle translated'))) {
+      const action = event.message.includes('translated') ? 'Translated' : 'Downloaded';
+      const lang = event.metadata?.language ? ` (${event.metadata.language.toUpperCase()})` : '';
+      await this.sendNotification(
+        'Subtitle Available',
+        `Subtitle ${action}${lang} for ${event.metadata?.title || 'media'}`,
+        event.metadata
+      );
+      return;
+    }
+
+    // 6. Low Disk Space Warning (throttled to at most once per 6 hours)
+    const notifyOnLowDiskSpace = getSetting('notifyOnLowDiskSpace') === 'true';
+    if (notifyOnLowDiskSpace && event.message === 'Low Disk Space Warning') {
+      const diskKey = event.metadata?.path || 'root';
+      const now = Date.now();
+      if (!this._lastDiskWarning) this._lastDiskWarning = new Map();
+      const lastWarn = this._lastDiskWarning.get(diskKey) || 0;
+      if (now - lastWarn > 6 * 60 * 60 * 1000) {
+        this._lastDiskWarning.set(diskKey, now);
+        await this.sendNotification(
+          'Low Disk Space Warning',
+          event.metadata?.message || 'Storage volume is running low on free space.',
+          event.metadata
+        );
+      }
+      return;
+    }
+
+    // 7. Backup Complete / Failed
+    const notifyOnBackup = getSetting('notifyOnBackup') === 'true';
+    if (notifyOnBackup) {
+      if (event.message === 'Database backup completed') {
+        await this.sendNotification('Backup Complete', event.metadata?.message || 'Database backup created successfully.', event.metadata);
+        return;
+      }
+      if (event.message === 'Database backup failed') {
+        await this.sendNotification('Backup Failed', event.metadata?.error || 'Database backup failed.', event.metadata);
+        return;
+      }
+    }
+
+    // 8. System Health Issue (Circuit breaker / downloader disconnect)
+    const notifyOnHealthIssue = getSetting('notifyOnHealthIssue') === 'true';
+    if (notifyOnHealthIssue && (event.message === 'Indexer circuit breaker tripped' || event.message === 'Download client connection failed')) {
+      await this.sendNotification(
+        'System Health Issue',
+        event.metadata?.message || event.message,
+        event.metadata
+      );
+      return;
     }
   }
 
@@ -76,10 +188,23 @@ class NotificationService {
 
     // Determine color for Discord embed
     let embedColor = 3447003; // Default blue
-    if (title === 'Download Complete') embedColor = 3066993; // Green
-    else if (title === 'Media Grabbed') embedColor = 15105570; // Orange
-    else if (title === 'Playback Started') embedColor = 5814783; // Purple-ish
-    else if (title === 'New Request') embedColor = 15277667; // Pink
+    if (title === 'Download Complete' || title === 'Backup Complete' || title === 'Request Approved' || title === 'Requested Media Available') {
+      embedColor = 3066993; // Green
+    } else if (title === 'Media Grabbed') {
+      embedColor = 15105570; // Orange
+    } else if (title === 'Media Upgraded') {
+      embedColor = 1752220; // Teal
+    } else if (title === 'Playback Started' || title === 'Playback Finished') {
+      embedColor = 5814783; // Purple
+    } else if (title === 'New Request') {
+      embedColor = 15277667; // Pink
+    } else if (title === 'Subtitle Available') {
+      embedColor = 10181046; // Cyan
+    } else if (title === 'Low Disk Space Warning') {
+      embedColor = 16705372; // Yellow
+    } else if (title === 'Malicious Release Blocked' || title === 'Download Failed' || title === 'Request Denied' || title === 'Backup Failed' || title === 'System Health Issue') {
+      embedColor = 15158332; // Red
+    }
 
     if (discordUrl) {
       try {
@@ -92,7 +217,7 @@ class NotificationService {
         };
 
         // Add fields for playback notifications
-        if (title === 'Playback Started') {
+        if (title === 'Playback Started' || title === 'Playback Finished') {
           const fields = [];
           if (metadata.type) fields.push({ name: 'Type', value: metadata.type, inline: true });
           if (metadata.duration) fields.push({ name: 'Duration', value: metadata.duration, inline: true });
@@ -103,7 +228,7 @@ class NotificationService {
 
         let discordSent = false;
         // Try to attach poster image by downloading it internally
-        if (metadata.poster && title === 'Playback Started') {
+        if (metadata.poster && (title === 'Playback Started' || title === 'Playback Finished' || title === 'Download Complete' || title === 'Media Upgraded' || title === 'Requested Media Available')) {
           try {
             const posterBuffer = await this.downloadPoster(metadata.poster);
             if (posterBuffer) {
@@ -131,7 +256,7 @@ class NotificationService {
           } catch (posterErr) {
             console.error('[NotificationService] Poster attachment failed, sending without:', posterErr.message);
           }
-        } else if (title === 'Atlas') {
+        } else if (title === 'Atlas' || title === 'Backup Complete' || title === 'Backup Failed' || title === 'Low Disk Space Warning' || title === 'System Health Issue') {
           try {
             const logoBuffer = this.getAtlasLogoBuffer();
             if (logoBuffer) {
@@ -184,29 +309,56 @@ class NotificationService {
           if (metadata.type) caption += `📺 ${metadata.type}`;
           if (metadata.duration) caption += ` · ⏱ ${metadata.duration}`;
           if (metadata.server) caption += `\n🖥 ${metadata.server}`;
+        } else if (title === 'Playback Finished' && itemTitle) {
+          caption = `⏹️ *Playback Finished*\n\n`;
+          caption += `*${escMd(itemTitle)}*\n`;
+          const cleanMessage = String(message || '').replace(/\*\*/g, '');
+          caption += `${escMd(cleanMessage)}\n`;
+          if (metadata.type) caption += `📺 ${metadata.type}`;
+          if (metadata.server) caption += `\n🖥 ${metadata.server}`;
         } else if (title === 'Atlas') {
           caption = (itemTitle && itemTitle !== 'Atlas')
             ? `*Atlas — ${escMd(itemTitle)}*\n${escMd(description)}`
             : `*Atlas*\n${escMd(description)}`;
-        } else if (itemTitle) {
-          caption = `*${escMd(title)}*\n${escMd(itemTitle)}\n${escMd(description)}`;
         } else {
-          caption = `*${escMd(title)}*\n${escMd(description)}`;
+          const emojiMap = {
+            'Media Grabbed': '📥',
+            'Download Complete': '✅',
+            'Media Upgraded': '⚡',
+            'Malicious Release Blocked': '🛡️',
+            'Download Failed': '❌',
+            'Subtitle Available': '💬',
+            'New Request': '🙋',
+            'Request Approved': '✨',
+            'Request Denied': '🚫',
+            'Requested Media Available': '🎉',
+            'Low Disk Space Warning': '⚠️',
+            'Backup Complete': '💾',
+            'Backup Failed': '💾',
+            'System Health Issue': '🚨'
+          };
+          const emoji = emojiMap[title] ? `${emojiMap[title]} ` : '';
+          if (itemTitle) {
+            caption = `${emoji}*${escMd(title)}*\n*${escMd(itemTitle)}*\n${escMd(description)}`;
+          } else {
+            caption = `${emoji}*${escMd(title)}*\n${escMd(description)}`;
+          }
         }
 
         let telegramPhotoSent = false;
         let photoBuffer = null;
         let photoFilename = 'poster.png';
 
-        // Try to attach poster for playback or Atlas logo for system messages
-        if (metadata.poster && title === 'Playback Started') {
+        // Try to attach poster for playback/downloads or Atlas logo for system messages
+        const posterTitles = ['Playback Started', 'Playback Finished', 'Download Complete', 'Media Upgraded', 'Requested Media Available'];
+        if (metadata.poster && posterTitles.includes(title)) {
           try {
             photoBuffer = await this.downloadPoster(metadata.poster);
             photoFilename = 'poster.png';
           } catch (posterErr) {
             console.error('[NotificationService] Telegram poster failed, sending text fallback:', posterErr.message);
           }
-        } else if (title === 'Atlas') {
+        } else if (title === 'Atlas' || title === 'Backup Complete' || title === 'Backup Failed' || title === 'Low Disk Space Warning' || title === 'System Health Issue') {
           photoBuffer = this.getAtlasLogoBuffer();
           photoFilename = 'atlas-logo.png';
         }

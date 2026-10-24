@@ -132,6 +132,16 @@ router.get('/', (req, res, next) => {
         notifyOnDownload: getSetting('notifyOnDownload') || 'false',
         notifyOnPlaybackStart: getSetting('notifyOnPlaybackStart') || 'false',
         notifyOnRequest: getSetting('notifyOnRequest') || 'false',
+        notifyOnPlaybackStop: getSetting('notifyOnPlaybackStop') || 'false',
+        notifyOnUpgrade: getSetting('notifyOnUpgrade') || 'false',
+        notifyOnDownloadFailed: getSetting('notifyOnDownloadFailed') || 'false',
+        notifyOnQuarantine: getSetting('notifyOnQuarantine') || 'false',
+        notifyOnRequestStatus: getSetting('notifyOnRequestStatus') || 'false',
+        notifyOnRequestAvailable: getSetting('notifyOnRequestAvailable') || 'false',
+        notifyOnSubtitle: getSetting('notifyOnSubtitle') || 'false',
+        notifyOnLowDiskSpace: getSetting('notifyOnLowDiskSpace') || 'false',
+        notifyOnBackup: getSetting('notifyOnBackup') || 'false',
+        notifyOnHealthIssue: getSetting('notifyOnHealthIssue') || 'false',
         pushoverAppToken: mask(getSetting('pushoverAppToken')),
         pushoverUserKey: mask(getSetting('pushoverUserKey')),
         autoDeleteWatchedEnabled: getSetting('autoDeleteWatchedEnabled') === 'true',
@@ -200,6 +210,16 @@ const SETTING_SCHEMA = {
   notifyOnDownload:         { type: 'string' },
   notifyOnPlaybackStart:    { type: 'string' },
   notifyOnRequest:          { type: 'string' },
+  notifyOnPlaybackStop:     { type: 'string' },
+  notifyOnUpgrade:          { type: 'string' },
+  notifyOnDownloadFailed:   { type: 'string' },
+  notifyOnQuarantine:       { type: 'string' },
+  notifyOnRequestStatus:    { type: 'string' },
+  notifyOnRequestAvailable: { type: 'string' },
+  notifyOnSubtitle:         { type: 'string' },
+  notifyOnLowDiskSpace:     { type: 'string' },
+  notifyOnBackup:           { type: 'string' },
+  notifyOnHealthIssue:      { type: 'string' },
   pushoverAppToken:         { type: 'apiKey' },
   pushoverUserKey:          { type: 'apiKey' },
   autoDeleteWatchedEnabled: { type: 'boolean' },
@@ -1390,7 +1410,11 @@ router.get('/backup', requireAdmin, (req, res, next) => {
     
     const stream = fs.createReadStream(dbPath);
     stream.pipe(res);
+    const eventBus = require('../services/eventBus');
+    eventBus.success('Database backup completed', { message: 'Database backup downloaded successfully.' });
   } catch (e) {
+    const eventBus = require('../services/eventBus');
+    eventBus.error('Database backup failed', { error: e.message });
     next(e);
   }
 });

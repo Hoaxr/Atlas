@@ -26,6 +26,13 @@ const recordFailure = () => {
   if (CIRCUIT_BREAKER.failures >= CIRCUIT_BREAKER.maxFailures) {
     CIRCUIT_BREAKER.openUntil = Date.now() + CIRCUIT_BREAKER.cooldownMs;
     console.error(`[IndexerService] Circuit breaker OPEN — ${CIRCUIT_BREAKER.maxFailures} consecutive failures. Pausing searches for ${CIRCUIT_BREAKER.cooldownMs / 1000}s.`);
+    try {
+      const eventBus = require('./eventBus');
+      eventBus.error('Indexer circuit breaker tripped', {
+        failures: CIRCUIT_BREAKER.failures,
+        message: `Prowlarr indexer failed ${CIRCUIT_BREAKER.maxFailures} consecutive times. Circuit breaker opened for ${CIRCUIT_BREAKER.cooldownMs / 1000}s.`
+      });
+    } catch { /* ignore */ }
   }
 };
 

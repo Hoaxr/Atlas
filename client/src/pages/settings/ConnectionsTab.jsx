@@ -36,7 +36,17 @@ export default function ConnectionsTab({
     notifyOnGrab: settings?.notifyOnGrab || false,
     notifyOnDownload: settings?.notifyOnDownload || false,
     notifyOnPlaybackStart: settings?.notifyOnPlaybackStart || false,
-    notifyOnRequest: settings?.notifyOnRequest || false
+    notifyOnRequest: settings?.notifyOnRequest || false,
+    notifyOnPlaybackStop: settings?.notifyOnPlaybackStop || false,
+    notifyOnUpgrade: settings?.notifyOnUpgrade || false,
+    notifyOnDownloadFailed: settings?.notifyOnDownloadFailed || false,
+    notifyOnQuarantine: settings?.notifyOnQuarantine || false,
+    notifyOnRequestStatus: settings?.notifyOnRequestStatus || false,
+    notifyOnRequestAvailable: settings?.notifyOnRequestAvailable || false,
+    notifyOnSubtitle: settings?.notifyOnSubtitle || false,
+    notifyOnLowDiskSpace: settings?.notifyOnLowDiskSpace || false,
+    notifyOnBackup: settings?.notifyOnBackup || false,
+    notifyOnHealthIssue: settings?.notifyOnHealthIssue || false
   });
   const [loading, setLoading] = useState(true);
   const [simklPulling, setSimklPulling] = useState(false);
@@ -140,7 +150,17 @@ export default function ConnectionsTab({
           notifyOnGrab: data.notifyOnGrab === 'true',
           notifyOnDownload: data.notifyOnDownload === 'true',
           notifyOnPlaybackStart: data.notifyOnPlaybackStart === 'true',
-          notifyOnRequest: data.notifyOnRequest === 'true'
+          notifyOnRequest: data.notifyOnRequest === 'true',
+          notifyOnPlaybackStop: data.notifyOnPlaybackStop === 'true',
+          notifyOnUpgrade: data.notifyOnUpgrade === 'true',
+          notifyOnDownloadFailed: data.notifyOnDownloadFailed === 'true',
+          notifyOnQuarantine: data.notifyOnQuarantine === 'true',
+          notifyOnRequestStatus: data.notifyOnRequestStatus === 'true',
+          notifyOnRequestAvailable: data.notifyOnRequestAvailable === 'true',
+          notifyOnSubtitle: data.notifyOnSubtitle === 'true',
+          notifyOnLowDiskSpace: data.notifyOnLowDiskSpace === 'true',
+          notifyOnBackup: data.notifyOnBackup === 'true',
+          notifyOnHealthIssue: data.notifyOnHealthIssue === 'true'
         };
         setLocalSettings(newVals);
         if (setSettings) {
@@ -250,13 +270,13 @@ export default function ConnectionsTab({
           customAlert('Successfully authenticated with Plex!');
           // Auto-save the token and URL
           try {
-            await api.post('/settings', {
-              ...updatedSettings,
-              notifyOnGrab: updatedSettings.notifyOnGrab.toString(),
-              notifyOnDownload: updatedSettings.notifyOnDownload.toString(),
-              notifyOnPlaybackStart: updatedSettings.notifyOnPlaybackStart.toString(),
-              notifyOnRequest: updatedSettings.notifyOnRequest.toString()
+            const autoSavePayload = { ...updatedSettings };
+            Object.keys(autoSavePayload).forEach(k => {
+              if (k.startsWith('notifyOn') && autoSavePayload[k] !== undefined) {
+                autoSavePayload[k] = autoSavePayload[k].toString();
+              }
             });
+            await api.post('/settings', autoSavePayload);
           } catch (saveErr) {
             console.error('Auto-save after OAuth failed:', saveErr);
           }
@@ -266,13 +286,13 @@ export default function ConnectionsTab({
           customAlert('Plex token obtained! Please enter your Plex server URL manually.');
           // Auto-save the token (URL will be empty until user enters it)
           try {
-            await api.post('/settings', {
-              ...updatedSettings,
-              notifyOnGrab: updatedSettings.notifyOnGrab.toString(),
-              notifyOnDownload: updatedSettings.notifyOnDownload.toString(),
-              notifyOnPlaybackStart: updatedSettings.notifyOnPlaybackStart.toString(),
-              notifyOnRequest: updatedSettings.notifyOnRequest.toString()
+            const autoSavePayload = { ...updatedSettings };
+            Object.keys(autoSavePayload).forEach(k => {
+              if (k.startsWith('notifyOn') && autoSavePayload[k] !== undefined) {
+                autoSavePayload[k] = autoSavePayload[k].toString();
+              }
             });
+            await api.post('/settings', autoSavePayload);
           } catch (saveErr) {
             console.error('Auto-save after OAuth failed:', saveErr);
           }
@@ -1071,34 +1091,122 @@ export default function ConnectionsTab({
         </div>
 
         {/* Events & Triggers */}
-        <div className="space-y-3 pt-2">
-          <h3 className="text-base font-bold font-display text-slate-100">Notification Triggers</h3>
-          
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <ToggleRow
-              checked={localSettings.notifyOnGrab}
-              onChange={(e) => handleChange({ target: { name: 'notifyOnGrab', type: 'checkbox', checked: e.target.checked } })}
-              title="Notify on Grab"
-              description="When release is sent to download client"
-            />
-            <ToggleRow
-              checked={localSettings.notifyOnDownload}
-              onChange={(e) => handleChange({ target: { name: 'notifyOnDownload', type: 'checkbox', checked: e.target.checked } })}
-              title="Notify on Download Complete"
-              description="When client finishes and Atlas imports"
-            />
-            <ToggleRow
-              checked={localSettings.notifyOnPlaybackStart}
-              onChange={(e) => handleChange({ target: { name: 'notifyOnPlaybackStart', type: 'checkbox', checked: e.target.checked } })}
-              title="Notify on Playback Start"
-              description="When media starts playing on a server"
-            />
-            <ToggleRow
-              checked={localSettings.notifyOnRequest}
-              onChange={(e) => handleChange({ target: { name: 'notifyOnRequest', type: 'checkbox', checked: e.target.checked } })}
-              title="Notify on Request"
-              description="When a user requests a movie or show"
-            />
+        <div className="space-y-4 pt-2">
+          <div>
+            <h3 className="text-base font-bold font-display text-slate-100">Notification Triggers</h3>
+            <p className="text-xs text-slate-400 mt-0.5">Select which events dispatch alerts across Telegram, Discord, and Pushover</p>
+          </div>
+
+          {/* Downloads & Quality */}
+          <div className="space-y-2">
+            <span className="text-[11px] font-bold text-cyan-400 uppercase tracking-wider">Downloads & Quality</span>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <ToggleRow
+                checked={localSettings.notifyOnGrab}
+                onChange={(e) => handleChange({ target: { name: 'notifyOnGrab', type: 'checkbox', checked: e.target.checked } })}
+                title="Notify on Grab"
+                description="When release is sent to download client"
+              />
+              <ToggleRow
+                checked={localSettings.notifyOnDownload}
+                onChange={(e) => handleChange({ target: { name: 'notifyOnDownload', type: 'checkbox', checked: e.target.checked } })}
+                title="Notify on Download Complete"
+                description="When client finishes and Atlas imports new media"
+              />
+              <ToggleRow
+                checked={localSettings.notifyOnUpgrade}
+                onChange={(e) => handleChange({ target: { name: 'notifyOnUpgrade', type: 'checkbox', checked: e.target.checked } })}
+                title="Notify on Media Upgrade"
+                description="When existing media is replaced with higher quality"
+              />
+              <ToggleRow
+                checked={localSettings.notifyOnDownloadFailed}
+                onChange={(e) => handleChange({ target: { name: 'notifyOnDownloadFailed', type: 'checkbox', checked: e.target.checked } })}
+                title="Notify on Download Failure"
+                description="When a download or import encounters an error"
+              />
+            </div>
+          </div>
+
+          {/* Playback & Streaming */}
+          <div className="space-y-2 pt-1">
+            <span className="text-[11px] font-bold text-indigo-400 uppercase tracking-wider">Playback & Activity</span>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <ToggleRow
+                checked={localSettings.notifyOnPlaybackStart}
+                onChange={(e) => handleChange({ target: { name: 'notifyOnPlaybackStart', type: 'checkbox', checked: e.target.checked } })}
+                title="Notify on Playback Start"
+                description="When media starts playing on a server"
+              />
+              <ToggleRow
+                checked={localSettings.notifyOnPlaybackStop}
+                onChange={(e) => handleChange({ target: { name: 'notifyOnPlaybackStop', type: 'checkbox', checked: e.target.checked } })}
+                title="Notify on Playback Finished"
+                description="When viewer completes or stops playing a title"
+              />
+            </div>
+          </div>
+
+          {/* Requests & Users */}
+          <div className="space-y-2 pt-1">
+            <span className="text-[11px] font-bold text-pink-400 uppercase tracking-wider">Requests & Users</span>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <ToggleRow
+                checked={localSettings.notifyOnRequest}
+                onChange={(e) => handleChange({ target: { name: 'notifyOnRequest', type: 'checkbox', checked: e.target.checked } })}
+                title="Notify on Request Created"
+                description="When a user submits a movie or show request"
+              />
+              <ToggleRow
+                checked={localSettings.notifyOnRequestStatus}
+                onChange={(e) => handleChange({ target: { name: 'notifyOnRequestStatus', type: 'checkbox', checked: e.target.checked } })}
+                title="Notify on Request Status Change"
+                description="When an admin approves or denies a user request"
+              />
+              <ToggleRow
+                checked={localSettings.notifyOnRequestAvailable}
+                onChange={(e) => handleChange({ target: { name: 'notifyOnRequestAvailable', type: 'checkbox', checked: e.target.checked } })}
+                title="Notify on Requested Media Ready"
+                description="When requested media finishes downloading and is ready"
+              />
+            </div>
+          </div>
+
+          {/* Security, Storage & Maintenance */}
+          <div className="space-y-2 pt-1">
+            <span className="text-[11px] font-bold text-emerald-400 uppercase tracking-wider">Security, Storage & System</span>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <ToggleRow
+                checked={localSettings.notifyOnQuarantine}
+                onChange={(e) => handleChange({ target: { name: 'notifyOnQuarantine', type: 'checkbox', checked: e.target.checked } })}
+                title="Notify on Malware Quarantine"
+                description="When fake release with executable files is blocked"
+              />
+              <ToggleRow
+                checked={localSettings.notifyOnSubtitle}
+                onChange={(e) => handleChange({ target: { name: 'notifyOnSubtitle', type: 'checkbox', checked: e.target.checked } })}
+                title="Notify on Subtitle Added"
+                description="When subtitles are downloaded or translated"
+              />
+              <ToggleRow
+                checked={localSettings.notifyOnLowDiskSpace}
+                onChange={(e) => handleChange({ target: { name: 'notifyOnLowDiskSpace', type: 'checkbox', checked: e.target.checked } })}
+                title="Notify on Low Disk Space"
+                description="When storage on library drives drops below safe limit"
+              />
+              <ToggleRow
+                checked={localSettings.notifyOnBackup}
+                onChange={(e) => handleChange({ target: { name: 'notifyOnBackup', type: 'checkbox', checked: e.target.checked } })}
+                title="Notify on Database Backup"
+                description="When automated or manual database backup completes"
+              />
+              <ToggleRow
+                checked={localSettings.notifyOnHealthIssue}
+                onChange={(e) => handleChange({ target: { name: 'notifyOnHealthIssue', type: 'checkbox', checked: e.target.checked } })}
+                title="Notify on System Health Issues"
+                description="When an indexer circuit breaker trips or downloader errors"
+              />
+            </div>
           </div>
         </div>
         

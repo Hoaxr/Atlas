@@ -211,6 +211,16 @@ router.put('/:id/approve', requireAdmin, async (req, res, next) => {
     // The frontend can call the standard library add route, and then call this endpoint.
     
     db.prepare("UPDATE requests SET status = 'approved' WHERE id = ?").run(req.params.id);
+    const notifyOnRequestStatus = getSetting('notifyOnRequestStatus') === 'true';
+    if (notifyOnRequestStatus) {
+      const user = db.prepare('SELECT username FROM users WHERE id = ?').get(request.user_id);
+      const username = user?.username || 'A user';
+      notificationService.sendNotification(
+        'Request Approved',
+        `Request for "${request.title}" by ${username} was approved`,
+        { title: request.title, type: request.type, poster: request.poster_path }
+      ).catch(() => {});
+    }
     res.json({ status: 'success', message: 'Request approved' });
   } catch (err) {
     next(err);
@@ -220,12 +230,22 @@ router.put('/:id/approve', requireAdmin, async (req, res, next) => {
 // PUT /api/requests/:id/deny (Admin only)
 router.put('/:id/deny', requireAdmin, (req, res, next) => {
   try {
-    const request = db.prepare('SELECT status FROM requests WHERE id = ?').get(req.params.id);
+    const request = db.prepare('SELECT * FROM requests WHERE id = ?').get(req.params.id);
     if (!request) return res.status(404).json({ status: 'error', message: 'Request not found' });
     if (request.status !== 'pending') {
       return res.status(400).json({ status: 'error', message: `Only pending requests can be denied (current status: ${request.status})` });
     }
     db.prepare("UPDATE requests SET status = 'denied' WHERE id = ?").run(req.params.id);
+    const notifyOnRequestStatus = getSetting('notifyOnRequestStatus') === 'true';
+    if (notifyOnRequestStatus) {
+      const user = db.prepare('SELECT username FROM users WHERE id = ?').get(request.user_id);
+      const username = user?.username || 'A user';
+      notificationService.sendNotification(
+        'Request Denied',
+        `Request for "${request.title}" by ${username} was denied`,
+        { title: request.title, type: request.type, poster: request.poster_path }
+      ).catch(() => {});
+    }
     res.json({ status: 'success', message: 'Request denied' });
   } catch (err) {
     next(err);

@@ -149,6 +149,16 @@ export default function Settings() {
     notifyOnDownload: false,
     notifyOnPlaybackStart: false,
     notifyOnRequest: false,
+    notifyOnPlaybackStop: false,
+    notifyOnUpgrade: false,
+    notifyOnDownloadFailed: false,
+    notifyOnQuarantine: false,
+    notifyOnRequestStatus: false,
+    notifyOnRequestAvailable: false,
+    notifyOnSubtitle: false,
+    notifyOnLowDiskSpace: false,
+    notifyOnBackup: false,
+    notifyOnHealthIssue: false,
     autoApproveRequests: false
   });
   const [paths, setPaths] = useState([]);
@@ -379,6 +389,16 @@ export default function Settings() {
           notifyOnDownload: res.data.data.notifyOnDownload === 'true',
           notifyOnPlaybackStart: res.data.data.notifyOnPlaybackStart === 'true',
           notifyOnRequest: res.data.data.notifyOnRequest === 'true',
+          notifyOnPlaybackStop: res.data.data.notifyOnPlaybackStop === 'true',
+          notifyOnUpgrade: res.data.data.notifyOnUpgrade === 'true',
+          notifyOnDownloadFailed: res.data.data.notifyOnDownloadFailed === 'true',
+          notifyOnQuarantine: res.data.data.notifyOnQuarantine === 'true',
+          notifyOnRequestStatus: res.data.data.notifyOnRequestStatus === 'true',
+          notifyOnRequestAvailable: res.data.data.notifyOnRequestAvailable === 'true',
+          notifyOnSubtitle: res.data.data.notifyOnSubtitle === 'true',
+          notifyOnLowDiskSpace: res.data.data.notifyOnLowDiskSpace === 'true',
+          notifyOnBackup: res.data.data.notifyOnBackup === 'true',
+          notifyOnHealthIssue: res.data.data.notifyOnHealthIssue === 'true',
           autoApproveRequests: res.data.data.autoApproveRequests === true || res.data.data.autoApproveRequests === 'true'
         });
         setIndexers(res.data.data.indexers || []);
@@ -492,10 +512,11 @@ export default function Settings() {
       if (payload.authEnabled !== undefined) {
         payload.authEnabled = payload.authEnabled.toString();
       }
-      if (payload.notifyOnGrab !== undefined) payload.notifyOnGrab = payload.notifyOnGrab.toString();
-      if (payload.notifyOnDownload !== undefined) payload.notifyOnDownload = payload.notifyOnDownload.toString();
-      if (payload.notifyOnPlaybackStart !== undefined) payload.notifyOnPlaybackStart = payload.notifyOnPlaybackStart.toString();
-      if (payload.notifyOnRequest !== undefined) payload.notifyOnRequest = payload.notifyOnRequest.toString();
+      Object.keys(payload).forEach(key => {
+        if (key.startsWith('notifyOn') && payload[key] !== undefined) {
+          payload[key] = payload[key].toString();
+        }
+      });
       if (payload.autoApproveRequests !== undefined) payload.autoApproveRequests = payload.autoApproveRequests.toString();
       await api.post('/settings', payload);
       invalidateSettingsCache();

@@ -513,6 +513,28 @@ const runMissingFilesCheck = async () => {
     return;
   }
 
+  // Check storage volume space for low disk warning
+  for (const rootPath of validRootPaths) {
+    try {
+      if (typeof fsp.statfs === 'function') {
+        const stats = await fsp.statfs(rootPath);
+        const freeBytes = stats.bavail * stats.bsize;
+        const totalBytes = stats.blocks * stats.bsize;
+        const freeGb = freeBytes / (1024 ** 3);
+        const freePercent = totalBytes > 0 ? (freeBytes / totalBytes) * 100 : 100;
+        if (freeGb < 20 || freePercent < 5) {
+          eventBus.warn('Low Disk Space Warning', {
+            path: rootPath,
+            freeGb: freeGb.toFixed(1),
+            totalGb: (totalBytes / (1024 ** 3)).toFixed(1),
+            freePercent: freePercent.toFixed(1),
+            message: `Storage drive "${rootPath}" is running low on disk space: ${freeGb.toFixed(1)} GB (${freePercent.toFixed(1)}%) remaining.`
+          });
+        }
+      }
+    } catch { /* ignore statfs errors */ }
+  }
+
   // Check Movies
   const movies = db.prepare("SELECT id, title, folder_path, file_path FROM movies WHERE status = 'downloaded'").all();
   let moviesRemoved = 0;
@@ -737,8 +759,14 @@ const runDatabaseBackup = async () => {
       }
       console.log(`[Automation] Deleted ${toDelete.length} old backup(s).`);
     }
+
+    eventBus.success('Database backup completed', {
+      path: backupPath,
+      message: `Database backed up to ${path.basename(backupPath)}`
+    });
   } catch (err) {
     console.error(`[Automation] Failed to backup database: ${err.message}`);
+    eventBus.error('Database backup failed', { error: err.message });
   }
 };
 
