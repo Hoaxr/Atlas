@@ -1161,7 +1161,7 @@ export default function ConnectionsTab({
 
           {/* Playback & Streaming */}
           <div className="space-y-2 pt-1">
-            <span className="text-[11px] font-bold text-indigo-400 uppercase tracking-wider">Playback & Activity</span>
+            <span className="text-[11px] font-bold text-cyan-400 uppercase tracking-wider">Playback & Activity</span>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <ToggleRow
                 checked={localSettings.notifyOnPlaybackStart}
@@ -1182,7 +1182,7 @@ export default function ConnectionsTab({
 
           {/* Requests & Users */}
           <div className="space-y-2 pt-1">
-            <span className="text-[11px] font-bold text-pink-400 uppercase tracking-wider">Requests & Users</span>
+            <span className="text-[11px] font-bold text-cyan-400 uppercase tracking-wider">Requests & Users</span>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <ToggleRow
                 checked={localSettings.notifyOnRequest}
@@ -1217,7 +1217,7 @@ export default function ConnectionsTab({
 
           {/* Security, Storage & Maintenance */}
           <div className="space-y-2 pt-1">
-            <span className="text-[11px] font-bold text-emerald-400 uppercase tracking-wider">Security, Storage & System</span>
+            <span className="text-[11px] font-bold text-cyan-400 uppercase tracking-wider">Security, Storage & System</span>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <ToggleRow
                 checked={localSettings.notifyOnQuarantine}
