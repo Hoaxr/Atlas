@@ -361,26 +361,36 @@ const downloadExternalImage = async (url, destPath) => {
   const dir = path.dirname(destPath);
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 
-  const response = await axios({
-    method: 'GET',
-    url,
-    responseType: 'stream',
-    timeout: 20000,
-    maxRedirects: 3,
-    beforeRedirect: (options) => {
-      const redirectUrl = options.href || `${options.protocol}//${options.host}${options.path}`;
-      if (redirectUrl) {
-        let parsed;
-        try { parsed = new URL(redirectUrl); } catch { throw new Error('Invalid redirect URL'); }
-        if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-          throw new Error('Disallowed redirect protocol');
-        }
-        if (net.isIP(parsed.hostname) && isPrivateIp(parsed.hostname)) {
-          throw new Error('Redirected to private IP');
-        }
-      }
+  let currentUrl = url;
+  let redirectsRemaining = 3;
+  let response = null;
+
+  while (redirectsRemaining >= 0) {
+    await validateSafeExternalUrl(currentUrl);
+
+    response = await axios({
+      method: 'GET',
+      url: currentUrl,
+      responseType: 'stream',
+      timeout: 20000,
+      maxRedirects: 0,
+      validateStatus: (status) => (status >= 200 && status < 300) || [301, 302, 303, 307, 308].includes(status),
+    });
+
+    if ([301, 302, 303, 307, 308].includes(response.status)) {
+      redirectsRemaining--;
+      const location = response.headers.location;
+      if (!location) throw new Error('Redirect missing Location header');
+      currentUrl = new URL(location, currentUrl).toString();
+      try { response.data.destroy(); } catch { /* ignore */ }
+      continue;
     }
-  });
+    break;
+  }
+
+  if (!response || response.status < 200 || response.status >= 300) {
+    throw new Error(`Failed to download image: HTTP ${response?.status || 'unknown'}`);
+  }
 
   const contentLength = parseInt(response.headers['content-length'], 10);
   if (!Number.isNaN(contentLength) && contentLength > MAX_IMAGE_BYTES) {

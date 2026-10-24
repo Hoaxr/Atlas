@@ -87,6 +87,7 @@ const readAudioTags = async (filePath) => {
       '-print_format', 'json',
       '-show_streams',
       '-show_format',
+      '--',
       filePath
     ], { timeout: 10000 });
 

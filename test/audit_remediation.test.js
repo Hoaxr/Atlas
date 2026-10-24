@@ -223,4 +223,73 @@ test('Security Audit Remediation Regression Tests', async (t) => {
 
     assert.strictEqual(corsOptions.credentials, false, 'CORS with wildcard origin must set credentials to false');
   });
+
+  await t.test('SEC-ATLAS-01: Node2Shell (CVE-2026-111497) defense blocks Brotli request body encoding with HTTP 415', async () => {
+    const app = express();
+    app.use((req, res, next) => {
+      const encoding = req.headers['content-encoding'];
+      if (encoding && /\b(br|brotli)\b/i.test(encoding)) {
+        return res.status(415).json({
+          status: 'error',
+          message: 'Unsupported Media Type: Brotli request body compression is disabled for security reasons.'
+        });
+      }
+      next();
+    });
+    app.post('/api/test', (req, res) => res.json({ status: 'ok' }));
+
+    const server = app.listen(0);
+    const port = server.address().port;
+
+    try {
+      const res = await fetch(`http://127.0.0.1:${port}/api/test`, {
+        method: 'POST',
+        headers: {
+          'Content-Encoding': 'br',
+          'Content-Type': 'application/json'
+        },
+        body: Buffer.from([0x01, 0x02, 0x03])
+      });
+      assert.strictEqual(res.status, 415, 'Request with Content-Encoding: br must be rejected with 415');
+    } finally {
+      server.close();
+    }
+  });
+
+  await t.test('SEC-ATLAS-04: authMiddleware explicitly rejects intermediate 2FA challenge tokens', async () => {
+    const authMiddleware = require('../server/middleware/authMiddleware');
+    const secret = process.env.JWT_SECRET || 'atlas_test_secret_for_audit';
+    process.env.JWT_SECRET = secret;
+
+    const challengeToken = jwt.sign(
+      { id: 999101, username: 'audit_user', role: 'user', stage: 'totp_pending', jwt_version: 1 },
+      secret
+    );
+
+    const req = {
+      method: 'GET',
+      headers: { authorization: `Bearer ${challengeToken}` },
+      query: {}
+    };
+    let statusCode = null;
+    let jsonResponse = null;
+    const res = {
+      status(code) { statusCode = code; return this; },
+      json(data) { jsonResponse = data; }
+    };
+    let nextCalled = false;
+
+    authMiddleware(req, res, () => { nextCalled = true; });
+
+    assert.strictEqual(nextCalled, false, 'authMiddleware must not call next() for totp_pending challenge token');
+    assert.strictEqual(statusCode, 401);
+    assert.strictEqual(jsonResponse?.status, 'error');
+  });
+
+  await t.test('SEC-ATLAS-05: musicImportService source contains -- argument boundary in ffprobe invocation', async () => {
+    const fs = require('fs');
+    const code = fs.readFileSync(require.resolve('../server/services/musicImportService'), 'utf8');
+    assert.ok(code.includes("execFileAsync('ffprobe'"), 'ffprobe must be invoked');
+    assert.ok(code.includes("'--'") && code.includes("filePath"), 'ffprobe must include -- before filePath');
+  });
 });

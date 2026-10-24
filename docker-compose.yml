@@ -24,7 +24,8 @@ services:
       - '/path/to/tvshows:/data/tvshows'
       - '/path/to/downloads:/data/downloads'
     ports:
-      - '9898:9898'
+      # Defaults to localhost (127.0.0.1) for secure reverse proxy deployment. Change to '9898:9898' if direct LAN access is required.
+      - '127.0.0.1:9898:9898'
     logging:
       driver: "json-file"
       options:

@@ -1,7 +1,7 @@
 # ============================================================
 # Stage 1 — Build the React client
 # ============================================================
-FROM node:22-alpine AS client-builder
+FROM node:22.23.4-alpine AS client-builder
 
 ARG GIT_COMMIT
 ARG GIT_BRANCH
@@ -26,7 +26,7 @@ RUN npm run build
 # ============================================================
 # Stage 2 — Install Server Dependencies
 # ============================================================
-FROM node:22-alpine AS server-builder
+FROM node:22.23.4-alpine AS server-builder
 
 # bcrypt needs build tools on Alpine
 RUN apk add --no-cache python3 make g++
@@ -38,7 +38,7 @@ RUN npm ci --omit=dev
 # ============================================================
 # Stage 3 — Assemble the final image
 # ============================================================
-FROM node:22-alpine AS server
+FROM node:22.23.4-alpine AS server
 
 # Only install runtime dependencies (ffmpeg for video resolution detection, su-exec for PUID/PGID dropping)
 RUN apk add --no-cache ffmpeg su-exec

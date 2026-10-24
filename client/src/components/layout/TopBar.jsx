@@ -36,7 +36,7 @@ import { MOD_KEY } from '../../lib/platform';
  * @param {{ issues?: number, requests?: number, downloads?: number, watchers?: number }} [props.activity]
  *   Live counters surfaced by the notifications bell (owned by Layout).
  */
-export default function TopBar({ user, activity, updateUrl, alerts = [], onOpenSearch, onOpenShortcuts, onLogout }) {
+export default function TopBar({ user, activity, updateUrl, alerts = [], onClearAlerts, onDismissAlert, onOpenSearch, onOpenShortcuts, onLogout }) {
   const navigate = useNavigate();
   const [activityOpen, setActivityOpen] = useState(false);
   const [hasUnread, setHasUnread] = useState(true);
@@ -628,6 +628,18 @@ export default function TopBar({ user, activity, updateUrl, alerts = [], onOpenS
                     </div>
                   </div>
                 </div>
+                {alerts.length > 0 && onClearAlerts && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onClearAlerts();
+                    }}
+                    className="text-xs font-medium text-slate-400 hover:text-sky-500 dark:hover:text-sky-400 transition-colors px-2 py-1 rounded-lg hover:bg-slate-200/50 dark:hover:bg-slate-800/50"
+                  >
+                    Clear alerts
+                  </button>
+                )}
               </div>
 
               {notifications.length === 0 && alerts.length === 0 && !updateUrl ? (
@@ -705,18 +717,44 @@ export default function TopBar({ user, activity, updateUrl, alerts = [], onOpenS
                               'w-4 h-4 shrink-0 mt-0.5',
                               alert.level === 'error' ? 'text-rose-400' : 'text-amber-400'
                             )} />
-                            <span className="min-w-0">
-                              <span className={clsx(
-                                'block text-xs font-semibold uppercase tracking-wide mb-0.5',
-                                alert.level === 'error' ? 'text-rose-400' : 'text-amber-400'
-                              )}>
-                                {alert.level === 'error' ? 'Error' : 'Warning'}
+                            <span className="min-w-0 flex-1">
+                              <span className="flex items-center gap-1.5 mb-0.5">
+                                <span className={clsx(
+                                  'block text-xs font-semibold uppercase tracking-wide',
+                                  alert.level === 'error' ? 'text-rose-400' : 'text-amber-400'
+                                )}>
+                                  {alert.level === 'error' ? 'Error' : 'Warning'}
+                                </span>
+                                {alert.count > 1 && (
+                                  <span className={clsx(
+                                    'text-[10px] font-bold px-1.5 py-0.5 rounded-md border leading-none',
+                                    alert.level === 'error'
+                                      ? 'bg-rose-500/15 text-rose-300 border-rose-500/20'
+                                      : 'bg-amber-500/15 text-amber-300 border-amber-500/20'
+                                  )}>
+                                    {alert.count}x
+                                  </span>
+                                )}
                               </span>
                               <span className="block text-sm text-slate-600 dark:text-slate-300 line-clamp-2">
                                 {alert.message}
                               </span>
                             </span>
                           </button>
+                          {onDismissAlert && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onDismissAlert(alert.id);
+                              }}
+                              title="Dismiss alert"
+                              aria-label="Dismiss alert"
+                              className="opacity-60 hover:opacity-100 sm:opacity-0 sm:group-hover:opacity-100 focus:opacity-100 p-1.5 mt-1.5 mr-2 text-slate-400 hover:text-slate-200 rounded-lg hover:bg-slate-200/50 dark:hover:bg-slate-700/50 transition-opacity shrink-0"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          )}
                         </div>
                       ))}
                     </>

@@ -460,6 +460,35 @@ const getMappedDownloadPath = (torrent) => {
   return contentPath;
 };
 
+/**
+ * Validates that a target path is safe to delete and does not match root,
+ * the base download directory, or any configured library root.
+ */
+const isSafeToPurgePath = (contentPath, torrent) => {
+  if (!contentPath || typeof contentPath !== 'string') return false;
+  const resolved = path.resolve(contentPath);
+  const root = path.parse(resolved).root;
+  // Never delete the filesystem root directory (e.g. '/' or 'C:\')
+  if (resolved === root) return false;
+
+  // Never delete the base save_path of the torrent client
+  if (torrent?.save_path && resolved === path.resolve(torrent.save_path)) {
+    return false;
+  }
+
+  // Never delete any configured library root directory
+  try {
+    const libPaths = db.prepare('SELECT path FROM library_paths').all();
+    for (const row of libPaths) {
+      if (row.path && resolved === path.resolve(row.path)) {
+        return false;
+      }
+    }
+  } catch { /* ignore */ }
+
+  return true;
+};
+
 // Reset any 'downloading' movies/episodes that are no longer present in the
 // active downloads.
 const resetDownloadsNotInClient = async (torrentList) => {
@@ -602,9 +631,13 @@ const runMediaManagement = async () => {
           try {
             await downloadClientService.deleteTorrent(torrent.hash, true);
           } catch { /* ignore */ }
-          try {
-            await fs.promises.rm(contentPath, { recursive: true, force: true });
-          } catch { /* ignore */ }
+          if (isSafeToPurgePath(contentPath, torrent)) {
+            try {
+              await fs.promises.rm(contentPath, { recursive: true, force: true });
+            } catch { /* ignore */ }
+          } else {
+            console.warn(`[Security] Aborting quarantine deletion: "${contentPath}" is a protected root or library path`);
+          }
         }
       }
     }

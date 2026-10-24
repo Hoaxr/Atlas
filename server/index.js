@@ -490,6 +490,20 @@ app.use(cors({
   },
   credentials: !allowsWildcardCors
 }));
+// Defense-in-depth against Node2Shell (CVE-2026-111497):
+// Reject incoming request bodies with Brotli content-encoding before they reach
+// body-parser's native zlib Brotli decompressor.
+app.use((req, res, next) => {
+  const encoding = req.headers['content-encoding'];
+  if (encoding && /\b(br|brotli)\b/i.test(encoding)) {
+    return res.status(415).json({
+      status: 'error',
+      message: 'Unsupported Media Type: Brotli request body compression is disabled for security reasons.'
+    });
+  }
+  next();
+});
+
 // Restore uploads are large — register above the global 500kb JSON parser with
 // its own limit. Auth must be applied explicitly since this bypasses later routers.
 app.post('/api/settings/restore', authMiddleware, requireAdmin, express.json({ limit: '100mb' }), settingsRoutes.restoreHandler);

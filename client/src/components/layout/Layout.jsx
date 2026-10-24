@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { Search, SlidersHorizontal, Film, ListTodo, Tv as TvIcon, DownloadCloud, Inbox, Calendar as CalendarIcon, BarChart3, Eye, X, TrendingUp, Music } from 'lucide-react';
 import bdekkerLogo from '../../assets/bdekker-logo.png';
@@ -70,8 +70,41 @@ export default function Layout() {
   const [systemIssues, setSystemIssues] = useState([]);
   const [pendingRequests, setPendingRequests] = useState(0);
   const [alerts, setAlerts] = useState(() => {
-    try { return JSON.parse(sessionStorage.getItem('atlas_alerts') || '[]'); } catch { return []; }
+    try {
+      const raw = JSON.parse(sessionStorage.getItem('atlas_alerts') || '[]');
+      if (!Array.isArray(raw)) return [];
+      const map = new Map();
+      for (const item of raw) {
+        if (!item || !item.message) continue;
+        const key = `${item.level || 'info'}:${item.message}`;
+        if (map.has(key)) {
+          const existing = map.get(key);
+          existing.count = (existing.count || 1) + (item.count || 1);
+          if (new Date(item.timestamp) > new Date(existing.timestamp)) {
+            existing.timestamp = item.timestamp;
+          }
+        } else {
+          map.set(key, { ...item, count: item.count || 1 });
+        }
+      }
+      return Array.from(map.values()).slice(0, 10);
+    } catch {
+      return [];
+    }
   });
+
+  const handleClearAlerts = useCallback(() => {
+    setAlerts([]);
+    try { sessionStorage.removeItem('atlas_alerts'); } catch { /* ignore */ }
+  }, []);
+
+  const handleDismissAlert = useCallback((id) => {
+    setAlerts((prev) => {
+      const next = prev.filter((a) => a.id !== id);
+      try { sessionStorage.setItem('atlas_alerts', JSON.stringify(next)); } catch { /* ignore */ }
+      return next;
+    });
+  }, []);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -204,10 +237,29 @@ export default function Layout() {
       // Accumulate warn/error events as dismissible alerts in the notification bell
       if ((data.level === 'warn' || data.level === 'error') && data.message) {
         setAlerts((prev) => {
-          const next = [
-            { id: Date.now() + Math.random(), level: data.level, message: data.message, timestamp: data.timestamp || new Date().toISOString() },
-            ...prev,
-          ].slice(0, 10);
+          const existingIndex = prev.findIndex((a) => a.message === data.message && a.level === data.level);
+          let next;
+          if (existingIndex !== -1) {
+            const existing = prev[existingIndex];
+            const updated = {
+              ...existing,
+              count: (existing.count || 1) + 1,
+              timestamp: data.timestamp || new Date().toISOString(),
+            };
+            next = [updated, ...prev.filter((_, idx) => idx !== existingIndex)];
+          } else {
+            next = [
+              {
+                id: Date.now() + Math.random(),
+                level: data.level,
+                message: data.message,
+                timestamp: data.timestamp || new Date().toISOString(),
+                count: 1,
+              },
+              ...prev,
+            ];
+          }
+          next = next.slice(0, 10);
           try { sessionStorage.setItem('atlas_alerts', JSON.stringify(next)); } catch { /* ignore */ }
           return next;
         });
@@ -586,6 +638,8 @@ export default function Layout() {
             watchers: watcherCount,
           }}
           alerts={alerts}
+          onClearAlerts={handleClearAlerts}
+          onDismissAlert={handleDismissAlert}
           onOpenSearch={() => setPaletteOpen(true)}
           onOpenShortcuts={() => setShortcutsOpen(true)}
           onLogout={handleLogout}

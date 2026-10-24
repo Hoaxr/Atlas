@@ -105,6 +105,10 @@ const authMiddleware = (req, res, next) => {
         return res.status(401).json({ status: 'error', message: 'Unauthorized: Invalid token payload' });
       }
 
+      if (decoded.stage === 'totp_pending') {
+        return res.status(401).json({ status: 'error', message: 'Unauthorized: Two-factor authentication verification required' });
+      }
+
       const dbUser = getUserSession(decoded.id);
       if (!dbUser) {
         return res.status(401).json({ status: 'error', message: 'User not found or deleted' });
