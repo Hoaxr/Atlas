@@ -1647,20 +1647,59 @@ router.post('/telegram/test', requireAdmin, async (req, res) => {
     }
 
     const text = '🎉 *Atlas Test Notification*\n\nYour Telegram integration is configured and working perfectly!';
-    const response = await axios.post(`https://api.telegram.org/bot${botToken}/sendMessage`, {
-      chat_id: chatId,
-      text,
-      parse_mode: 'Markdown'
-    }, { timeout: 10000 });
+    const logoPath = path.resolve(__dirname, '../../assets/logo.png');
+    let photoSent = false;
 
-    if (response.data?.ok) {
-      return res.json({ status: 'success', message: 'Test message sent to Telegram successfully' });
+    if (fs.existsSync(logoPath)) {
+      try {
+        const logoBuffer = fs.readFileSync(logoPath);
+        const boundary = `----AtlasTelegram${Date.now()}`;
+        const parts = [];
+        parts.push(Buffer.from(`--${boundary}\r\n`));
+        parts.push(Buffer.from('Content-Disposition: form-data; name="chat_id"\r\n\r\n'));
+        parts.push(Buffer.from(chatId, 'utf-8'));
+        parts.push(Buffer.from(`\r\n--${boundary}\r\n`));
+        parts.push(Buffer.from('Content-Disposition: form-data; name="caption"\r\n\r\n'));
+        parts.push(Buffer.from(text, 'utf-8'));
+        parts.push(Buffer.from(`\r\n--${boundary}\r\n`));
+        parts.push(Buffer.from('Content-Disposition: form-data; name="parse_mode"\r\n\r\n'));
+        parts.push(Buffer.from('Markdown', 'utf-8'));
+        parts.push(Buffer.from(`\r\n--${boundary}\r\n`));
+        parts.push(Buffer.from('Content-Disposition: form-data; name="photo"; filename="atlas-logo.png"\r\n'));
+        parts.push(Buffer.from('Content-Type: image/png\r\n\r\n'));
+        parts.push(logoBuffer);
+        parts.push(Buffer.from(`\r\n--${boundary}--\r\n`));
+
+        const body = Buffer.concat(parts);
+        const photoRes = await axios.post(`https://api.telegram.org/bot${botToken}/sendPhoto`, body, {
+          headers: { 'Content-Type': `multipart/form-data; boundary=${boundary}` },
+          timeout: 10000
+        });
+        if (photoRes.data?.ok) {
+          photoSent = true;
+          return res.json({ status: 'success', message: 'Test message sent to Telegram successfully' });
+        }
+      } catch {
+        // Fall back to text message
+      }
     }
 
-    return res.status(400).json({
-      status: 'error',
-      message: response.data?.description || 'Telegram API returned an unexpected response'
-    });
+    if (!photoSent) {
+      const response = await axios.post(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+        chat_id: chatId,
+        text,
+        parse_mode: 'Markdown'
+      }, { timeout: 10000 });
+
+      if (response.data?.ok) {
+        return res.json({ status: 'success', message: 'Test message sent to Telegram successfully' });
+      }
+
+      return res.status(400).json({
+        status: 'error',
+        message: response.data?.description || 'Telegram API returned an unexpected response'
+      });
+    }
   } catch (err) {
     const errorMsg = err.response?.data?.description || err.response?.data?.error || err.message || 'Failed to send Telegram test message';
     return res.status(400).json({

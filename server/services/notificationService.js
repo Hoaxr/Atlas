@@ -1,10 +1,27 @@
+const path = require('path');
+const fs = require('fs');
 const axios = require('axios');
 const eventBus = require('./eventBus');
 const { getSetting } = require('../utils/settings');
 
 class NotificationService {
   constructor() {
+    this._logoBuffer = null;
     this.init();
+  }
+
+  getAtlasLogoBuffer() {
+    if (this._logoBuffer) return this._logoBuffer;
+    try {
+      const logoPath = path.resolve(__dirname, '../../assets/logo.png');
+      if (fs.existsSync(logoPath)) {
+        this._logoBuffer = fs.readFileSync(logoPath);
+        return this._logoBuffer;
+      }
+    } catch (e) {
+      console.error('[NotificationService] Failed to read Atlas logo:', e.message);
+    }
+    return null;
   }
 
   init() {
@@ -114,6 +131,34 @@ class NotificationService {
           } catch (posterErr) {
             console.error('[NotificationService] Poster attachment failed, sending without:', posterErr.message);
           }
+        } else if (title === 'Atlas') {
+          try {
+            const logoBuffer = this.getAtlasLogoBuffer();
+            if (logoBuffer) {
+              embed.thumbnail = { url: 'attachment://logo.png' };
+              const boundary = `----AtlasDiscord${Date.now()}`;
+              const payload = JSON.stringify({ embeds: [embed] });
+
+              const parts = [];
+              parts.push(Buffer.from(`--${boundary}\r\n`));
+              parts.push(Buffer.from('Content-Disposition: form-data; name="payload_json"\r\n\r\n'));
+              parts.push(Buffer.from(payload, 'utf-8'));
+              parts.push(Buffer.from(`\r\n--${boundary}\r\n`));
+              parts.push(Buffer.from('Content-Disposition: form-data; name="files[0]"; filename="logo.png"\r\n'));
+              parts.push(Buffer.from('Content-Type: image/png\r\n\r\n'));
+              parts.push(logoBuffer);
+              parts.push(Buffer.from(`\r\n--${boundary}--\r\n`));
+
+              const body = Buffer.concat(parts);
+              await axios.post(discordUrl, body, {
+                headers: { 'Content-Type': `multipart/form-data; boundary=${boundary}` },
+                timeout: 10000
+              });
+              discordSent = true;
+            }
+          } catch (logoErr) {
+            console.error('[NotificationService] Discord logo attachment failed, sending without:', logoErr.message);
+          }
         }
 
         // Fallback: send without poster attachment
@@ -134,10 +179,15 @@ class NotificationService {
         if (title === 'Playback Started' && itemTitle) {
           caption = `🎬 *Playback Started*\n\n`;
           caption += `*${escMd(itemTitle)}*\n`;
-          caption += `${escMd(message)}\n`;
+          const cleanMessage = String(message || '').replace(/\*\*/g, '');
+          caption += `${escMd(cleanMessage)}\n`;
           if (metadata.type) caption += `📺 ${metadata.type}`;
           if (metadata.duration) caption += ` · ⏱ ${metadata.duration}`;
           if (metadata.server) caption += `\n🖥 ${metadata.server}`;
+        } else if (title === 'Atlas') {
+          caption = (itemTitle && itemTitle !== 'Atlas')
+            ? `*Atlas — ${escMd(itemTitle)}*\n${escMd(description)}`
+            : `*Atlas*\n${escMd(description)}`;
         } else if (itemTitle) {
           caption = `*${escMd(title)}*\n${escMd(itemTitle)}\n${escMd(description)}`;
         } else {
@@ -145,37 +195,49 @@ class NotificationService {
         }
 
         let telegramPhotoSent = false;
-        // Try to send as photo with poster for playback notifications
+        let photoBuffer = null;
+        let photoFilename = 'poster.png';
+
+        // Try to attach poster for playback or Atlas logo for system messages
         if (metadata.poster && title === 'Playback Started') {
           try {
-            const posterBuffer = await this.downloadPoster(metadata.poster);
-            if (posterBuffer) {
-              const boundary = `----AtlasTelegram${Date.now()}`;
-              const parts = [];
-              parts.push(Buffer.from(`--${boundary}\r\n`));
-              parts.push(Buffer.from('Content-Disposition: form-data; name="chat_id"\r\n\r\n'));
-              parts.push(Buffer.from(telegramChatId, 'utf-8'));
-              parts.push(Buffer.from(`\r\n--${boundary}\r\n`));
-              parts.push(Buffer.from('Content-Disposition: form-data; name="caption"\r\n\r\n'));
-              parts.push(Buffer.from(caption, 'utf-8'));
-              parts.push(Buffer.from(`\r\n--${boundary}\r\n`));
-              parts.push(Buffer.from('Content-Disposition: form-data; name="parse_mode"\r\n\r\n'));
-              parts.push(Buffer.from('Markdown', 'utf-8'));
-              parts.push(Buffer.from(`\r\n--${boundary}\r\n`));
-              parts.push(Buffer.from('Content-Disposition: form-data; name="photo"; filename="poster.png"\r\n'));
-              parts.push(Buffer.from('Content-Type: image/png\r\n\r\n'));
-              parts.push(posterBuffer);
-              parts.push(Buffer.from(`\r\n--${boundary}--\r\n`));
-
-              const body = Buffer.concat(parts);
-              await axios.post(`https://api.telegram.org/bot${telegramToken}/sendPhoto`, body, {
-                headers: { 'Content-Type': `multipart/form-data; boundary=${boundary}` },
-                timeout: 10000
-              });
-              telegramPhotoSent = true;
-            }
+            photoBuffer = await this.downloadPoster(metadata.poster);
+            photoFilename = 'poster.png';
           } catch (posterErr) {
             console.error('[NotificationService] Telegram poster failed, sending text fallback:', posterErr.message);
+          }
+        } else if (title === 'Atlas') {
+          photoBuffer = this.getAtlasLogoBuffer();
+          photoFilename = 'atlas-logo.png';
+        }
+
+        if (photoBuffer) {
+          try {
+            const boundary = `----AtlasTelegram${Date.now()}`;
+            const parts = [];
+            parts.push(Buffer.from(`--${boundary}\r\n`));
+            parts.push(Buffer.from('Content-Disposition: form-data; name="chat_id"\r\n\r\n'));
+            parts.push(Buffer.from(telegramChatId, 'utf-8'));
+            parts.push(Buffer.from(`\r\n--${boundary}\r\n`));
+            parts.push(Buffer.from('Content-Disposition: form-data; name="caption"\r\n\r\n'));
+            parts.push(Buffer.from(caption, 'utf-8'));
+            parts.push(Buffer.from(`\r\n--${boundary}\r\n`));
+            parts.push(Buffer.from('Content-Disposition: form-data; name="parse_mode"\r\n\r\n'));
+            parts.push(Buffer.from('Markdown', 'utf-8'));
+            parts.push(Buffer.from(`\r\n--${boundary}\r\n`));
+            parts.push(Buffer.from(`Content-Disposition: form-data; name="photo"; filename="${photoFilename}"\r\n`));
+            parts.push(Buffer.from('Content-Type: image/png\r\n\r\n'));
+            parts.push(photoBuffer);
+            parts.push(Buffer.from(`\r\n--${boundary}--\r\n`));
+
+            const body = Buffer.concat(parts);
+            await axios.post(`https://api.telegram.org/bot${telegramToken}/sendPhoto`, body, {
+              headers: { 'Content-Type': `multipart/form-data; boundary=${boundary}` },
+              timeout: 10000
+            });
+            telegramPhotoSent = true;
+          } catch (photoErr) {
+            console.error('[NotificationService] Telegram photo failed, sending text fallback:', photoErr.message);
           }
         }
 

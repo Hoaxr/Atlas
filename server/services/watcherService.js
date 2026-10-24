@@ -617,7 +617,7 @@ class WatcherService {
 
           await notificationService.sendNotification(
             'Playback Started',
-            `**${session.user}** is watching on **${device}**`,
+            `${session.user} is watching on ${device}`,
             {
               title: session.title,
               type: typeLabel,
