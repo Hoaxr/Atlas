@@ -90,5 +90,42 @@ test('Settings System & Masking Rules', async (t) => {
     assert.ok(purgeRoute, 'POST /database/purge route should be registered');
     assert.strictEqual(purgeRoute.route.methods.post, true);
   });
+
+  await t.test('notifyOnTaskRun setting is supported and triggers notifications on task execution', async () => {
+    const taskRegistry = require('../server/services/taskRegistry');
+    const notificationService = require('../server/services/notificationService');
+
+    const originalSetting = getSetting('notifyOnTaskRun');
+    setSetting('notifyOnTaskRun', 'true');
+    invalidateSettingsCache();
+
+    let sentTitle = null;
+    let sentMessage = null;
+    const origSendNotification = notificationService.sendNotification;
+    notificationService.sendNotification = async (title, message) => {
+      sentTitle = title;
+      sentMessage = message;
+    };
+
+    try {
+      taskRegistry.registerTask('unit_test_task', 'Unit Test Task', 'Runs test', '* * * * *', async () => {
+        return 'All items updated';
+      });
+
+      await taskRegistry.executeTask('unit_test_task');
+
+      assert.strictEqual(sentTitle, 'Task Completed');
+      assert.ok(sentMessage.includes('Unit Test Task'));
+      assert.ok(sentMessage.includes('completed successfully'));
+    } finally {
+      notificationService.sendNotification = origSendNotification;
+      if (originalSetting !== null) {
+        setSetting('notifyOnTaskRun', originalSetting);
+      } else {
+        db.prepare('DELETE FROM settings WHERE key = ?').run('notifyOnTaskRun');
+      }
+      invalidateSettingsCache();
+    }
+  });
 });
 

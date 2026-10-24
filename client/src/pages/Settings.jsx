@@ -159,6 +159,7 @@ export default function Settings() {
     notifyOnLowDiskSpace: false,
     notifyOnBackup: false,
     notifyOnHealthIssue: false,
+    notifyOnTaskRun: false,
     autoApproveRequests: false
   });
   const [paths, setPaths] = useState([]);
@@ -399,6 +400,7 @@ export default function Settings() {
           notifyOnLowDiskSpace: res.data.data.notifyOnLowDiskSpace === 'true',
           notifyOnBackup: res.data.data.notifyOnBackup === 'true',
           notifyOnHealthIssue: res.data.data.notifyOnHealthIssue === 'true',
+          notifyOnTaskRun: res.data.data.notifyOnTaskRun === 'true',
           autoApproveRequests: res.data.data.autoApproveRequests === true || res.data.data.autoApproveRequests === 'true'
         });
         setIndexers(res.data.data.indexers || []);

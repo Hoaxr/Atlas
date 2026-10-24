@@ -46,7 +46,8 @@ export default function ConnectionsTab({
     notifyOnSubtitle: settings?.notifyOnSubtitle || false,
     notifyOnLowDiskSpace: settings?.notifyOnLowDiskSpace || false,
     notifyOnBackup: settings?.notifyOnBackup || false,
-    notifyOnHealthIssue: settings?.notifyOnHealthIssue || false
+    notifyOnHealthIssue: settings?.notifyOnHealthIssue || false,
+    notifyOnTaskRun: settings?.notifyOnTaskRun || false
   });
   const [loading, setLoading] = useState(true);
   const [simklPulling, setSimklPulling] = useState(false);
@@ -160,7 +161,8 @@ export default function ConnectionsTab({
           notifyOnSubtitle: data.notifyOnSubtitle === 'true',
           notifyOnLowDiskSpace: data.notifyOnLowDiskSpace === 'true',
           notifyOnBackup: data.notifyOnBackup === 'true',
-          notifyOnHealthIssue: data.notifyOnHealthIssue === 'true'
+          notifyOnHealthIssue: data.notifyOnHealthIssue === 'true',
+          notifyOnTaskRun: data.notifyOnTaskRun === 'true'
         };
         setLocalSettings(newVals);
         if (setSettings) {
@@ -1205,6 +1207,12 @@ export default function ConnectionsTab({
                 onChange={(e) => handleChange({ target: { name: 'notifyOnHealthIssue', type: 'checkbox', checked: e.target.checked } })}
                 title="Notify on System Health Issues"
                 description="When an indexer circuit breaker trips or downloader errors"
+              />
+              <ToggleRow
+                checked={localSettings.notifyOnTaskRun}
+                onChange={(e) => handleChange({ target: { name: 'notifyOnTaskRun', type: 'checkbox', checked: e.target.checked } })}
+                title="Notify on Scheduled Task Run"
+                description="When background automation tasks finish executing"
               />
             </div>
           </div>

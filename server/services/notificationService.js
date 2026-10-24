@@ -158,6 +158,31 @@ class NotificationService {
       );
       return;
     }
+
+    // 9. Scheduled Tasks (Automation tasks that ran)
+    const notifyOnTaskRun = getSetting('notifyOnTaskRun') === 'true';
+    if (notifyOnTaskRun && event.message === 'Scheduled task completed') {
+      const taskName = event.metadata?.taskName || 'Automation Task';
+      const duration = event.metadata?.duration ? ` (took ${event.metadata.duration})` : '';
+      const detail = event.metadata?.message ? ` — ${event.metadata.message}` : '';
+      await this.sendNotification(
+        'Task Completed',
+        `Task "${taskName}" completed successfully${duration}.${detail}`,
+        event.metadata
+      );
+      return;
+    }
+
+    if (notifyOnTaskRun && (event.message === 'Scheduled task failed' || (typeof event.message === 'string' && event.message.startsWith('Task failed: ')))) {
+      const taskName = event.metadata?.taskName || 'Automation Task';
+      const err = event.metadata?.error || (typeof event.message === 'string' ? event.message.replace(/^Task failed:\s*/, '') : 'Unknown error');
+      await this.sendNotification(
+        'Task Failed',
+        `Task "${taskName}" failed: ${err}`,
+        event.metadata
+      );
+      return;
+    }
   }
 
   async sendNotification(title, message, metadata = {}, overrides = {}) {
@@ -188,7 +213,7 @@ class NotificationService {
 
     // Determine color for Discord embed
     let embedColor = 3447003; // Default blue
-    if (title === 'Download Complete' || title === 'Backup Complete' || title === 'Request Approved' || title === 'Requested Media Available') {
+    if (title === 'Download Complete' || title === 'Backup Complete' || title === 'Request Approved' || title === 'Requested Media Available' || title === 'Task Completed') {
       embedColor = 3066993; // Green
     } else if (title === 'Media Grabbed') {
       embedColor = 15105570; // Orange
@@ -202,7 +227,7 @@ class NotificationService {
       embedColor = 10181046; // Cyan
     } else if (title === 'Low Disk Space Warning') {
       embedColor = 16705372; // Yellow
-    } else if (title === 'Malicious Release Blocked' || title === 'Download Failed' || title === 'Request Denied' || title === 'Backup Failed' || title === 'System Health Issue') {
+    } else if (title === 'Malicious Release Blocked' || title === 'Download Failed' || title === 'Request Denied' || title === 'Backup Failed' || title === 'System Health Issue' || title === 'Task Failed') {
       embedColor = 15158332; // Red
     }
 
@@ -335,7 +360,9 @@ class NotificationService {
             'Low Disk Space Warning': '⚠️',
             'Backup Complete': '💾',
             'Backup Failed': '💾',
-            'System Health Issue': '🚨'
+            'System Health Issue': '🚨',
+            'Task Completed': '⏱️',
+            'Task Failed': '❌'
           };
           const emoji = emojiMap[title] ? `${emojiMap[title]} ` : '';
           if (itemTitle) {
@@ -358,7 +385,7 @@ class NotificationService {
           } catch (posterErr) {
             console.error('[NotificationService] Telegram poster failed, sending text fallback:', posterErr.message);
           }
-        } else if (title === 'Atlas' || title === 'Backup Complete' || title === 'Backup Failed' || title === 'Low Disk Space Warning' || title === 'System Health Issue') {
+        } else if (title === 'Atlas' || title === 'Backup Complete' || title === 'Backup Failed' || title === 'Low Disk Space Warning' || title === 'System Health Issue' || title === 'Task Completed' || title === 'Task Failed') {
           photoBuffer = this.getAtlasLogoBuffer();
           photoFilename = 'atlas-logo.png';
         }

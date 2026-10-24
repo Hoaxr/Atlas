@@ -62,10 +62,25 @@ const executeTask = async (id) => {
       updateTaskStatus(id, 'idle', 'Task skipped (no active downloads)');
     } else {
       updateTaskStatus(id, 'idle', 'Task completed successfully');
+      // database_backup already emits "Database backup completed" which is handled by notifyOnBackup
+      if (id !== 'database_backup') {
+        const durationMs = tasks[id]?.lastRunDuration;
+        const durationSec = durationMs ? (durationMs / 1000).toFixed(1) : null;
+        eventBus.info('Scheduled task completed', {
+          taskId: id,
+          taskName: task.name,
+          duration: durationSec ? `${durationSec}s` : undefined,
+          message: typeof result === 'string' ? result : undefined
+        });
+      }
     }
   } catch (err) {
     updateTaskStatus(id, 'error', `Failed: ${err.message}`);
-    eventBus.error(`Task failed: ${task.name} — ${err.message}`);
+    eventBus.error(`Task failed: ${task.name} — ${err.message}`, {
+      taskId: id,
+      taskName: task.name,
+      error: err.message
+    });
     // Reset to idle after a while so it can run again
     setTimeout(() => updateTaskStatus(id, 'idle', 'Reset after error'), 10000);
   }
