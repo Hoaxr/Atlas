@@ -335,11 +335,11 @@ export default function MediaDetailsModal({
             {/* ─── Modal Main Body ─── */}
             <div className="p-4 sm:p-5 pt-0 flex-1 flex flex-col">
               
-              {/* Header Info Area overlapping the banner */}
-              <div className="flex flex-col sm:flex-row gap-3.5 sm:gap-4 items-start -mt-12 sm:-mt-16 relative z-20 mb-3.5">
+              {/* Header Info Area overlapping the banner: side-by-side on mobile & desktop */}
+              <div className="flex flex-row gap-3 sm:gap-4 items-start -mt-10 sm:-mt-16 relative z-20 mb-3.5">
                 
-                {/* Poster */}
-                <div className="w-24 sm:w-28 shrink-0 mx-auto sm:mx-0 aspect-[2/3] rounded-lg overflow-hidden shadow-xl border border-slate-700/70 bg-slate-950 relative group">
+                {/* Poster on the left */}
+                <div className="w-24 sm:w-28 shrink-0 aspect-[2/3] rounded-lg overflow-hidden shadow-xl border border-slate-700/70 bg-slate-950 relative group">
                   {details.poster_path ? (
                     <img 
                       src={isInLibrary
@@ -367,40 +367,40 @@ export default function MediaDetailsModal({
                       className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center cursor-pointer"
                       title="Play Trailer"
                     >
-                      <PlayCircle className="w-10 h-10 text-white drop-shadow-2xl transform scale-90 group-hover:scale-110 transition-transform" />
+                      <PlayCircle className="w-9 h-9 sm:w-10 sm:h-10 text-white drop-shadow-2xl transform scale-90 group-hover:scale-110 transition-transform" />
                     </button>
                   )}
                 </div>
 
-                {/* Title & Key Meta */}
-                <div className="flex-1 text-center sm:text-left min-w-0 pt-1 sm:pt-4">
+                {/* Title & Key Meta on the right */}
+                <div className="flex-1 text-left min-w-0 pt-0.5 sm:pt-4">
                   
                   {/* Title & Year */}
-                  <h1 className="text-lg sm:text-xl font-bold text-white tracking-tight leading-snug">
-                    {title} {releaseYear && <span className="text-slate-400 font-semibold font-mono text-base sm:text-lg">({releaseYear})</span>}
+                  <h1 className="text-base sm:text-xl font-bold text-white tracking-tight leading-snug">
+                    {title} {releaseYear && <span className="text-slate-400 font-semibold font-mono text-sm sm:text-lg">({releaseYear})</span>}
                   </h1>
 
                   {/* Tagline */}
                   {details.tagline && (
-                    <p className="text-xs text-cyan-400/90 italic font-medium mt-0.5">
+                    <p className="text-xs text-cyan-400/90 italic font-medium mt-0.5 line-clamp-2">
                       "{details.tagline}"
                     </p>
                   )}
 
                   {/* Director / Creator */}
                   {(director || creators) && (
-                    <div className="flex items-center justify-center sm:justify-start gap-1.5 text-xs text-slate-400 mt-1">
+                    <div className="flex items-center justify-start gap-1.5 text-xs text-slate-400 mt-1">
                       <Clapperboard className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
                       <span>{director ? `Directed by ` : `Created by `}</span>
-                      <strong className="text-slate-200 font-semibold">{director || creators}</strong>
+                      <strong className="text-slate-200 font-semibold truncate">{director || creators}</strong>
                     </div>
                   )}
 
                   {/* Metadata Chips */}
-                  <div className="mt-2.5 flex flex-wrap items-center justify-center sm:justify-start gap-1.5">
+                  <div className="mt-2 flex flex-wrap items-center justify-start gap-1.5">
                     {/* Rating */}
                     {details.vote_average > 0 ? (
-                      <span className="flex items-center gap-1 bg-amber-500/10 border border-amber-500/20 text-amber-400 font-bold px-2 py-0.5 rounded-md text-[11px]">
+                      <span className="flex items-center gap-1 bg-amber-500/10 border border-amber-500/20 text-amber-400 font-bold px-1.5 sm:px-2 py-0.5 rounded-md text-[11px]">
                         <Star className="w-3 h-3 fill-current" />
                         {details.vote_average.toFixed(1)}
                       </span>
@@ -410,7 +410,7 @@ export default function MediaDetailsModal({
 
                     {/* Year */}
                     {releaseYear && (
-                      <span className="flex items-center gap-1 bg-slate-800/80 border border-slate-700/60 text-slate-300 font-medium px-2 py-0.5 rounded-md text-[11px]">
+                      <span className="flex items-center gap-1 bg-slate-800/80 border border-slate-700/60 text-slate-300 font-medium px-1.5 sm:px-2 py-0.5 rounded-md text-[11px]">
                         <Calendar className="w-3 h-3 text-slate-400" />
                         {releaseYear}
                       </span>
@@ -418,7 +418,7 @@ export default function MediaDetailsModal({
 
                     {/* Runtime */}
                     {runtime && (
-                      <span className="flex items-center gap-1 bg-slate-800/80 border border-slate-700/60 text-slate-300 font-medium px-2 py-0.5 rounded-md text-[11px]">
+                      <span className="flex items-center gap-1 bg-slate-800/80 border border-slate-700/60 text-slate-300 font-medium px-1.5 sm:px-2 py-0.5 rounded-md text-[11px]">
                         <Clock className="w-3 h-3 text-slate-400" />
                         {runtime} min
                       </span>
@@ -426,14 +426,14 @@ export default function MediaDetailsModal({
 
                     {/* Certification */}
                     {certification && (
-                      <span className="bg-slate-800/80 border border-slate-700/60 text-slate-300 font-semibold px-2 py-0.5 rounded-md text-[11px] tracking-wider">
+                      <span className="bg-slate-800/80 border border-slate-700/60 text-slate-300 font-semibold px-1.5 sm:px-2 py-0.5 rounded-md text-[11px] tracking-wider">
                         {certification}
                       </span>
                     )}
 
                     {/* In Library Status */}
                     {isInLibrary && (
-                      <span className="flex items-center gap-1 bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 font-semibold px-2 py-0.5 rounded-md text-[11px]">
+                      <span className="flex items-center gap-1 bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 font-semibold px-1.5 sm:px-2 py-0.5 rounded-md text-[11px]">
                         <ShieldCheck className="w-3 h-3" />
                         In Library
                       </span>
@@ -442,7 +442,7 @@ export default function MediaDetailsModal({
 
                   {/* Genres */}
                   {details.genres && details.genres.length > 0 && (
-                    <div className="mt-2 flex flex-wrap items-center justify-center sm:justify-start gap-1">
+                    <div className="mt-2 flex flex-wrap items-center justify-start gap-1">
                       {details.genres.map(g => (
                         <span key={g.id} className="text-[10px] font-medium bg-slate-800/60 text-slate-300 px-2 py-0.5 rounded-full border border-slate-700/50">
                           {g.name}
@@ -452,7 +452,7 @@ export default function MediaDetailsModal({
                   )}
 
                   {/* Quick Action Button for In-Library / Request mode */}
-                  <div className="mt-2.5 flex flex-wrap items-center justify-center sm:justify-start gap-2">
+                  <div className="mt-2.5 flex flex-wrap items-center justify-start gap-2">
                     {isInLibrary && libraryId && (
                       <button
                         onClick={() => {
@@ -542,7 +542,7 @@ export default function MediaDetailsModal({
                     )}
                   </div>
 
-                  <div className="flex flex-wrap gap-1.5">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-60 overflow-y-auto pr-0.5">
                     {details.seasons.filter(s => s.season_number > 0).map(season => {
                       const isMonitored = monitoredSeasons.has(season.season_number);
                       const isToggling = togglingSeason === season.season_number;
@@ -554,24 +554,26 @@ export default function MediaDetailsModal({
                           disabled={isToggling}
                           title={isMonitored ? `Season ${season.season_number} is monitored (click to unmonitor)` : `Season ${season.season_number} is unmonitored (click to monitor)`}
                           className={clsx(
-                            "px-2.5 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 border transition-all cursor-pointer select-none active:scale-95",
+                            "w-full px-2.5 py-2 rounded-lg text-xs font-medium flex items-center justify-between gap-1.5 border transition-all cursor-pointer select-none active:scale-95 text-left",
                             isMonitored 
                               ? "bg-cyan-950/50 border-cyan-500/50 text-cyan-100 hover:bg-cyan-900/50 hover:border-cyan-400 shadow-sm shadow-cyan-950/30" 
                               : "bg-slate-900/60 border-slate-800 text-slate-400 hover:border-slate-700 hover:text-slate-300 opacity-60 hover:opacity-100"
                           )}
                         >
-                          {isToggling ? (
-                            <Loader2 className="w-3.5 h-3.5 animate-spin text-cyan-400 shrink-0" />
-                          ) : isMonitored ? (
-                            <Bookmark className="w-3.5 h-3.5 text-cyan-400 fill-cyan-400 shrink-0" />
-                          ) : (
-                            <BookmarkMinus className="w-3.5 h-3.5 text-slate-500 shrink-0" />
-                          )}
-                          <span className={isMonitored ? "font-semibold text-slate-100" : "text-slate-400"}>
-                            {season.name}
-                          </span>
+                          <div className="flex items-center gap-1.5 min-w-0 truncate">
+                            {isToggling ? (
+                              <Loader2 className="w-3.5 h-3.5 animate-spin text-cyan-400 shrink-0" />
+                            ) : isMonitored ? (
+                              <Bookmark className="w-3.5 h-3.5 text-cyan-400 fill-cyan-400 shrink-0" />
+                            ) : (
+                              <BookmarkMinus className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                            )}
+                            <span className={clsx("truncate", isMonitored ? "font-semibold text-slate-100" : "text-slate-400")}>
+                              {season.name}
+                            </span>
+                          </div>
                           <span className={clsx(
-                            "text-[10px] ml-0.5",
+                            "text-[10px] shrink-0 font-normal",
                             isMonitored ? "text-cyan-300/80" : "text-slate-500"
                           )}>
                             ({season.episode_count} eps)
