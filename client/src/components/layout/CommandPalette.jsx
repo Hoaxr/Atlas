@@ -228,10 +228,34 @@ export default function CommandPalette({ open, onClose }) {
     }
 
     const libraryMatches = searchLibraryIndex(libraryItems, trimmed, MAX_PER_SECTION);
-    if (libraryMatches.length) {
+    const seenLibraryKeys = new Set(libraryMatches.map((item) => `${item.kind}-${item.id}`));
+    const seenTmdbIds = new Set(libraryMatches.map((item) => Number(item.tmdbId)).filter(Boolean));
+
+    const extraLibraryItems = [];
+    const unownedMedia = [];
+
+    const media = tmdbResults.filter((r) => r.media_type === 'movie' || r.media_type === 'tv');
+    media.forEach((item) => {
+      const tmdbId = Number(item.id);
+      if (seenTmdbIds.has(tmdbId)) return;
+      const owned = libraryByTmdbId.get(tmdbId);
+      if (owned) {
+        if (!seenLibraryKeys.has(`${owned.kind}-${owned.id}`)) {
+          seenLibraryKeys.add(`${owned.kind}-${owned.id}`);
+          seenTmdbIds.add(tmdbId);
+          extraLibraryItems.push(owned);
+        }
+      } else {
+        seenTmdbIds.add(tmdbId);
+        unownedMedia.push(item);
+      }
+    });
+
+    const allLibraryItems = [...libraryMatches, ...extraLibraryItems].slice(0, MAX_PER_SECTION);
+    if (allLibraryItems.length) {
       built.push({
         key: 'library',
-        items: libraryMatches.map((item) => ({
+        items: allLibraryItems.map((item) => ({
           key: `lib-${item.kind}-${item.id}`,
           title: item.title,
           subtitle: [item.kind === 'movie' ? 'Movie' : 'TV Show', item.meta].filter(Boolean).join(' · '),
@@ -246,37 +270,29 @@ export default function CommandPalette({ open, onClose }) {
       });
     }
 
-    const media = tmdbResults.filter((r) => r.media_type === 'movie' || r.media_type === 'tv');
     const people = tmdbResults.filter((r) => r.media_type === 'person');
 
-    if (media.length) {
+    if (unownedMedia.length) {
       built.push({
         key: 'tmdb',
-        items: media.slice(0, MAX_PER_SECTION).map((item) => {
-          const owned = libraryByTmdbId.get(Number(item.id));
+        items: unownedMedia.slice(0, MAX_PER_SECTION).map((item) => {
           const title = item.title || item.name || 'Untitled';
           const date = item.release_date || item.first_air_date || '';
           return {
             key: `tmdb-${item.media_type}-${item.id}`,
             title,
-            subtitle: owned
-              ? 'In your library'
-              : item.overview
-                ? item.overview.slice(0, 90)
-                : item.media_type === 'movie'
-                  ? 'Movie'
-                  : 'TV Show',
+            subtitle: item.overview
+              ? item.overview.slice(0, 90)
+              : item.media_type === 'movie'
+                ? 'Movie'
+                : 'TV Show',
             year: date ? date.slice(0, 4) : null,
             thumb: {
               src: tmdbImgUrl(item.poster_path, 'w92'),
               icon: item.media_type === 'movie' ? Film : Tv,
             },
-            badge: owned ? 'In library' : 'Add',
+            badge: 'Add',
             run: () => {
-              if (owned) {
-                go(owned.route);
-                return;
-              }
               onClose();
               setAddTarget({ mediaId: item.id, mediaType: item.media_type, title });
             },

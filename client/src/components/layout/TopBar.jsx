@@ -241,7 +241,14 @@ export default function TopBar({ user, activity, updateUrl, alerts = [], onClear
 
   const flatRows = useMemo(() => {
     const rows = [];
+    const seenLibraryKeys = new Set();
+    const seenTmdbIds = new Set();
+
     libraryMatches.forEach((item) => {
+      seenLibraryKeys.add(`${item.kind}-${item.id}`);
+      if (item.tmdbId) {
+        seenTmdbIds.add(Number(item.tmdbId));
+      }
       rows.push({
         type: 'library',
         id: `lib-${item.kind}-${item.id}`,
@@ -261,9 +268,43 @@ export default function TopBar({ user, activity, updateUrl, alerts = [], onClear
     });
 
     tmdbMatches.forEach((item) => {
-      const owned = libraryByTmdbId.get(Number(item.id));
+      const tmdbId = Number(item.id);
+      const owned = libraryByTmdbId.get(tmdbId);
+
+      // If already shown from library matches, skip to prevent duplicates
+      if (seenTmdbIds.has(tmdbId)) {
+        return;
+      }
+
+      // If already in library, show only the library item
+      if (owned) {
+        if (seenLibraryKeys.has(`${owned.kind}-${owned.id}`)) {
+          return;
+        }
+        seenLibraryKeys.add(`${owned.kind}-${owned.id}`);
+        seenTmdbIds.add(tmdbId);
+        rows.push({
+          type: 'library',
+          id: `lib-${owned.kind}-${owned.id}`,
+          title: owned.title,
+          year: owned.year,
+          subtitle: [owned.kind === 'movie' ? 'Movie' : 'TV Show', owned.meta].filter(Boolean).join(' · '),
+          poster: owned.tmdbId ? posterUrl(owned.kind === 'movie' ? 'movies' : 'shows', owned.tmdbId, owned.posterPath) : null,
+          icon: owned.kind === 'movie' ? Film : Tv,
+          badge: 'In library',
+          run: () => {
+            navigate(owned.route);
+            setIsSearchOpen(false);
+            setSearchQuery('');
+            searchInputRef.current?.blur();
+          },
+        });
+        return;
+      }
+
       const title = item.title || item.name || 'Untitled';
       const year = (item.release_date || item.first_air_date || '').slice(0, 4);
+      seenTmdbIds.add(tmdbId);
       rows.push({
         type: 'tmdb',
         id: `tmdb-${item.media_type}-${item.id}`,
@@ -272,13 +313,9 @@ export default function TopBar({ user, activity, updateUrl, alerts = [], onClear
         subtitle: item.media_type === 'movie' ? 'Movie' : 'TV Series',
         poster: tmdbImgUrl(item.poster_path, 'w92'),
         icon: item.media_type === 'movie' ? Film : Tv,
-        badge: owned ? 'In library' : 'Add',
+        badge: 'Add',
         run: () => {
-          if (owned) {
-            navigate(owned.route);
-          } else {
-            setAddTarget({ mediaId: item.id, mediaType: item.media_type, title });
-          }
+          setAddTarget({ mediaId: item.id, mediaType: item.media_type, title });
           setIsSearchOpen(false);
           setSearchQuery('');
           searchInputRef.current?.blur();
