@@ -621,6 +621,38 @@ test('Tracker & Continue Watching System', async (t) => {
       setSetting('notifyOnPlaybackStart', 'false');
     }
   });
+
+  await t.test('watcherService.formatEta returns 24-hour Dutch time in configured timezone', () => {
+    const watcherService = require('../server/services/watcherService');
+    const origTz = db.prepare('SELECT value FROM settings WHERE key = ?').get('timezone')?.value;
+
+    try {
+      // 2026-10-25 19:28:00 UTC -> 20:28 in Europe/Amsterdam (CET, UTC+1 after DST ends)
+      const baseTime = Date.parse('2026-10-25T19:00:00Z');
+      const remainingMs = 28 * 60 * 1000; // 28 minutes
+
+      setSetting('timezone', 'Europe/Amsterdam');
+      const amsterdamEta = watcherService.formatEta(remainingMs, baseTime);
+      assert.strictEqual(amsterdamEta, '20:28', 'Should format as 20:28 in Dutch 24-hour time for Europe/Amsterdam');
+
+      // Check null / non-positive
+      assert.strictEqual(watcherService.formatEta(0), null);
+      assert.strictEqual(watcherService.formatEta(-1000), null);
+      assert.strictEqual(watcherService.formatEta(null), null);
+
+      // Check America/New_York (EDT, UTC-4) -> 19:28 UTC is 15:28
+      setSetting('timezone', 'America/New_York');
+      const nyEta = watcherService.formatEta(remainingMs, baseTime);
+      assert.strictEqual(nyEta, '15:28', 'Should format as 15:28 in Dutch 24-hour time for America/New_York');
+    } finally {
+      if (origTz !== undefined) {
+        setSetting('timezone', origTz);
+      } else {
+        db.prepare('DELETE FROM settings WHERE key = ?').run('timezone');
+      }
+    }
+  });
 });
+
 
 

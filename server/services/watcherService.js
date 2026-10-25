@@ -68,6 +68,30 @@ class WatcherService {
     }
   }
 
+  formatEta(remainingMs, fromTimestamp = Date.now()) {
+    if (!remainingMs || remainingMs <= 0) return null;
+    const etaTime = new Date(fromTimestamp + remainingMs);
+    const timezone = getSetting('timezone') || 'Europe/Amsterdam';
+    const options = {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false
+    };
+    if (timezone) {
+      try {
+        options.timeZone = timezone;
+        return etaTime.toLocaleTimeString('nl-NL', options);
+      } catch {
+        // Fall back if invalid timezone
+      }
+    }
+    return etaTime.toLocaleTimeString('nl-NL', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false
+    });
+  }
+
   cleanUntrackedWatchHistory() {
     try {
       const setting = getSetting('autoWatchUser');
@@ -402,8 +426,7 @@ class WatcherService {
 
         // ETA calculation
         const remaining = s.duration && s.viewOffset ? s.duration - s.viewOffset : 0;
-        const etaTime = remaining > 0 ? new Date(Date.now() + remaining) : null;
-        const etaStr = etaTime ? etaTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : null;
+        const etaStr = this.formatEta(remaining);
 
         // Build poster URL: try DB lookup first (English titles), fall back to Plex thumb
         const dbInfo = resolvePoster(s.type === 'episode' ? s.grandparentTitle : s.title, s.type);
@@ -508,8 +531,7 @@ class WatcherService {
         const totalTicks = item.RunTimeTicks;
         const posTicks = s.PlayState?.PositionTicks;
         const remaining = totalTicks && posTicks ? Math.floor((totalTicks - posTicks) / 10000) : 0;
-        const etaTime = remaining > 0 ? new Date(Date.now() + remaining) : null;
-        const etaStr = etaTime ? etaTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : null;
+        const etaStr = this.formatEta(remaining);
 
         const title = item.Type === 'Episode' 
             ? `${item.SeriesName} - S${String(item.ParentIndexNumber).padStart(2, '0')}E${String(item.IndexNumber).padStart(2, '0')}` 

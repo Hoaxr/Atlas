@@ -158,29 +158,10 @@ export default function Watcher() {
           {sessions.map(session => (
             <div key={session.id} className="bg-slate-900/70 backdrop-blur-sm border border-slate-800 rounded-xl relative overflow-hidden group flex flex-col hover:border-slate-700 transition-colors shadow-sm">
               <div className="p-4 sm:p-5 relative z-10 flex-1">
-                <div className="flex justify-between items-start mb-4">
-                  <div className="flex items-center gap-2 text-slate-200 text-xs sm:text-sm font-semibold bg-[#101e31] px-3 py-1.5 rounded-xl border border-[#1c2d46]">
-                    <User className="w-4 h-4 text-cyan-400 shrink-0" />
-                    <span className="truncate">{session.user}</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold px-2 py-1 bg-[#101e31] text-slate-300 rounded-lg border border-[#1c2d46]">
-                      {session.server}
-                    </span>
-                    {session.state === 'playing' ? (
-                      <div className="bg-cyan-500/15 p-1.5 rounded-lg border border-cyan-500/30">
-                        <Play className="w-3.5 h-3.5 text-cyan-400 fill-cyan-400/20" />
-                      </div>
-                    ) : (
-                      <div className="bg-slate-800/80 p-1.5 rounded-lg border border-slate-700/60">
-                        <Pause className="w-3.5 h-3.5 text-slate-400 fill-slate-400/20" />
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                <div className="flex gap-4 items-center mt-2">
-                  <div className="w-16 h-24 sm:w-20 sm:h-28 bg-[#101e31] rounded-xl flex items-center justify-center flex-shrink-0 overflow-hidden shadow-lg border border-[#1c2d46] relative group-hover:scale-105 transition-transform duration-300">
+                {/* Top Section: Poster on left, Details on right */}
+                <div className="flex gap-3 sm:gap-4 items-start">
+                  {/* Poster Thumbnail */}
+                  <div className="w-16 h-20 sm:w-20 sm:h-24 bg-[#101e31] rounded-xl flex items-center justify-center flex-shrink-0 overflow-hidden shadow-md border border-[#1c2d46] relative group-hover:scale-105 transition-transform duration-300">
                     {session.poster ? (
                       <img 
                         src={session.poster} 
@@ -196,42 +177,92 @@ export default function Watcher() {
                     
                     <div className={session.poster ? 'hidden' : 'flex w-full h-full items-center justify-center'}>
                       {session.type === 'movie' ? (
-                        <Film className="w-8 h-8 text-slate-500" />
+                        <Film className="w-7 h-7 text-slate-500" />
                       ) : (
-                        <Tv className="w-8 h-8 text-slate-500" />
+                        <Tv className="w-7 h-7 text-slate-500" />
                       )}
                     </div>
                   </div>
-                  <div className="flex-1 min-w-0">
-                    {session.media_id ? (
-                      <Link to={session.type === 'movie' ? `/movies/${session.media_id}` : `/shows/${session.media_id}`}>
-                        <h3 className="font-bold text-base sm:text-lg text-slate-100 line-clamp-2 leading-tight hover:text-cyan-400 hover:underline transition-colors">
+
+                  {/* Right: Badges, Title, Device Info */}
+                  <div className="flex-1 min-w-0 flex flex-col justify-between self-stretch py-0.5">
+                    {/* Row 1: User & Server (Left) | ETA & Play State (Right) */}
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <div className="flex items-center gap-1.5 bg-[#101e31] px-2.5 py-1 rounded-lg border border-[#1c2d46] text-xs font-semibold text-slate-200">
+                          <User className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                          <span className="truncate">{session.user}</span>
+                        </div>
+                        <span className="text-xs font-semibold px-2 py-1 bg-[#101e31] text-slate-400 rounded-lg border border-[#1c2d46] shrink-0">
+                          {session.server}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {session.eta && (
+                          <span className="flex items-center gap-1.5 bg-[#101e31] px-2.5 py-1 rounded-lg border border-[#1c2d46] text-xs text-slate-300 font-mono">
+                            <Clock className="w-3.5 h-3.5 text-cyan-400" />
+                            <span>{session.eta}</span>
+                          </span>
+                        )}
+                        <div className={`p-1.5 rounded-lg border ${session.state === 'playing' ? 'bg-cyan-500/15 border-cyan-500/30 text-cyan-400' : 'bg-slate-800/80 border-slate-700/60 text-slate-400'}`}>
+                          {session.state === 'playing' ? (
+                            <Play className="w-3.5 h-3.5 fill-cyan-400/20" />
+                          ) : (
+                            <Pause className="w-3.5 h-3.5 fill-slate-400/20" />
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Row 2: Title */}
+                    <div className="my-1.5">
+                      {session.media_id ? (
+                        <Link to={session.type === 'movie' ? `/movies/${session.media_id}` : `/shows/${session.media_id}`}>
+                          <h3 className="font-bold text-base sm:text-lg text-slate-100 line-clamp-1 leading-tight hover:text-cyan-400 hover:underline transition-colors">
+                            {session.title}
+                          </h3>
+                        </Link>
+                      ) : (
+                        <h3 className="font-bold text-base sm:text-lg text-slate-100 line-clamp-1 leading-tight group-hover:text-cyan-400 transition-colors">
                           {session.title}
                         </h3>
-                      </Link>
-                    ) : (
-                      <h3 className="font-bold text-base sm:text-lg text-slate-100 line-clamp-2 leading-tight group-hover:text-cyan-400 transition-colors">
-                        {session.title}
-                      </h3>
-                    )}
-                    <div className="flex items-center gap-2 mt-2 flex-wrap">
-                      <p className="text-xs sm:text-sm text-slate-400 flex items-center gap-1.5 font-medium bg-[#101e31] px-2.5 py-1 rounded-lg border border-[#1c2d46]">
-                        <span className={`w-2 h-2 rounded-full shadow-[0_0_8px_currentColor] ${session.state === 'playing' ? 'bg-cyan-400 text-cyan-400' : 'bg-slate-500 text-slate-500'}`}></span>
-                        {session.player}
-                      </p>
-                      {/* Sub-line: product for Plex, device/platform for Jellyfin/Emby */}
+                      )}
+                    </div>
+
+                    {/* Row 3: Player, Platform, Location, Bandwidth Badges (strict 1 line) */}
+                    <div className="flex items-center gap-1.5 flex-nowrap overflow-hidden text-xs">
+                      <span className="text-slate-300 flex items-center gap-1.5 font-medium bg-[#101e31] px-2 py-1 rounded-lg border border-[#1c2d46] min-w-0 shrink whitespace-nowrap">
+                        <span className={`w-2 h-2 rounded-full shrink-0 shadow-[0_0_8px_currentColor] ${session.state === 'playing' ? 'bg-cyan-400 text-cyan-400' : 'bg-slate-500 text-slate-500'}`}></span>
+                        <span className="truncate">{session.player}</span>
+                      </span>
+
                       {((session.product && session.product !== session.player) || session.platform) && (
-                        <p className="text-xs text-slate-400 flex items-center gap-1 bg-[#101e31] px-2 py-1 rounded-lg border border-[#1c2d46]">
-                          <Monitor className="w-3 h-3 text-slate-500" />
-                          {session.product !== session.player ? session.product : session.platform}
-                        </p>
+                        <span className="text-slate-400 flex items-center gap-1 bg-[#101e31] px-2 py-1 rounded-lg border border-[#1c2d46] shrink-0 whitespace-nowrap">
+                          <Monitor className="w-3 h-3 text-slate-500 shrink-0" />
+                          <span className="truncate max-w-[80px] sm:max-w-[100px]">{session.product !== session.player ? session.product : session.platform}</span>
+                        </span>
+                      )}
+
+                      {session.location && (
+                        <span className="text-slate-400 flex items-center gap-1 bg-[#101e31] px-2 py-1 rounded-lg border border-[#1c2d46] shrink-0 whitespace-nowrap">
+                          <Wifi className="w-3 h-3 text-slate-500 shrink-0" />
+                          <span>{session.location}</span>
+                        </span>
+                      )}
+
+                      {session.bandwidth && (
+                        <span className="text-cyan-400 flex items-center gap-1 bg-[#101e31] px-2 py-1 rounded-lg border border-[#1c2d46] font-medium shrink-0 whitespace-nowrap">
+                          <Zap className="w-3 h-3 text-cyan-400 shrink-0" />
+                          <span>{String(session.bandwidth).replace(/mbps/i, '').trim()}M</span>
+                        </span>
                       )}
                     </div>
                   </div>
                 </div>
 
                 {/* Stream Details */}
-                {(session.quality || session.videoLabel || session.audioLabel) && (
+                {(session.quality || session.videoDecision || session.audioDecision || session.videoLabel || session.audioLabel) && (
                   <div className="mt-4 space-y-1.5 p-3 bg-[#101e31]/60 rounded-xl border border-[#1c2d46]/70">
                     {session.quality && (
                       <div className="flex items-center gap-2 text-xs">
@@ -292,30 +323,6 @@ export default function Watcher() {
                         </span>
                       )}
                     </div>
-                  </div>
-                )}
-
-                {/* Location & Bandwidth & ETA */}
-                {(session.location || session.bandwidth || session.eta) && (
-                  <div className="mt-3 flex items-center gap-2.5 text-xs text-slate-400 flex-wrap">
-                    {session.location && (
-                      <span className="flex items-center gap-1 bg-[#101e31] px-2.5 py-1 rounded-lg border border-[#1c2d46]">
-                        <Wifi className="w-3 h-3 text-slate-500" />
-                        {session.location}
-                      </span>
-                    )}
-                    {session.bandwidth && (
-                      <span className="flex items-center gap-1 bg-[#101e31] px-2.5 py-1 rounded-lg border border-[#1c2d46]">
-                        <Zap className="w-3 h-3 text-cyan-400" />
-                        {session.bandwidth} Mbps
-                      </span>
-                    )}
-                    {session.eta && (
-                      <span className="flex items-center gap-1 bg-[#101e31] px-2.5 py-1 rounded-lg border border-[#1c2d46] ml-auto">
-                        <Clock className="w-3 h-3 text-slate-500" />
-                        ETA: {session.eta}
-                      </span>
-                    )}
                   </div>
                 )}
               </div>
