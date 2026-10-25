@@ -5,7 +5,7 @@ import { formatSize } from '../lib/format';
 import {
   BarChart3, Film, Tv, HardDrive, Star,
   CheckCircle2, Hash, Zap, PlayCircle, Activity, Languages, Trash2, FolderOpen,
-  Music2, Disc, Mic2, FileAudio, ChevronRight, Tag, Sparkles, Loader2
+  Music2, Disc, Mic2, FileAudio, ChevronRight, Loader2, Eye
 } from 'lucide-react';
 import LoadingState from '../components/shared/LoadingState';
 import EmptyState from '../components/shared/EmptyState';
@@ -773,32 +773,20 @@ export default function Statistics() {
                     )}
                   </div>
                   <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-center">
-                    {sub.sync_status === 'duration_mismatch' && (
-                      <button
-                        onClick={() => handleMarkForced(sub)}
-                        disabled={actionLoadingFile === sub.filename}
-                        className="px-2 py-1 text-xs font-medium rounded-lg bg-blue-500/15 hover:bg-blue-500/25 text-blue-300 border border-blue-500/30 transition-colors flex items-center gap-1 cursor-pointer disabled:opacity-50"
-                        title="Mark as Forced / Foreign-only dialogue (removes from cut issues)"
-                      >
-                        {actionLoadingFile === sub.filename ? <Loader2 className="w-3 h-3 animate-spin" /> : <Tag className="w-3 h-3" />}
-                        Forced
-                      </button>
-                    )}
                     {sub.lang_code !== 'en' && (
                       <button
                         onClick={() => handleTranslateSub(sub)}
                         disabled={actionLoadingFile === sub.filename}
-                        className="px-2 py-1 text-xs font-medium rounded-lg bg-cyan-500/15 hover:bg-cyan-500/25 text-cyan-300 border border-cyan-500/30 transition-colors flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                        className="p-1.5 rounded-lg bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 border border-cyan-500/20 transition-colors cursor-pointer disabled:opacity-50"
                         title="AI translate full track from English"
                       >
-                        <Sparkles className="w-3 h-3" />
-                        Translate
+                        {actionLoadingFile === sub.filename ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Languages className="w-3.5 h-3.5" />}
                       </button>
                     )}
                     <button
                       onClick={() => handleDeleteSub(sub)}
                       disabled={actionLoadingFile === sub.filename}
-                      className="p-1.5 text-xs rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 transition-colors cursor-pointer disabled:opacity-50"
+                      className="p-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 transition-colors cursor-pointer disabled:opacity-50"
                       title="Delete broken subtitle file"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
@@ -809,9 +797,10 @@ export default function Statistics() {
                           setSyncIssuesModal(false);
                           navigate(sub.media_type === 'movie' ? `/movies/${sub.show_or_movie_id}` : `/shows/${sub.show_or_movie_id}`);
                         }}
-                        className="px-2.5 py-1 text-xs rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors cursor-pointer"
+                        className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700/60 transition-colors cursor-pointer"
+                        title="View media item"
                       >
-                        View
+                        <Eye className="w-3.5 h-3.5" />
                       </button>
                     )}
                   </div>
