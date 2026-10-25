@@ -59,7 +59,6 @@ export default function Statistics() {
   const [syncIssuesData, setSyncIssuesData] = useState(null);
   const [syncIssuesTotal, setSyncIssuesTotal] = useState(0);
   const [syncIssuesLoading, setSyncIssuesLoading] = useState(false);
-  const [reclassifying, setReclassifying] = useState(false);
   const [actionLoadingFile, setActionLoadingFile] = useState(null);
   const [, setDeletableData] = useState(null);
   const [, setDeletableLoading] = useState(false);
@@ -93,22 +92,6 @@ export default function Statistics() {
       console.error('Failed to fetch subtitle sync issues', e);
     } finally {
       setSyncIssuesLoading(false);
-    }
-  };
-
-  const handleReclassifyForced = async () => {
-    setReclassifying(true);
-    try {
-      const res = await api.post('/library/subtitles/reclassify-forced');
-      if (res.data.status === 'success') {
-        customAlert(res.data.message || 'Filtered forced subtitle false positives', 'success');
-        openSyncIssues();
-        fetchStats();
-      }
-    } catch (e) {
-      customAlert(e.response?.data?.message || 'Failed to reclassify subtitles', 'error');
-    } finally {
-      setReclassifying(false);
     }
   };
 
@@ -712,28 +695,17 @@ export default function Statistics() {
           </div>
         ) : (
           <div className="space-y-4 text-sm">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div className="flex items-center justify-between">
               <p className="text-xs text-slate-400">
                 Found <span className="font-semibold text-amber-400">{syncIssuesTotal || syncIssuesData.length}</span> subtitle track{(syncIssuesTotal || syncIssuesData.length) > 1 ? 's' : ''} with anomalies
                 {syncIssuesTotal > syncIssuesData.length ? ` (showing top ${syncIssuesData.length})` : ''}:
               </p>
-              <div className="flex items-center gap-2 shrink-0">
-                <button
-                  onClick={handleReclassifyForced}
-                  disabled={reclassifying}
-                  className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-lg bg-cyan-500/10 text-cyan-300 border border-cyan-500/25 hover:bg-cyan-500/20 transition-colors disabled:opacity-50 cursor-pointer"
-                  title="Filter out low-cue forced subtitles and false positives"
-                >
-                  {reclassifying ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
-                  Filter False Positives
-                </button>
-                <button
-                  onClick={() => { setSyncIssuesModal(false); navigate('/health'); }}
-                  className="text-xs text-cyan-400 hover:underline cursor-pointer"
-                >
-                  Media Health &rarr;
-                </button>
-              </div>
+              <button
+                onClick={() => { setSyncIssuesModal(false); navigate('/health'); }}
+                className="text-xs text-cyan-400 hover:underline cursor-pointer"
+              >
+                Media Health &rarr;
+              </button>
             </div>
             <div className="bg-slate-900/50 rounded-xl border border-white/5 overflow-hidden divide-y divide-slate-800/50 max-h-96 overflow-y-auto">
               {syncIssuesData.map((sub) => (

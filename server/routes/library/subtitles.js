@@ -395,9 +395,14 @@ router.post('/repair/restore', async (req, res, next) => {
  */
 router.get('/sync-issues', (req, res, next) => {
   try {
+    // Automatically reclassify pending low-cue forced tracks in the background
+    subtitleSyncService.reclassifyForcedSubtitles().catch(() => {});
+
     const totalCount = db.prepare(`
       SELECT COUNT(*) as count FROM subtitle_tracks
       WHERE sync_status IN ('duration_mismatch', 'drift_detected', 'offset_detected', 'desynced', 'invalid_timing')
+        AND (is_forced IS NULL OR is_forced = 0)
+        AND (sync_status != 'duration_mismatch' OR cue_count IS NULL OR cue_count >= 65 OR cue_count = 0)
     `).get()?.count || 0;
 
     const issues = db.prepare(`
@@ -415,6 +420,8 @@ router.get('/sync-issues', (req, res, next) => {
       LEFT JOIN episodes e ON st.media_type = 'episode' AND st.media_id = e.id
       LEFT JOIN shows s ON e.show_id = s.id
       WHERE st.sync_status IN ('duration_mismatch', 'drift_detected', 'offset_detected', 'desynced', 'invalid_timing')
+        AND (st.is_forced IS NULL OR st.is_forced = 0)
+        AND (st.sync_status != 'duration_mismatch' OR st.cue_count IS NULL OR st.cue_count >= 65 OR st.cue_count = 0)
       ORDER BY st.updated_at DESC
       LIMIT 100
     `).all();

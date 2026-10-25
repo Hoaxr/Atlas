@@ -896,6 +896,11 @@ const verifyAllSubtitlesForMedia = async (mediaType, mediaId, { force = false } 
  */
 const runLibrarySubtitleSyncCheck = async ({ force = false } = {}) => {
   console.log(`[SubtitleSyncService] Starting Library Subtitle Sync Check (force: ${force})...`);
+  try {
+    await reclassifyForcedSubtitles();
+  } catch (reclassErr) {
+    console.warn('[SubtitleSyncService] Pre-check reclassification error:', reclassErr.message);
+  }
   let totalChecked = 0;
   let cachedCount = 0;
   let issuesFound = 0;
@@ -1397,12 +1402,27 @@ const reclassifyForcedSubtitles = async () => {
   for (const track of candidates) {
     let cuesCount = track.cue_count || 0;
     // If cue_count wasn't stored, try to read it from file
-    if (cuesCount === 0 && track.file_path && fs.existsSync(track.file_path)) {
-      try {
-        const raw = await readSubtitleFile(track.file_path);
-        const parsed = parseSubtitles(raw);
-        cuesCount = parsed.cues?.length || 0;
-      } catch { /* ignore */ }
+    if (cuesCount === 0) {
+      let resolvedPath = track.file_path;
+      if (!resolvedPath || !fs.existsSync(resolvedPath)) {
+        try {
+          if (track.media_type === 'movie') {
+            const m = db.prepare('SELECT file_path, folder_path FROM movies WHERE id = ?').get(track.media_id);
+            const dir = m?.folder_path || (m?.file_path ? path.dirname(m.file_path) : null);
+            if (dir) resolvedPath = path.join(dir, track.filename);
+          } else if (track.media_type === 'episode') {
+            const ep = db.prepare('SELECT file_path FROM episodes WHERE id = ?').get(track.media_id);
+            if (ep?.file_path) resolvedPath = path.join(path.dirname(ep.file_path), track.filename);
+          }
+        } catch { /* ignore */ }
+      }
+      if (resolvedPath && fs.existsSync(resolvedPath)) {
+        try {
+          const raw = await readSubtitleFile(resolvedPath);
+          const parsed = parseSubtitles(raw);
+          cuesCount = parsed.cues?.length || 0;
+        } catch { /* ignore */ }
+      }
     }
 
     // If cue count is low (< 65 cues), it is virtually certain to be a forced/foreign-dialogue track
@@ -1446,6 +1466,11 @@ const init = () => {
   const job = cron.schedule(cronExp, () => taskRegistry.executeTask('subtitle_sync_checker'));
   registerJob(job);
   console.log('[SubtitleSyncService] Registered and scheduled subtitle_sync_checker task.');
+
+  // Automatically reclassify existing low-cue forced subtitles on boot
+  reclassifyForcedSubtitles().catch(err => {
+    console.warn('[SubtitleSyncService] Auto-reclassification failed on boot:', err.message);
+  });
 };
 
 module.exports = {

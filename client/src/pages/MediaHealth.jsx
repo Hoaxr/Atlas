@@ -12,7 +12,6 @@ export default function MediaHealth() {
   const [healthData, setHealthData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [actionLoadingFile, setActionLoadingFile] = useState(null);
-  const [reclassifying, setReclassifying] = useState(false);
 
   // Expanded sections state
   const [expandedSection, setExpandedSection] = useState(null); // 'movies-missing', 'movies-unmet', etc.
@@ -36,21 +35,6 @@ export default function MediaHealth() {
 
   const toggleSection = (section) => {
     setExpandedSection(prev => prev === section ? null : section);
-  };
-
-  const handleReclassifyForced = async () => {
-    setReclassifying(true);
-    try {
-      const res = await api.post('/library/subtitles/reclassify-forced');
-      if (res.data.status === 'success') {
-        customAlert(res.data.message || 'Filtered forced subtitle false positives', 'success');
-        fetchHealth();
-      }
-    } catch (e) {
-      customAlert(e.response?.data?.message || 'Failed to reclassify subtitles', 'error');
-    } finally {
-      setReclassifying(false);
-    }
   };
 
   const handleMarkForced = async (sub) => {
@@ -381,17 +365,6 @@ export default function MediaHealth() {
             </div>
 
             <div className="flex items-center gap-2">
-              {subtitleIssues.length > 0 && (
-                <button
-                  onClick={handleReclassifyForced}
-                  disabled={reclassifying}
-                  className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-lg bg-pink-500/10 text-pink-300 border border-pink-500/25 hover:bg-pink-500/20 transition-colors disabled:opacity-50 cursor-pointer"
-                  title="Filter out low-cue forced subtitles and false positives"
-                >
-                  {reclassifying ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
-                  Filter False Positives
-                </button>
-              )}
               <span className={`px-2.5 py-1 text-xs font-semibold rounded-full border ${
                 subtitleIssues.length === 0
                   ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'

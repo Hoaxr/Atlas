@@ -119,6 +119,8 @@ router.get('/health', (req, res, next) => {
         LEFT JOIN episodes ep ON st.media_type = 'episode' AND st.media_id = ep.id
         LEFT JOIN shows s ON ep.show_id = s.id
         WHERE st.sync_status IN ('desynced', 'offset_detected', 'drift_detected', 'duration_mismatch', 'invalid_timing')
+          AND (st.is_forced IS NULL OR st.is_forced = 0)
+          AND (st.sync_status != 'duration_mismatch' OR st.cue_count IS NULL OR st.cue_count >= 65 OR st.cue_count = 0)
         ORDER BY st.updated_at DESC
         LIMIT 50
       `).all().map(row => {
@@ -382,6 +384,8 @@ router.get('/stats', (req, res, next) => {
       subtitleSyncIssuesCount = db.prepare(`
         SELECT COUNT(*) as count FROM subtitle_tracks
         WHERE sync_status IN ('desynced', 'offset_detected', 'drift_detected', 'duration_mismatch', 'invalid_timing')
+          AND (is_forced IS NULL OR is_forced = 0)
+          AND (sync_status != 'duration_mismatch' OR cue_count IS NULL OR cue_count >= 65 OR cue_count = 0)
       `).get()?.count || 0;
     } catch { /* ignore */ }
 
