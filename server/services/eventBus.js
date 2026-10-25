@@ -10,7 +10,12 @@ const getDb = () => {
 class AppEventBus extends EventEmitter {
   log(level, message, metadata = {}) {
     try {
-      let payload = JSON.stringify({ level, message, ...metadata });
+      const cleanMeta = metadata ? { ...metadata } : {};
+      const resolvedMessage = (typeof cleanMeta.message === 'string' && cleanMeta.message.trim())
+        ? cleanMeta.message
+        : message;
+      delete cleanMeta.message;
+      let payload = JSON.stringify({ level, message: resolvedMessage, ...cleanMeta });
       if (payload.length > 5000) {
         payload = payload.substring(0, 5000) + '... [TRUNCATED]';
       }

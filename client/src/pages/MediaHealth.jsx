@@ -1,15 +1,18 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../lib/api';
-import { Activity, ShieldCheck, ChevronDown, ChevronUp, Search, Languages, CheckCircle2 } from 'lucide-react';
+import { Activity, ShieldCheck, ChevronDown, ChevronUp, Search, Languages, CheckCircle2, Sparkles, Tag, Trash2, Loader2 } from 'lucide-react';
 import { useStickyBar } from '../lib/useStickyBar';
 import StickyBar from '../components/shared/StickyBar';
+import { customAlert, customConfirm } from '../utils/alerts';
 
 export default function MediaHealth() {
   const navigate = useNavigate();
   const { headerRef, stickyVisible } = useStickyBar();
   const [healthData, setHealthData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [actionLoadingFile, setActionLoadingFile] = useState(null);
+  const [reclassifying, setReclassifying] = useState(false);
 
   // Expanded sections state
   const [expandedSection, setExpandedSection] = useState(null); // 'movies-missing', 'movies-unmet', etc.
@@ -33,6 +36,76 @@ export default function MediaHealth() {
 
   const toggleSection = (section) => {
     setExpandedSection(prev => prev === section ? null : section);
+  };
+
+  const handleReclassifyForced = async () => {
+    setReclassifying(true);
+    try {
+      const res = await api.post('/library/subtitles/reclassify-forced');
+      if (res.data.status === 'success') {
+        customAlert(res.data.message || 'Filtered forced subtitle false positives', 'success');
+        fetchHealth();
+      }
+    } catch (e) {
+      customAlert(e.response?.data?.message || 'Failed to reclassify subtitles', 'error');
+    } finally {
+      setReclassifying(false);
+    }
+  };
+
+  const handleMarkForced = async (sub) => {
+    setActionLoadingFile(sub.filename);
+    try {
+      const res = await api.post(`/library/subtitles/mark-forced/${sub.media_type}/${sub.media_id}/${encodeURIComponent(sub.filename)}`);
+      if (res.data.status === 'success') {
+        customAlert(`"${sub.filename}" marked as forced/foreign-only`, 'success');
+        fetchHealth();
+      }
+    } catch (e) {
+      customAlert(e.response?.data?.message || 'Failed to mark subtitle as forced', 'error');
+    } finally {
+      setActionLoadingFile(null);
+    }
+  };
+
+  const handleTranslateSub = async (sub) => {
+    setActionLoadingFile(sub.filename);
+    try {
+      const res = await api.post('/library/subtitles/translate', {
+        mediaType: sub.media_type,
+        mediaId: sub.media_id,
+        targetLangs: [sub.lang_code || 'nl'],
+        retranslate: true
+      });
+      if (res.data.status === 'success') {
+        customAlert(`AI Translation queued for ${sub.title || sub.filename}`, 'success');
+      }
+    } catch (e) {
+      customAlert(e.response?.data?.message || 'Translation failed or no source subtitle found', 'error');
+    } finally {
+      setActionLoadingFile(null);
+    }
+  };
+
+  const handleDeleteSub = async (sub) => {
+    const confirmed = await customConfirm(
+      `Are you sure you want to delete "${sub.filename}"? Atlas can re-download a fresh copy.`,
+      'Delete Subtitle'
+    );
+    if (!confirmed) return;
+
+    setActionLoadingFile(sub.filename);
+    try {
+      const res = await api.delete(`/library/subtitles/tracks/${sub.media_type}/${sub.media_id}/${encodeURIComponent(sub.filename)}`);
+      if (res.data.status === 'success') {
+        customAlert('Subtitle deleted successfully', 'success');
+        fetchHealth();
+      }
+    } catch (e) {
+      customAlert(e.response?.data?.message || 'Failed to delete subtitle', 'error');
+    } finally {
+      setActionLoadingFile(null);
+    }
   };
 
   if (loading) {
@@ -308,6 +381,17 @@ export default function MediaHealth() {
             </div>
 
             <div className="flex items-center gap-2">
+              {subtitleIssues.length > 0 && (
+                <button
+                  onClick={handleReclassifyForced}
+                  disabled={reclassifying}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-lg bg-pink-500/10 text-pink-300 border border-pink-500/25 hover:bg-pink-500/20 transition-colors disabled:opacity-50 cursor-pointer"
+                  title="Filter out low-cue forced subtitles and false positives"
+                >
+                  {reclassifying ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+                  Filter False Positives
+                </button>
+              )}
               <span className={`px-2.5 py-1 text-xs font-semibold rounded-full border ${
                 subtitleIssues.length === 0
                   ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
@@ -327,8 +411,8 @@ export default function MediaHealth() {
             <div className="bg-slate-800/40 rounded-xl border border-white/5 overflow-hidden">
               <ul className="divide-y divide-slate-800/50 max-h-96 overflow-y-auto">
                 {subtitleIssues.map((sub) => (
-                  <li key={sub.id || sub.filename} className="p-3 flex items-center justify-between hover:bg-slate-800/50 transition-colors">
-                    <div className="min-w-0 flex-1 pr-4">
+                  <li key={sub.id || sub.filename} className="p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2 hover:bg-slate-800/50 transition-colors">
+                    <div className="min-w-0 flex-1 pr-2">
                       <button
                         onClick={() => navigate(sub.media_type === 'movie' ? `/movies/${sub.show_or_movie_id}` : `/shows/${sub.show_or_movie_id}`)}
                         className="font-medium text-slate-200 truncate hover:text-pink-400 hover:underline text-left block w-full transition-colors"
@@ -365,13 +449,45 @@ export default function MediaHealth() {
                         )}
                       </div>
                     </div>
-                    <button
-                      onClick={() => navigate(sub.media_type === 'movie' ? `/movies/${sub.show_or_movie_id}` : `/shows/${sub.show_or_movie_id}`)}
-                      className="p-2 text-slate-400 hover:text-white hover:bg-slate-700 rounded-lg transition-colors shrink-0"
-                      title="Inspect Subtitles"
-                    >
-                      <Search className="w-4 h-4" />
-                    </button>
+                    <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-center">
+                      {sub.sync_status === 'duration_mismatch' && (
+                        <button
+                          onClick={() => handleMarkForced(sub)}
+                          disabled={actionLoadingFile === sub.filename}
+                          className="px-2 py-1 text-xs font-medium rounded-lg bg-blue-500/15 hover:bg-blue-500/25 text-blue-300 border border-blue-500/30 transition-colors flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                          title="Mark as Forced / Foreign-only dialogue (removes cut mismatch)"
+                        >
+                          {actionLoadingFile === sub.filename ? <Loader2 className="w-3 h-3 animate-spin" /> : <Tag className="w-3 h-3" />}
+                          Forced
+                        </button>
+                      )}
+                      {sub.lang_code !== 'en' && (
+                        <button
+                          onClick={() => handleTranslateSub(sub)}
+                          disabled={actionLoadingFile === sub.filename}
+                          className="px-2 py-1 text-xs font-medium rounded-lg bg-cyan-500/15 hover:bg-cyan-500/25 text-cyan-300 border border-cyan-500/30 transition-colors flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                          title="AI translate full track from English"
+                        >
+                          <Sparkles className="w-3 h-3" />
+                          Translate
+                        </button>
+                      )}
+                      <button
+                        onClick={() => handleDeleteSub(sub)}
+                        disabled={actionLoadingFile === sub.filename}
+                        className="p-1.5 text-xs rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 transition-colors cursor-pointer disabled:opacity-50"
+                        title="Delete broken subtitle file"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={() => navigate(sub.media_type === 'movie' ? `/movies/${sub.show_or_movie_id}` : `/shows/${sub.show_or_movie_id}`)}
+                        className="p-2 text-slate-400 hover:text-white hover:bg-slate-700 rounded-lg transition-colors shrink-0"
+                        title="Inspect Subtitles"
+                      >
+                        <Search className="w-4 h-4" />
+                      </button>
+                    </div>
                   </li>
                 ))}
               </ul>

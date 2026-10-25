@@ -5,13 +5,14 @@ import { formatSize } from '../lib/format';
 import {
   BarChart3, Film, Tv, HardDrive, Star,
   CheckCircle2, Hash, Zap, PlayCircle, Activity, Languages, Trash2, FolderOpen,
-  Music2, Disc, Mic2, FileAudio, ChevronRight
+  Music2, Disc, Mic2, FileAudio, ChevronRight, Tag, Sparkles, Loader2
 } from 'lucide-react';
 import LoadingState from '../components/shared/LoadingState';
 import EmptyState from '../components/shared/EmptyState';
 import StickyBar from '../components/shared/StickyBar';
 import ModalShell from '../components/shared/ModalShell';
 import { useStickyBar } from '../lib/useStickyBar';
+import { customAlert, customConfirm } from '../utils/alerts';
 
 const STATUS_CONFIG = {
   downloaded: { color: '#06b6d4', label: 'Downloaded', bg: 'bg-cyan-500' },
@@ -56,7 +57,10 @@ export default function Statistics() {
   const [missingSubsLoading, setMissingSubsLoading] = useState(false);
   const [syncIssuesModal, setSyncIssuesModal] = useState(false);
   const [syncIssuesData, setSyncIssuesData] = useState(null);
+  const [syncIssuesTotal, setSyncIssuesTotal] = useState(0);
   const [syncIssuesLoading, setSyncIssuesLoading] = useState(false);
+  const [reclassifying, setReclassifying] = useState(false);
+  const [actionLoadingFile, setActionLoadingFile] = useState(null);
   const [, setDeletableData] = useState(null);
   const [, setDeletableLoading] = useState(false);
 
@@ -83,11 +87,87 @@ export default function Statistics() {
       const res = await api.get('/library/subtitles/sync-issues');
       if (res.data.status === 'success') {
         setSyncIssuesData(res.data.data || []);
+        setSyncIssuesTotal(res.data.totalCount || res.data.data?.length || 0);
       }
     } catch (e) {
       console.error('Failed to fetch subtitle sync issues', e);
     } finally {
       setSyncIssuesLoading(false);
+    }
+  };
+
+  const handleReclassifyForced = async () => {
+    setReclassifying(true);
+    try {
+      const res = await api.post('/library/subtitles/reclassify-forced');
+      if (res.data.status === 'success') {
+        customAlert(res.data.message || 'Filtered forced subtitle false positives', 'success');
+        openSyncIssues();
+        fetchStats();
+      }
+    } catch (e) {
+      customAlert(e.response?.data?.message || 'Failed to reclassify subtitles', 'error');
+    } finally {
+      setReclassifying(false);
+    }
+  };
+
+  const handleMarkForced = async (sub) => {
+    setActionLoadingFile(sub.filename);
+    try {
+      const res = await api.post(`/library/subtitles/mark-forced/${sub.media_type}/${sub.media_id}/${encodeURIComponent(sub.filename)}`);
+      if (res.data.status === 'success') {
+        customAlert(`"${sub.filename}" marked as forced/foreign-only`, 'success');
+        setSyncIssuesData(prev => prev.filter(item => item.filename !== sub.filename));
+        setSyncIssuesTotal(prev => Math.max(0, prev - 1));
+        fetchStats();
+      }
+    } catch (e) {
+      customAlert(e.response?.data?.message || 'Failed to mark subtitle as forced', 'error');
+    } finally {
+      setActionLoadingFile(null);
+    }
+  };
+
+  const handleTranslateSub = async (sub) => {
+    setActionLoadingFile(sub.filename);
+    try {
+      const res = await api.post('/library/subtitles/translate', {
+        mediaType: sub.media_type,
+        mediaId: sub.media_id,
+        targetLangs: [sub.lang_code || 'nl'],
+        retranslate: true
+      });
+      if (res.data.status === 'success') {
+        customAlert(`AI Translation queued for ${sub.media_title || sub.filename}`, 'success');
+      }
+    } catch (e) {
+      customAlert(e.response?.data?.message || 'Translation failed or no source subtitle found', 'error');
+    } finally {
+      setActionLoadingFile(null);
+    }
+  };
+
+  const handleDeleteSub = async (sub) => {
+    const confirmed = await customConfirm(
+      `Are you sure you want to delete "${sub.filename}"? Atlas can re-download a fresh copy.`,
+      'Delete Subtitle'
+    );
+    if (!confirmed) return;
+
+    setActionLoadingFile(sub.filename);
+    try {
+      const res = await api.delete(`/library/subtitles/tracks/${sub.media_type}/${sub.media_id}/${encodeURIComponent(sub.filename)}`);
+      if (res.data.status === 'success') {
+        customAlert('Subtitle deleted successfully', 'success');
+        setSyncIssuesData(prev => prev.filter(item => item.filename !== sub.filename));
+        setSyncIssuesTotal(prev => Math.max(0, prev - 1));
+        fetchStats();
+      }
+    } catch (e) {
+      customAlert(e.response?.data?.message || 'Failed to delete subtitle', 'error');
+    } finally {
+      setActionLoadingFile(null);
     }
   };
 
@@ -607,7 +687,7 @@ export default function Statistics() {
         )}
       </ModalShell>
 
-      <ModalShell open={syncIssuesModal} onClose={() => setSyncIssuesModal(false)} title="Subtitle Synchronization & Integrity" width="max-w-2xl">
+      <ModalShell open={syncIssuesModal} onClose={() => setSyncIssuesModal(false)} title="Subtitle Synchronization & Integrity" width="max-w-3xl">
         {syncIssuesLoading ? (
           <LoadingState className="py-12" />
         ) : !syncIssuesData ? (
@@ -632,20 +712,32 @@ export default function Statistics() {
           </div>
         ) : (
           <div className="space-y-4 text-sm">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <p className="text-xs text-slate-400">
-                Found <span className="font-semibold text-amber-400">{syncIssuesData.length}</span> subtitle track{syncIssuesData.length > 1 ? 's' : ''} with synchronization or cutoff anomalies:
+                Found <span className="font-semibold text-amber-400">{syncIssuesTotal || syncIssuesData.length}</span> subtitle track{(syncIssuesTotal || syncIssuesData.length) > 1 ? 's' : ''} with anomalies
+                {syncIssuesTotal > syncIssuesData.length ? ` (showing top ${syncIssuesData.length})` : ''}:
               </p>
-              <button
-                onClick={() => { setSyncIssuesModal(false); navigate('/health'); }}
-                className="text-xs text-cyan-400 hover:underline cursor-pointer"
-              >
-                Media Health &rarr;
-              </button>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  onClick={handleReclassifyForced}
+                  disabled={reclassifying}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-lg bg-cyan-500/10 text-cyan-300 border border-cyan-500/25 hover:bg-cyan-500/20 transition-colors disabled:opacity-50 cursor-pointer"
+                  title="Filter out low-cue forced subtitles and false positives"
+                >
+                  {reclassifying ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+                  Filter False Positives
+                </button>
+                <button
+                  onClick={() => { setSyncIssuesModal(false); navigate('/health'); }}
+                  className="text-xs text-cyan-400 hover:underline cursor-pointer"
+                >
+                  Media Health &rarr;
+                </button>
+              </div>
             </div>
             <div className="bg-slate-900/50 rounded-xl border border-white/5 overflow-hidden divide-y divide-slate-800/50 max-h-96 overflow-y-auto">
               {syncIssuesData.map((sub) => (
-                <div key={sub.id || sub.filename} className="p-3.5 hover:bg-slate-800/30 transition-colors flex items-center justify-between gap-3">
+                <div key={sub.id || sub.filename} className="p-3.5 hover:bg-slate-800/30 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <div className="min-w-0 flex-1">
                     <button
                       onClick={() => {
@@ -708,17 +800,49 @@ export default function Statistics() {
                       </p>
                     )}
                   </div>
-                  {sub.show_or_movie_id && (
+                  <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-center">
+                    {sub.sync_status === 'duration_mismatch' && (
+                      <button
+                        onClick={() => handleMarkForced(sub)}
+                        disabled={actionLoadingFile === sub.filename}
+                        className="px-2 py-1 text-xs font-medium rounded-lg bg-blue-500/15 hover:bg-blue-500/25 text-blue-300 border border-blue-500/30 transition-colors flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                        title="Mark as Forced / Foreign-only dialogue (removes from cut issues)"
+                      >
+                        {actionLoadingFile === sub.filename ? <Loader2 className="w-3 h-3 animate-spin" /> : <Tag className="w-3 h-3" />}
+                        Forced
+                      </button>
+                    )}
+                    {sub.lang_code !== 'en' && (
+                      <button
+                        onClick={() => handleTranslateSub(sub)}
+                        disabled={actionLoadingFile === sub.filename}
+                        className="px-2 py-1 text-xs font-medium rounded-lg bg-cyan-500/15 hover:bg-cyan-500/25 text-cyan-300 border border-cyan-500/30 transition-colors flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                        title="AI translate full track from English"
+                      >
+                        <Sparkles className="w-3 h-3" />
+                        Translate
+                      </button>
+                    )}
                     <button
-                      onClick={() => {
-                        setSyncIssuesModal(false);
-                        navigate(sub.media_type === 'movie' ? `/movies/${sub.show_or_movie_id}` : `/shows/${sub.show_or_movie_id}`);
-                      }}
-                      className="px-2.5 py-1 text-xs rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors shrink-0 cursor-pointer"
+                      onClick={() => handleDeleteSub(sub)}
+                      disabled={actionLoadingFile === sub.filename}
+                      className="p-1.5 text-xs rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 transition-colors cursor-pointer disabled:opacity-50"
+                      title="Delete broken subtitle file"
                     >
-                      View
+                      <Trash2 className="w-3.5 h-3.5" />
                     </button>
-                  )}
+                    {sub.show_or_movie_id && (
+                      <button
+                        onClick={() => {
+                          setSyncIssuesModal(false);
+                          navigate(sub.media_type === 'movie' ? `/movies/${sub.show_or_movie_id}` : `/shows/${sub.show_or_movie_id}`);
+                        }}
+                        className="px-2.5 py-1 text-xs rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors cursor-pointer"
+                      >
+                        View
+                      </button>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>

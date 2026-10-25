@@ -528,12 +528,34 @@ const verifySingleSubtitleSync = async ({ filePath, subPath, mediaType, mediaId:
       };
     }
 
-    // Cutoff / early finish check (> 6 mins for movies, or > 18% earlier for episodes/short media)
-    const endGapMs = durationMs - lastCue.endMs;
-    const isShortOrEpisode = durationMs <= 1800000 || mediaType === 'episode';
-    const isSevereCutoff = (durationMs > 1800000 && endGapMs > 360000) || (isShortOrEpisode && endGapMs > 240000 && endGapMs / durationMs > 0.18);
+    const durationMin = durationMs / 60000;
+    const cueDensity = durationMin > 0 ? cues.length / durationMin : 0;
+    const isLikelyForced = meta.isForced || (durationMin >= 15 && (cues.length < 55 || (cueDensity < 1.1 && cues.length < 90)));
 
-    if (isSevereCutoff && !meta.isForced) {
+    if (isLikelyForced) {
+      // Intentionally partial track (forced / non-English dialogue only)
+      return {
+        status: 'in_sync',
+        synced: true,
+        confidence: 0.90,
+        qualityScore: 85,
+        offsetSeconds: 0,
+        driftSeconds: 0,
+        isForced: true,
+        method: 'density_check',
+        message: `Forced / foreign-dialogue subtitle (${cues.length} cues, covers non-native speech)`
+      };
+    }
+
+    // Cutoff / early finish check:
+    const endGapMs = durationMs - lastCue.endMs;
+    const endGapRatio = endGapMs / durationMs;
+    const isShortOrEpisode = durationMs <= 1800000 || mediaType === 'episode';
+    const isSevereCutoff = (endGapMs > 900000) || 
+                           (durationMs > 1800000 && endGapMs > 420000 && endGapRatio > 0.15) || 
+                           (isShortOrEpisode && endGapMs > 270000 && endGapRatio > 0.18);
+
+    if (isSevereCutoff) {
       const gapMin = Math.round(endGapMs / 60000);
       return {
         status: 'duration_mismatch',
@@ -767,7 +789,7 @@ const saveSyncResult = async (mediaType, mediaId, subFilename, subPath, syncResu
       syncResult.confidence || 0,
       syncResult.method || 'unknown',
       syncResult.qualityScore || null,
-      meta.isForced ? 1 : 0,
+      (meta.isForced || syncResult.isForced) ? 1 : 0,
       meta.isSdh ? 1 : 0,
       meta.isHearingImpaired ? 1 : 0,
       syncResult.message || '',
@@ -1360,6 +1382,55 @@ const compareSubtitlesRobust = (targetCues, refCues, videoDurationSec = 0) => {
 };
 
 /**
+ * Scans subtitle_tracks table for 'duration_mismatch' rows and reclassifies
+ * tracks that have low cue counts (< 65 cues) or low cue density as forced tracks.
+ */
+const reclassifyForcedSubtitles = async () => {
+  const candidates = db.prepare(`
+    SELECT id, media_type, media_id, filename, file_path, cue_count
+    FROM subtitle_tracks
+    WHERE sync_status = 'duration_mismatch'
+  `).all();
+
+  let reclassified = 0;
+
+  for (const track of candidates) {
+    let cuesCount = track.cue_count || 0;
+    // If cue_count wasn't stored, try to read it from file
+    if (cuesCount === 0 && track.file_path && fs.existsSync(track.file_path)) {
+      try {
+        const raw = await readSubtitleFile(track.file_path);
+        const parsed = parseSubtitles(raw);
+        cuesCount = parsed.cues?.length || 0;
+      } catch { /* ignore */ }
+    }
+
+    // If cue count is low (< 65 cues), it is virtually certain to be a forced/foreign-dialogue track
+    if (cuesCount > 0 && cuesCount < 65) {
+      db.prepare(`
+        UPDATE subtitle_tracks
+        SET is_forced = 1,
+            sync_status = 'in_sync',
+            sync_confidence = 0.90,
+            quality_score = 85,
+            sync_method = 'density_check',
+            cue_count = ?,
+            sync_details = ?,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `).run(
+        cuesCount,
+        `Forced / foreign-dialogue subtitle (${cuesCount} cues, covers non-native speech)`,
+        track.id
+      );
+      reclassified++;
+    }
+  }
+
+  return { totalCandidates: candidates.length, reclassified };
+};
+
+/**
  * Initializes task registry and scheduled cron job
  */
 const init = () => {
@@ -1382,6 +1453,7 @@ module.exports = {
   verifySingleSubtitleSync,
   verifyAllSubtitlesForMedia,
   runLibrarySubtitleSyncCheck,
+  reclassifyForcedSubtitles,
   probeMediaDuration,
   probeAudioVolumeAt,
   applyOffsetRepair,
@@ -1393,3 +1465,4 @@ module.exports = {
   performCrossTrackAlignment,
   findOptimalReferenceTrack
 };
+

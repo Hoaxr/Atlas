@@ -395,6 +395,11 @@ router.post('/repair/restore', async (req, res, next) => {
  */
 router.get('/sync-issues', (req, res, next) => {
   try {
+    const totalCount = db.prepare(`
+      SELECT COUNT(*) as count FROM subtitle_tracks
+      WHERE sync_status IN ('duration_mismatch', 'drift_detected', 'offset_detected', 'desynced', 'invalid_timing')
+    `).get()?.count || 0;
+
     const issues = db.prepare(`
       SELECT st.*, 
         CASE 
@@ -413,7 +418,49 @@ router.get('/sync-issues', (req, res, next) => {
       ORDER BY st.updated_at DESC
       LIMIT 100
     `).all();
-    res.json({ status: 'success', data: issues });
+    res.json({ status: 'success', data: issues, totalCount });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * POST /api/library/subtitles/reclassify-forced
+ * Retroactively scans duration_mismatch tracks and reclassifies low cue count tracks as forced
+ */
+router.post('/reclassify-forced', async (req, res, next) => {
+  try {
+    const result = await subtitleSyncService.reclassifyForcedSubtitles();
+    res.json({
+      status: 'success',
+      message: `Reclassified ${result.reclassified} of ${result.totalCandidates} track(s) as forced / in sync`,
+      ...result
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * POST /api/library/subtitles/mark-forced/:mediaType/:mediaId/:filename
+ * Manually marks a subtitle as forced / foreign-only
+ */
+router.post('/mark-forced/:mediaType/:mediaId/:filename', (req, res, next) => {
+  try {
+    const { mediaType, mediaId, filename } = req.params;
+    db.prepare(`
+      UPDATE subtitle_tracks
+      SET is_forced = 1,
+          sync_status = 'in_sync',
+          sync_confidence = 0.95,
+          quality_score = 90,
+          sync_method = 'manual',
+          sync_details = 'Manually classified as forced / partial subtitle',
+          updated_at = CURRENT_TIMESTAMP
+      WHERE media_type = ? AND media_id = ? AND filename = ?
+    `).run(mediaType, mediaId, filename);
+
+    res.json({ status: 'success', message: 'Subtitle marked as forced' });
   } catch (err) {
     next(err);
   }

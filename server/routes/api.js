@@ -59,11 +59,16 @@ router.get('/logs', requireAdmin, (req, res, next) => {
     const logs = db.prepare(query).all(...params);
 
     const parsed = logs.map(log => {
+      let created = log.created_at;
+      if (created && typeof created === 'string' && !created.includes('Z') && !created.includes('+')) {
+        created = created.replace(' ', 'T') + 'Z';
+      }
       try {
         const data = JSON.parse(log.message);
-        return { id: log.id, ...data, created_at: log.created_at };
+        const msg = data.message || (data.taskName ? `${data.taskName} completed${data.duration ? ` in ${data.duration}` : ''}` : 'Scheduled task completed');
+        return { id: log.id, ...data, message: msg, created_at: created };
       } catch {
-        return { id: log.id, level: 'info', message: log.message, created_at: log.created_at };
+        return { id: log.id, level: 'info', message: log.message, created_at: created };
       }
     });
 

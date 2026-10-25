@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { 
   Languages, Download, Trash2, Edit3, Sparkles, 
   Search, X, Loader2, CheckCircle2, AlertTriangle, XCircle,
-  Wrench, Undo2
+  Wrench, Undo2, Tag
 } from 'lucide-react';
 import ModalShell from '../shared/ModalShell';
 import api from '../../lib/api';
@@ -167,6 +167,22 @@ export default function SubtitleManagerModal({
       }
     } catch (err) {
       customAlert(err.response?.data?.message || 'Failed to restore backup', 'error');
+    } finally {
+      setRepairingFile(null);
+    }
+  };
+
+  const handleMarkForced = async (track) => {
+    setRepairingFile(track.filename);
+    try {
+      const res = await api.post(`/library/subtitles/mark-forced/${mediaType}/${mediaId}/${encodeURIComponent(track.filename)}`);
+      if (res.data?.status === 'success') {
+        customAlert(`"${track.filename}" marked as forced/foreign-only`, 'success');
+        fetchTracks();
+        if (onRefresh) onRefresh();
+      }
+    } catch (err) {
+      customAlert(err.response?.data?.message || 'Failed to mark subtitle as forced', 'error');
     } finally {
       setRepairingFile(null);
     }
@@ -441,6 +457,21 @@ export default function SubtitleManagerModal({
                               <Wrench className="w-3.5 h-3.5" />
                             )}
                             Fix Drift
+                          </button>
+                        )}
+                        {track.syncStatus === 'duration_mismatch' && (
+                          <button
+                            onClick={() => handleMarkForced(track)}
+                            disabled={repairingFile === track.filename}
+                            className="px-2.5 py-1 text-xs font-medium bg-blue-500/20 text-blue-300 border border-blue-500/30 hover:bg-blue-500/30 rounded-lg transition-colors flex items-center gap-1.5 disabled:opacity-50"
+                            title="Mark as Forced / Foreign-only dialogue (reclassifies as in sync)"
+                          >
+                            {repairingFile === track.filename ? (
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            ) : (
+                              <Tag className="w-3.5 h-3.5" />
+                            )}
+                            Mark Forced
                           </button>
                         )}
                         {track.hasBackup && (

@@ -449,7 +449,15 @@ export default function Status() {
                 overscan={400}
                 itemContent={(_index, log) => {
                   const cfg = levelConfig[log.level] || levelConfig.info;
-                  const time = new Date(log.created_at).toLocaleTimeString();
+                  let rawTime = log.created_at;
+                  if (rawTime && typeof rawTime === 'string' && !rawTime.includes('Z') && !rawTime.includes('+') && !rawTime.includes('T')) {
+                    rawTime = rawTime.replace(' ', 'T') + 'Z';
+                  }
+                  const d = new Date(rawTime);
+                  const time = !isNaN(d.getTime()) 
+                    ? d.toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }) 
+                    : (log.created_at || '');
+                  const message = log.message || (log.taskName ? `${log.taskName} completed${log.duration ? ` in ${log.duration}` : ''}` : 'Scheduled task completed');
                   const failureDetails = log.failureDetails || log.metadata?.failureDetails || [];
                   const omittedFailureDetails = log.omittedFailureDetails || log.metadata?.omittedFailureDetails || 0;
                   return (
@@ -461,9 +469,9 @@ export default function Status() {
                           <span className={`text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${cfg.bg} ${cfg.text}`}>
                             {log.level}
                           </span>
-                          <time className="text-xs text-slate-500">{time}</time>
+                          <time className="text-xs text-slate-500 font-mono">{time}</time>
                         </div>
-                          <p className="text-sm text-slate-200 break-words">{log.message}</p>
+                          <p className="text-sm text-slate-200 break-words">{message}</p>
                           {failureDetails.length > 0 && (
                             <div className="mt-2 space-y-1.5 border-t border-slate-800/70 pt-2">
                               {failureDetails.map((failure, index) => (

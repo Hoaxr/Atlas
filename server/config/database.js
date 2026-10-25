@@ -1778,6 +1778,29 @@ const MIGRATIONS = [
         }
       }
     }
+  },
+  {
+    id: 59,
+    name: 'reclassify_low_cue_subtitles_as_forced',
+    run: (db) => {
+      try {
+        db.exec(`
+          UPDATE subtitle_tracks
+          SET is_forced = 1,
+              sync_status = 'in_sync',
+              sync_confidence = 0.90,
+              quality_score = 85,
+              sync_method = 'density_check',
+              sync_details = 'Auto-reclassified: low cue count (' || cue_count || ' cues) indicates forced / foreign-dialogue track',
+              updated_at = CURRENT_TIMESTAMP
+          WHERE sync_status = 'duration_mismatch'
+            AND cue_count > 0
+            AND cue_count < 65;
+        `);
+      } catch (err) {
+        console.warn('[DB] Migration 59 warning:', err.message);
+      }
+    }
   }
 ];
 

@@ -11,7 +11,8 @@ const {
   calculateSubtitleQualityScore,
   applyOffsetRepair,
   applyDriftRepair,
-  restoreBackup
+  restoreBackup,
+  reclassifyForcedSubtitles
 } = require('../server/services/subtitles/subtitleSyncService');
 
 test('Subtitle Metadata & Tokenizer Suite', async (t) => {
@@ -293,3 +294,36 @@ Second line at two minutes.
     assert(cues[1].startMs !== 120000, 'Second cue should have stretched timing');
   });
 });
+
+test('Forced Subtitle Classification & False-Positive Elimination Suite', async (t) => {
+  const db = require('../server/config/database');
+
+  await t.test('reclassifyForcedSubtitles correctly converts low-cue duration_mismatch tracks', async () => {
+    // Insert a dummy duration_mismatch track with 25 cues
+    const testFilename = `test_forced_${Date.now()}.srt`;
+    db.prepare(`
+      INSERT INTO subtitle_tracks (
+        media_type, media_id, filename, file_path, lang_code, lang_name,
+        sync_status, sync_offset, sync_drift, sync_confidence, sync_method, quality_score,
+        is_forced, is_sdh, is_hearing_impaired, sync_details, file_size, cue_count, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+    `).run(
+      'episode', 999999, testFilename, '/non/existent.srt', 'nl', 'Dutch',
+      'duration_mismatch', -600, 0, 0.95, 'boundary_check', 35,
+      0, 0, 0, 'Subtitle finishes ~10m before video ends', 5000, 25
+    );
+
+    try {
+      const res = await reclassifyForcedSubtitles();
+      assert(res.reclassified >= 1, `Expected at least 1 track reclassified, got ${res.reclassified}`);
+
+      const updated = db.prepare('SELECT is_forced, sync_status, sync_method FROM subtitle_tracks WHERE filename = ?').get(testFilename);
+      assert.strictEqual(updated.is_forced, 1, 'Track should be marked as forced');
+      assert.strictEqual(updated.sync_status, 'in_sync', 'Status should be updated to in_sync');
+      assert.strictEqual(updated.sync_method, 'density_check', 'Method should be density_check');
+    } finally {
+      db.prepare('DELETE FROM subtitle_tracks WHERE filename = ?').run(testFilename);
+    }
+  });
+});
+
