@@ -279,3 +279,31 @@ h1, h2, h3, h4, h5, h6, .font-display {
     grid-template-columns: repeat(auto-fill, minmax(var(--poster-size, 180px), 1fr));
   }
 }
+
+/* Mobile Viewport & Touch Optimization: ensure full viewport visibility and prevent unwanted zooming */
+html, body {
+  overflow-x: hidden;
+  max-width: 100vw;
+  width: 100%;
+}
+
+/* Prevent accidental double-tap-to-zoom on interactive touch controls */
+button,
+a,
+input,
+select,
+textarea,
+[role="button"],
+.interactive-glow-card {
+  touch-action: manipulation;
+}
+
+/* Prevent iOS Safari from auto-zooming in on input/select/textarea focus */
+@media screen and (max-width: 899px) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}
+

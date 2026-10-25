@@ -40,6 +40,9 @@ export default function PersonDetails() {
         customAlert(`${type === 'movie' ? 'Movie' : 'Show'} added to library successfully!`);
         // Update person state to mark this credit as inLibrary
         updateCredit(tmdbId, { inLibrary: true, libraryId: res.data.data?.id ?? null });
+        if (res.data.data?.id) {
+          navigate(type === 'movie' ? `/movies/${res.data.data.id}` : `/shows/${res.data.data.id}`);
+        }
       }
     } catch (err) {
       customAlert(err.response?.data?.message || `Failed to add ${type} to library.`, 'error');

@@ -403,6 +403,7 @@ export default function Requests() {
           isInLibrary={false}
           onAdded={handleAddedToLibrary}
           mode="add"
+          navigateOnAdd={false}
         />
       )}
     </div>

@@ -25,7 +25,8 @@ export default function MediaDetailsModal({
   onRequest, 
   mode: _mode = 'add', 
   requestStatus, 
-  onDelete 
+  onDelete,
+  navigateOnAdd = true
 }) {
   const navigate = useNavigate();
   const [details, setDetails] = useState(null);
@@ -135,13 +136,14 @@ export default function MediaDetailsModal({
   const handleAddMedia = async () => {
     setIsAdding(true);
     try {
-      const endpoint = mediaType === 'movie' ? '/library/movies' : '/library/shows';
+      const isMovie = mediaType === 'movie';
+      const endpoint = isMovie ? '/library/movies' : '/library/shows';
       const payload = { 
         tmdbId: details.id, 
         qualityProfileId: parseInt(selectedProfile) || null,
         rootFolderPath: selectedPath,
         autoSearch,
-        monitorLevel: mediaType === 'show' ? monitorLevel : undefined
+        monitorLevel: !isMovie ? monitorLevel : undefined
       };
       const res = await api.post(endpoint, payload);
       setCachedMovies(null);
@@ -149,9 +151,13 @@ export default function MediaDetailsModal({
       invalidateLibraryIndex();
       if (onAdded) onAdded(details.id, details, res.data?.data);
       onClose();
-      customAlert(`${mediaType === 'movie' ? 'Movie' : 'TV Show'} added to library successfully!`);
-      if (autoSearch && mediaType === 'movie' && res.data?.data?.id) {
+      customAlert(`${isMovie ? 'Movie' : 'TV Show'} added to library successfully!`);
+      if (autoSearch && isMovie && res.data?.data?.id) {
         api.post(`/library/movies/${res.data.data.id}/auto-search`).catch(() => {});
+      }
+      const addedId = res.data?.data?.id;
+      if (navigateOnAdd && addedId) {
+        navigate(isMovie ? `/movies/${addedId}` : `/shows/${addedId}`);
       }
     } catch (err) {
       console.error('Add to library error:', err.response?.data || err);
@@ -465,7 +471,7 @@ export default function MediaDetailsModal({
               {!isInLibrary && !onRequest && (
                 <div className="mt-auto pt-3 border-t border-slate-800/80">
                   <div className="bg-slate-950/40 border border-slate-800/80 rounded-xl p-3 sm:p-3.5">
-                    <div className={mediaType === 'show' ? "grid grid-cols-1 sm:grid-cols-2 gap-2.5" : ""}>
+                    <div className={mediaType !== 'movie' ? "grid grid-cols-1 sm:grid-cols-2 gap-2.5" : ""}>
                       {/* Quality Profile */}
                       <div>
                         <label className="block text-[11px] font-semibold text-slate-400 mb-1">Quality Profile</label>
@@ -484,7 +490,7 @@ export default function MediaDetailsModal({
                       </div>
 
                       {/* Monitor Level (for TV shows) */}
-                      {mediaType === 'show' && (
+                      {mediaType !== 'movie' && (
                         <div>
                           <label className="block text-[11px] font-semibold text-slate-400 mb-1">Monitor</label>
                           <select 
