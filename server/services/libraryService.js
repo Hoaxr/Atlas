@@ -205,7 +205,7 @@ const getMovies = (limit = 0, offset = 0, sort = 'added_desc', filters = {}) => 
   return db.prepare(sql).all(...params);
 };
 
-const addShow = async (tmdbId, rootFolderPath = null, monitorLevel = 'all') => {
+const addShow = async (tmdbId, rootFolderPath = null, monitorLevel = 'all', monitoredSeasons = null) => {
   const existing = db.prepare('SELECT id FROM shows WHERE tmdb_id = ?').get(tmdbId);
   if (existing) {
     throw new Error('Show already in library');
@@ -265,10 +265,15 @@ const addShow = async (tmdbId, rootFolderPath = null, monitorLevel = 'all') => {
         `);
         
         const latestSeasonNumber = eps.length > 0 ? Math.max(...eps.map(e => e.season_number)) : 0;
+        const normalizedMonitoredSeasons = Array.isArray(monitoredSeasons) ? monitoredSeasons.map(Number) : null;
 
         for (const ep of eps) {
           let isMonitored = 1;
-          if (monitorLevel === 'none') {
+          const isSeasonMonitored = !normalizedMonitoredSeasons || normalizedMonitoredSeasons.includes(Number(ep.season_number));
+
+          if (!isSeasonMonitored) {
+            isMonitored = 0;
+          } else if (monitorLevel === 'none') {
             isMonitored = 0;
           } else if (monitorLevel === 'first') {
             isMonitored = ep.season_number === 1 ? 1 : 0;

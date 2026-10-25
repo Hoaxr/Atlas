@@ -2,10 +2,11 @@ import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import api from '../lib/api';
+import clsx from 'clsx';
 import { 
   X, Star, Calendar, Clock, Plus, PlayCircle, CheckCircle2, 
   CheckSquare, Square, XCircle, Trash2, Loader2, ChevronDown, 
-  Clapperboard, ShieldCheck 
+  Clapperboard, ShieldCheck, Bookmark, BookmarkMinus 
 } from 'lucide-react';
 import { customAlert } from '../utils/alerts';
 import TrailerModal from './TrailerModal';
@@ -44,6 +45,8 @@ export default function MediaDetailsModal({
   const deleteBtnRef = useRef(null);
   const [dropdownPos, setDropdownPos] = useState({ top: 0, left: 0 });
   const [monitorLevel, setMonitorLevel] = useState('all');
+  const [monitoredSeasons, setMonitoredSeasons] = useState(new Set());
+  const [togglingSeason, setTogglingSeason] = useState(null);
 
   const fetchSettings = async () => {
     try {
@@ -109,6 +112,112 @@ export default function MediaDetailsModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, mediaId]);
 
+  useEffect(() => {
+    if (details?.seasons && (mediaType === 'show' || mediaType === 'tv' || mediaType === 'shows')) {
+      const validSeasons = details.seasons.filter(s => s.season_number > 0);
+      if (isInLibrary && libraryId) {
+        api.get(`/library/shows/${libraryId}/episodes`)
+          .then(res => {
+            if (res.data?.status === 'success') {
+              const eps = res.data.data || [];
+              const monitoredNums = new Set(
+                eps.filter(e => e.monitored).map(e => e.season_number)
+              );
+              setMonitoredSeasons(monitoredNums);
+            }
+          })
+          .catch(() => {
+            setMonitoredSeasons(new Set(validSeasons.map(s => s.season_number)));
+          });
+      } else {
+        // Monitored standard ON by default
+        setMonitoredSeasons(new Set(validSeasons.map(s => s.season_number)));
+        setMonitorLevel('all');
+      }
+    }
+  }, [details, isInLibrary, libraryId, mediaType]);
+
+  const handleMonitorLevelChange = (level) => {
+    setMonitorLevel(level);
+    if (!details?.seasons) return;
+    const validSeasons = details.seasons.filter(s => s.season_number > 0);
+    const seasonNums = validSeasons.map(s => s.season_number);
+    const latestNum = seasonNums.length > 0 ? Math.max(...seasonNums) : 1;
+
+    if (level === 'all' || level === 'future') {
+      setMonitoredSeasons(new Set(seasonNums));
+    } else if (level === 'none') {
+      setMonitoredSeasons(new Set());
+    } else if (level === 'first') {
+      setMonitoredSeasons(new Set([1]));
+    } else if (level === 'latest') {
+      setMonitoredSeasons(new Set([latestNum]));
+    }
+  };
+
+  const handleToggleSeason = async (seasonNumber) => {
+    if (isInLibrary && libraryId) {
+      setTogglingSeason(seasonNumber);
+      try {
+        const res = await api.post(`/library/shows/${libraryId}/seasons/${seasonNumber}/toggle-monitor`);
+        if (res.data?.status === 'success') {
+          const isNowMonitored = res.data.data.monitored === 1;
+          setMonitoredSeasons(prev => {
+            const next = new Set(prev);
+            if (isNowMonitored) next.add(seasonNumber);
+            else next.delete(seasonNumber);
+            return next;
+          });
+          customAlert(`Season ${seasonNumber} is now ${res.data.data.monitored ? 'monitored' : 'unmonitored'}`);
+        }
+      } catch {
+        customAlert('Failed to toggle season monitor', 'error');
+      } finally {
+        setTogglingSeason(null);
+      }
+      return;
+    }
+
+    setMonitoredSeasons(prev => {
+      const next = new Set(prev);
+      if (next.has(seasonNumber)) {
+        next.delete(seasonNumber);
+      } else {
+        next.add(seasonNumber);
+      }
+
+      const validSeasons = (details?.seasons || []).filter(s => s.season_number > 0);
+      const allNums = validSeasons.map(s => s.season_number);
+      const latestNum = allNums.length > 0 ? Math.max(...allNums) : 1;
+
+      if (next.size === 0) {
+        setMonitorLevel('none');
+      } else if (next.size === allNums.length) {
+        setMonitorLevel(prevLevel => prevLevel === 'future' ? 'future' : 'all');
+      } else if (next.size === 1 && next.has(1)) {
+        setMonitorLevel('first');
+      } else if (next.size === 1 && next.has(latestNum)) {
+        setMonitorLevel('latest');
+      } else {
+        setMonitorLevel('custom');
+      }
+
+      return next;
+    });
+  };
+
+  const handleSelectAllSeasons = () => {
+    if (!details?.seasons) return;
+    const allNums = details.seasons.filter(s => s.season_number > 0).map(s => s.season_number);
+    setMonitoredSeasons(new Set(allNums));
+    setMonitorLevel('all');
+  };
+
+  const handleSelectNoneSeasons = () => {
+    setMonitoredSeasons(new Set());
+    setMonitorLevel('none');
+  };
+
   if (!isOpen) return null;
 
   // Extract trailer
@@ -143,7 +252,8 @@ export default function MediaDetailsModal({
         qualityProfileId: parseInt(selectedProfile) || null,
         rootFolderPath: selectedPath,
         autoSearch,
-        monitorLevel: !isMovie ? monitorLevel : undefined
+        monitorLevel: !isMovie ? monitorLevel : undefined,
+        monitoredSeasons: !isMovie ? Array.from(monitoredSeasons) : undefined
       };
       const res = await api.post(endpoint, payload);
       setCachedMovies(null);
@@ -401,17 +511,79 @@ export default function MediaDetailsModal({
                 </p>
               </div>
 
-              {/* ─── TV Seasons (if applicable) ─── */}
+              {/* ─── TV Seasons (Interactive Monitor Toggle) ─── */}
               {details.seasons && details.seasons.length > 0 && (
-                <div className="mb-3.5">
-                  <h3 className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">Seasons</h3>
-                  <div className="flex flex-wrap gap-1.5">
-                    {details.seasons.filter(s => s.season_number > 0).map(season => (
-                      <div key={season.id} className="bg-slate-800/80 border border-slate-700/60 text-slate-300 px-2.5 py-1 rounded-lg text-xs font-medium">
-                        {season.name} <span className="text-slate-500 text-[11px] ml-1">({season.episode_count} eps)</span>
+                <div className="mb-4 bg-slate-950/40 border border-slate-800/80 rounded-xl p-3">
+                  <div className="flex items-center justify-between gap-2 mb-2.5">
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-[11px] font-bold uppercase tracking-wider text-slate-300">Seasons</h3>
+                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-cyan-950/60 text-cyan-300 border border-cyan-800/50">
+                        {monitoredSeasons.size} of {details.seasons.filter(s => s.season_number > 0).length} monitored
+                      </span>
+                    </div>
+                    {details.seasons.filter(s => s.season_number > 0).length > 1 && !isInLibrary && (
+                      <div className="flex items-center gap-2 text-[11px]">
+                        <button
+                          type="button"
+                          onClick={handleSelectAllSeasons}
+                          className="text-cyan-400 hover:text-cyan-300 font-medium transition-colors hover:underline cursor-pointer"
+                        >
+                          All
+                        </button>
+                        <span className="text-slate-600">·</span>
+                        <button
+                          type="button"
+                          onClick={handleSelectNoneSeasons}
+                          className="text-slate-400 hover:text-slate-300 font-medium transition-colors hover:underline cursor-pointer"
+                        >
+                          None
+                        </button>
                       </div>
-                    ))}
+                    )}
                   </div>
+
+                  <div className="flex flex-wrap gap-1.5">
+                    {details.seasons.filter(s => s.season_number > 0).map(season => {
+                      const isMonitored = monitoredSeasons.has(season.season_number);
+                      const isToggling = togglingSeason === season.season_number;
+                      return (
+                        <button
+                          key={season.id || season.season_number}
+                          type="button"
+                          onClick={() => handleToggleSeason(season.season_number)}
+                          disabled={isToggling}
+                          title={isMonitored ? `Season ${season.season_number} is monitored (click to unmonitor)` : `Season ${season.season_number} is unmonitored (click to monitor)`}
+                          className={clsx(
+                            "px-2.5 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 border transition-all cursor-pointer select-none active:scale-95",
+                            isMonitored 
+                              ? "bg-cyan-950/50 border-cyan-500/50 text-cyan-100 hover:bg-cyan-900/50 hover:border-cyan-400 shadow-sm shadow-cyan-950/30" 
+                              : "bg-slate-900/60 border-slate-800 text-slate-400 hover:border-slate-700 hover:text-slate-300 opacity-60 hover:opacity-100"
+                          )}
+                        >
+                          {isToggling ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin text-cyan-400 shrink-0" />
+                          ) : isMonitored ? (
+                            <Bookmark className="w-3.5 h-3.5 text-cyan-400 fill-cyan-400 shrink-0" />
+                          ) : (
+                            <BookmarkMinus className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                          )}
+                          <span className={isMonitored ? "font-semibold text-slate-100" : "text-slate-400"}>
+                            {season.name}
+                          </span>
+                          <span className={clsx(
+                            "text-[10px] ml-0.5",
+                            isMonitored ? "text-cyan-300/80" : "text-slate-500"
+                          )}>
+                            ({season.episode_count} eps)
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <p className="text-[11px] text-slate-400 mt-2 flex items-center gap-1.5">
+                    <Bookmark className="w-3 h-3 text-cyan-400 fill-cyan-400 shrink-0" />
+                    <span>Click seasons to toggle monitoring. Unmonitored seasons will not be searched or downloaded.</span>
+                  </p>
                 </div>
               )}
 
@@ -496,13 +668,16 @@ export default function MediaDetailsModal({
                           <select 
                             className="w-full bg-slate-900/90 border border-slate-700/80 rounded-lg text-slate-200 px-2.5 py-1.5 text-xs focus:outline-none focus:border-cyan-500"
                             value={monitorLevel}
-                            onChange={(e) => setMonitorLevel(e.target.value)}
+                            onChange={(e) => handleMonitorLevelChange(e.target.value)}
                           >
                             <option value="all">All Episodes</option>
                             <option value="future">Future Episodes Only</option>
                             <option value="latest">Latest Season Only</option>
                             <option value="first">First Season Only</option>
                             <option value="none">None</option>
+                            {monitorLevel === 'custom' && (
+                              <option value="custom">Custom Selection ({monitoredSeasons.size} monitored)</option>
+                            )}
                           </select>
                         </div>
                       )}
