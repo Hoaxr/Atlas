@@ -384,70 +384,87 @@ export default function MediaHealth() {
             <div className="bg-slate-800/40 rounded-xl border border-white/5 overflow-hidden">
               <ul className="divide-y divide-slate-800/50 max-h-96 overflow-y-auto">
                 {subtitleIssues.map((sub) => (
-                  <li key={sub.id || sub.filename} className="p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2 hover:bg-slate-800/50 transition-colors">
+                  <li key={sub.id || sub.filename} className="p-3 flex flex-col sm:flex-row sm:items-start justify-between gap-3 hover:bg-slate-800/50 transition-colors">
                     <div className="min-w-0 flex-1 pr-2">
-                      <button
-                        onClick={() => navigate(sub.media_type === 'movie' ? `/movies/${sub.show_or_movie_id}` : `/shows/${sub.show_or_movie_id}`)}
-                        className="font-medium text-slate-200 truncate hover:text-pink-400 hover:underline text-left block w-full transition-colors"
-                        title={sub.title}
-                      >
-                        {sub.title}
-                      </button>
-                      <div className="flex items-center gap-2 mt-1 text-xs flex-wrap">
-                        <span className="text-slate-400 truncate max-w-[280px]">
-                          {sub.filename}
-                        </span>
-                        <span className="px-1.5 py-0.5 rounded bg-pink-500/15 text-pink-300 border border-pink-500/30 uppercase font-bold text-[10px]">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <button
+                          onClick={() => navigate(sub.media_type === 'movie' ? `/movies/${sub.show_or_movie_id}` : `/shows/${sub.show_or_movie_id}`)}
+                          className="font-medium text-slate-200 truncate hover:text-pink-400 hover:underline text-left cursor-pointer transition-colors"
+                          title={sub.title}
+                        >
+                          {sub.title}
+                        </button>
+                        <span className="px-1.5 py-0.5 rounded bg-pink-500/15 text-pink-300 border border-pink-500/30 uppercase font-bold text-[10px] shrink-0">
                           {sub.lang_code}
                         </span>
-                        {sub.sync_status === 'offset_detected' && (
-                          <span className="px-2 py-0.5 rounded border bg-amber-500/10 text-amber-400 border-amber-500/20">
-                            Offset: {sub.sync_offset > 0 ? `+${sub.sync_offset}s` : `${sub.sync_offset}s`}
-                          </span>
-                        )}
-                        {sub.sync_status === 'drift_detected' && (
-                          <span className="px-2 py-0.5 rounded border bg-amber-500/10 text-amber-400 border-amber-500/20">
-                            Framerate Drift
-                          </span>
-                        )}
-                        {sub.sync_status === 'duration_mismatch' && (
-                          <span className="px-2 py-0.5 rounded border bg-rose-500/10 text-rose-400 border-rose-500/20">
-                            Runtime/Cut Mismatch
-                          </span>
-                        )}
-                        {sub.sync_status === 'desynced' && (
-                          <span className="px-2 py-0.5 rounded border bg-rose-500/10 text-rose-400 border-rose-500/20">
-                            Speech Desync
-                          </span>
-                        )}
                       </div>
-                    </div>
-                    <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-center">
-                      {sub.lang_code !== 'en' && (
-                        <button
-                          onClick={() => handleTranslateSub(sub)}
-                          disabled={actionLoadingFile === sub.filename}
-                          className="p-1.5 rounded-lg bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 border border-cyan-500/20 transition-colors cursor-pointer disabled:opacity-50"
-                          title="AI translate full track from English"
-                        >
-                          {actionLoadingFile === sub.filename ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Languages className="w-3.5 h-3.5" />}
-                        </button>
+                      {sub.sync_details && (
+                        <p className="text-[11px] text-slate-500 mt-1.5 italic">
+                          {(() => {
+                            try {
+                              if (typeof sub.sync_details === 'string' && sub.sync_details.startsWith('{')) {
+                                const parsed = JSON.parse(sub.sync_details);
+                                return parsed.message || sub.sync_details;
+                              }
+                              if (typeof sub.sync_details === 'object' && sub.sync_details?.message) {
+                                return sub.sync_details.message;
+                              }
+                              return String(sub.sync_details);
+                            } catch {
+                              return String(sub.sync_details);
+                            }
+                          })()}
+                        </p>
                       )}
-                      <button
-                        onClick={() => handleDeleteSub(sub)}
-                        disabled={actionLoadingFile === sub.filename}
-                        className="p-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 transition-colors cursor-pointer disabled:opacity-50"
-                        title="Delete broken subtitle file"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        onClick={() => navigate(sub.media_type === 'movie' ? `/movies/${sub.show_or_movie_id}` : `/shows/${sub.show_or_movie_id}`)}
-                        className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700/60 transition-colors shrink-0 cursor-pointer"
-                        title="View media item"
-                      >
-                        <Eye className="w-3.5 h-3.5" />
-                      </button>
+                    </div>
+                    <div className="flex flex-col items-end gap-2 shrink-0 self-end sm:self-auto">
+                      {sub.sync_status === 'offset_detected' && (
+                        <span className="px-2 py-0.5 rounded border bg-amber-500/10 text-amber-400 border-amber-500/20 text-[11px] font-semibold">
+                          Offset: {sub.sync_offset > 0 ? `+${sub.sync_offset}s` : `${sub.sync_offset}s`}
+                        </span>
+                      )}
+                      {sub.sync_status === 'drift_detected' && (
+                        <span className="px-2 py-0.5 rounded border bg-amber-500/10 text-amber-400 border-amber-500/20 text-[11px] font-semibold">
+                          Framerate Drift
+                        </span>
+                      )}
+                      {sub.sync_status === 'duration_mismatch' && (
+                        <span className="px-2 py-0.5 rounded border bg-rose-500/10 text-rose-400 border-rose-500/20 text-[11px] font-semibold">
+                          Runtime / Cut Mismatch
+                        </span>
+                      )}
+                      {sub.sync_status === 'desynced' && (
+                        <span className="px-2 py-0.5 rounded border bg-rose-500/10 text-rose-400 border-rose-500/20 text-[11px] font-semibold">
+                          Speech Desync
+                        </span>
+                      )}
+                      <div className="flex items-center gap-1.5">
+                        {sub.lang_code !== 'en' && (
+                          <button
+                            onClick={() => handleTranslateSub(sub)}
+                            disabled={actionLoadingFile === sub.filename}
+                            className="p-1.5 rounded-lg bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 border border-cyan-500/20 transition-colors cursor-pointer disabled:opacity-50"
+                            title="AI translate full track from English"
+                          >
+                            {actionLoadingFile === sub.filename ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Languages className="w-3.5 h-3.5" />}
+                          </button>
+                        )}
+                        <button
+                          onClick={() => handleDeleteSub(sub)}
+                          disabled={actionLoadingFile === sub.filename}
+                          className="p-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 transition-colors cursor-pointer disabled:opacity-50"
+                          title="Delete broken subtitle file"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => navigate(sub.media_type === 'movie' ? `/movies/${sub.show_or_movie_id}` : `/shows/${sub.show_or_movie_id}`)}
+                          className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700/60 transition-colors shrink-0 cursor-pointer"
+                          title="View media item"
+                        >
+                          <Eye className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </div>
                   </li>
                 ))}
