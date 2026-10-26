@@ -399,7 +399,7 @@ export default function Watcher() {
           </div>
 
           {/* Overview Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
             <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-3.5 sm:p-4 shadow-sm transition-colors hover:border-slate-700 flex items-center gap-3.5">
               <div className="p-2.5 rounded-lg bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 shrink-0">
                 <Eye className="w-5 h-5" />
@@ -407,171 +407,426 @@ export default function Watcher() {
               <div className="min-w-0 flex-1">
                 <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider truncate">Total Plays</p>
                 <div className="flex items-baseline gap-2 mt-0.5">
-                  <span className="text-xl sm:text-2xl font-bold text-slate-100">{stats.overview?.totalPlays || 0}</span>
+                  <span className="text-xl sm:text-2xl font-bold text-slate-100 font-mono">{stats.overview?.totalPlays || 0}</span>
                 </div>
               </div>
             </div>
 
             <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-3.5 sm:p-4 shadow-sm transition-colors hover:border-slate-700 flex items-center gap-3.5">
-              <div className="p-2.5 rounded-lg bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 shrink-0">
+              <div className="p-2.5 rounded-lg bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 shrink-0">
                 <User className="w-5 h-5" />
               </div>
               <div className="min-w-0 flex-1">
-                <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider truncate">Unique Users</p>
+                <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider truncate">Unique Viewers</p>
                 <div className="flex items-baseline gap-2 mt-0.5">
-                  <span className="text-xl sm:text-2xl font-bold text-slate-100">{stats.overview?.uniqueUsers || 0}</span>
+                  <span className="text-xl sm:text-2xl font-bold text-slate-100 font-mono">{stats.overview?.uniqueUsers || 0}</span>
                 </div>
               </div>
             </div>
 
             <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-3.5 sm:p-4 shadow-sm transition-colors hover:border-slate-700 flex items-center gap-3.5">
-              <div className="p-2.5 rounded-lg bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 shrink-0">
+              <div className="p-2.5 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shrink-0">
                 <Hash className="w-5 h-5" />
               </div>
               <div className="min-w-0 flex-1">
                 <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider truncate">Unique Titles</p>
                 <div className="flex items-baseline gap-2 mt-0.5">
-                  <span className="text-xl sm:text-2xl font-bold text-slate-100">{stats.overview?.uniqueTitles || 0}</span>
+                  <span className="text-xl sm:text-2xl font-bold text-slate-100 font-mono">{stats.overview?.uniqueTitles || 0}</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-3.5 sm:p-4 shadow-sm transition-colors hover:border-slate-700 flex items-center gap-3.5">
+              <div className="p-2.5 rounded-lg bg-sky-500/10 text-sky-400 border border-sky-500/20 shrink-0">
+                <MonitorPlay className="w-5 h-5" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider truncate">Top Platform</p>
+                <div className="flex items-baseline gap-1.5 mt-0.5">
+                  <span className="text-sm sm:text-base font-bold text-slate-100 truncate">
+                    {stats.topPlatforms?.[0]?.player || 'None'}
+                  </span>
+                  {stats.topPlatforms?.[0] && (
+                    <span className="text-xs text-sky-400 font-mono font-semibold">({stats.topPlatforms[0].percentage}%)</span>
+                  )}
                 </div>
               </div>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {/* Most Watched Movies */}
+          {/* Leaderboard Cards Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+            {/* Most Watched Shows */}
             <div className="bg-slate-900/70 backdrop-blur-sm border border-slate-800 rounded-xl p-4 sm:p-5 shadow-sm transition-colors hover:border-slate-700 flex flex-col">
-              <div className="flex items-center gap-2 mb-3.5 border-b border-[#1c2d46]/80 pb-2.5">
-                <Film className="w-4 h-4 text-cyan-400" />
-                <h3 className="text-sm font-bold text-slate-200">Most Watched Movies</h3>
+              <div className="flex items-center justify-between gap-2 mb-3.5 border-b border-[#1c2d46]/80 pb-2.5">
+                <div className="flex items-center gap-2">
+                  <Tv className="w-4 h-4 text-cyan-400" />
+                  <h3 className="text-sm font-bold text-slate-200">Most Watched Shows</h3>
+                </div>
+                <span className="text-[10px] font-medium text-slate-400 uppercase tracking-wider">By Plays</span>
               </div>
               <ul className="space-y-2 flex-1">
-                {stats.topMovies?.length > 0 ? stats.topMovies.map((item, idx) => (
-                  <li key={item.id || `topMovies-${item.title}-${idx}`} className="flex justify-between items-center bg-[#101e31]/60 p-2.5 rounded-xl border border-[#1c2d46]/60 group hover:bg-[#101e31] transition-colors">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <span className="text-xs font-bold text-slate-500 w-5 flex-shrink-0 font-mono">{idx + 1}</span>
-                      <span className="text-slate-300 font-medium truncate text-xs sm:text-sm">{item.title}</span>
-                    </div>
-                    <span className="bg-cyan-500/15 text-cyan-300 font-bold border border-cyan-500/30 text-xs px-2 py-0.5 rounded-md flex-shrink-0 ml-2 font-mono">{item.plays}</span>
-                  </li>
-                )) : <li className="text-slate-500 text-xs italic text-center py-4 bg-[#101e31]/30 rounded-xl border border-dashed border-slate-800/80">No data yet.</li>}
+                {stats.topShows?.length > 0 ? (() => {
+                  const maxPlays = Math.max(...stats.topShows.map(s => s.plays || 1), 1);
+                  return stats.topShows.map((item, idx) => (
+                    <li key={`topShows-${item.title}-${idx}`} className="relative overflow-hidden bg-[#101e31]/60 rounded-xl border border-[#1c2d46]/60 p-2 sm:p-2.5 flex items-center gap-2.5 group hover:bg-[#101e31] hover:border-cyan-500/30 transition-all">
+                      <div 
+                        className="absolute left-0 top-0 bottom-0 bg-cyan-500/5 group-hover:bg-cyan-500/10 transition-all pointer-events-none"
+                        style={{ width: `${Math.round((item.plays / maxPlays) * 100)}%` }}
+                      />
+                      <div className="w-8 h-11 rounded-lg overflow-hidden bg-slate-800/80 border border-slate-700/60 shrink-0 flex items-center justify-center shadow-xs">
+                        {item.poster ? (
+                          <img 
+                            src={item.poster} 
+                            alt={item.title} 
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform" 
+                            loading="lazy" 
+                            onError={(e) => { e.target.style.display = 'none'; e.target.nextElementSibling.style.display = 'flex'; }}
+                          />
+                        ) : null}
+                        <div className={item.poster ? 'hidden w-full h-full items-center justify-center' : 'flex w-full h-full items-center justify-center'}>
+                          <Tv className="w-4 h-4 text-slate-500" />
+                        </div>
+                      </div>
+                      <div className="min-w-0 flex-1 relative z-10">
+                        {item.media_id ? (
+                          <Link 
+                            to={`/shows/${item.media_id}`}
+                            className="font-semibold text-xs sm:text-sm text-slate-200 truncate block hover:text-cyan-400 transition-colors"
+                          >
+                            {item.title}
+                          </Link>
+                        ) : (
+                          <span className="font-semibold text-xs sm:text-sm text-slate-200 truncate block">
+                            {item.title}
+                          </span>
+                        )}
+                      </div>
+                      <span className="bg-cyan-500/15 text-cyan-300 font-bold border border-cyan-500/30 text-xs px-2 py-0.5 rounded-md flex-shrink-0 font-mono relative z-10">
+                        {item.plays} {item.plays === 1 ? 'play' : 'plays'}
+                      </span>
+                    </li>
+                  ));
+                })() : <li className="text-slate-500 text-xs italic text-center py-4 bg-[#101e31]/30 rounded-xl border border-dashed border-slate-800/80">No data yet.</li>}
               </ul>
             </div>
 
-            {/* Most Watched Shows */}
+            {/* Most Watched Movies */}
             <div className="bg-slate-900/70 backdrop-blur-sm border border-slate-800 rounded-xl p-4 sm:p-5 shadow-sm transition-colors hover:border-slate-700 flex flex-col">
-              <div className="flex items-center gap-2 mb-3.5 border-b border-[#1c2d46]/80 pb-2.5">
-                <Tv className="w-4 h-4 text-cyan-400" />
-                <h3 className="text-sm font-bold text-slate-200">Most Watched Shows</h3>
+              <div className="flex items-center justify-between gap-2 mb-3.5 border-b border-[#1c2d46]/80 pb-2.5">
+                <div className="flex items-center gap-2">
+                  <Film className="w-4 h-4 text-cyan-400" />
+                  <h3 className="text-sm font-bold text-slate-200">Most Watched Movies</h3>
+                </div>
+                <span className="text-[10px] font-medium text-slate-400 uppercase tracking-wider">By Plays</span>
               </div>
               <ul className="space-y-2 flex-1">
-                {stats.topShows?.length > 0 ? stats.topShows.map((item, idx) => (
-                  <li key={item.id || `topShows-${item.title}-${idx}`} className="flex justify-between items-center bg-[#101e31]/60 p-2.5 rounded-xl border border-[#1c2d46]/60 group hover:bg-[#101e31] transition-colors">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <span className="text-xs font-bold text-slate-500 w-5 flex-shrink-0 font-mono">{idx + 1}</span>
-                      <span className="text-slate-300 font-medium truncate text-xs sm:text-sm">{item.title}</span>
-                    </div>
-                    <span className="bg-cyan-500/15 text-cyan-300 font-bold border border-cyan-500/30 text-xs px-2 py-0.5 rounded-md flex-shrink-0 ml-2 font-mono">{item.plays}</span>
-                  </li>
-                )) : <li className="text-slate-500 text-xs italic text-center py-4 bg-[#101e31]/30 rounded-xl border border-dashed border-slate-800/80">No data yet.</li>}
+                {stats.topMovies?.length > 0 ? (() => {
+                  const maxPlays = Math.max(...stats.topMovies.map(m => m.plays || 1), 1);
+                  return stats.topMovies.map((item, idx) => (
+                    <li key={`topMovies-${item.title}-${idx}`} className="relative overflow-hidden bg-[#101e31]/60 rounded-xl border border-[#1c2d46]/60 p-2 sm:p-2.5 flex items-center gap-2.5 group hover:bg-[#101e31] hover:border-cyan-500/30 transition-all">
+                      <div 
+                        className="absolute left-0 top-0 bottom-0 bg-cyan-500/5 group-hover:bg-cyan-500/10 transition-all pointer-events-none"
+                        style={{ width: `${Math.round((item.plays / maxPlays) * 100)}%` }}
+                      />
+                      <div className="w-8 h-11 rounded-lg overflow-hidden bg-slate-800/80 border border-slate-700/60 shrink-0 flex items-center justify-center shadow-xs">
+                        {item.poster ? (
+                          <img 
+                            src={item.poster} 
+                            alt={item.title} 
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform" 
+                            loading="lazy" 
+                            onError={(e) => { e.target.style.display = 'none'; e.target.nextElementSibling.style.display = 'flex'; }}
+                          />
+                        ) : null}
+                        <div className={item.poster ? 'hidden w-full h-full items-center justify-center' : 'flex w-full h-full items-center justify-center'}>
+                          <Film className="w-4 h-4 text-slate-500" />
+                        </div>
+                      </div>
+                      <div className="min-w-0 flex-1 relative z-10">
+                        {item.media_id ? (
+                          <Link 
+                            to={`/movies/${item.media_id}`}
+                            className="font-semibold text-xs sm:text-sm text-slate-200 truncate block hover:text-cyan-400 transition-colors"
+                          >
+                            {item.title}
+                          </Link>
+                        ) : (
+                          <span className="font-semibold text-xs sm:text-sm text-slate-200 truncate block">
+                            {item.title}
+                          </span>
+                        )}
+                      </div>
+                      <span className="bg-cyan-500/15 text-cyan-300 font-bold border border-cyan-500/30 text-xs px-2 py-0.5 rounded-md flex-shrink-0 font-mono relative z-10">
+                        {item.plays} {item.plays === 1 ? 'play' : 'plays'}
+                      </span>
+                    </li>
+                  ));
+                })() : <li className="text-slate-500 text-xs italic text-center py-4 bg-[#101e31]/30 rounded-xl border border-dashed border-slate-800/80">No data yet.</li>}
               </ul>
             </div>
 
             {/* Most Active Users */}
             <div className="bg-slate-900/70 backdrop-blur-sm border border-slate-800 rounded-xl p-4 sm:p-5 shadow-sm transition-colors hover:border-slate-700 flex flex-col">
-              <div className="flex items-center gap-2 mb-3.5 border-b border-[#1c2d46]/80 pb-2.5">
-                <User className="w-4 h-4 text-cyan-400" />
-                <h3 className="text-sm font-bold text-slate-200">Most Active Users</h3>
+              <div className="flex items-center justify-between gap-2 mb-3.5 border-b border-[#1c2d46]/80 pb-2.5">
+                <div className="flex items-center gap-2">
+                  <User className="w-4 h-4 text-cyan-400" />
+                  <h3 className="text-sm font-bold text-slate-200">Most Active Users</h3>
+                </div>
+                <span className="text-[10px] font-medium text-slate-400 uppercase tracking-wider">Top Viewers</span>
               </div>
               <ul className="space-y-2 flex-1">
-                {stats.topUsers?.length > 0 ? stats.topUsers.map((item, idx) => (
-                  <li key={item.id || `topUsers-${item.user}-${idx}`} className="flex justify-between items-center bg-[#101e31]/60 p-2.5 rounded-xl border border-[#1c2d46]/60 group hover:bg-[#101e31] transition-colors">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <span className="text-xs font-bold text-slate-500 w-5 flex-shrink-0 font-mono">{idx + 1}</span>
-                      <span className="text-slate-300 font-medium truncate text-xs sm:text-sm">{item.user}</span>
-                    </div>
-                    <span className="bg-cyan-500/15 text-cyan-300 font-bold border border-cyan-500/30 text-xs px-2 py-0.5 rounded-md flex-shrink-0 ml-2 font-mono">{item.plays}</span>
-                  </li>
-                )) : <li className="text-slate-500 text-xs italic text-center py-4 bg-[#101e31]/30 rounded-xl border border-dashed border-slate-800/80">No data yet.</li>}
-              </ul>
-            </div>
-
-            {/* Most Popular Movies (by unique users) */}
-            <div className="bg-slate-900/70 backdrop-blur-sm border border-slate-800 rounded-xl p-4 sm:p-5 shadow-sm transition-colors hover:border-slate-700 flex flex-col">
-              <div className="flex items-center gap-2 mb-3.5 border-b border-[#1c2d46]/80 pb-2.5">
-                <TrendingUp className="w-4 h-4 text-cyan-400" />
-                <h3 className="text-sm font-bold text-slate-200">Most Popular Movies</h3>
-              </div>
-              <ul className="space-y-2 flex-1">
-                {stats.popularMovies?.length > 0 ? stats.popularMovies.map((item, idx) => (
-                  <li key={item.id || `popularMovies-${item.title}-${idx}`} className="flex justify-between items-center bg-[#101e31]/60 p-2.5 rounded-xl border border-[#1c2d46]/60 group hover:bg-[#101e31] transition-colors">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <span className="text-xs font-bold text-slate-500 w-5 flex-shrink-0 font-mono">{idx + 1}</span>
-                      <span className="text-slate-300 font-medium truncate text-xs sm:text-sm">{item.title}</span>
-                    </div>
-                    <span className="bg-cyan-500/15 text-cyan-300 font-bold border border-cyan-500/30 text-xs px-2 py-0.5 rounded-md flex-shrink-0 ml-2 font-mono">{item.users} {item.users === 1 ? 'user' : 'users'}</span>
-                  </li>
-                )) : <li className="text-slate-500 text-xs italic text-center py-4 bg-[#101e31]/30 rounded-xl border border-dashed border-slate-800/80">No data yet.</li>}
+                {stats.topUsers?.length > 0 ? (() => {
+                  const maxPlays = Math.max(...stats.topUsers.map(u => u.plays || 1), 1);
+                  return stats.topUsers.map((item, idx) => (
+                    <li key={`topUsers-${item.user}-${idx}`} className="relative overflow-hidden bg-[#101e31]/60 rounded-xl border border-[#1c2d46]/60 p-2.5 sm:p-3 flex items-center justify-between group hover:bg-[#101e31] hover:border-indigo-500/30 transition-all">
+                      <div 
+                        className="absolute left-0 top-0 bottom-0 bg-indigo-500/5 group-hover:bg-indigo-500/10 transition-all pointer-events-none"
+                        style={{ width: `${Math.round((item.plays / maxPlays) * 100)}%` }}
+                      />
+                      <span className="font-semibold text-xs sm:text-sm text-slate-200 truncate flex-1 relative z-10">
+                        {item.user}
+                      </span>
+                      <span className="bg-indigo-500/15 text-indigo-300 font-bold border border-indigo-500/30 text-xs px-2 py-0.5 rounded-md flex-shrink-0 font-mono relative z-10">
+                        {item.plays} {item.plays === 1 ? 'play' : 'plays'}
+                      </span>
+                    </li>
+                  ));
+                })() : <li className="text-slate-500 text-xs italic text-center py-4 bg-[#101e31]/30 rounded-xl border border-dashed border-slate-800/80">No data yet.</li>}
               </ul>
             </div>
 
             {/* Most Popular Shows (by unique users) */}
             <div className="bg-slate-900/70 backdrop-blur-sm border border-slate-800 rounded-xl p-4 sm:p-5 shadow-sm transition-colors hover:border-slate-700 flex flex-col">
-              <div className="flex items-center gap-2 mb-3.5 border-b border-[#1c2d46]/80 pb-2.5">
-                <TrendingUp className="w-4 h-4 text-cyan-400" />
-                <h3 className="text-sm font-bold text-slate-200">Most Popular Shows</h3>
+              <div className="flex items-center justify-between gap-2 mb-3.5 border-b border-[#1c2d46]/80 pb-2.5">
+                <div className="flex items-center gap-2">
+                  <TrendingUp className="w-4 h-4 text-cyan-400" />
+                  <h3 className="text-sm font-bold text-slate-200">Most Popular Shows</h3>
+                </div>
+                <span className="text-[10px] font-medium text-slate-400 uppercase tracking-wider">Unique Viewers</span>
               </div>
               <ul className="space-y-2 flex-1">
-                {stats.popularShows?.length > 0 ? stats.popularShows.map((item, idx) => (
-                  <li key={item.id || `popularShows-${item.title}-${idx}`} className="flex justify-between items-center bg-[#101e31]/60 p-2.5 rounded-xl border border-[#1c2d46]/60 group hover:bg-[#101e31] transition-colors">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <span className="text-xs font-bold text-slate-500 w-5 flex-shrink-0 font-mono">{idx + 1}</span>
-                      <span className="text-slate-300 font-medium truncate text-xs sm:text-sm">{item.title}</span>
-                    </div>
-                    <span className="bg-cyan-500/15 text-cyan-300 font-bold border border-cyan-500/30 text-xs px-2 py-0.5 rounded-md flex-shrink-0 ml-2 font-mono">{item.users} {item.users === 1 ? 'user' : 'users'}</span>
-                  </li>
-                )) : <li className="text-slate-500 text-xs italic text-center py-4 bg-[#101e31]/30 rounded-xl border border-dashed border-slate-800/80">No data yet.</li>}
+                {stats.popularShows?.length > 0 ? (() => {
+                  const maxUsers = Math.max(...stats.popularShows.map(s => s.users || 1), 1);
+                  return stats.popularShows.map((item, idx) => (
+                    <li key={`popularShows-${item.title}-${idx}`} className="relative overflow-hidden bg-[#101e31]/60 rounded-xl border border-[#1c2d46]/60 p-2 sm:p-2.5 flex items-center gap-2.5 group hover:bg-[#101e31] hover:border-cyan-500/30 transition-all">
+                      <div 
+                        className="absolute left-0 top-0 bottom-0 bg-cyan-500/5 group-hover:bg-cyan-500/10 transition-all pointer-events-none"
+                        style={{ width: `${Math.round((item.users / maxUsers) * 100)}%` }}
+                      />
+                      <div className="w-8 h-11 rounded-lg overflow-hidden bg-slate-800/80 border border-slate-700/60 shrink-0 flex items-center justify-center shadow-xs">
+                        {item.poster ? (
+                          <img 
+                            src={item.poster} 
+                            alt={item.title} 
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform" 
+                            loading="lazy" 
+                            onError={(e) => { e.target.style.display = 'none'; e.target.nextElementSibling.style.display = 'flex'; }}
+                          />
+                        ) : null}
+                        <div className={item.poster ? 'hidden w-full h-full items-center justify-center' : 'flex w-full h-full items-center justify-center'}>
+                          <Tv className="w-4 h-4 text-slate-500" />
+                        </div>
+                      </div>
+                      <div className="min-w-0 flex-1 relative z-10">
+                        {item.media_id ? (
+                          <Link 
+                            to={`/shows/${item.media_id}`}
+                            className="font-semibold text-xs sm:text-sm text-slate-200 truncate block hover:text-cyan-400 transition-colors"
+                          >
+                            {item.title}
+                          </Link>
+                        ) : (
+                          <span className="font-semibold text-xs sm:text-sm text-slate-200 truncate block">
+                            {item.title}
+                          </span>
+                        )}
+                      </div>
+                      <span className="bg-cyan-500/15 text-cyan-300 font-bold border border-cyan-500/30 text-xs px-2 py-0.5 rounded-md flex-shrink-0 font-mono relative z-10">
+                        {item.users} {item.users === 1 ? 'user' : 'users'}
+                      </span>
+                    </li>
+                  ));
+                })() : <li className="text-slate-500 text-xs italic text-center py-4 bg-[#101e31]/30 rounded-xl border border-dashed border-slate-800/80">No data yet.</li>}
               </ul>
             </div>
 
-            {/* Recently Watched */}
+            {/* Most Popular Movies (by unique users) */}
             <div className="bg-slate-900/70 backdrop-blur-sm border border-slate-800 rounded-xl p-4 sm:p-5 shadow-sm transition-colors hover:border-slate-700 flex flex-col">
-              <div className="flex items-center gap-2 mb-3.5 border-b border-[#1c2d46]/80 pb-2.5">
-                <History className="w-4 h-4 text-cyan-400" />
-                <h3 className="text-sm font-bold text-slate-200">Recently Watched</h3>
+              <div className="flex items-center justify-between gap-2 mb-3.5 border-b border-[#1c2d46]/80 pb-2.5">
+                <div className="flex items-center gap-2">
+                  <TrendingUp className="w-4 h-4 text-cyan-400" />
+                  <h3 className="text-sm font-bold text-slate-200">Most Popular Movies</h3>
+                </div>
+                <span className="text-[10px] font-medium text-slate-400 uppercase tracking-wider">Unique Viewers</span>
               </div>
               <ul className="space-y-2 flex-1">
-                {stats.recent?.length > 0 ? stats.recent.map((item, idx) => (
-                  <li key={item.id || `recent-${item.title}-${item.user}-${idx}`} className="flex items-center gap-3 bg-[#101e31]/60 p-2.5 rounded-xl border border-[#1c2d46]/60 group hover:bg-[#101e31] transition-colors">
-                    <div className="p-1.5 rounded-lg flex-shrink-0 bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
-                      {item.type === 'movie' ? <Film className="w-3.5 h-3.5" /> : <Tv className="w-3.5 h-3.5" />}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-xs sm:text-sm text-slate-200 font-medium truncate">{item.title}</p>
-                      <p className="text-[10px] text-slate-400 mt-0.5">{item.user} · {formatRelativeTime(item.created_at)}</p>
-                    </div>
-                  </li>
-                )) : <li className="text-slate-500 text-xs italic text-center py-4 bg-[#101e31]/30 rounded-xl border border-dashed border-slate-800/80">No data yet.</li>}
+                {stats.popularMovies?.length > 0 ? (() => {
+                  const maxUsers = Math.max(...stats.popularMovies.map(m => m.users || 1), 1);
+                  return stats.popularMovies.map((item, idx) => (
+                    <li key={`popularMovies-${item.title}-${idx}`} className="relative overflow-hidden bg-[#101e31]/60 rounded-xl border border-[#1c2d46]/60 p-2 sm:p-2.5 flex items-center gap-2.5 group hover:bg-[#101e31] hover:border-cyan-500/30 transition-all">
+                      <div 
+                        className="absolute left-0 top-0 bottom-0 bg-cyan-500/5 group-hover:bg-cyan-500/10 transition-all pointer-events-none"
+                        style={{ width: `${Math.round((item.users / maxUsers) * 100)}%` }}
+                      />
+                      <div className="w-8 h-11 rounded-lg overflow-hidden bg-slate-800/80 border border-slate-700/60 shrink-0 flex items-center justify-center shadow-xs">
+                        {item.poster ? (
+                          <img 
+                            src={item.poster} 
+                            alt={item.title} 
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform" 
+                            loading="lazy" 
+                            onError={(e) => { e.target.style.display = 'none'; e.target.nextElementSibling.style.display = 'flex'; }}
+                          />
+                        ) : null}
+                        <div className={item.poster ? 'hidden w-full h-full items-center justify-center' : 'flex w-full h-full items-center justify-center'}>
+                          <Film className="w-4 h-4 text-slate-500" />
+                        </div>
+                      </div>
+                      <div className="min-w-0 flex-1 relative z-10">
+                        {item.media_id ? (
+                          <Link 
+                            to={`/movies/${item.media_id}`}
+                            className="font-semibold text-xs sm:text-sm text-slate-200 truncate block hover:text-cyan-400 transition-colors"
+                          >
+                            {item.title}
+                          </Link>
+                        ) : (
+                          <span className="font-semibold text-xs sm:text-sm text-slate-200 truncate block">
+                            {item.title}
+                          </span>
+                        )}
+                      </div>
+                      <span className="bg-cyan-500/15 text-cyan-300 font-bold border border-cyan-500/30 text-xs px-2 py-0.5 rounded-md flex-shrink-0 font-mono relative z-10">
+                        {item.users} {item.users === 1 ? 'user' : 'users'}
+                      </span>
+                    </li>
+                  ));
+                })() : <li className="text-slate-500 text-xs italic text-center py-4 bg-[#101e31]/30 rounded-xl border border-dashed border-slate-800/80">No data yet.</li>}
               </ul>
             </div>
 
             {/* Most Active Platforms */}
-            <div className="bg-slate-900/70 backdrop-blur-sm border border-slate-800 rounded-xl p-4 sm:p-5 shadow-sm transition-colors hover:border-slate-700 flex flex-col lg:col-span-1">
-              <div className="flex items-center gap-2 mb-3.5 border-b border-[#1c2d46]/80 pb-2.5">
-                <MonitorPlay className="w-4 h-4 text-cyan-400" />
-                <h3 className="text-sm font-bold text-slate-200">Most Active Platforms</h3>
+            <div className="bg-slate-900/70 backdrop-blur-sm border border-slate-800 rounded-xl p-4 sm:p-5 shadow-sm transition-colors hover:border-slate-700 flex flex-col">
+              <div className="flex items-center justify-between gap-2 mb-3.5 border-b border-[#1c2d46]/80 pb-2.5">
+                <div className="flex items-center gap-2">
+                  <MonitorPlay className="w-4 h-4 text-cyan-400" />
+                  <h3 className="text-sm font-bold text-slate-200">Most Active Platforms</h3>
+                </div>
+                <span className="text-[10px] font-medium text-slate-400 uppercase tracking-wider">Devices</span>
               </div>
               <ul className="space-y-2 flex-1">
                 {stats.topPlatforms?.length > 0 ? stats.topPlatforms.map((item, idx) => (
-                  <li key={item.id || `topPlatforms-${item.player}-${idx}`} className="flex justify-between items-center bg-[#101e31]/60 p-2.5 rounded-xl border border-[#1c2d46]/60 group hover:bg-[#101e31] transition-colors">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <span className="text-xs font-bold text-slate-500 w-5 flex-shrink-0 font-mono">{idx + 1}</span>
-                      <span className="text-slate-300 font-medium truncate text-xs sm:text-sm">{item.player || 'Unknown'}</span>
+                  <li key={`topPlatforms-${item.player}-${idx}`} className="p-2.5 bg-[#101e31]/60 rounded-xl border border-[#1c2d46]/60 hover:bg-[#101e31] hover:border-[#1c2d46] transition-all space-y-1.5">
+                    <div className="flex items-center justify-between gap-2 text-xs">
+                      <span className="font-semibold text-slate-200 flex items-center gap-2 truncate">
+                        <Monitor className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                        <span className="truncate">{item.player || 'Unknown'}</span>
+                      </span>
+                      <span className="text-slate-400 font-mono text-[11px] shrink-0 font-semibold">
+                        {item.plays} {item.plays === 1 ? 'play' : 'plays'} <span className="text-cyan-400">({item.percentage}%)</span>
+                      </span>
                     </div>
-                    <span className="bg-cyan-500/15 text-cyan-300 font-bold border border-cyan-500/30 text-xs px-2 py-0.5 rounded-md flex-shrink-0 ml-2 font-mono">{item.plays}</span>
+                    <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                      <div 
+                        className="h-full bg-gradient-to-r from-cyan-500 to-blue-500 rounded-full transition-all duration-500" 
+                        style={{ width: `${item.percentage}%` }}
+                      />
+                    </div>
                   </li>
                 )) : <li className="text-slate-500 text-xs italic text-center py-4 bg-[#101e31]/30 rounded-xl border border-dashed border-slate-800/80">No data yet.</li>}
               </ul>
             </div>
+          </div>
+
+          {/* Recently Watched Activity Feed */}
+          <div className="bg-slate-900/70 backdrop-blur-sm border border-slate-800 rounded-xl p-4 sm:p-5 shadow-sm transition-colors hover:border-slate-700">
+            <div className="flex items-center justify-between gap-2 mb-4 border-b border-[#1c2d46]/80 pb-2.5">
+              <div className="flex items-center gap-2">
+                <History className="w-4 h-4 text-cyan-400" />
+                <h3 className="text-sm font-bold text-slate-200">Recently Watched Stream History</h3>
+              </div>
+              <span className="text-[11px] font-mono text-slate-400">
+                {stats.recent?.length || 0} recent plays
+              </span>
+            </div>
+
+            {stats.recent?.length > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {stats.recent.map((item, idx) => {
+                  const isEpisode = item.type === 'episode';
+                  const parts = isEpisode && item.title.includes(' - S') ? item.title.split(' - S') : null;
+                  const showTitle = parts ? parts[0] : item.title;
+                  const epTag = parts ? `S${parts[1]}` : null;
+
+                  return (
+                    <div 
+                      key={item.id || `recent-${item.title}-${item.user}-${idx}`} 
+                      className="flex items-center gap-3 bg-[#101e31]/60 p-2.5 rounded-xl border border-[#1c2d46]/60 group hover:bg-[#101e31] hover:border-cyan-500/30 transition-all"
+                    >
+                      <div className="w-10 h-14 rounded-lg overflow-hidden bg-slate-800/80 border border-slate-700/60 shrink-0 flex items-center justify-center shadow-xs">
+                        {item.poster ? (
+                          <img 
+                            src={item.poster} 
+                            alt={item.title} 
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform" 
+                            loading="lazy" 
+                            onError={(e) => { e.target.style.display = 'none'; e.target.nextElementSibling.style.display = 'flex'; }}
+                          />
+                        ) : null}
+                        <div className={item.poster ? 'hidden w-full h-full items-center justify-center' : 'flex w-full h-full items-center justify-center'}>
+                          {item.type === 'movie' ? <Film className="w-5 h-5 text-slate-500" /> : <Tv className="w-5 h-5 text-slate-500" />}
+                        </div>
+                      </div>
+
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          {item.media_id ? (
+                            <Link 
+                              to={item.type === 'movie' ? `/movies/${item.media_id}` : `/shows/${item.media_id}`} 
+                              className="font-bold text-xs sm:text-sm text-slate-100 truncate hover:text-cyan-400 hover:underline transition-colors"
+                            >
+                              {showTitle}
+                            </Link>
+                          ) : (
+                            <span className="font-bold text-xs sm:text-sm text-slate-100 truncate">
+                              {showTitle}
+                            </span>
+                          )}
+                          {epTag && (
+                            <span className="px-1.5 py-0.5 rounded-md text-[10px] font-mono font-bold bg-[#1c2d46] text-cyan-300 border border-[#273d5e] shrink-0">
+                              {epTag}
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-2 mt-1.5 text-xs text-slate-400 flex-wrap">
+                          <span className="font-semibold text-slate-200 flex items-center gap-1 bg-[#101e31] px-2 py-0.5 rounded-md border border-[#1c2d46] text-[11px]">
+                            <User className="w-3 h-3 text-cyan-400" />
+                            {item.user}
+                          </span>
+                          <span className="text-[11px] font-semibold text-slate-400 bg-[#101e31] px-1.5 py-0.5 rounded-md border border-[#1c2d46]">
+                            {item.server}
+                          </span>
+                          {item.player && (
+                            <span className="text-[11px] text-slate-500 hidden sm:inline">
+                              on {item.player}
+                            </span>
+                          )}
+                          <span className="text-[11px] text-slate-400 font-mono ml-auto">
+                            {formatRelativeTime(item.created_at)}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="text-slate-500 text-xs italic text-center py-6 bg-[#101e31]/30 rounded-xl border border-dashed border-slate-800/80">
+                No recent stream activity recorded yet.
+              </div>
+            )}
           </div>
         </div>
       )}

@@ -120,14 +120,44 @@ class WatcherService {
     this.resolvePoster = resolvePoster;
     this.activeSessions = new Map(); // Track sessionId -> currentTitle to detect new sessions and autoplay title changes
     this.autoWatchedSet = new Set(); // Track sessions already auto-marked to avoid duplicate calls
-    this.recordedPlaySet = new Set(); // Track session+title already recorded in play_history
+    this.recordedPlaySet = new Set(); // Legacy compatibility set
+    this.recordedPlayMap = new Map(); // Cooldown map: key = `${user}:${title}`, value = timestamp
     this.recentPlaybackNotifications = new Map(); // Cooldown map: key = `${user}:${title}`, value = timestamp
     this.pollInterval = null;
+
+    this.cleanupDuplicatePlayHistory();
 
     if (process.env.NODE_ENV !== 'test') {
       this.startPolling();
       const t2 = setTimeout(() => this.backfillUnsyncedHistory(), 3000);
       t2.unref?.();
+    }
+  }
+
+  cleanupDuplicatePlayHistory() {
+    try {
+      const all = db.prepare('SELECT id, user, title, created_at FROM play_history ORDER BY id ASC').all();
+      const keepIds = new Set();
+      const lastSeen = new Map();
+      const DUPE_WINDOW_MS = 2 * 60 * 60 * 1000; // 2 hours
+
+      for (const row of all) {
+        const key = `${row.user}:::${row.title}`;
+        const time = new Date(row.created_at.replace(' ', 'T') + (row.created_at.includes('Z') ? '' : 'Z')).getTime();
+        const prevTime = lastSeen.get(key);
+        if (!prevTime || (time - prevTime) > DUPE_WINDOW_MS) {
+          keepIds.add(row.id);
+          lastSeen.set(key, time);
+        }
+      }
+
+      const duplicateIds = all.filter(r => !keepIds.has(r.id)).map(r => r.id);
+      if (duplicateIds.length > 0) {
+        db.prepare(`DELETE FROM play_history WHERE id IN (${duplicateIds.map(() => '?').join(',')})`).run(...duplicateIds);
+        console.log(`[WatcherService] Cleaned up ${duplicateIds.length} duplicate play history records from pause/resume flaps`);
+      }
+    } catch (err) {
+      console.error('[WatcherService] Failed to clean up duplicate play history:', err.message);
     }
   }
 
@@ -606,6 +636,7 @@ class WatcherService {
         const altTitles = item.Type === 'Episode'
           ? [item.OriginalTitle, item.SeriesName]
           : [item.OriginalTitle];
+        const dbInfo = resolvePoster(item.Type === 'Episode' ? item.SeriesName : item.Name, item.Type === 'Episode' ? 'episode' : 'movie', altTitles);
         const imageId = item.Type === 'Episode' ? (item.SeriesId || item.Id) : item.Id;
         const posterUrl = dbInfo.url 
           || (imageId ? `/api/watcher/image?server=${serverLabel.toLowerCase()}&id=${imageId}` : null);
@@ -745,20 +776,40 @@ class WatcherService {
 
       if (session.progress >= 80) {
         const playKey = `${session.id}:${session.title}`;
-        if (!this.recordedPlaySet.has(playKey)) {
-          this.recordedPlaySet.add(playKey);
+        this.recordedPlaySet.add(playKey);
+        const playUserKey = `${session.user}:${session.title}`;
+        const now = Date.now();
+        const lastRecorded = this.recordedPlayMap.get(playUserKey);
+        const COOLDOWN_MS = 2 * 60 * 60 * 1000; // 2 hour cooldown for same title + user to ignore pause/resume flaps
+
+        if (!lastRecorded || (now - lastRecorded) > COOLDOWN_MS) {
+          let isDuplicate = false;
           try {
-            const uniqueSessionId = `${session.id}_${Date.now()}`;
-            db.prepare('INSERT INTO play_history (session_id, user, title, type, server, player) VALUES (?, ?, ?, ?, ?, ?)').run(
-              uniqueSessionId,
-              session.user,
-              session.title,
-              session.type,
-              session.server,
-              session.platform || session.player || null
-            );
-          } catch (err) {
-            console.error('[WatcherService] Failed to record play history:', err.message);
+            const recentPlay = db.prepare(`
+              SELECT id FROM play_history 
+              WHERE user = ? AND title = ? 
+                AND datetime(created_at) >= datetime('now', '-2 hours')
+              LIMIT 1
+            `).get(session.user, session.title);
+            if (recentPlay) isDuplicate = true;
+          } catch { /* ignore */ }
+
+          this.recordedPlayMap.set(playUserKey, now);
+
+          if (!isDuplicate) {
+            try {
+              const uniqueSessionId = `${session.id}_${now}`;
+              db.prepare('INSERT INTO play_history (session_id, user, title, type, server, player) VALUES (?, ?, ?, ?, ?, ?)').run(
+                uniqueSessionId,
+                session.user,
+                session.title,
+                session.type,
+                session.server,
+                session.platform || session.player || null
+              );
+            } catch (err) {
+              console.error('[WatcherService] Failed to record play history:', err.message);
+            }
           }
         }
       }
@@ -889,9 +940,11 @@ class WatcherService {
       }
     }
 
-    for (const playKey of this.recordedPlaySet) {
-      if (!currentPlayKeys.has(playKey)) {
-        this.recordedPlaySet.delete(playKey);
+    // Cleanup recordedPlayMap older than 2 hours
+    const nowTs = Date.now();
+    for (const [k, time] of this.recordedPlayMap.entries()) {
+      if (nowTs - time > 2 * 60 * 60 * 1000) {
+        this.recordedPlayMap.delete(k);
       }
     }
 
@@ -931,35 +984,80 @@ class WatcherService {
       progress: s.progress || 0
     }]));
 
-    // Skip the 9 aggregate play_history queries when nobody is watching
-    // and no WS clients are connected to receive the stats
+    // Skip computing stats when nobody is watching and no WS clients are connected
     if (currentSessionIds.size === 0 && presenceTracker.getOnlineUserIds().length === 0) {
       return;
     }
 
     // Emit event with full sessions + stats (replaces per-client HTTP polling)
-    const topMovies = db.prepare(`SELECT title, COUNT(*) as plays FROM play_history WHERE type = 'movie' GROUP BY title ORDER BY plays DESC LIMIT 10`).all();
-    const topShows = db.prepare(`SELECT CASE WHEN INSTR(title, ' - S') > 0 THEN SUBSTR(title, 1, INSTR(title, ' - S') - 1) ELSE title END as title, COUNT(*) as plays FROM play_history WHERE type IN ('episode', 'live') GROUP BY 1 ORDER BY plays DESC LIMIT 10`).all();
-    const topUsers = db.prepare(`SELECT user, COUNT(*) as plays FROM play_history GROUP BY user ORDER BY plays DESC LIMIT 10`).all();
-    const popularMovies = db.prepare(`SELECT title, COUNT(DISTINCT user) as users FROM play_history WHERE type = 'movie' GROUP BY title ORDER BY users DESC LIMIT 10`).all();
-    const popularShows = db.prepare(`SELECT CASE WHEN INSTR(title, ' - S') > 0 THEN SUBSTR(title, 1, INSTR(title, ' - S') - 1) ELSE title END as title, COUNT(DISTINCT user) as users FROM play_history WHERE type IN ('episode', 'live') GROUP BY 1 ORDER BY users DESC LIMIT 10`).all();
-    const recent = db.prepare(`SELECT id, user, title, type, server, player, created_at FROM play_history ORDER BY id DESC LIMIT 10`).all().map(item => {
-      let created = item.created_at;
-      if (created && !created.includes('Z') && !created.includes('+')) {
-        created = created.replace(' ', 'T') + 'Z';
-      }
-      return { ...item, created_at: created };
-    });
-    const topPlatforms = db.prepare(`SELECT player, COUNT(*) as plays FROM play_history WHERE player IS NOT NULL AND player != '' GROUP BY player ORDER BY plays DESC LIMIT 10`).all();
-    const totalPlays = db.prepare(`SELECT COUNT(*) as count FROM play_history`).get()?.count || 0;
-    const uniqueUsers = db.prepare(`SELECT COUNT(DISTINCT user) as count FROM play_history`).get()?.count || 0;
-    const uniqueTitles = db.prepare(`SELECT COUNT(DISTINCT title) as count FROM play_history`).get()?.count || 0;
-
     eventBus.emit('event', {
       type: 'WATCHERS_UPDATE',
       count: currentSessionIds.size,
       sessions,
-      stats: {
+      stats: this.getStats()
+    });
+  }
+
+  getStats() {
+    try {
+      const topMoviesRaw = db.prepare(`SELECT title, COUNT(*) as plays FROM play_history WHERE type = 'movie' GROUP BY title ORDER BY plays DESC LIMIT 10`).all();
+      const topShowsRaw = db.prepare(`SELECT CASE WHEN INSTR(title, ' - S') > 0 THEN SUBSTR(title, 1, INSTR(title, ' - S') - 1) ELSE title END as title, COUNT(*) as plays FROM play_history WHERE type IN ('episode', 'live') GROUP BY 1 ORDER BY plays DESC LIMIT 10`).all();
+      const topUsers = db.prepare(`SELECT user, COUNT(*) as plays FROM play_history GROUP BY user ORDER BY plays DESC LIMIT 10`).all();
+
+      const popularMoviesRaw = db.prepare(`SELECT title, COUNT(DISTINCT user) as users FROM play_history WHERE type = 'movie' GROUP BY title ORDER BY users DESC LIMIT 10`).all();
+      const popularShowsRaw = db.prepare(`SELECT CASE WHEN INSTR(title, ' - S') > 0 THEN SUBSTR(title, 1, INSTR(title, ' - S') - 1) ELSE title END as title, COUNT(DISTINCT user) as users FROM play_history WHERE type IN ('episode', 'live') GROUP BY 1 ORDER BY users DESC LIMIT 10`).all();
+
+      const topMovies = topMoviesRaw.map(m => {
+        const info = resolvePoster(m.title, 'movie');
+        return { ...m, poster: info.url, media_id: info.media_id, tmdb_id: info.tmdb_id };
+      });
+
+      const topShows = topShowsRaw.map(s => {
+        const info = resolvePoster(s.title, 'tv');
+        return { ...s, poster: info.url, media_id: info.media_id, tmdb_id: info.tmdb_id };
+      });
+
+      const popularMovies = popularMoviesRaw.map(m => {
+        const info = resolvePoster(m.title, 'movie');
+        return { ...m, poster: info.url, media_id: info.media_id, tmdb_id: info.tmdb_id };
+      });
+
+      const popularShows = popularShowsRaw.map(s => {
+        const info = resolvePoster(s.title, 'tv');
+        return { ...s, poster: info.url, media_id: info.media_id, tmdb_id: info.tmdb_id };
+      });
+
+      // Recently watched (last 10 entries)
+      const recent = db.prepare(`SELECT id, user, title, type, server, player, created_at FROM play_history ORDER BY id DESC LIMIT 10`).all().map(item => {
+        let created = item.created_at;
+        if (created && !created.includes('Z') && !created.includes('+')) {
+          created = created.replace(' ', 'T') + 'Z';
+        }
+        const showTitle = item.type === 'episode' ? (item.title.split(' - S')[0] || item.title) : item.title;
+        const info = resolvePoster(showTitle, item.type === 'episode' ? 'tv' : 'movie');
+        return {
+          ...item,
+          created_at: created,
+          poster: info.url,
+          media_id: info.media_id,
+          tmdb_id: info.tmdb_id
+        };
+      });
+
+      // Most active platforms (by player)
+      const topPlatformsRaw = db.prepare(`SELECT player, COUNT(*) as plays FROM play_history WHERE player IS NOT NULL AND player != '' GROUP BY player ORDER BY plays DESC LIMIT 10`).all();
+      const totalPlatformPlays = topPlatformsRaw.reduce((acc, p) => acc + p.plays, 0);
+      const topPlatforms = topPlatformsRaw.map(p => ({
+        ...p,
+        percentage: totalPlatformPlays ? Math.round((p.plays / totalPlatformPlays) * 100) : 0
+      }));
+
+      // Total stats overview
+      const totalPlays = db.prepare(`SELECT COUNT(*) as count FROM play_history`).get()?.count || 0;
+      const uniqueUsers = db.prepare(`SELECT COUNT(DISTINCT user) as count FROM play_history`).get()?.count || 0;
+      const uniqueTitles = db.prepare(`SELECT COUNT(DISTINCT title) as count FROM play_history`).get()?.count || 0;
+
+      return {
         topMovies,
         topShows,
         topUsers,
@@ -967,9 +1065,25 @@ class WatcherService {
         popularShows,
         recent,
         topPlatforms,
-        overview: { totalPlays, uniqueUsers, uniqueTitles }
-      }
-    });
+        overview: {
+          totalPlays,
+          uniqueUsers,
+          uniqueTitles
+        }
+      };
+    } catch (err) {
+      console.error('[WatcherService] Failed to compute stats:', err.message);
+      return {
+        topMovies: [],
+        topShows: [],
+        topUsers: [],
+        popularMovies: [],
+        popularShows: [],
+        recent: [],
+        topPlatforms: [],
+        overview: { totalPlays: 0, uniqueUsers: 0, uniqueTitles: 0 }
+      };
+    }
   }
 }
 
