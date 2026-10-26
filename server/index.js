@@ -516,6 +516,7 @@ app.use('/api', (req, res, next) => {
   if (
     req.path.startsWith('/auth') ||
     req.path.startsWith('/images') ||
+    (req.method === 'GET' && req.path.startsWith('/watcher/image')) ||
     (req.method === 'GET' && req.path.startsWith('/library/music/artists/') && req.path.endsWith('/image')) ||
     (req.method === 'GET' && req.path.startsWith('/library/music/albums/') && req.path.endsWith('/cover')) ||
     req.path === '/webhooks/download-client'

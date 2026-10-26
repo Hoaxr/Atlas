@@ -161,28 +161,62 @@ export default function Watcher() {
                 {/* Top Section: Poster on left, Details on right */}
                 <div className="flex gap-3 sm:gap-4 items-start">
                   {/* Poster Thumbnail */}
-                  <div className="w-16 h-20 sm:w-20 sm:h-24 bg-[#101e31] rounded-xl flex items-center justify-center flex-shrink-0 overflow-hidden shadow-md border border-[#1c2d46] relative group-hover:scale-105 transition-transform duration-300">
-                    {session.poster ? (
-                      <img 
-                        src={session.poster} 
-                        alt={session.title} 
-                        className="w-full h-full object-cover"
-                        loading="lazy"
-                        onError={(e) => {
-                          e.target.style.display = 'none';
-                          e.target.nextElementSibling.style.display = 'flex';
-                        }}
-                      />
-                    ) : null}
-                    
-                    <div className={session.poster ? 'hidden' : 'flex w-full h-full items-center justify-center'}>
-                      {session.type === 'movie' ? (
-                        <Film className="w-7 h-7 text-slate-500" />
-                      ) : (
-                        <Tv className="w-7 h-7 text-slate-500" />
-                      )}
+                  {session.media_id ? (
+                    <Link 
+                      to={session.type === 'movie' ? `/movies/${session.media_id}` : `/shows/${session.media_id}`}
+                      className="w-16 h-20 sm:w-20 sm:h-24 bg-[#101e31] rounded-xl flex items-center justify-center flex-shrink-0 overflow-hidden shadow-md border border-[#1c2d46] relative group-hover:scale-105 transition-transform duration-300 cursor-pointer"
+                    >
+                      {session.poster ? (
+                        <img 
+                          key={session.poster}
+                          src={session.poster} 
+                          alt={session.title} 
+                          className="w-full h-full object-cover"
+                          loading="lazy"
+                          onError={(e) => {
+                            e.target.style.display = 'none';
+                            if (e.target.nextElementSibling) {
+                              e.target.nextElementSibling.style.display = 'flex';
+                            }
+                          }}
+                        />
+                      ) : null}
+                      
+                      <div className={session.poster ? 'hidden' : 'flex w-full h-full items-center justify-center'}>
+                        {session.type === 'movie' ? (
+                          <Film className="w-7 h-7 text-slate-500" />
+                        ) : (
+                          <Tv className="w-7 h-7 text-slate-500" />
+                        )}
+                      </div>
+                    </Link>
+                  ) : (
+                    <div className="w-16 h-20 sm:w-20 sm:h-24 bg-[#101e31] rounded-xl flex items-center justify-center flex-shrink-0 overflow-hidden shadow-md border border-[#1c2d46] relative group-hover:scale-105 transition-transform duration-300">
+                      {session.poster ? (
+                        <img 
+                          key={session.poster}
+                          src={session.poster} 
+                          alt={session.title} 
+                          className="w-full h-full object-cover"
+                          loading="lazy"
+                          onError={(e) => {
+                            e.target.style.display = 'none';
+                            if (e.target.nextElementSibling) {
+                              e.target.nextElementSibling.style.display = 'flex';
+                            }
+                          }}
+                        />
+                      ) : null}
+                      
+                      <div className={session.poster ? 'hidden' : 'flex w-full h-full items-center justify-center'}>
+                        {session.type === 'movie' ? (
+                          <Film className="w-7 h-7 text-slate-500" />
+                        ) : (
+                          <Tv className="w-7 h-7 text-slate-500" />
+                        )}
+                      </div>
                     </div>
-                  </div>
+                  )}
 
                   {/* Right: Badges, Title, Device Info */}
                   <div className="flex-1 min-w-0 flex flex-col justify-between self-stretch py-0.5">

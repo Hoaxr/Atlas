@@ -652,6 +652,35 @@ test('Tracker & Continue Watching System', async (t) => {
       }
     }
   });
+
+  await t.test('watcherService.resolvePoster resolves show posters with subtitle prefix and alternate titles', () => {
+    const watcherService = require('../server/services/watcherService');
+
+    // 1. Exact match on test show
+    const exact = watcherService.resolvePoster('Continue Watching Test Show', 'episode');
+    assert.strictEqual(exact.tmdb_id, testTmdbId);
+    assert.strictEqual(exact.media_id, testShowId);
+    assert.strictEqual(exact.url, `/api/images/shows/${testTmdbId}/poster`);
+
+    // 2. Subtitle after colon (e.g. "Continue Watching Test Show: Origin Story")
+    const withColon = watcherService.resolvePoster('Continue Watching Test Show: Origin Story', 'episode');
+    assert.strictEqual(withColon.tmdb_id, testTmdbId);
+    assert.strictEqual(withColon.media_id, testShowId);
+
+    // 3. With year suffix (e.g. "Continue Watching Test Show (2026)")
+    const withYear = watcherService.resolvePoster('Continue Watching Test Show (2026)', 'episode');
+    assert.strictEqual(withYear.tmdb_id, testTmdbId);
+
+    // 4. Alternate title fallback
+    const withAlt = watcherService.resolvePoster('Unrelated Title', 'episode', ['Continue Watching Test Show']);
+    assert.strictEqual(withAlt.tmdb_id, testTmdbId);
+
+    // 5. Test movie poster resolution
+    const movieExact = watcherService.resolvePoster('Continue Watching Test Movie', 'movie');
+    assert.strictEqual(movieExact.tmdb_id, testMovieTmdbId);
+    assert.strictEqual(movieExact.media_id, testMovieId);
+    assert.strictEqual(movieExact.url, `/api/images/movies/${testMovieTmdbId}/poster`);
+  });
 });
 
 

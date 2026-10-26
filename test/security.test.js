@@ -246,4 +246,23 @@ test('Executable Payload Blocking & Quarantine Security', async (t) => {
     assert.strictEqual(statusCode, 401);
     assert.strictEqual(jsonResponse?.status, 'error');
   });
+
+  await t.test('GET /api/watcher/image is exempted from auth middleware for img rendering', () => {
+    // Replicate the route gate logic from server/index.js
+    const isExempt = (method, path) => {
+      return (
+        path.startsWith('/auth') ||
+        path.startsWith('/images') ||
+        (method === 'GET' && path.startsWith('/watcher/image')) ||
+        (method === 'GET' && path.startsWith('/library/music/artists/') && path.endsWith('/image')) ||
+        (method === 'GET' && path.startsWith('/library/music/albums/') && path.endsWith('/cover')) ||
+        path === '/webhooks/download-client'
+      );
+    };
+
+    assert.strictEqual(isExempt('GET', '/watcher/image'), true);
+    assert.strictEqual(isExempt('POST', '/watcher/image'), false);
+    assert.strictEqual(isExempt('GET', '/watcher/sessions'), false);
+    assert.strictEqual(isExempt('GET', '/watcher/stats'), false);
+  });
 });

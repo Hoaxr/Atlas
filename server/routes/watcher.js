@@ -132,6 +132,13 @@ router.get('/image', async (req, res) => {
     }
 
     const response = await axios.get(url, { headers, responseType: 'stream' });
+    if (response.headers['content-type']) {
+      res.setHeader('Content-Type', response.headers['content-type']);
+    }
+    if (response.headers['content-length']) {
+      res.setHeader('Content-Length', response.headers['content-length']);
+    }
+    res.setHeader('Cache-Control', 'public, max-age=3600');
     response.data.pipe(res);
   } catch {
     res.status(404).send('Image not found');

@@ -12,8 +12,10 @@ const POSTER_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 const MAX_POSTER_CACHE = 500;
 
 // Look up a poster from our database by title — reliable fallback for all server types
-const resolvePoster = (title, type) => {
-  const key = `${type}:${title}`;
+const resolvePoster = (title, type, altTitles = []) => {
+  if (!title && (!altTitles || altTitles.length === 0)) return { url: null, tmdb_id: null, media_id: null };
+  const altKey = Array.isArray(altTitles) ? altTitles.filter(Boolean).join('|') : String(altTitles || '');
+  const key = `${type}:${title}:${altKey}`;
   const cached = posterCache.get(key);
   if (cached && Date.now() - cached.t < POSTER_CACHE_TTL) return { url: cached.url, tmdb_id: cached.tmdb_id, media_id: cached.media_id };
 
@@ -21,16 +23,76 @@ const resolvePoster = (title, type) => {
   let tmdb_id = null;
   let media_id = null;
   try {
+    const rawList = [title, ...(Array.isArray(altTitles) ? altTitles : [altTitles])].filter(Boolean);
+    const candidates = [];
+    for (const raw of rawList) {
+      if (!raw || typeof raw !== 'string') continue;
+      const clean = (type === 'episode' || type === 'tv')
+        ? (raw.split(/ - S\d+/i)[0] || raw.split(' - S')[0] || raw).trim()
+        : raw.trim();
+      if (!clean) continue;
+      if (!candidates.includes(clean)) candidates.push(clean);
+
+      // Strip year suffix e.g. "Marshals (2026)" -> "Marshals"
+      const noYear = clean.replace(/\s*\(\d{4}\)$/, '').trim();
+      if (noYear && !candidates.includes(noYear)) candidates.push(noYear);
+
+      // Strip subtitle after colon, dash or en-dash e.g. "Marshals: A Yellowstone Story" -> "Marshals"
+      if (clean.includes(':') || clean.includes(' - ') || clean.includes(' – ') || clean.includes(' — ')) {
+        const prefix = clean.split(/[:–—]| - /)[0].trim();
+        if (prefix && prefix.length >= 2 && !candidates.includes(prefix)) {
+          candidates.push(prefix);
+          const prefixNoYear = prefix.replace(/\s*\(\d{4}\)$/, '').trim();
+          if (prefixNoYear && !candidates.includes(prefixNoYear)) candidates.push(prefixNoYear);
+        }
+      }
+    }
+
+    const norm = (s) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+
     if (type === 'episode' || type === 'tv') {
-      const showName = title.split(' - S')[0] || title;
-      const show = db.prepare('SELECT id, tmdb_id FROM shows WHERE title = ? COLLATE NOCASE').get(showName);
+      let show = null;
+      for (const cand of candidates) {
+        show = db.prepare('SELECT id, tmdb_id, title FROM shows WHERE title = ? COLLATE NOCASE').get(cand);
+        if (show?.tmdb_id) break;
+      }
+      if (!show?.tmdb_id) {
+        for (const cand of candidates) {
+          if (cand.length >= 3) {
+            show = db.prepare('SELECT id, tmdb_id, title FROM shows WHERE title LIKE ? COLLATE NOCASE LIMIT 1').get(`${cand}:%`);
+            if (show?.tmdb_id) break;
+          }
+        }
+      }
+      if (!show?.tmdb_id) {
+        const cNorms = candidates.map(norm).filter(Boolean);
+        const allShows = db.prepare('SELECT id, tmdb_id, title FROM shows').all();
+        show = allShows.find(s => cNorms.includes(norm(s.title)));
+      }
       if (show?.tmdb_id) {
         url = `/api/images/shows/${show.tmdb_id}/poster`;
         tmdb_id = show.tmdb_id;
         media_id = show.id;
       }
     } else if (type === 'movie') {
-      const movie = db.prepare('SELECT id, tmdb_id FROM movies WHERE title = ? COLLATE NOCASE').get(title);
+      let movie = null;
+      for (const cand of candidates) {
+        movie = db.prepare('SELECT id, tmdb_id, title FROM movies WHERE title = ? COLLATE NOCASE').get(cand);
+        if (movie?.tmdb_id) break;
+      }
+      if (!movie?.tmdb_id) {
+        for (const cand of candidates) {
+          if (cand.length >= 3) {
+            movie = db.prepare('SELECT id, tmdb_id, title FROM movies WHERE title LIKE ? COLLATE NOCASE LIMIT 1').get(`${cand}:%`);
+            if (movie?.tmdb_id) break;
+          }
+        }
+      }
+      if (!movie?.tmdb_id) {
+        const cNorms = candidates.map(norm).filter(Boolean);
+        const allMovies = db.prepare('SELECT id, tmdb_id, title FROM movies').all();
+        movie = allMovies.find(m => cNorms.includes(norm(m.title)));
+      }
       if (movie?.tmdb_id) {
         url = `/api/images/movies/${movie.tmdb_id}/poster`;
         tmdb_id = movie.tmdb_id;
@@ -55,6 +117,7 @@ class WatcherService {
     // Ensure player column exists (self-healing migration)
     try { db.exec("ALTER TABLE play_history ADD COLUMN player TEXT;"); } catch { /* ignore */ }
     
+    this.resolvePoster = resolvePoster;
     this.activeSessions = new Map(); // Track sessionId -> currentTitle to detect new sessions and autoplay title changes
     this.autoWatchedSet = new Set(); // Track sessions already auto-marked to avoid duplicate calls
     this.recordedPlaySet = new Set(); // Track session+title already recorded in play_history
@@ -429,7 +492,10 @@ class WatcherService {
         const etaStr = this.formatEta(remaining);
 
         // Build poster URL: try DB lookup first (English titles), fall back to Plex thumb
-        const dbInfo = resolvePoster(s.type === 'episode' ? s.grandparentTitle : s.title, s.type);
+        const altTitles = s.type === 'episode'
+          ? [s.originalTitle, s.grandparentSlug]
+          : [s.originalTitle];
+        const dbInfo = resolvePoster(s.type === 'episode' ? s.grandparentTitle : s.title, s.type, altTitles);
         const plexThumb = s.type === 'episode' 
           ? (s.grandparentThumb || s.thumb) 
           : s.thumb;
@@ -537,7 +603,10 @@ class WatcherService {
             ? `${item.SeriesName} - S${String(item.ParentIndexNumber).padStart(2, '0')}E${String(item.IndexNumber).padStart(2, '0')}` 
             : item.Name;
 
-        const dbInfo = resolvePoster(item.Type === 'Episode' ? item.SeriesName : item.Name, item.Type === 'Episode' ? 'episode' : 'movie');
+        const altTitles = item.Type === 'Episode'
+          ? [item.OriginalTitle, item.SeriesName]
+          : [item.OriginalTitle];
+        const dbInfo = resolvePoster(item.Type === 'Episode' ? item.SeriesName : item.Name, item.Type === 'Episode' ? 'episode' : 'movie', altTitles);
         const posterUrl = dbInfo.url 
           || `/api/watcher/image?server=${serverLabel.toLowerCase()}&id=${item.Id}`;
 
