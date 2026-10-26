@@ -606,9 +606,9 @@ class WatcherService {
         const altTitles = item.Type === 'Episode'
           ? [item.OriginalTitle, item.SeriesName]
           : [item.OriginalTitle];
-        const dbInfo = resolvePoster(item.Type === 'Episode' ? item.SeriesName : item.Name, item.Type === 'Episode' ? 'episode' : 'movie', altTitles);
+        const imageId = item.Type === 'Episode' ? (item.SeriesId || item.Id) : item.Id;
         const posterUrl = dbInfo.url 
-          || `/api/watcher/image?server=${serverLabel.toLowerCase()}&id=${item.Id}`;
+          || (imageId ? `/api/watcher/image?server=${serverLabel.toLowerCase()}&id=${imageId}` : null);
 
         return {
           id: `${serverLabel.toLowerCase()}_${s.Id}`,
