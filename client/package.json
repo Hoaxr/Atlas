@@ -12,7 +12,7 @@
   "dependencies": {
     "@capacitor/core": "^8.5.3",
     "@capacitor/ios": "^8.5.3",
-    "@rolldown/binding-linux-x64-gnu": "^1.2.13",
+    "@rolldown/binding-linux-x64-gnu": "^1.2.15",
     "axios": "^1.20.0",
     "clsx": "^2.1.1",
     "framer-motion": "^14.1.0",
