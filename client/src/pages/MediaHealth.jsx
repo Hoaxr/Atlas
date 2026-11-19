@@ -37,21 +37,6 @@ export default function MediaHealth() {
     setExpandedSection(prev => prev === section ? null : section);
   };
 
-  const handleMarkForced = async (sub) => {
-    setActionLoadingFile(sub.filename);
-    try {
-      const res = await api.post(`/library/subtitles/mark-forced/${sub.media_type}/${sub.media_id}/${encodeURIComponent(sub.filename)}`);
-      if (res.data.status === 'success') {
-        customAlert(`"${sub.filename}" marked as forced/foreign-only`, 'success');
-        fetchHealth();
-      }
-    } catch (e) {
-      customAlert(e.response?.data?.message || 'Failed to mark subtitle as forced', 'error');
-    } finally {
-      setActionLoadingFile(null);
-    }
-  };
-
   const handleTranslateSub = async (sub) => {
     setActionLoadingFile(sub.filename);
     try {

@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import api from '../lib/api';
-import { Calendar as CalendarIcon, Tv, Film, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Calendar as CalendarIcon, Tv, Film, ChevronLeft, ChevronRight, CheckCircle2 } from 'lucide-react';
 import LoadingState from '../components/shared/LoadingState';
 import EmptyState from '../components/shared/EmptyState';
 import StickyBar from '../components/shared/StickyBar';
@@ -324,6 +324,8 @@ export default function Calendar() {
                               ? `S${String(item.season_number).padStart(2, '0')}E${String(item.episode_number).padStart(2, '0')}`
                               : '';
 
+                            const isDownloaded = !!(item.has_file || item.status === 'downloaded');
+
                             return (
                               <div
                                 key={`item-${j}`}
@@ -331,10 +333,16 @@ export default function Calendar() {
                                   e.stopPropagation();
                                   navigate(isMovie ? `/movies/${item.show_id}` : `/shows/${item.show_id}`);
                                 }}
-                                className="group/item flex items-center gap-1.5 px-2 py-1 rounded-md bg-[#101e31] hover:bg-[#16273f] border border-[#1c2d46] hover:border-slate-500/60 transition-all cursor-pointer shadow-xs min-w-0"
-                                title={isMovie ? item.title : `${item.show_title}${epCode ? ` — ${epCode}` : ''}${item.title ? `: ${item.title}` : ''}`}
+                                className={`group/item flex items-center gap-1.5 px-2 py-1 rounded-md border transition-all cursor-pointer shadow-xs min-w-0 ${
+                                  isDownloaded
+                                    ? 'bg-[#101e31] hover:bg-[#16273f] border-[#1c2d46] hover:border-emerald-500/50'
+                                    : 'bg-[#101e31] hover:bg-[#16273f] border-[#1c2d46] hover:border-slate-500/60'
+                                }`}
+                                title={isMovie ? `${item.title}${isDownloaded ? ' (Downloaded)' : ''}` : `${item.show_title}${epCode ? ` — ${epCode}` : ''}${item.title ? `: ${item.title}` : ''}${isDownloaded ? ' (Downloaded)' : ''}`}
                               >
-                                <span className={`w-1.5 h-1.5 rounded-full shrink-0 group-hover/item:scale-125 transition-transform ${isMovie ? 'bg-purple-400' : 'bg-cyan-400'}`} />
+                                <span className={`w-1.5 h-1.5 rounded-full shrink-0 group-hover/item:scale-125 transition-transform ${
+                                  isDownloaded ? 'bg-emerald-400' : isMovie ? 'bg-purple-400' : 'bg-cyan-400'
+                                }`} />
                                 <span className="text-[11px] font-medium text-slate-200 group-hover/item:text-white truncate flex-1 min-w-0">
                                   {showTitle}
                                 </span>
@@ -342,6 +350,9 @@ export default function Calendar() {
                                   <span className="text-[9px] font-mono text-slate-400 shrink-0">
                                     {epCode}
                                   </span>
+                                )}
+                                {isDownloaded && (
+                                  <CheckCircle2 className="w-3 h-3 text-emerald-400 shrink-0" />
                                 )}
                               </div>
                             );
@@ -365,6 +376,10 @@ export default function Calendar() {
           <div className="flex items-center gap-2">
             <span className="w-2.5 h-2.5 rounded-full bg-purple-400 shadow-xs" />
             <span className="text-slate-300">Movies</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 shadow-xs" />
+            <span className="text-slate-300">Downloaded</span>
           </div>
           <div className="flex items-center gap-2">
             <span className="w-2.5 h-2.5 rounded-full bg-white shadow-xs" />
@@ -426,6 +441,7 @@ export default function Calendar() {
                     {/* Items */}
                     <div className="divide-y divide-white/5">
                       {eps.map((item, i) => {
+                        const isDownloaded = !!(item.has_file || item.status === 'downloaded');
                         if (item.type === 'movie') {
                           return (
                             <div
@@ -433,14 +449,25 @@ export default function Calendar() {
                               onClick={() => navigate(`/movies/${item.show_id}`)}
                               className="px-5 py-3.5 flex items-center gap-3.5 hover:bg-[#101e31]/60 transition-all cursor-pointer group/item"
                             >
-                              <div className="p-2.5 rounded-xl bg-[#101e31] border border-[#1c2d46] text-sky-400 group-hover/item:border-cyan-500/40 group-hover/item:text-cyan-300 transition-colors shrink-0">
+                              <div className={`p-2.5 rounded-xl border transition-colors shrink-0 ${
+                                isDownloaded
+                                  ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400 group-hover/item:border-emerald-500/50'
+                                  : 'bg-[#101e31] border-[#1c2d46] text-purple-400 group-hover/item:border-purple-500/40 group-hover/item:text-purple-300'
+                              }`}>
                                 <Film className="w-4 h-4" />
                               </div>
                               <div className="flex-1 min-w-0">
                                 <p className="text-sm font-bold text-slate-100 truncate group-hover/item:text-cyan-300 transition-colors">{item.title}</p>
                                 <p className="text-xs text-slate-400 mt-0.5">Movie Release</p>
                               </div>
-                              <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 bg-[#101e31] px-2.5 py-1 rounded-md border border-[#1c2d46] shrink-0">Movie</span>
+                              {isDownloaded ? (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-emerald-400 bg-emerald-500/15 px-2.5 py-1 rounded-md border border-emerald-500/30 shrink-0">
+                                  <CheckCircle2 className="w-3 h-3" />
+                                  Downloaded
+                                </span>
+                              ) : (
+                                <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 bg-[#101e31] px-2.5 py-1 rounded-md border border-[#1c2d46] shrink-0">Movie</span>
+                              )}
                             </div>
                           );
                         }
@@ -450,16 +477,29 @@ export default function Calendar() {
                             onClick={() => navigate(`/shows/${item.show_id}`)}
                             className="px-5 py-3.5 flex items-center gap-3.5 hover:bg-[#101e31]/60 transition-all cursor-pointer group/item"
                           >
-                            <div className="p-2.5 rounded-xl bg-[#101e31] border border-[#1c2d46] text-cyan-400 group-hover/item:border-cyan-500/40 group-hover/item:text-cyan-300 transition-colors shrink-0">
+                            <div className={`p-2.5 rounded-xl border transition-colors shrink-0 ${
+                              isDownloaded
+                                ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400 group-hover/item:border-emerald-500/50'
+                                : 'bg-[#101e31] border-[#1c2d46] text-cyan-400 group-hover/item:border-cyan-500/40 group-hover/item:text-cyan-300'
+                            }`}>
                               <Tv className="w-4 h-4" />
                             </div>
                             <div className="flex-1 min-w-0">
                               <p className="text-sm font-bold text-slate-100 truncate group-hover/item:text-cyan-300 transition-colors">{item.show_title}</p>
                               <p className="text-xs text-slate-400 mt-0.5">
-                                {item.title || 'New Episode'}
+                                {item.season_number !== null && item.season_number !== undefined && item.episode_number !== null && item.episode_number !== undefined
+                                  ? `S${String(item.season_number).padStart(2, '0')}E${String(item.episode_number).padStart(2, '0')}${item.title ? ` · ${item.title}` : ''}`
+                                  : (item.title || 'New Episode')}
                               </p>
                             </div>
-                            <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 bg-[#101e31] px-2.5 py-1 rounded-md border border-[#1c2d46] shrink-0">TV</span>
+                            {isDownloaded ? (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-emerald-400 bg-emerald-500/15 px-2.5 py-1 rounded-md border border-emerald-500/30 shrink-0">
+                                <CheckCircle2 className="w-3 h-3" />
+                                Downloaded
+                              </span>
+                            ) : (
+                              <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 bg-[#101e31] px-2.5 py-1 rounded-md border border-[#1c2d46] shrink-0">TV</span>
+                            )}
                           </div>
                         );
                       })}

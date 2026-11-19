@@ -3,7 +3,7 @@ const path = require('path');
 const fs = require('fs');
 const fsp = require('fs/promises');
 const db = require('../config/database');
-const { getAiredCutoffSql, localizeAirDate } = require('../utils/airDate');
+const { getAiredCutoffSql, localizeAirDate, getAirDateShiftSql } = require('../utils/airDate');
 const indexerService = require('./indexerService');
 const downloadClientService = require('./downloadClientService');
 const taskRegistry = require('./taskRegistry');
@@ -196,7 +196,7 @@ const runSearchCycle = async () => {
         AND e.monitored = 1
         AND s.monitored = 1
         AND (e.next_search_at IS NULL OR e.next_search_at <= datetime('now'))
-        AND (e.air_date IS NOT NULL AND date(e.air_date) <= ${getAiredCutoffSql()})
+        AND (e.air_date IS NOT NULL AND date(${getAirDateShiftSql('e.air_date')}) <= ${getAiredCutoffSql()})
     `).all();
 
     monitoredEpisodes.forEach(e => {

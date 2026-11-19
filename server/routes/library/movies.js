@@ -367,9 +367,16 @@ router.post('/:id/toggle-monitor', async (req, res, next) => {
     const newMonitored = movie.monitored ? 0 : 1;
     db.prepare('UPDATE movies SET monitored = ? WHERE id = ?').run(newMonitored, req.params.id);
     
-    // If the movie has a file on disk and we're re-enabling monitoring, restore 'downloaded' status
-    if (newMonitored && movie.file_path) {
-      db.prepare("UPDATE movies SET status = 'downloaded' WHERE id = ?").run(req.params.id);
+    if (newMonitored) {
+      if (movie.file_path && movie.file_path !== '') {
+        db.prepare("UPDATE movies SET status = 'downloaded' WHERE id = ?").run(req.params.id);
+      } else if (movie.status === 'unmonitored') {
+        db.prepare("UPDATE movies SET status = 'monitored' WHERE id = ?").run(req.params.id);
+      }
+    } else {
+      if (!movie.file_path && (movie.status === 'monitored' || movie.status === 'missing')) {
+        db.prepare("UPDATE movies SET status = 'unmonitored' WHERE id = ?").run(req.params.id);
+      }
     }
     
     res.json({ status: 'success', data: { monitored: newMonitored }});

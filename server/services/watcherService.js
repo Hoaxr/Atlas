@@ -704,7 +704,6 @@ class WatcherService {
   async pollSessions() {
     const sessions = await this.getAllSessions();
     const currentSessionIds = new Set(sessions.map(s => s.id));
-    const currentPlayKeys = new Set(sessions.map(s => `${s.id}:${s.title}`));
     const notifyOnPlayback = getSetting('notifyOnPlaybackStart') === 'true';
     const notifyOnPlaybackStop = getSetting('notifyOnPlaybackStop') === 'true';
 

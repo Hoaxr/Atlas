@@ -676,10 +676,14 @@ router.get('/calendar', async (req, res, next) => {
         s.id as show_id, 
         s.tmdb_id,
         s.poster_path,
+        e.status,
+        (e.file_path IS NOT NULL AND e.file_path != '') as has_file,
         'episode' as type
       FROM episodes e
       JOIN shows s ON e.show_id = s.id
       WHERE e.air_date IS NOT NULL 
+        AND s.monitored = 1
+        AND e.monitored = 1
         AND s.status != 'unmonitored'
       UNION ALL
       SELECT 
@@ -692,9 +696,12 @@ router.get('/calendar', async (req, res, next) => {
         m.id as show_id,
         m.tmdb_id,
         m.poster_path,
+        m.status,
+        (m.file_path IS NOT NULL AND m.file_path != '') as has_file,
         'movie' as type
       FROM movies m
       WHERE m.release_date IS NOT NULL
+        AND m.monitored = 1
         AND m.status != 'unmonitored'
       ORDER BY date ASC
     `).all();

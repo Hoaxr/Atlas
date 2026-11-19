@@ -868,9 +868,13 @@ router.post('/shows/:id/toggle-monitor', async (req, res, next) => {
     db.prepare('UPDATE shows SET monitored = ? WHERE id = ?').run(newMonitored, req.params.id);
     db.prepare('UPDATE episodes SET monitored = ? WHERE show_id = ?').run(newMonitored, req.params.id);
     
-    // If the show has a folder on disk and we're re-enabling monitoring, restore 'downloaded' status
-    if (newMonitored && show.folder_path) {
-      db.prepare("UPDATE shows SET status = 'downloaded' WHERE id = ?").run(req.params.id);
+    if (newMonitored) {
+      if (show.folder_path) {
+        db.prepare("UPDATE shows SET status = 'downloaded' WHERE id = ?").run(req.params.id);
+      }
+      db.prepare("UPDATE episodes SET status = CASE WHEN (file_path IS NOT NULL AND file_path != '') THEN 'downloaded' ELSE 'monitored' END WHERE show_id = ? AND status = 'unmonitored'").run(req.params.id);
+    } else {
+      db.prepare("UPDATE episodes SET status = 'unmonitored' WHERE show_id = ? AND (file_path IS NULL OR file_path = '') AND status IN ('monitored', 'missing')").run(req.params.id);
     }
     
     res.json({ status: 'success', data: { monitored: newMonitored }});
@@ -887,6 +891,11 @@ router.post('/shows/:id/seasons/:season/toggle-monitor', async (req, res, next) 
     const newMonitored = monitoredCount > 0 ? 0 : 1;
     
     db.prepare('UPDATE episodes SET monitored = ? WHERE show_id = ? AND season_number = ?').run(newMonitored, id, season);
+    if (newMonitored) {
+      db.prepare("UPDATE episodes SET status = CASE WHEN (file_path IS NOT NULL AND file_path != '') THEN 'downloaded' ELSE 'monitored' END WHERE show_id = ? AND season_number = ? AND status = 'unmonitored'").run(id, season);
+    } else {
+      db.prepare("UPDATE episodes SET status = 'unmonitored' WHERE show_id = ? AND season_number = ? AND (file_path IS NULL OR file_path = '') AND status IN ('monitored', 'missing')").run(id, season);
+    }
     
     res.json({ status: 'success', data: { monitored: newMonitored }});
   } catch (err) {
@@ -896,11 +905,21 @@ router.post('/shows/:id/seasons/:season/toggle-monitor', async (req, res, next) 
 
 router.post('/episodes/:id/toggle-monitor', async (req, res, next) => {
   try {
-    const episode = db.prepare('SELECT monitored FROM episodes WHERE id = ?').get(req.params.id);
+    const episode = db.prepare('SELECT monitored, file_path, status FROM episodes WHERE id = ?').get(req.params.id);
     if (!episode) return res.status(404).json({ status: 'error', message: 'Episode not found' });
     
     const newMonitored = episode.monitored ? 0 : 1;
     db.prepare('UPDATE episodes SET monitored = ? WHERE id = ?').run(newMonitored, req.params.id);
+    if (newMonitored) {
+      if (episode.status === 'unmonitored') {
+        const nextStatus = (episode.file_path && episode.file_path !== '') ? 'downloaded' : 'monitored';
+        db.prepare('UPDATE episodes SET status = ? WHERE id = ?').run(nextStatus, req.params.id);
+      }
+    } else {
+      if (episode.status === 'monitored' || episode.status === 'missing') {
+        db.prepare("UPDATE episodes SET status = 'unmonitored' WHERE id = ?").run(req.params.id);
+      }
+    }
     
     res.json({ status: 'success', data: { monitored: newMonitored }});
   } catch (err) {

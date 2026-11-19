@@ -11,6 +11,7 @@ const jwt = require('jsonwebtoken');
 
 const JWT_SECRET = process.env.JWT_SECRET;
 const getJwtSecret = () => process.env.JWT_SECRET || JWT_SECRET || 'atlas_fallback_secret_for_tests';
+const JWT_EXPIRES_IN = process.env.JWT_EXPIRY || '30d';
 // JWT_SECRET presence is validated at startup in index.js before this module loads.
 // Using the value here is safe.
 
@@ -121,7 +122,7 @@ router.post('/login', loginLimiter, async (req, res) => {
   const token = jwt.sign(
     { id: user.id, username: user.username, role: user.role, jwt_version: user.jwt_version },
     getJwtSecret(),
-    { expiresIn: '7d' }
+    { expiresIn: JWT_EXPIRES_IN }
   );
   db.prepare('UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = ?').run(user.id);
   res.json({ status: 'success', data: { token, user: { id: user.id, username: user.username, role: user.role, origin: user.origin } } });
@@ -294,7 +295,7 @@ router.post('/setup', loginLimiter, async (req, res) => {
     const token = jwt.sign(
       { id: newUserId, username: trimmedUser, role: 'admin', jwt_version: 1 },
       getJwtSecret(),
-      { expiresIn: '7d' }
+      { expiresIn: JWT_EXPIRES_IN }
     );
 
     res.json({
@@ -393,7 +394,7 @@ router.post('/plex/login', loginLimiter, async (req, res) => {
       user = { id: result.lastInsertRowid, username: finalUsername, role: 'user', origin: 'plex', jwt_version: 1 };
     }
 
-    const token = jwt.sign({ id: user.id, username: user.username, role: user.role, jwt_version: user.jwt_version }, getJwtSecret(), { expiresIn: '7d' });
+    const token = jwt.sign({ id: user.id, username: user.username, role: user.role, jwt_version: user.jwt_version }, getJwtSecret(), { expiresIn: JWT_EXPIRES_IN });
     db.prepare('UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = ?').run(user.id);
     
     res.json({ status: 'success', data: { token, user: { id: user.id, username: user.username, role: user.role, origin: user.origin } } });
@@ -445,7 +446,7 @@ router.post('/jellyfin/login', loginLimiter, async (req, res) => {
         user = { id: result.lastInsertRowid, username: finalUsername, role: 'user', origin: 'jellyfin', jwt_version: 1 };
       }
 
-      const token = jwt.sign({ id: user.id, username: user.username, role: user.role, jwt_version: user.jwt_version }, getJwtSecret(), { expiresIn: '7d' });
+      const token = jwt.sign({ id: user.id, username: user.username, role: user.role, jwt_version: user.jwt_version }, getJwtSecret(), { expiresIn: JWT_EXPIRES_IN });
       db.prepare('UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = ?').run(user.id);
       
       res.json({ status: 'success', data: { token, user: { id: user.id, username: user.username, role: user.role, origin: user.origin } } });
@@ -532,7 +533,7 @@ router.post('/jellyfin/quickconnect/login', loginLimiter, async (req, res) => {
         user = { id: result.lastInsertRowid, username: finalUsername, role: 'user', origin: 'jellyfin', jwt_version: 1 };
       }
 
-      const token = jwt.sign({ id: user.id, username: user.username, role: user.role, jwt_version: user.jwt_version }, getJwtSecret(), { expiresIn: '7d' });
+      const token = jwt.sign({ id: user.id, username: user.username, role: user.role, jwt_version: user.jwt_version }, getJwtSecret(), { expiresIn: JWT_EXPIRES_IN });
       db.prepare('UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = ?').run(user.id);
       
       res.json({ status: 'success', data: { token, user: { id: user.id, username: user.username, role: user.role, origin: user.origin } } });
@@ -591,7 +592,7 @@ router.post('/2fa/verify-login', totpLimiter, async (req, res) => {
     const token = jwt.sign(
       { id: user.id, username: user.username, role: user.role, jwt_version: user.jwt_version },
       getJwtSecret(),
-      { expiresIn: '7d' }
+      { expiresIn: JWT_EXPIRES_IN }
     );
     db.prepare('UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = ?').run(user.id);
     res.json({

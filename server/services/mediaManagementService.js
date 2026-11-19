@@ -1221,7 +1221,7 @@ const importEpisode = async (torrent, episode) => {
           throw copyErr;
         }
         const shouldRemoveCompleted = db.prepare('SELECT value FROM settings WHERE key = ?').get('removeCompletedDownloads')?.value === 'true';
-        if (shouldRemoveCompleted) {
+        if (shouldRemoveCompleted && torrent.hash) {
           console.log(`[MediaManagement] Copy complete for episode. Deleting original download file.`);
           await fs.promises.unlink(videoFile.path).catch(e => {
             if (e.code !== 'ENOENT') throw e;
@@ -1518,6 +1518,7 @@ const init = () => {
 
 module.exports = {
   init,
+  runMediaManagement,
   getNamingConfig,
   sanitizeTitle,
   formatSeriesFolder,

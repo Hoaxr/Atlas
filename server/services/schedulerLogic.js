@@ -1,7 +1,7 @@
 const { getSetting } = require('../utils/settings');
 
 const getSchedulerConfig = () => ({
-  moviePreReleaseDays: parseInt(getSetting('scheduler_movie_pre_release_days') || '7', 10),
+  moviePreReleaseDays: parseInt(getSetting('scheduler_movie_pre_release_days') || '0', 10),
   maxRetries: parseInt(getSetting('scheduler_max_retries') || '25', 10),
   expirationDays: parseInt(getSetting('scheduler_expiration_days') || '30', 10),
   backoffMultiplier: parseFloat(getSetting('scheduler_backoff_multiplier') || '1.5')
@@ -62,9 +62,13 @@ const calculateNextSearchAt = (item, type, options = {}, currentDate = new Date(
 
   // Hard limits
   if (item.retry_count >= config.maxRetries) {
-    // If it's downloaded but needs an upgrade, we should still search occasionally, just very slowly.
+    // If it's downloaded but needs an upgrade, search occasionally (every 48 hours)
     if (isDownloaded && !isCutoffMet) {
-      return { state: 'UPGRADING', nextSearch: new Date(currentDate.getTime() + 48 * 3600000) }; // Every 48 hours
+      return { state: 'UPGRADING', nextSearch: new Date(currentDate.getTime() + 48 * 3600000) };
+    }
+    // If it's missing and monitored, never permanently abandon it — check back weekly
+    if (!isDownloaded) {
+      return { state: 'SEARCHING', nextSearch: new Date(currentDate.getTime() + 7 * 24 * 3600000) };
     }
     return { state: 'EXPIRED', nextSearch: null };
   }
@@ -122,8 +126,9 @@ const scheduleMovie = (retryCount, diffHours, config, currentDate, isDownloaded 
       state = 'UPGRADING';
       nextMs += 48 * 3600000; // 48 hours for long-term upgrades
     } else {
-      state = 'EXPIRED';
-      nextMs = null;
+      // Catalog/older movies: keep searching periodically (every 7 days) rather than abandoning
+      state = 'SEARCHING';
+      nextMs += 7 * 24 * 3600000;
     }
   }
 
@@ -156,8 +161,9 @@ const scheduleEpisode = (retryCount, diffHours, config, currentDate, isDownloade
       state = 'UPGRADING';
       nextMs += 48 * 3600000; // 48 hours for long-term upgrades
     } else {
-      state = 'EXPIRED';
-      nextMs = null;
+      // Catalog/older movies: keep searching periodically (every 7 days) rather than abandoning
+      state = 'SEARCHING';
+      nextMs += 7 * 24 * 3600000;
     }
   }
 
