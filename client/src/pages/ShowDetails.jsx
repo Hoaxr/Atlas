@@ -12,6 +12,7 @@ import TrailerModal from '../components/TrailerModal';
 import ManualSearchModal from '../components/ManualSearchModal';
 import EpisodeDetailsModal from '../components/EpisodeDetailsModal';
 import RemapModal from '../components/RemapModal';
+import { cachedShows } from '../lib/libraryCache';
 import { posterUrl, tmdbImgUrl } from '../lib/posterUrl';
 import InlineError from '../components/shared/InlineError';
 
@@ -50,15 +51,9 @@ export default function ShowDetails() {
   // Use cached library data for sibling navigation — avoids a full re-fetch on every detail page visit.
   // Falls back to a lightweight fetch only when cache is cold.
   useEffect(() => {
-    const cached = sessionStorage.getItem('library_shows_cache');
-    if (cached) {
-      try {
-        const parsed = JSON.parse(cached);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          setSiblingIds(parsed.map(s => s.id));
-          return;
-        }
-      } catch { /* use live fetch */ }
+    if (cachedShows && cachedShows.length > 0) {
+      setSiblingIds(cachedShows.map(s => s.id));
+      return;
     }
     api.get('/library/shows').then(res => {
       if (res.data?.data) setSiblingIds(res.data.data.map(s => s.id));

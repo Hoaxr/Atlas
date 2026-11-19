@@ -44,6 +44,8 @@ const getTorrents = async (client) => {
       size: g.FileSize || 0,
       completed: (g.FileSize || 0) - (g.RemainingSize || 0),
       eta: null,
+      save_path: g.DestDir || undefined,
+      content_path: g.DestDir || undefined,
     }));
 };
 

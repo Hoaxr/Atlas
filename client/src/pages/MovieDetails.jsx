@@ -241,7 +241,7 @@ export default function MovieDetails() {
   const audio = movie.audio || parseAudio(movie.scene_name || movie.file_path);
   const genres = tmdbDetails?.genres || [];
   const castList = tmdbDetails?.credits?.cast?.slice(0, 5) || [];
-  const addedDate = movie.created_at ? new Date(movie.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : null;
+  const addedDate = (movie.added_at || movie.created_at) ? new Date(movie.added_at || movie.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : null;
 
   // US content rating from release_dates
   let certification = '';

@@ -111,6 +111,7 @@ export default function useWebSocket() {
   const onEvent = useCallback((handler) => {
     handlerRef.current = handler;
     handlers.add(handler);
+    reconnectDisabled = false;
     if (!sharedWs || sharedWs.readyState > 1) {
       clearTimeout(reconnectTimer);
       reconnectDisabled = false;

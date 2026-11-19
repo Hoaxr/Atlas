@@ -43,6 +43,8 @@ const getTorrents = async (client) => {
       size: item.size ? parseInt(item.size) * 1024 * 1024 : 0,
       completed: item.mb ? parseFloat(item.mb) * 1024 * 1024 : 0,
       eta: item.eta || null,
+      save_path: item.storage || undefined,
+      content_path: item.storage || undefined,
     }));
 };
 

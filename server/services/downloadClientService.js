@@ -320,7 +320,8 @@ const quarantineMaliciousTorrent = async (torrent, badFileName) => {
         if (contentPath.startsWith(from)) contentPath = contentPath.replace(from, to);
       } catch { /* ignore */ }
     }
-    if (contentPath && fs.existsSync(contentPath)) {
+    const { isSafeToPurgePath } = require('./mediaManagementService');
+    if (contentPath && fs.existsSync(contentPath) && isSafeToPurgePath(contentPath, torrent)) {
       await fs.promises.rm(contentPath, { recursive: true, force: true });
       console.log(`[Security] Removed malicious payload from disk: ${contentPath}`);
     }
@@ -334,7 +335,7 @@ const quarantineMaliciousTorrent = async (torrent, badFileName) => {
         } catch { /* ignore */ }
       }
       const directExe = path.join(saveDir, `${torrent.name}.exe`);
-      if (fs.existsSync(directExe)) {
+      if (fs.existsSync(directExe) && isSafeToPurgePath(directExe, torrent)) {
         await fs.promises.rm(directExe, { force: true });
         console.log(`[Security] Removed direct .exe from disk: ${directExe}`);
       }
@@ -359,7 +360,7 @@ const quarantineMaliciousTorrent = async (torrent, badFileName) => {
       const showTitle = ep.show_title.toLowerCase();
       const s = `s${String(ep.season_number).padStart(2, '0')}`;
       const e = `e${String(ep.episode_number).padStart(2, '0')}`;
-      if (torrentName.includes(showTitle) && (torrentName.includes(`${s}${e}`) || torrentName.includes(s))) {
+      if (torrentName.includes(showTitle) && (torrentName.includes(`${s}${e}`) || torrentName.includes(`${s}e${ep.episode_number}`))) {
         const resetStatus = (ep.monitored === 1 && ep.show_monitored === 1) ? 'monitored' : 'unmonitored';
         console.log(`[Security] Resetting episode ${ep.show_title} S${ep.season_number}E${ep.episode_number} to ${resetStatus} after blocking malicious release.`);
         db.prepare("UPDATE episodes SET status = ?, file_path = NULL, file_size = NULL, scene_name = NULL WHERE id = ?").run(resetStatus, ep.id);

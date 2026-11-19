@@ -767,6 +767,12 @@ router.get('/tracks/:id/stream', (req, res, next) => {
       const parts = range.replace(/bytes=/, '').split('-');
       const start = parseInt(parts[0], 10);
       const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
+
+      if (isNaN(start) || isNaN(end) || start < 0 || end >= fileSize || start > end) {
+        res.setHeader('Content-Range', `bytes */${fileSize}`);
+        return res.status(416).send('Requested Range Not Satisfiable');
+      }
+
       const chunksize = (end - start) + 1;
       const file = fs.createReadStream(resolvedPath, { start, end });
       file.on('error', (err) => next(err));

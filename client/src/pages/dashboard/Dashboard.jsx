@@ -386,7 +386,7 @@ export default function Dashboard() {
     if (searchQuery.trim()) {
       const q = searchQuery.trim().toLowerCase();
       items = items.filter(item =>
-        item.title.toLowerCase().includes(q) ||
+        (item.title || '').toLowerCase().includes(q) ||
         (item.year && item.year.toString().includes(q))
       );
     }

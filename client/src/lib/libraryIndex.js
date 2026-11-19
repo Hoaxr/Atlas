@@ -76,7 +76,7 @@ export const getLibraryIndex = () => {
   inflight = (async () => {
     // Live ESM bindings — reflects whatever Layout prefetched.
     const items =
-      cachedMovies || cachedShows
+      cachedMovies && cachedShows
         ? [...fromMovies(cachedMovies), ...fromShows(cachedShows)]
         : await fetchLibrary();
 

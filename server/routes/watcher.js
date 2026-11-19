@@ -64,7 +64,7 @@ router.get('/image', async (req, res) => {
         decodedPath.includes('\\') ||
         decodedPath.includes('@') ||
         decodedPath.includes('?') || // disallow query string injection
-        (!decodedPath.startsWith('/photo/:/transcode') && !decodedPath.startsWith('/library/metadata/'))
+        (!decodedPath.startsWith('/photo/:/transcode') && !/^\/library\/metadata\/\d+\/(thumb|art|poster|banner)/.test(decodedPath))
       ) {
         return res.status(400).send('Invalid path');
       }

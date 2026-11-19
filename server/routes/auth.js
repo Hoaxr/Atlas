@@ -16,6 +16,7 @@ const JWT_EXPIRES_IN = process.env.JWT_EXPIRY || '30d';
 // Using the value here is safe.
 
 const authMiddleware = require('../middleware/authMiddleware');
+const requireAdmin = require('../middleware/requireAdmin');
 const {
   generateSecret,
   verifyTOTP,
@@ -57,7 +58,11 @@ const totpLimiter = rateLimit({
 
 // Login endpoint
 router.post('/login', loginLimiter, async (req, res) => {
-  const { username, password, totp_code } = req.body;
+  const { username, password, totp_code } = req.body || {};
+  if (!username || typeof username !== 'string' || !password || typeof password !== 'string') {
+    return res.status(400).json({ status: 'error', message: 'Username and password are required' });
+  }
+
   const authEnabled = isAuthEnabled();
 
   if (!authEnabled) {
@@ -190,7 +195,7 @@ router.post('/simkl/device-code', generalLimiter, async (req, res) => {
   }
 });
 
-router.post('/simkl/device-token', authMiddleware, async (req, res) => {
+router.post('/simkl/device-token', authMiddleware, requireAdmin, async (req, res) => {
   const { userCode, deviceCode } = req.body;
   if (!userCode && !deviceCode) {
     return res.status(400).json({ status: 'error', message: 'User code or device code is required' });
@@ -215,7 +220,7 @@ router.post('/simkl/device-token', authMiddleware, async (req, res) => {
   }
 });
 
-router.post('/simkl/disconnect', authMiddleware, (req, res) => {
+router.post('/simkl/disconnect', authMiddleware, requireAdmin, (req, res) => {
   setSetting('simklAccessToken', '');
   setSetting('simklWatchedSync', 'false');
   res.json({ status: 'success', message: 'Simkl account disconnected.' });

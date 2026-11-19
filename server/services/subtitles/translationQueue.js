@@ -404,6 +404,8 @@ class SubtitleTranslationQueue {
         language: job.targetLang
       });
 
+      this.activeJobs.delete(job.id);
+
     } catch (err) {
       const cleanError = formatTranslationError(err);
       console.error(`[SubtitleQueue] Job ${job.id} failed:`, cleanError, err.message);
@@ -419,6 +421,8 @@ class SubtitleTranslationQueue {
         language: job.targetLang,
         error: cleanError
       });
+
+      this.activeJobs.delete(job.id);
     }
   }
 

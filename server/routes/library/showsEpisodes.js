@@ -503,6 +503,8 @@ router.post('/episodes/:id/download-subs', async (req, res, _next) => {
 
     // If a direct URL is provided, download from there (used by SubDL unpack files)
     if (url) {
+      const { validateSafeExternalUrl } = require('../../services/imageService');
+      await validateSafeExternalUrl(url);
       const srtRes = await axios.get(url, { responseType: 'arraybuffer', timeout: 30000 });
       const cleanContent = decodeSubtitleBuffer(Buffer.from(srtRes.data), { season: episode.season_number, episode: episode.episode_number });
       if (!cleanContent || cleanContent.length < 10) {
@@ -969,7 +971,8 @@ router.delete('/episodes/:id/file', async (req, res, next) => {
         const entries = await fsp.readdir(dir);
         const subExts = ['.srt', '.sub', '.vtt', '.ass', '.ssa', '.smi', '.idx'];
         for (const entry of entries) {
-          if (entry.startsWith(parsed.name)) {
+          if (entry === parsed.base) continue;
+          if (entry.startsWith(parsed.name + '.') || entry.startsWith(parsed.name + '-')) {
             const ext = path.extname(entry).toLowerCase();
             if (subExts.includes(ext) || ext === '.nfo') {
               await fsp.unlink(path.join(dir, entry)).catch(() => {});

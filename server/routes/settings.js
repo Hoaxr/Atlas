@@ -57,7 +57,7 @@ router.get('/', (req, res, next) => {
     
     const defaultQualityProfileId = getSetting('defaultQualityProfileId');
     
-    const isAdmin = !req.user || req.user.role === 'admin';
+    const isAdmin = Boolean(req.user && req.user.role === 'admin');
     const mask = (val) => {
       if (!val) return '';
       if (!isAdmin) return '';
@@ -358,7 +358,7 @@ router.post('/', requireAdmin, async (req, res, next) => {
         const hashed = await bcrypt.hash(body.authPassword, 12);
         if (existingUser) {
           const username = body.authUsername !== undefined ? body.authUsername : getSetting('authUsername');
-          db.prepare('UPDATE users SET password = ?, username = ? WHERE id = ?').run(hashed, username, existingUser.id);
+          db.prepare('UPDATE users SET password = ?, username = ?, jwt_version = jwt_version + 1 WHERE id = ?').run(hashed, username, existingUser.id);
         } else {
           const username = body.authUsername !== undefined ? body.authUsername : 'admin';
           db.prepare("INSERT INTO users (username, password, role) VALUES (?, ?, 'admin')").run(username, hashed);

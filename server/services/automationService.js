@@ -580,7 +580,7 @@ const runMissingFilesCheck = async () => {
     const chunks = chunkArray(moviesToReset, 100);
     for (const chunk of chunks) {
       db.transaction((ids) => {
-        const resetStmt = db.prepare("UPDATE movies SET file_path = NULL, status = 'monitored' WHERE id = ?");
+        const resetStmt = db.prepare("UPDATE movies SET file_path = NULL, status = CASE WHEN monitored = 1 THEN 'monitored' ELSE 'unmonitored' END WHERE id = ?");
         for (const id of ids) resetStmt.run(id);
       })(chunk);
       await new Promise(r => setImmediate(r));
@@ -656,7 +656,12 @@ const runMissingFilesCheck = async () => {
     const chunks = chunkArray(episodesToReset, 100);
     for (const chunk of chunks) {
       db.transaction((ids) => {
-        const resetStmt = db.prepare("UPDATE episodes SET file_path = NULL, status = 'monitored' WHERE id = ?");
+        const resetStmt = db.prepare(`
+          UPDATE episodes
+          SET file_path = NULL,
+              status = CASE WHEN monitored = 1 AND EXISTS (SELECT 1 FROM shows s WHERE s.id = episodes.show_id AND s.monitored = 1) THEN 'monitored' ELSE 'unmonitored' END
+          WHERE id = ?
+        `);
         for (const id of ids) resetStmt.run(id);
       })(chunk);
       await new Promise(r => setImmediate(r));
@@ -739,11 +744,19 @@ const runDatabaseBackup = async () => {
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     const backupPath = path.join(backupDir, `database-${timestamp}.sqlite`);
     
-    // Perform backup using SQLite online backup API if available, otherwise safely copy file
+    // Perform atomic backup using VACUUM INTO, with WAL-flushing fallback
     try {
-      await db.backup(backupPath);
+      db.exec(`VACUUM INTO '${backupPath.replace(/'/g, "''")}';`);
     } catch {
+      try {
+        db.exec('PRAGMA wal_checkpoint(TRUNCATE);');
+      } catch { /* ignore */ }
       await fsp.copyFile(dbPath, backupPath);
+      // Also copy WAL file if present
+      const walPath = `${dbPath}-wal`;
+      if (fs.existsSync(walPath)) {
+        await fsp.copyFile(walPath, `${backupPath}-wal`).catch(() => {});
+      }
     }
     console.log(`[Automation] Database backed up to ${backupPath}`);
     
@@ -794,7 +807,7 @@ const runAutoDeleteWatched = async () => {
       try {
         await safelyDeleteMovieFiles(movie);
         console.log(`[Automation] Auto-deleted watched movie files: ${movie.title}`);
-        db.prepare("UPDATE movies SET file_path = NULL, status = 'unmonitored' WHERE id = ?").run(movie.id);
+        db.prepare("UPDATE movies SET file_path = NULL, status = 'unmonitored', monitored = 0 WHERE id = ?").run(movie.id);
       } catch (err) {
         console.error(`[Automation] Failed to auto-delete movie ${movie.title}: ${err.message}`);
       }
@@ -1083,6 +1096,7 @@ const runReleaseMonitoring = async () => {
     SET next_search_at = datetime('now'), search_state = 'PENDING'
     WHERE (status IN ('monitored', 'missing'))
       AND monitored = 1
+      AND EXISTS (SELECT 1 FROM shows s WHERE s.id = episodes.show_id AND s.monitored = 1)
       AND air_date IS NOT NULL 
       AND air_date <= ${getAiredCutoffSql()}
       AND (last_searched_at IS NULL OR last_searched_at < datetime(air_date))

@@ -542,6 +542,7 @@ const libraryAdminWrapper = (req, res, next) => {
     '/export',
     '/paths',
     '/downloads',
+    '/health',
     '/system-health',
     '/duplicates',
     '/cleanup-candidates',

@@ -38,18 +38,20 @@ function getVersionInfo() {
     }
   }
 
-  // 2. Try git command if available to get absolute latest
-  try {
-    const gitCommit = execSync('git rev-parse --short HEAD', { cwd: rootDir, stdio: ['pipe', 'pipe', 'ignore'] }).toString().trim();
-    if (gitCommit) {
-      commit = gitCommit;
-      fullCommit = execSync('git rev-parse HEAD', { cwd: rootDir, stdio: ['pipe', 'pipe', 'ignore'] }).toString().trim();
-      branch = execSync('git rev-parse --abbrev-ref HEAD', { cwd: rootDir, stdio: ['pipe', 'pipe', 'ignore'] }).toString().trim();
-      date = execSync('git log -1 --format=%cd --date=short', { cwd: rootDir, stdio: ['pipe', 'pipe', 'ignore'] }).toString().trim();
-      message = execSync('git log -1 --format=%s', { cwd: rootDir, stdio: ['pipe', 'pipe', 'ignore'] }).toString().trim();
-      commitCount = parseInt(execSync('git rev-list --count HEAD', { cwd: rootDir, stdio: ['pipe', 'pipe', 'ignore'] }).toString().trim(), 10) || 0;
-    }
-  } catch {
+  // 2. Try git command if in a git directory, otherwise fallback to env
+  if (fs.existsSync(path.join(rootDir, '.git'))) {
+    try {
+      const gitCommit = execSync('git rev-parse --short HEAD', { cwd: rootDir, stdio: ['pipe', 'pipe', 'ignore'] }).toString().trim();
+      if (gitCommit) {
+        commit = gitCommit;
+        fullCommit = execSync('git rev-parse HEAD', { cwd: rootDir, stdio: ['pipe', 'pipe', 'ignore'] }).toString().trim();
+        branch = execSync('git rev-parse --abbrev-ref HEAD', { cwd: rootDir, stdio: ['pipe', 'pipe', 'ignore'] }).toString().trim();
+        date = execSync('git log -1 --format=%cd --date=short', { cwd: rootDir, stdio: ['pipe', 'pipe', 'ignore'] }).toString().trim();
+        message = execSync('git log -1 --format=%s', { cwd: rootDir, stdio: ['pipe', 'pipe', 'ignore'] }).toString().trim();
+        commitCount = parseInt(execSync('git rev-list --count HEAD', { cwd: rootDir, stdio: ['pipe', 'pipe', 'ignore'] }).toString().trim(), 10) || 0;
+      }
+    } catch { /* ignore git execution errors */ }
+  } else {
     // If git not available, env vars fallback
     if (process.env.GIT_COMMIT) {
       commit = process.env.GIT_COMMIT.slice(0, 7);
@@ -57,6 +59,15 @@ function getVersionInfo() {
     }
     if (process.env.GIT_BRANCH) {
       branch = process.env.GIT_BRANCH;
+    }
+    if (process.env.GIT_DATE) {
+      date = process.env.GIT_DATE;
+    }
+    if (process.env.GIT_MESSAGE) {
+      message = process.env.GIT_MESSAGE;
+    }
+    if (process.env.GIT_COUNT) {
+      commitCount = parseInt(process.env.GIT_COUNT, 10) || 0;
     }
   }
 

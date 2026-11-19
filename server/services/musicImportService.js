@@ -575,7 +575,7 @@ const importMusicDownload = async (downloadPath, downloadName) => {
         console.warn(`[MusicImport] Could not update artist status for ${artist.name}:`, stErr.message);
       }
 
-      eventBus.emit({
+      eventBus.emit('event', {
         type: 'MUSIC_IMPORT_COMPLETE',
         albumId: album.id,
         albumTitle: album.title,

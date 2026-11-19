@@ -107,8 +107,8 @@ router.post('/', (req, res, next) => {
       }
     }
 
-    // Check if already requested globally
-    const existing = db.prepare('SELECT id, user_id FROM requests WHERE tmdb_id = ? AND type = ?').get(tmdb_id, type);
+    // Check if already requested globally (excluding denied requests)
+    const existing = db.prepare('SELECT id, user_id FROM requests WHERE tmdb_id = ? AND type = ? AND status != ?').get(tmdb_id, type, 'denied');
     if (existing) {
       if (existing.user_id === user_id) {
         return res.status(400).json({ status: 'error', message: 'You have already requested this item' });

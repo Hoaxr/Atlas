@@ -104,14 +104,17 @@ export default function SystemTasks() {
   const fetchLogs = useCallback(async () => {
     try {
       const res = await api.get('/logs', { params: { limit: 30 } });
-      if (res.data.status === 'success' && res.data.data.length !== prevLogCountRef.current) {
-        setLogs(res.data.data);
-        prevLogCountRef.current = res.data.data.length;
+      if (res.data.status === 'success') {
+        const topId = res.data.data?.[0]?.id;
+        if (topId !== prevLogCountRef.current || res.data.data.length !== logs.length) {
+          setLogs(res.data.data);
+          prevLogCountRef.current = topId;
+        }
       }
     } catch (err) {
       console.error('Failed to fetch logs', err);
     }
-  }, []);
+  }, [logs.length]);
 
   useEffect(() => {
     Promise.all([fetchTasks(), fetchLogs()]).finally(() => {

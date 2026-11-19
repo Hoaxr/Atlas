@@ -75,7 +75,9 @@ const getTorrents = async (client) => {
     size: t.totalSize,
     completed: t.downloadedEver,
     eta: t.eta,
-    added_date: t.addedDate
+    added_date: t.addedDate,
+    save_path: t.downloadDir,
+    content_path: t.downloadDir ? `${t.downloadDir}/${t.name}` : undefined
   }));
 };
 

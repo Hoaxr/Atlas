@@ -577,6 +577,8 @@ router.post('/:id/download-subs', async (req, res, _next) => {
 
     // If a direct URL is provided, download from there
     if (url) {
+      const { validateSafeExternalUrl } = require('../../services/imageService');
+      await validateSafeExternalUrl(url);
       const srtRes = await axios.get(url, { responseType: 'arraybuffer', timeout: 30000 });
       const cleanContent = decodeSubtitleBuffer(Buffer.from(srtRes.data));
       if (!cleanContent || cleanContent.length < 10) {
@@ -814,18 +816,25 @@ router.post('/:id/set-path', requireAdmin, async (req, res, next) => {
     const movie = db.prepare('SELECT * FROM movies WHERE id = ?').get(req.params.id);
     if (!movie) return res.status(404).json({ status: 'error', message: 'Movie not found' });
 
-    // Verify the folder exists
+    // Verify the folder exists and is within configured library paths
+    const resolvedFolder = path.resolve(folderPath);
+    const libraryPaths = db.prepare('SELECT path FROM library_paths').all().map(p => path.resolve(p.path));
+    const isAllowed = libraryPaths.some(lp => resolvedFolder === lp || resolvedFolder.startsWith(lp + path.sep));
+    if (!isAllowed) {
+      return res.status(403).json({ status: 'error', message: 'Folder path must be inside a configured library path' });
+    }
+
     try {
-      await fsp.access(folderPath);
+      await fsp.access(resolvedFolder);
     } catch {
       return res.status(400).json({ status: 'error', message: 'Folder does not exist' });
     }
 
     // Update folder_path
-    db.prepare('UPDATE movies SET folder_path = ? WHERE id = ?').run(folderPath, req.params.id);
+    db.prepare('UPDATE movies SET folder_path = ? WHERE id = ?').run(resolvedFolder, req.params.id);
 
     // Scan the folder for the largest video file
-    const best = await findLargestVideoFile(folderPath);
+    const best = await findLargestVideoFile(resolvedFolder);
     if (best) {
       db.prepare("UPDATE movies SET file_path = ?, file_size = ?, status = 'downloaded' WHERE id = ?")
         .run(best.path, best.size, req.params.id);

@@ -915,7 +915,12 @@ const importMovie = async (torrent, movie) => {
       console.warn('[MediaManagement] Companion subtitle import error:', subImportErr.message);
     }
 
-    // Remove torrent from client first (if enabled), so failed removal keeps status as 'downloading' for retry
+    // Mark movie as downloaded in database first before attempting client removal
+    db.prepare("UPDATE movies SET status = 'downloaded', file_path = ?, folder_path = COALESCE(NULLIF(folder_path, ''), ?), scene_name = ? WHERE id = ?").run(destFile, destFolder, torrent.name, movie.id);
+    console.log(`[MediaManagement] Movie ${movie.title} marked as downloaded.`);
+    eventBus.success('Download complete', { title: movie.title, type: 'movie', destinationPath: destFile });
+
+    // Remove torrent from client (if enabled)
     const removeSetting = db.prepare('SELECT value FROM settings WHERE key = ?').get('removeCompletedDownloads');
     const deleteFilesSetting = db.prepare('SELECT value FROM settings WHERE key = ?').get('deleteTorrentFiles');
     if (removeSetting && removeSetting.value === 'true') {
@@ -925,14 +930,9 @@ const importMovie = async (torrent, movie) => {
         await downloadClientService.deleteTorrent(torrent.hash, deleteFiles);
         console.log(`[MediaManagement] Torrent ${torrent.name} removed successfully.`);
       } catch (delErr) {
-        console.error(`[MediaManagement] Failed to remove torrent ${torrent.name}, will retry next cycle:`, delErr.message);
-        return; // Keep status as 'downloading' so it retries next cycle
+        console.warn(`[MediaManagement] Warning: failed to remove torrent ${torrent.name} from client:`, delErr.message);
       }
     }
-
-    db.prepare("UPDATE movies SET status = 'downloaded', file_path = ?, folder_path = COALESCE(NULLIF(folder_path, ''), ?), scene_name = ? WHERE id = ?").run(destFile, destFolder, torrent.name, movie.id);
-    console.log(`[MediaManagement] Movie ${movie.title} marked as downloaded.`);
-    eventBus.success('Download complete', { title: movie.title, type: 'movie', destinationPath: destFile });
 
     // Immediately search for subtitles without waiting for the scheduler
     try {

@@ -65,6 +65,8 @@ const TORRENT_FIELDS = [
   'd.ratio=',
   'd.size_bytes=',
   'd.bytes_done=',
+  'd.directory=',
+  'd.base_path=',
 ];
 
 const getTorrents = async (client) => {
@@ -86,7 +88,7 @@ const getTorrents = async (client) => {
     }
     if (values.length < TORRENT_FIELDS.length) continue;
 
-    const [hash, name, state, downRate, upRate, ratio, sizeBytes, bytesDone] = values;
+    const [hash, name, state, downRate, upRate, ratio, sizeBytes, bytesDone, directory, basePath] = values;
     const size = parseInt(sizeBytes, 10) || 0;
     const completed = parseInt(bytesDone, 10) || 0;
     const progress = size > 0 ? Math.min(100, (completed / size) * 100) : 0;
@@ -102,6 +104,8 @@ const getTorrents = async (client) => {
       ratio: Math.round(((parseInt(ratio, 10) || 0) / 1000) * 100) / 100,
       size,
       completed,
+      save_path: directory || undefined,
+      content_path: basePath || (directory ? `${directory}/${name}` : undefined),
     });
   }
   return items;
