@@ -178,15 +178,34 @@ export default function Layout() {
         }
       }
 
-      const [moviesRes, showsRes] = await Promise.allSettled([
-        api.get('/library/movies'),
-        api.get('/library/shows')
-      ]);
-      if (moviesRes.status === 'fulfilled' && moviesRes.value.data.status === 'success') {
-        setCachedMovies(moviesRes.value.data.data);
+      // Check current route: only prefetch the other library if on dashboard, or prefetch sequentially
+      const isShowsRoute = window.location.pathname.startsWith('/shows');
+      const firstEndpoint = isShowsRoute ? '/library/shows' : '/library/movies';
+      const secondEndpoint = isShowsRoute ? '/library/movies' : '/library/shows';
+
+      const firstRes = await api.get(firstEndpoint).catch(() => null);
+      if (firstRes?.data?.status === 'success') {
+        if (isShowsRoute) setCachedShows(firstRes.data.data);
+        else setCachedMovies(firstRes.data.data);
       }
-      if (showsRes.status === 'fulfilled' && showsRes.value.data.status === 'success') {
-        setCachedShows(showsRes.value.data.data);
+
+      // Defer second view prefetch until after initial render has settled
+      if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+        window.requestIdleCallback(async () => {
+          const secondRes = await api.get(secondEndpoint).catch(() => null);
+          if (secondRes?.data?.status === 'success') {
+            if (isShowsRoute) setCachedMovies(secondRes.data.data);
+            else setCachedShows(secondRes.data.data);
+          }
+        }, { timeout: 3000 });
+      } else {
+        setTimeout(async () => {
+          const secondRes = await api.get(secondEndpoint).catch(() => null);
+          if (secondRes?.data?.status === 'success') {
+            if (isShowsRoute) setCachedMovies(secondRes.data.data);
+            else setCachedShows(secondRes.data.data);
+          }
+        }, 1500);
       }
     } catch (err) {
       console.error('Failed to prefetch library', err);

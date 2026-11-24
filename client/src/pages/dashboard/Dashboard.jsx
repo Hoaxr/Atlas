@@ -284,7 +284,11 @@ export default function Dashboard() {
 
   useEffect(() => {
     const otherMode = initialViewModeRef.current === 'movies' ? 'shows' : 'movies';
-    fetchViewData(otherMode, true);
+    // Defer other view fetch so initial page view loads with priority
+    const timer = setTimeout(() => {
+      fetchViewData(otherMode, true);
+    }, 2500);
+    return () => clearTimeout(timer);
   }, []);
 
   // Listen for scan completion or new media added to refresh library
@@ -614,7 +618,7 @@ export default function Dashboard() {
 
     const scheduleChunk = (startIdx) => {
       if (cancelled || startIdx >= urls.length) return;
-      const chunk = urls.slice(startIdx, startIdx + 6);
+      const chunk = urls.slice(startIdx, startIdx + 3);
       chunk.forEach(url => {
         if (typeof window !== 'undefined') {
           const img = new window.Image();
@@ -622,13 +626,13 @@ export default function Dashboard() {
         }
       });
       if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
-        window.requestIdleCallback(() => scheduleChunk(startIdx + 6), { timeout: 800 });
+        window.requestIdleCallback(() => scheduleChunk(startIdx + 3), { timeout: 1500 });
       } else {
-        setTimeout(() => scheduleChunk(startIdx + 6), 120);
+        setTimeout(() => scheduleChunk(startIdx + 3), 300);
       }
     };
 
-    const timer = setTimeout(() => scheduleChunk(0), 150);
+    const timer = setTimeout(() => scheduleChunk(0), 1000);
     return () => {
       cancelled = true;
       clearTimeout(timer);
@@ -1383,11 +1387,21 @@ export default function Dashboard() {
                       alt={item.title}
                       width="500"
                       height="750"
+                      loading="lazy"
                       decoding="async"
                       onError={(e) => {
-                        if (item.poster_path && !e.currentTarget.dataset.fallback) {
-                          e.currentTarget.dataset.fallback = 'true';
-                          e.currentTarget.src = `https://image.tmdb.org/t/p/w500${item.poster_path}`;
+                        const target = e.currentTarget;
+                        const attempts = parseInt(target.dataset.retryCount || '0', 10);
+                        if (attempts < 2) {
+                          // Transient network/socket abort: retry the local cached poster endpoint once with slight delay
+                          target.dataset.retryCount = String(attempts + 1);
+                          setTimeout(() => {
+                            target.src = `${posterUrl(viewMode, item.tmdb_id, item.poster_path)}?r=${Date.now()}`;
+                          }, 500);
+                        } else if (item.poster_path && !target.dataset.fallback) {
+                          // Fallback directly to TMDB CDN if local server fails repeatedly
+                          target.dataset.fallback = 'true';
+                          target.src = `https://image.tmdb.org/t/p/w500${item.poster_path}`;
                         }
                       }}
                       className="w-full h-full object-cover relative z-10"

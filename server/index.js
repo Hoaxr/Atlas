@@ -73,6 +73,9 @@ app.set('trust proxy', 1);
 app.set('query parser', 'extended');
 
 const server = http.createServer(app);
+// Enable Keep-Alive with sensible timeouts to accelerate high-volume concurrent asset requests (posters)
+server.keepAliveTimeout = 65000;
+server.headersTimeout = 66000;
 const PORT = process.env.PORT || 9898;
 
 // WebSocket server
@@ -669,6 +672,10 @@ app.get('/api/images/:type/:tmdbId/poster', async (req, res) => {
     const cachedPath = await imageService.ensurePoster(type, tmdbId, tmdbPath);
 
     if (!cachedPath || !fs.existsSync(cachedPath)) {
+      if (tmdbPath) {
+        // Redirect directly to TMDB CDN if local download/disk write is slow or failed
+        return res.redirect(302, `https://image.tmdb.org/t/p/w500${tmdbPath}`);
+      }
       return res.status(404).json({ error: 'No poster available' });
     }
 
