@@ -88,6 +88,61 @@ test('Executable Payload Blocking & Quarantine Security', async (t) => {
     assert.strictEqual(typeof downloadClientService.getTorrentFiles, 'function');
     assert.strictEqual(typeof downloadClientService.quarantineMaliciousTorrent, 'function');
     assert.strictEqual(typeof downloadClientService.inspectTorrentsForMalware, 'function');
+    assert.strictEqual(typeof downloadClientService.isExplicitlyNonMedia, 'function');
+    assert.strictEqual(typeof downloadClientService.isAtlasMediaCandidate, 'function');
+  });
+
+  await t.test('downloadClientService.isExplicitlyNonMedia classifies games, software, and non-media categories', () => {
+    const { isExplicitlyNonMedia } = downloadClientService;
+
+    // Categories
+    assert.strictEqual(isExplicitlyNonMedia({ category: 'games' }), true);
+    assert.strictEqual(isExplicitlyNonMedia({ category: 'game' }), true);
+    assert.strictEqual(isExplicitlyNonMedia({ category: 'Software' }), true);
+    assert.strictEqual(isExplicitlyNonMedia({ category: 'PC' }), true);
+    assert.strictEqual(isExplicitlyNonMedia({ category: 'apps' }), true);
+    assert.strictEqual(isExplicitlyNonMedia({ category: 'other' }), true);
+    assert.strictEqual(isExplicitlyNonMedia({ category: 'ebooks' }), true);
+
+    // Tags
+    assert.strictEqual(isExplicitlyNonMedia({ tags: ['pc', 'game'] }), true);
+    assert.strictEqual(isExplicitlyNonMedia({ tags: 'gaming' }), true);
+
+    // Save path
+    assert.strictEqual(isExplicitlyNonMedia({ save_path: '/mnt/storage/downloads/games' }), true);
+    assert.strictEqual(isExplicitlyNonMedia({ save_path: '/mnt/storage/software' }), true);
+
+    // Media categories and default/empty
+    assert.strictEqual(isExplicitlyNonMedia({ category: 'movies' }), false);
+    assert.strictEqual(isExplicitlyNonMedia({ category: 'tv' }), false);
+    assert.strictEqual(isExplicitlyNonMedia({ category: 'music' }), false);
+    assert.strictEqual(isExplicitlyNonMedia({ category: '' }), false);
+    assert.strictEqual(isExplicitlyNonMedia({ save_path: '/mnt/storage/downloads' }), false);
+  });
+
+  await t.test('downloadClientService.isAtlasMediaCandidate protects game torrents from malware deletion', () => {
+    const { isAtlasMediaCandidate } = downloadClientService;
+
+    // Game torrents with non-media categories or tags must NEVER be candidates
+    assert.strictEqual(isAtlasMediaCandidate({ name: 'Cyberpunk.2077.v2.1-RUNE', category: 'games' }), false);
+    assert.strictEqual(isAtlasMediaCandidate({ name: 'Grand.Theft.Auto.V.Repack.by.FitGirl', category: 'game' }), false);
+    assert.strictEqual(isAtlasMediaCandidate({ name: 'Windows.11.Pro.x64.ISO', category: 'software' }), false);
+    assert.strictEqual(isAtlasMediaCandidate({ name: 'Steam.Game.Setup.exe', tags: ['pc', 'gaming'] }), false);
+
+    // Uncategorized user torrents not tracked in Atlas database must NEVER be candidates
+    assert.strictEqual(isAtlasMediaCandidate({ name: 'Random.Game.Setup.v1.0-SKIDROW', category: '', tags: [] }), false);
+
+    // Atlas media torrents with media category or mediaType are candidates
+    assert.strictEqual(isAtlasMediaCandidate({ name: 'Gladiator.II.2024.1080p.BluRay', category: 'movies' }), true);
+    assert.strictEqual(isAtlasMediaCandidate({ name: 'Dark.Matter.S01E01.1080p', category: 'tv' }), true);
+    assert.strictEqual(isAtlasMediaCandidate({ name: 'Daft.Punk.Discovery.FLAC', category: 'music' }), true);
+    assert.strictEqual(isAtlasMediaCandidate({ name: 'Custom.Media.Release', mediaType: 'movie' }), true);
+  });
+
+  await t.test('quarantineMaliciousTorrent aborts without deleting files if torrent is non-media', async () => {
+    const { quarantineMaliciousTorrent } = downloadClientService;
+    // Should safely abort without throwing or removing client data
+    await quarantineMaliciousTorrent({ name: 'Legal.PC.Game.Setup.exe', hash: 'fakegamehash123', category: 'games' }, 'setup.exe');
   });
 
   await t.test('resetDownloadsNotInClient correctly resets unmonitored items and recalculates music artist status', async () => {

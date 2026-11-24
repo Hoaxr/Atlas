@@ -299,7 +299,108 @@ const getTorrentFiles = async (hash, clientId = null) => {
   return [];
 };
 
+const NON_MEDIA_CATEGORIES = new Set([
+  'game', 'games', 'gaming', 'pc', 'software', 'app', 'apps', 'application',
+  'applications', 'program', 'programs', 'iso', 'other', 'books', 'ebook',
+  'ebooks', 'comic', 'comics', 'audiobook', 'audiobooks', 'manual'
+]);
+
+const isExplicitlyNonMedia = (torrent) => {
+  if (!torrent) return false;
+  const cat = (torrent.category || '').toLowerCase().trim();
+  const tagsStr = (Array.isArray(torrent.tags) ? torrent.tags.join(' ') : (torrent.tags || '')).toLowerCase();
+  const savePath = (torrent.save_path || torrent.downloadDir || '').toLowerCase();
+
+  // If category or tags match non-media keywords
+  if (cat && (NON_MEDIA_CATEGORIES.has(cat) || Array.from(NON_MEDIA_CATEGORIES).some(kw => cat.includes(kw)))) {
+    return true;
+  }
+  if (tagsStr && Array.from(NON_MEDIA_CATEGORIES).some(kw => tagsStr.includes(kw))) {
+    return true;
+  }
+  // If save path explicitly contains game/software/apps directory
+  if (['/games', '/game', '/software', '/apps', '/pc'].some(p => savePath.includes(p))) {
+    return true;
+  }
+  return false;
+};
+
+const isAtlasMediaCandidate = (torrent) => {
+  if (!torrent) return false;
+
+  // Never inspect torrents explicitly tagged or categorized as non-media (e.g. games, software)
+  if (isExplicitlyNonMedia(torrent)) {
+    return false;
+  }
+
+  // Check if tagged/categorized as Atlas media
+  const cat = (torrent.category || '').toLowerCase().trim();
+  const tagsStr = (Array.isArray(torrent.tags) ? torrent.tags.join(' ') : (torrent.tags || '')).toLowerCase();
+  const isMediaCategory = ['movies', 'movie', 'tv', 'music', 'audio'].some(c => cat === c || tagsStr.includes(c));
+  if (isMediaCategory || torrent.mediaType === 'movie' || torrent.mediaType === 'tv' || torrent.mediaType === 'music') {
+    return true;
+  }
+
+  // If uncategorized, check if it matches an active downloading Atlas item in the DB
+  try {
+    const rawName = (torrent.name || '').toLowerCase();
+    if (!rawName) return false;
+
+    // Check downloading movies
+    const downloadingMovies = db.prepare("SELECT title FROM movies WHERE status IN ('downloading', 'monitored')").all();
+    for (const m of downloadingMovies) {
+      if (!m.title) continue;
+      const lowerTitle = m.title.toLowerCase();
+      // Word boundary check or length > 3 to avoid substring false positives on short words
+      if (lowerTitle.length > 3 && rawName.includes(lowerTitle)) return true;
+      if (new RegExp(`(?:^|[^a-z0-9])${lowerTitle.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')}(?:$|[^a-z0-9])`, 'i').test(rawName)) return true;
+    }
+
+    // Check downloading episodes
+    const downloadingEpisodes = db.prepare(`
+      SELECT s.title as show_title, e.season_number, e.episode_number
+      FROM episodes e
+      JOIN shows s ON e.show_id = s.id
+      WHERE e.status = 'downloading'
+    `).all();
+    for (const ep of downloadingEpisodes) {
+      if (!ep.show_title) continue;
+      const lowerShow = ep.show_title.toLowerCase();
+      const s = `s${String(ep.season_number).padStart(2, '0')}`;
+      const e = `e${String(ep.episode_number).padStart(2, '0')}`;
+      if (rawName.includes(lowerShow) && (rawName.includes(`${s}${e}`) || rawName.includes(`${s}e${ep.episode_number}`))) {
+        return true;
+      }
+    }
+
+    // Check downloading music albums
+    const downloadingAlbums = db.prepare(`
+      SELECT al.title, a.name as artist_name
+      FROM music_albums al
+      JOIN music_artists a ON al.artist_id = a.id
+      WHERE al.status = 'downloading'
+    `).all();
+    for (const alb of downloadingAlbums) {
+      const lowerTitle = (alb.title || '').toLowerCase();
+      const lowerArtist = (alb.artist_name || '').toLowerCase();
+      if ((lowerTitle.length > 3 && rawName.includes(lowerTitle)) || (lowerArtist.length > 3 && rawName.includes(lowerArtist))) {
+        return true;
+      }
+    }
+  } catch {
+    // If DB check fails, default to false (safe by default: do not delete user's downloads)
+    return false;
+  }
+
+  return false;
+};
+
 const quarantineMaliciousTorrent = async (torrent, badFileName) => {
+  if (!torrent || isExplicitlyNonMedia(torrent)) {
+    console.warn(`[Security] Aborting quarantine: "${torrent?.name}" is explicitly classified as non-media (e.g. game/software).`);
+    return;
+  }
+
   console.warn(`[Security] QUARANTINE: Executable payload detected in torrent "${torrent.name}" (${badFileName}). Terminating download.`);
 
   // 1. Delete torrent from client including local data
@@ -433,6 +534,13 @@ const inspectTorrentsForMalware = (torrents) => {
     if (!t.hash) continue;
     if (safeHashes.has(t.hash) || inspectingHashes.has(t.hash)) continue;
 
+    // Only inspect torrents that are managed by Atlas or candidates for Atlas media.
+    // Torrents belonging to other categories (e.g. games, software, apps) or manual user downloads are never inspected or quarantined.
+    if (!isAtlasMediaCandidate(t)) {
+      safeHashes.add(t.hash);
+      continue;
+    }
+
     // Fast check: if torrent name itself has executable extension
     if (DANGEROUS_FILE_REGEX.test((t.name || '').trim())) {
       quarantineMaliciousTorrent(t, t.name).catch(() => {});
@@ -502,5 +610,6 @@ module.exports = {
   getClient, getAllClients,
   addTorrent, getTorrents, getTransferInfo, getTorrentFiles, pauseTorrent, resumeTorrent, deleteTorrent,
   pauseTorrents, resumeTorrents, deleteTorrents, testClientConnection,
-  quarantineMaliciousTorrent, inspectTorrentsForMalware
+  quarantineMaliciousTorrent, inspectTorrentsForMalware,
+  isExplicitlyNonMedia, isAtlasMediaCandidate
 };

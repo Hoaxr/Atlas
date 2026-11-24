@@ -621,27 +621,6 @@ const runMediaManagement = async () => {
       return 'skipped';
     }
     
-    // Safety check: quarantine any torrent whose content path contains dangerous executable files (.exe, .bat, etc.)
-    for (const torrent of torrentList) {
-      const contentPath = getMappedDownloadPath(torrent);
-      if (contentPath && fs.existsSync(contentPath)) {
-        const dangerous = await findDangerousFiles(contentPath);
-        if (dangerous.length > 0 || isDangerousFile(contentPath)) {
-          console.warn(`[Security] Quarantining malicious download "${torrent.name}" at ${contentPath}`);
-          try {
-            await downloadClientService.deleteTorrent(torrent.hash, true);
-          } catch { /* ignore */ }
-          if (isSafeToPurgePath(contentPath, torrent)) {
-            try {
-              await fs.promises.rm(contentPath, { recursive: true, force: true });
-            } catch { /* ignore */ }
-          } else {
-            console.warn(`[Security] Aborting quarantine deletion: "${contentPath}" is a protected root or library path`);
-          }
-        }
-      }
-    }
-
     // Filter finished torrents
     const finishedTorrents = torrentList.filter(t => t.progress >= 100);
 
@@ -788,10 +767,14 @@ const importMovie = async (torrent, movie) => {
         } catch (delErr) {
           console.error(`[Security] Failed to delete malicious torrent from client: ${delErr.message}`);
         }
-        try {
-          await fs.promises.rm(contentPath, { recursive: true, force: true });
-        } catch (rmErr) {
-          console.error(`[Security] Failed to remove malicious path from disk: ${rmErr.message}`);
+        if (isSafeToPurgePath(contentPath, torrent)) {
+          try {
+            await fs.promises.rm(contentPath, { recursive: true, force: true });
+          } catch (rmErr) {
+            console.error(`[Security] Failed to remove malicious path from disk: ${rmErr.message}`);
+          }
+        } else {
+          console.warn(`[Security] Aborting quarantine deletion: "${contentPath}" is a protected root or library path`);
         }
         db.prepare("UPDATE movies SET status = 'monitored', file_path = NULL, file_size = 0, scene_name = NULL WHERE id = ?").run(movie.id);
         eventBus.error('Malicious Download Removed', { title: movie.title, message: `Removed fake movie release containing executable files.` });
@@ -1094,10 +1077,14 @@ const importEpisode = async (torrent, episode) => {
         } catch (delErr) {
           console.error(`[Security] Failed to delete malicious torrent from client: ${delErr.message}`);
         }
-        try {
-          await fs.promises.rm(contentPath, { recursive: true, force: true });
-        } catch (rmErr) {
-          console.error(`[Security] Failed to remove malicious path from disk: ${rmErr.message}`);
+        if (isSafeToPurgePath(contentPath, torrent)) {
+          try {
+            await fs.promises.rm(contentPath, { recursive: true, force: true });
+          } catch (rmErr) {
+            console.error(`[Security] Failed to remove malicious path from disk: ${rmErr.message}`);
+          }
+        } else {
+          console.warn(`[Security] Aborting quarantine deletion: "${contentPath}" is a protected root or library path`);
         }
         db.prepare("UPDATE episodes SET status = 'monitored', file_path = NULL, file_size = NULL, scene_name = NULL WHERE id = ?").run(episode.id);
         eventBus.error('Malicious Download Removed', { title: `${episode.show_title} S${episode.season_number}E${episode.episode_number}`, message: `Removed fake episode release containing executable files.` });
@@ -1432,9 +1419,13 @@ const importSeasonPack = async (torrent, { showId, showTitle, seasonNumber }) =>
             await downloadClientService.deleteTorrent(torrent.hash, true);
           }
         } catch { /* ignore */ }
-        try {
-          await fs.promises.rm(contentPath, { recursive: true, force: true });
-        } catch { /* ignore */ }
+        if (isSafeToPurgePath(contentPath, torrent)) {
+          try {
+            await fs.promises.rm(contentPath, { recursive: true, force: true });
+          } catch { /* ignore */ }
+        } else {
+          console.warn(`[Security] Aborting quarantine deletion: "${contentPath}" is a protected root or library path`);
+        }
       }
       return;
     }
