@@ -160,7 +160,7 @@ const runSearchCycle = async () => {
         
         if (results.length > 0) {
           const bestRelease = results[0]; 
-          await downloadClientService.addTorrent(bestRelease.link);
+          await downloadClientService.addTorrent(bestRelease.link, 'movie');
           db.prepare("UPDATE movies SET status = 'downloading', scene_name = COALESCE(NULLIF(scene_name, ''), ?), search_state = 'COMPLETED', retry_count = 0, last_success_at = datetime('now'), next_search_at = NULL WHERE id = ?").run(bestRelease.title, movie.id);
           eventBus.info('Download started', { title: movie.title, type: 'movie', release: bestRelease.title });
           return;
@@ -330,7 +330,7 @@ const runSearchCycle = async () => {
         
         if (results.length > 0) {
           const bestRelease = results[0];
-          await downloadClientService.addTorrent(bestRelease.link);
+          await downloadClientService.addTorrent(bestRelease.link, 'tv');
           db.prepare("UPDATE episodes SET status = 'downloading', scene_name = COALESCE(NULLIF(scene_name, ''), ?), search_state = 'COMPLETED', retry_count = 0, last_success_at = datetime('now'), next_search_at = NULL WHERE id = ?").run(bestRelease.title, ep.id);
           eventBus.info('Download started', { title: epLabel, type: 'episode', release: bestRelease.title });
         } else {

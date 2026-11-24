@@ -234,4 +234,62 @@ test('Core Automation & Media Post-Processing Lifecycle E2E Suite', async (t) =>
       downloadClientService.getTorrents = originalGetTorrents;
     }
   });
+
+  await t.test('Lifecycle: TV episode import correctly selects library_paths with type="tv" even without "tv" in path string', async () => {
+    const customSeriesDir = path.join(tempDir, 'series_custom');
+    fs.mkdirSync(customSeriesDir, { recursive: true });
+
+    // Temporarily replace library_paths with a tv path named "series_custom" (no "tv" or "show" in name)
+    const savedPaths = db.prepare("SELECT * FROM library_paths").all();
+    db.prepare("DELETE FROM library_paths").run();
+    db.prepare("INSERT INTO library_paths (path, type) VALUES (?, 'movies')").run(moviesDir);
+    db.prepare("INSERT INTO library_paths (path, type) VALUES (?, 'tv')").run(customSeriesDir);
+
+    const showTitle = 'E2E Test Show CustomPath';
+    const showInfo = db.prepare(`
+      INSERT INTO shows (title, status, monitored, tmdb_id)
+      VALUES (?, 'monitored', 1, 9999904)
+    `).run(showTitle);
+    const showId = showInfo.lastInsertRowid;
+
+    const epInfo = db.prepare(`
+      INSERT INTO episodes (show_id, season_number, episode_number, title, status, monitored)
+      VALUES (?, 1, 1, 'E2E Test Ep Custom', 'downloading', 1)
+    `).run(showId);
+    const epId = epInfo.lastInsertRowid;
+
+    const torrentName = 'E2E.Test.Show.CustomPath.S01E01.1080p.WEB-GRP';
+    const torrentContentDir = path.join(downloadsDir, torrentName);
+    fs.mkdirSync(torrentContentDir, { recursive: true });
+    const videoFile = path.join(torrentContentDir, 'custom.s01e01.mkv');
+    fs.writeFileSync(videoFile, Buffer.alloc(1024 * 64, 'fake-custom-ep-payload'));
+
+    const originalGetTorrents = downloadClientService.getTorrents;
+    downloadClientService.getTorrents = async () => [
+      {
+        hash: 'mockhashcustompath123',
+        name: torrentName,
+        progress: 100,
+        savePath: downloadsDir,
+        contentPath: torrentContentDir,
+        state: 'uploading'
+      }
+    ];
+
+    try {
+      await runMediaManagement();
+
+      const updated = db.prepare('SELECT * FROM episodes WHERE id = ?').get(epId);
+      assert.strictEqual(updated.status, 'downloaded');
+      assert.ok(updated.file_path, 'File path must be set');
+      assert.ok(updated.file_path.startsWith(customSeriesDir), `Episode must be imported into customSeriesDir, got: ${updated.file_path}`);
+    } finally {
+      downloadClientService.getTorrents = originalGetTorrents;
+      db.prepare("DELETE FROM library_paths").run();
+      const insertPath = db.prepare("INSERT INTO library_paths (id, path, type, added_at) VALUES (?, ?, ?, ?)");
+      for (const p of savedPaths) {
+        insertPath.run(p.id, p.path, p.type, p.added_at);
+      }
+    }
+  });
 });

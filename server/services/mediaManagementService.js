@@ -1018,7 +1018,7 @@ const importEpisode = async (torrent, episode) => {
   console.log(`[MediaManagement] Importing episode: ${episode.show_title} S${episode.season_number}E${episode.episode_number}`);
   
   try {
-    const paths = db.prepare('SELECT path FROM library_paths').all();
+    const paths = db.prepare('SELECT path, type FROM library_paths').all();
     if (paths.length === 0) {
       console.warn('[MediaManagement] No library paths configured to import to!');
       return;
