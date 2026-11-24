@@ -1402,6 +1402,8 @@ export default function Dashboard() {
                           // Fallback directly to TMDB CDN if local server fails repeatedly
                           target.dataset.fallback = 'true';
                           target.src = `https://image.tmdb.org/t/p/w500${item.poster_path}`;
+                        } else {
+                          target.style.display = 'none';
                         }
                       }}
                       className="w-full h-full object-cover relative z-10"

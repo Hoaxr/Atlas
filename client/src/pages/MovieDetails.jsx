@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import { customAlert, customConfirm } from '../utils/alerts';
 import { useOutsideClick } from '../lib/useOutsideClick';
-import { posterUrl, tmdbImgUrl } from '../lib/posterUrl';
+import { posterUrl, backdropUrl } from '../lib/posterUrl';
 
 import TrailerModal from '../components/TrailerModal';
 import ManualSearchModal from '../components/ManualSearchModal';
@@ -282,8 +282,17 @@ export default function MovieDetails() {
           className="fixed inset-0 z-0"
         >
           <img
-            src={tmdbImgUrl(tmdbDetails.backdrop_path, 'original')}
+            src={backdropUrl('movies', movie.tmdb_id, tmdbDetails.backdrop_path, 'original')}
             alt=""
+            onError={(e) => {
+              const target = e.currentTarget;
+              if (tmdbDetails.backdrop_path && !target.dataset.fallback) {
+                target.dataset.fallback = 'true';
+                target.src = `https://image.tmdb.org/t/p/original${tmdbDetails.backdrop_path}`;
+              } else {
+                target.style.display = 'none';
+              }
+            }}
             className="w-full h-full object-cover"
           />
           <div className="absolute inset-0 bg-gradient-to-b from-slate-950/85 via-slate-950/75 to-slate-950/98" />
@@ -403,17 +412,24 @@ export default function MovieDetails() {
             {/* ─── Left: Poster Column ─── */}
             <div className="w-full max-w-[280px] mx-auto md:max-w-none md:w-[260px] lg:w-[280px] shrink-0 flex flex-col gap-3">
               {/* Poster */}
-              <div className="relative group rounded-lg overflow-hidden shadow-lg border border-slate-800 aspect-[2/3]">
+              <div className="relative group rounded-lg overflow-hidden shadow-lg border border-slate-800 aspect-[2/3] bg-slate-950">
+                <div className="absolute inset-0 flex flex-col items-center justify-center p-3 text-center text-slate-500">
+                  <Film className="w-10 h-10 text-slate-600 mb-2" />
+                  <span className="text-xs text-slate-400 font-medium line-clamp-2">{movie.title}</span>
+                </div>
                 <img
                   src={posterUrl('movies', movie.tmdb_id, movie.poster_path)}
                   alt={movie.title}
                   onError={(e) => {
-                    if (movie.poster_path && !e.currentTarget.dataset.fallback) {
-                      e.currentTarget.dataset.fallback = 'true';
-                      e.currentTarget.src = `https://image.tmdb.org/t/p/w500${movie.poster_path}`;
+                    const target = e.currentTarget;
+                    if (movie.poster_path && !target.dataset.fallback) {
+                      target.dataset.fallback = 'true';
+                      target.src = `https://image.tmdb.org/t/p/w500${movie.poster_path}`;
+                    } else {
+                      target.style.display = 'none';
                     }
                   }}
-                  className="w-full h-full object-cover"
+                  className="relative z-10 w-full h-full object-cover"
                 />
                 <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-slate-900 to-transparent pointer-events-none" />
                 {trailerKey && (
@@ -908,18 +924,16 @@ export default function MovieDetails() {
                           to={`/person/${person.id}`}
                           className="shrink-0 flex flex-col items-center gap-2 group"
                         >
-                          <div className="w-24 h-24 rounded-full overflow-hidden bg-slate-700 ring-2 ring-white/10 group-hover:ring-cyan-500/40 transition-all shadow-md">
-                            {person.profile_path ? (
+                          <div className="relative w-24 h-24 rounded-full overflow-hidden bg-slate-700 ring-2 ring-white/10 group-hover:ring-cyan-500/40 transition-all shadow-md flex items-center justify-center text-slate-500">
+                            <svg className="w-10 h-10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>
+                            {person.profile_path && (
                               <img
                                 src={`https://image.tmdb.org/t/p/w185${person.profile_path}`}
                                 alt={person.name}
-                                className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
+                                onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                                className="absolute inset-0 w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
                                 loading="lazy"
                               />
-                            ) : (
-                              <div className="w-full h-full flex items-center justify-center text-slate-500">
-                                <svg className="w-10 h-10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>
-                              </div>
                             )}
                           </div>
                           <p className="text-xs font-semibold text-slate-300 group-hover:text-cyan-400 text-center leading-tight whitespace-nowrap transition-colors">{person.name}</p>

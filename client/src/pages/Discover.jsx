@@ -524,15 +524,18 @@ export default function Discover() {
               </div>
             </div>
           )}
-          {poster ? (
+          <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-500 text-center p-2 text-xs">
+            {displayType === 'movie' ? <Film className="w-8 h-8 text-slate-600 mb-1" /> : <Tv className="w-8 h-8 text-slate-600 mb-1" />}
+            <span className="text-[11px] text-slate-400 font-medium line-clamp-1 px-1">{title}</span>
+          </div>
+          {poster && (
             <img 
               src={poster} 
               alt={title}
-              className="w-full h-full object-cover"
+              onError={(e) => { e.currentTarget.style.display = 'none'; }}
+              className="relative z-1 w-full h-full object-cover"
               loading="lazy"
             />
-          ) : (
-            <div className="w-full h-full flex items-center justify-center text-slate-500 text-center p-2 text-xs">No Image</div>
           )}
           
           <div className={`absolute inset-0 bg-slate-950/80 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col items-center justify-center z-10 pointer-events-none ${

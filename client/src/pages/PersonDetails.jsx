@@ -102,17 +102,17 @@ export default function PersonDetails() {
 
       {/* Hero */}
       <div className="flex flex-col sm:flex-row gap-6 items-start">
-        {person.profile_path ? (
-          <img
-            src={`${IMG_BASE}w342${person.profile_path}`}
-            alt={person.name}
-            className="w-36 h-52 object-cover rounded-2xl shrink-0 shadow-2xl ring-1 ring-white/10"
-          />
-        ) : (
-          <div className="w-36 h-52 rounded-2xl bg-slate-800 flex items-center justify-center shrink-0">
-            <User className="w-12 h-12 text-slate-600" />
-          </div>
-        )}
+        <div className="relative w-36 h-52 rounded-2xl bg-slate-800 flex items-center justify-center shrink-0 overflow-hidden shadow-2xl ring-1 ring-white/10">
+          <User className="w-12 h-12 text-slate-600" />
+          {person.profile_path && (
+            <img
+              src={`${IMG_BASE}w342${person.profile_path}`}
+              alt={person.name}
+              onError={(e) => { e.currentTarget.style.display = 'none'; }}
+              className="absolute inset-0 w-full h-full object-cover"
+            />
+          )}
+        </div>
 
         <div className="space-y-3 flex-1">
           <h1 className="text-3xl font-black text-white">{person.name}</h1>
@@ -192,17 +192,17 @@ export default function PersonDetails() {
               className="group block rounded-xl overflow-hidden bg-slate-900/60 border border-white/5 hover:border-white/15 transition-all hover:-translate-y-0.5 hover:shadow-xl relative"
             >
               <div className="relative aspect-[2/3] bg-slate-800">
-                {credit.poster_path ? (
+                <div className="absolute inset-0 flex items-center justify-center text-slate-600">
+                  {isMovie ? <Film className="w-8 h-8 text-slate-600" /> : <Tv className="w-8 h-8 text-slate-600" />}
+                </div>
+                {credit.poster_path && (
                   <img
                     src={`${IMG_BASE}w342${credit.poster_path}`}
                     alt={title}
-                    className="w-full h-full object-cover"
+                    onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                    className="relative z-10 w-full h-full object-cover"
                     loading="lazy"
                   />
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center">
-                    {isMovie ? <Film className="w-8 h-8 text-slate-600" /> : <Tv className="w-8 h-8 text-slate-600" />}
-                  </div>
                 )}
 
                 {/* In library badge */}

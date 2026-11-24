@@ -124,15 +124,14 @@ export function AnimatedUpNextCard({ item, type, onMarkWatched, onDismiss }) {
         animState === 'exiting'
           ? { opacity: 0, scale: 0.9, y: -16, filter: 'blur(4px)' }
           : animState === 'animating'
-          ? { opacity: 1, scale: 1.01, y: 0, filter: 'blur(0px)' }
-          : { opacity: 1, scale: 1, y: 0, filter: 'blur(0px)' }
+            ? { opacity: 1, scale: 1.01, y: 0, filter: 'blur(0px)' }
+            : { opacity: 1, scale: 1, y: 0, filter: 'blur(0px)' }
       }
       transition={{ duration: 0.35, ease: [0.4, 0, 0.2, 1] }}
-      className={`w-48 sm:w-72 md:w-80 shrink-0 snap-start bg-slate-800/60 border rounded-xl sm:rounded-2xl overflow-hidden transition-all duration-500 flex flex-col group relative ${
-        isCompleted
-          ? 'border-cyan-500/40 ring-1 ring-cyan-500/20 shadow-lg shadow-cyan-500/10'
-          : 'border-slate-700/50 shadow-xl hover:border-cyan-500/40 hover:-translate-y-1'
-      }`}
+      className={`w-48 sm:w-72 md:w-80 shrink-0 snap-start bg-slate-800/60 border rounded-xl sm:rounded-2xl overflow-hidden transition-all duration-500 flex flex-col group relative ${isCompleted
+        ? 'border-cyan-500/40 ring-1 ring-cyan-500/20 shadow-lg shadow-cyan-500/10'
+        : 'border-slate-700/50 shadow-xl hover:border-cyan-500/40 hover:-translate-y-1'
+        }`}
     >
       {/* CARD AMBIENT GLOW ON SUCCESS */}
       <AnimatePresence>
@@ -148,7 +147,7 @@ export function AnimatedUpNextCard({ item, type, onMarkWatched, onDismiss }) {
       </AnimatePresence>
 
       {/* THUMBNAIL CONTAINER */}
-      <div 
+      <div
         role="button"
         tabIndex={0}
         aria-label={`View ${isEpisode ? item.show_title : item.title}`}
@@ -168,9 +167,8 @@ export function AnimatedUpNextCard({ item, type, onMarkWatched, onDismiss }) {
             loading="lazy"
             decoding="async"
             onError={handleImageError}
-            className={`w-full h-full object-cover group-hover:scale-105 transition-all duration-500 ease-out ${
-              isCompleted ? 'brightness-110' : ''
-            }`}
+            className={`w-full h-full object-cover group-hover:scale-105 transition-all duration-500 ease-out ${isCompleted ? 'brightness-110' : ''
+              }`}
           />
         ) : (
           <div className="w-full h-full flex flex-col items-center justify-center text-slate-500 bg-slate-950 p-2 text-center select-none">
@@ -225,7 +223,7 @@ export function AnimatedUpNextCard({ item, type, onMarkWatched, onDismiss }) {
 
         {/* ── SATISFYING CHECKMARK BUTTON & CELEBRATION EFFECTS ── */}
         <div className="absolute bottom-2 sm:bottom-3 right-2 sm:right-3 z-20 flex items-center justify-center">
-          
+
           {/* RIPPLE EFFECT */}
           <AnimatePresence>
             {isCompleted && (
@@ -269,11 +267,10 @@ export function AnimatedUpNextCard({ item, type, onMarkWatched, onDismiss }) {
                 : {}
             }
             transition={{ type: 'spring', stiffness: 400, damping: 17 }}
-            className={`p-1.5 sm:p-2 rounded-lg sm:rounded-xl backdrop-blur-md transition-colors duration-300 shadow-lg cursor-pointer flex items-center gap-1.5 ${
-              isCompleted
-                ? 'bg-emerald-500 text-white border-emerald-400'
-                : 'bg-slate-900/80 text-slate-300 hover:bg-emerald-500 hover:text-white border border-white/10 hover:border-emerald-400'
-            }`}
+            className={`p-1.5 sm:p-2 rounded-lg sm:rounded-xl backdrop-blur-md transition-colors duration-300 shadow-lg cursor-pointer flex items-center gap-1.5 ${isCompleted
+              ? 'bg-emerald-500 text-white border-emerald-400'
+              : 'bg-slate-900/80 text-slate-300 hover:bg-emerald-500 hover:text-white border border-white/10 hover:border-emerald-400'
+              }`}
             title="Mark Watched"
           >
             {isCompleted ? (
@@ -295,7 +292,7 @@ export function AnimatedUpNextCard({ item, type, onMarkWatched, onDismiss }) {
       <div className="p-2.5 sm:p-4 flex-1 flex flex-col justify-between space-y-1.5 sm:space-y-3 z-10">
         <div>
           <div className="flex items-start justify-between gap-1.5 sm:gap-2">
-            <h3 
+            <h3
               onClick={handleTitleClick}
               className="font-bold text-slate-100 text-xs sm:text-base md:text-lg truncate group-hover:text-cyan-400 transition-colors cursor-pointer min-w-0"
             >
@@ -313,8 +310,8 @@ export function AnimatedUpNextCard({ item, type, onMarkWatched, onDismiss }) {
             {isEpisode
               ? item.episode_title || `Episode ${item.episode_number}`
               : item.runtime
-              ? `${item.runtime} mins`
-              : 'Movie'}
+                ? `${item.runtime} mins`
+                : 'Movie'}
           </p>
         </div>
 
@@ -328,8 +325,8 @@ export function AnimatedUpNextCard({ item, type, onMarkWatched, onDismiss }) {
                 width: isCompleted
                   ? '100%'
                   : isEpisode && item.total_episodes > 0
-                  ? `${Math.round(((item.watched_episodes ?? Math.max(0, item.total_episodes - (item.episodes_left || 0))) / item.total_episodes) * 100)}%`
-                  : `${item.watch_progress || 0}%`
+                    ? `${Math.round(((item.watched_episodes ?? Math.max(0, item.total_episodes - (item.episodes_left || 0))) / item.total_episodes) * 100)}%`
+                    : `${item.watch_progress || 0}%`
               }}
               transition={{ duration: 0.5, ease: 'easeOut' }}
             />

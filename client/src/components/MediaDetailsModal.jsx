@@ -6,12 +6,12 @@ import clsx from 'clsx';
 import { 
   X, Star, Calendar, Clock, Plus, PlayCircle, CheckCircle2, 
   CheckSquare, Square, XCircle, Trash2, Loader2, ChevronDown, 
-  Clapperboard, ShieldCheck, Bookmark, BookmarkMinus 
+  Clapperboard, ShieldCheck, Bookmark, BookmarkMinus, Film, Tv 
 } from 'lucide-react';
 import { customAlert } from '../utils/alerts';
 import TrailerModal from './TrailerModal';
 import Spinner from './shared/Spinner';
-import { posterUrl, tmdbImgUrl } from '../lib/posterUrl';
+import { posterUrl, backdropUrl, tmdbImgUrl } from '../lib/posterUrl';
 import { setCachedMovies, setCachedShows } from '../lib/libraryCache';
 import { invalidateLibraryIndex } from '../lib/libraryIndex';
 
@@ -320,8 +320,17 @@ export default function MediaDetailsModal({
             <div className="relative h-32 sm:h-40 w-full shrink-0 overflow-hidden bg-slate-950">
               {details.backdrop_path ? (
                 <img 
-                  src={tmdbImgUrl(details.backdrop_path, 'original')}
+                  src={backdropUrl(mediaType === 'movie' ? 'movies' : 'shows', details.id, details.backdrop_path, 'original')}
                   alt={title}
+                  onError={(e) => {
+                    const target = e.currentTarget;
+                    if (details.backdrop_path && !target.dataset.fallback) {
+                      target.dataset.fallback = 'true';
+                      target.src = `https://image.tmdb.org/t/p/original${details.backdrop_path}`;
+                    } else {
+                      target.style.display = 'none';
+                    }
+                  }}
                   className="w-full h-full object-cover object-top opacity-80"
                 />
               ) : (
@@ -340,6 +349,9 @@ export default function MediaDetailsModal({
                 
                 {/* Poster on the left */}
                 <div className="w-24 sm:w-28 shrink-0 aspect-[2/3] rounded-lg overflow-hidden shadow-xl border border-slate-700/70 bg-slate-950 relative group">
+                  <div className="absolute inset-0 flex items-center justify-center text-slate-600">
+                    {mediaType === 'movie' ? <Film className="w-6 h-6" /> : <Tv className="w-6 h-6" />}
+                  </div>
                   {details.poster_path ? (
                     <img 
                       src={isInLibrary
@@ -347,12 +359,15 @@ export default function MediaDetailsModal({
                         : tmdbImgUrl(details.poster_path)} 
                       alt={title}
                       onError={(e) => {
-                        if (details.poster_path && !e.currentTarget.dataset.fallback) {
-                          e.currentTarget.dataset.fallback = 'true';
-                          e.currentTarget.src = `https://image.tmdb.org/t/p/w500${details.poster_path}`;
+                        const target = e.currentTarget;
+                        if (details.poster_path && !target.dataset.fallback) {
+                          target.dataset.fallback = 'true';
+                          target.src = `https://image.tmdb.org/t/p/w500${details.poster_path}`;
+                        } else {
+                          target.style.display = 'none';
                         }
                       }}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                      className="relative z-10 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                     />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center text-slate-600 text-xs">No Poster</div>

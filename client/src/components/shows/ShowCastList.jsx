@@ -14,21 +14,19 @@ export default function ShowCastList({ credits }) {
             to={`/person/${person.id}`}
             className="shrink-0 flex flex-col items-center gap-2 group"
           >
-            <div className="w-24 h-24 rounded-full overflow-hidden bg-slate-700 ring-2 ring-white/10 group-hover:ring-purple-500/40 transition-all shadow-md">
-              {person.profile_path ? (
+            <div className="relative w-24 h-24 rounded-full overflow-hidden bg-slate-700 ring-2 ring-white/10 group-hover:ring-purple-500/40 transition-all shadow-md flex items-center justify-center text-slate-500">
+              <svg className="w-10 h-10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                <circle cx="12" cy="7" r="4" />
+              </svg>
+              {person.profile_path && (
                 <img
                   src={`https://image.tmdb.org/t/p/w185${person.profile_path}`}
                   alt={person.name}
-                  className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
+                  onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                  className="absolute inset-0 w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
                   loading="lazy"
                 />
-              ) : (
-                <div className="w-full h-full flex items-center justify-center text-slate-500">
-                  <svg className="w-10 h-10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-                    <circle cx="12" cy="7" r="4" />
-                  </svg>
-                </div>
               )}
             </div>
             <p className="text-xs font-semibold text-slate-300 group-hover:text-purple-400 text-center leading-tight whitespace-nowrap transition-colors">

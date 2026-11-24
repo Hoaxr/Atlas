@@ -5,7 +5,7 @@ import api from '../lib/api';
 import { formatSize, parseResolution, parseCodec, parseAudio, LANG_NAME } from '../lib/format';
 import { useSettings } from '../lib/useSettings';
 import { useTMDBDetails } from '../lib/useTMDBDetails';
-import { ArrowLeft, HardDrive, PlayCircle, ChevronLeft, ChevronRight, Bookmark, BookmarkMinus, Star, X, RefreshCw, Loader2, Film, Trash2, Globe, Eye, Volume2 } from 'lucide-react';
+import { ArrowLeft, HardDrive, PlayCircle, ChevronLeft, ChevronRight, Bookmark, BookmarkMinus, Star, X, RefreshCw, Loader2, Film, Tv, Trash2, Globe, Eye, Volume2 } from 'lucide-react';
 import { customAlert, customConfirm } from '../utils/alerts';
 import { useOutsideClick } from '../lib/useOutsideClick';
 import TrailerModal from '../components/TrailerModal';
@@ -13,7 +13,7 @@ import ManualSearchModal from '../components/ManualSearchModal';
 import EpisodeDetailsModal from '../components/EpisodeDetailsModal';
 import RemapModal from '../components/RemapModal';
 import { cachedShows } from '../lib/libraryCache';
-import { posterUrl, tmdbImgUrl } from '../lib/posterUrl';
+import { posterUrl, backdropUrl } from '../lib/posterUrl';
 import InlineError from '../components/shared/InlineError';
 
 import SubtitleLanguageBadge from '../components/shared/SubtitleLanguageBadge';
@@ -223,8 +223,17 @@ export default function ShowDetails() {
           className="fixed inset-0 z-0"
         >
           <img
-            src={tmdbImgUrl(tmdbDetails.backdrop_path, 'original')}
+            src={backdropUrl('shows', show.tmdb_id, tmdbDetails.backdrop_path, 'original')}
             alt=""
+            onError={(e) => {
+              const target = e.currentTarget;
+              if (tmdbDetails.backdrop_path && !target.dataset.fallback) {
+                target.dataset.fallback = 'true';
+                target.src = `https://image.tmdb.org/t/p/original${tmdbDetails.backdrop_path}`;
+              } else {
+                target.style.display = 'none';
+              }
+            }}
             className="w-full h-full object-cover"
           />
           <div className="absolute inset-0 bg-gradient-to-b from-slate-950/90 via-slate-950/70 to-slate-950/95" />
@@ -344,17 +353,24 @@ export default function ShowDetails() {
             {/* ─── Left: Poster Column ─── */}
             <div className="w-full max-w-[280px] mx-auto md:max-w-none md:w-[260px] lg:w-[280px] shrink-0 flex flex-col gap-3">
               {/* Poster */}
-              <div className="relative group rounded-lg overflow-hidden shadow-lg border border-slate-800 aspect-[2/3]">
+              <div className="relative group rounded-lg overflow-hidden shadow-lg border border-slate-800 aspect-[2/3] bg-slate-950">
+                <div className="absolute inset-0 flex flex-col items-center justify-center p-3 text-center text-slate-500">
+                  <Tv className="w-10 h-10 text-slate-600 mb-2" />
+                  <span className="text-xs text-slate-400 font-medium line-clamp-2">{show.title}</span>
+                </div>
                 <img
                   src={posterUrl('shows', show.tmdb_id, show.poster_path)}
                   alt={show.title}
                   onError={(e) => {
-                    if (show.poster_path && !e.currentTarget.dataset.fallback) {
-                      e.currentTarget.dataset.fallback = 'true';
-                      e.currentTarget.src = `https://image.tmdb.org/t/p/w500${show.poster_path}`;
+                    const target = e.currentTarget;
+                    if (show.poster_path && !target.dataset.fallback) {
+                      target.dataset.fallback = 'true';
+                      target.src = `https://image.tmdb.org/t/p/w500${show.poster_path}`;
+                    } else {
+                      target.style.display = 'none';
                     }
                   }}
-                  className="w-full h-full object-cover"
+                  className="relative z-10 w-full h-full object-cover"
                 />
                 <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-slate-900 to-transparent pointer-events-none" />
                 {trailerKey && (
