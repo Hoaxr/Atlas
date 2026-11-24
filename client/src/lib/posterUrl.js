@@ -29,6 +29,31 @@ export const posterUrl = (type, tmdbId, tmdbPath = null, size = 'w500') => {
 };
 
 /**
+ * backdropUrl — returns the URL for a cached backdrop served by Atlas.
+ *
+ * Usage:
+ *   backdropUrl('movies', item.tmdb_id, item.backdrop_path)
+ *   backdropUrl('shows',  item.tmdb_id, item.backdrop_path)
+ *
+ * Falls back to TMDB CDN if no tmdbId is present.
+ *
+ * @param {'movies'|'shows'} type
+ * @param {number|string|null} tmdbId
+ * @param {string|null}        [tmdbPath]
+ * @param {string}             [size]
+ */
+export const backdropUrl = (type, tmdbId, tmdbPath = null, size = 'w780') => {
+  if (tmdbId) {
+    const query = tmdbPath ? `?path=${encodeURIComponent(tmdbPath)}` : '';
+    return `/api/images/${type}/${tmdbId}/backdrop${query}`;
+  }
+  if (tmdbPath) {
+    return `https://image.tmdb.org/t/p/${size}${tmdbPath}`;
+  }
+  return null;
+};
+
+/**
  * Convenience: build a TMDB CDN URL directly (for people/backdrops that are
  * never stored locally — cast profile pics, backdrop hero images, etc.)
  */

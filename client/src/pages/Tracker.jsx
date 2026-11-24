@@ -24,12 +24,14 @@ const TimelineHistoryCard = ({ item, handleMarkUnwatched, handleDeleteHistory })
   const resolvedPoster = isMovie ? item.movie_poster : item.show_poster;
   const [localTitle, setLocalTitle] = useState(resolvedTitle);
   const [localPoster, setLocalPoster] = useState(resolvedPoster);
+  const [imgError, setImgError] = useState(false);
 
   useEffect(() => {
     const title = isMovie ? item.movie_title : item.show_title;
     const poster = isMovie ? item.movie_poster : item.show_poster;
     setLocalTitle(title);
     setLocalPoster(poster);
+    setImgError(false);
   }, [item.movie_title, item.show_title, item.movie_poster, item.show_poster, isMovie]);
 
   useEffect(() => {
@@ -98,10 +100,13 @@ const TimelineHistoryCard = ({ item, handleMarkUnwatched, handleDeleteHistory })
           onClick={handleTitleClick}
           className="relative w-12 h-16 sm:w-14 sm:h-20 bg-slate-950 rounded-lg overflow-hidden shrink-0 cursor-pointer border border-slate-800 group/poster"
         >
-          {poster ? (
+          {poster && !imgError ? (
             <img 
-              src={tmdbImgUrl(poster, 'w200')} 
+              src={poster.startsWith('/api') ? poster : tmdbImgUrl(poster, 'w200')} 
               alt={title} 
+              loading="lazy"
+              decoding="async"
+              onError={() => setImgError(true)}
               className="w-full h-full object-cover group-hover/poster:scale-105 transition-transform duration-300" 
             />
           ) : (
@@ -460,16 +465,18 @@ const Tracker = () => {
                 }}
                 className="w-16 sm:w-20 aspect-[2/3] rounded-xl overflow-hidden bg-slate-950 shrink-0 border border-white/10 shadow-lg shadow-black/70 cursor-pointer relative group/poster"
               >
-                {activeWatching.poster ? (
+                <div className="absolute inset-0 flex items-center justify-center text-cyan-400 bg-slate-900">
+                  <Tv className="w-6 h-6" />
+                </div>
+                {activeWatching.poster && (
                   <img 
                     src={activeWatching.poster.startsWith('/api') ? activeWatching.poster : tmdbImgUrl(activeWatching.poster, 'w200')} 
                     alt="" 
-                    className="w-full h-full object-cover group-hover/poster:scale-105 transition-transform duration-300" 
+                    onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                    className="relative z-10 w-full h-full object-cover group-hover/poster:scale-105 transition-transform duration-300" 
                   />
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center text-cyan-400 bg-slate-900"><Tv className="w-6 h-6" /></div>
                 )}
-                <div className="absolute bottom-1 right-1 p-1 rounded-md bg-black/70 backdrop-blur-xs border border-white/10 shadow-xs">
+                <div className="absolute bottom-1 right-1 p-1 rounded-md bg-black/70 backdrop-blur-xs border border-white/10 shadow-xs z-20">
                   {activeWatching.state === 'paused' ? (
                     <Pause className="w-2.5 h-2.5 text-amber-400 fill-amber-400" />
                   ) : (
@@ -562,10 +569,16 @@ const Tracker = () => {
                 }}
                 className="w-16 sm:w-20 aspect-[2/3] rounded-xl overflow-hidden bg-slate-950 shrink-0 border border-white/10 shadow-lg shadow-black/70 cursor-pointer relative group/poster"
               >
-                {currently.poster ? (
-                  <img src={tmdbImgUrl(currently.poster, 'w200')} alt="" className="w-full h-full object-cover group-hover/poster:scale-105 transition-transform duration-300" />
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center text-slate-600 bg-slate-900"><Tv className="w-6 h-6" /></div>
+                <div className="absolute inset-0 flex items-center justify-center text-slate-600 bg-slate-900">
+                  <Tv className="w-6 h-6" />
+                </div>
+                {currently.poster && (
+                  <img 
+                    src={tmdbImgUrl(currently.poster, 'w200')} 
+                    alt="" 
+                    onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                    className="relative z-10 w-full h-full object-cover group-hover/poster:scale-105 transition-transform duration-300" 
+                  />
                 )}
               </div>
               <div className="flex-1 min-w-0 space-y-1.5">

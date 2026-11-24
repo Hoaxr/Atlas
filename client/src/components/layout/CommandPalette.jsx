@@ -77,14 +77,19 @@ function Thumb({ src, icon: Icon, round }) {
   return (
     <span
       className={clsx(
-        'shrink-0 overflow-hidden bg-[#101e31] border border-white/10 flex items-center justify-center shadow-sm',
+        'shrink-0 overflow-hidden bg-[#101e31] border border-white/10 flex items-center justify-center shadow-sm relative',
         round ? 'w-10 h-10 rounded-full' : 'w-9 h-12 rounded-lg',
       )}
     >
-      {src ? (
-        <img src={src} alt="" loading="lazy" className="w-full h-full object-cover" />
-      ) : (
-        <Icon className="w-4 h-4 text-slate-500" />
+      {Icon && <Icon className="w-4 h-4 text-slate-500 absolute" />}
+      {src && (
+        <img
+          src={src}
+          alt=""
+          loading="lazy"
+          onError={(e) => { e.currentTarget.style.display = 'none'; }}
+          className="relative z-10 w-full h-full object-cover"
+        />
       )}
     </span>
   );

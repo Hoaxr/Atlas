@@ -498,13 +498,17 @@ export default function TopBar({ user, activity, updateUrl, alerts = [], onClear
                         )}
                       >
                         <div className={clsx(
-                          'shrink-0 overflow-hidden bg-[#101e31] border border-white/10 flex items-center justify-center shadow-sm',
+                          'shrink-0 overflow-hidden bg-[#101e31] border border-white/10 flex items-center justify-center shadow-sm relative',
                           item.isPerson ? 'w-9 h-9 rounded-full' : 'w-8 h-11 rounded-lg'
                         )}>
-                          {item.poster ? (
-                            <img src={item.poster} alt="" className="w-full h-full object-cover" />
-                          ) : (
-                            <Icon className="w-4 h-4 text-slate-500" />
+                          <Icon className="w-4 h-4 text-slate-500 absolute" />
+                          {item.poster && (
+                            <img
+                              src={item.poster}
+                              alt=""
+                              onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                              className="relative z-10 w-full h-full object-cover"
+                            />
                           )}
                         </div>
 

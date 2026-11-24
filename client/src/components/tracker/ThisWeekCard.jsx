@@ -1,7 +1,8 @@
 
+import { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Tv, Film, Calendar } from 'lucide-react';
-import { tmdbImgUrl } from '../../lib/posterUrl';
+import { tmdbImgUrl, posterUrl, backdropUrl } from '../../lib/posterUrl';
 import { formatRuntime } from '../../lib/format';
 
 const formatDate = (dateStr) => {
@@ -25,6 +26,42 @@ const formatDate = (dateStr) => {
 export function ThisWeekCard({ item, type }) {
   const navigate = useNavigate();
   const isEpisode = type === 'episode';
+  const mediaType = isEpisode ? 'shows' : 'movies';
+  const tmdbId = item.tmdb_id;
+
+  // Primary image source (backdrop preferred, fallback to poster)
+  const initialImageSrc = useMemo(() => {
+    if (item.backdrop_path) {
+      return backdropUrl(mediaType, tmdbId, item.backdrop_path, 'w780');
+    }
+    if (item.poster_path) {
+      return posterUrl(mediaType, tmdbId, item.poster_path);
+    }
+    return null;
+  }, [mediaType, tmdbId, item.backdrop_path, item.poster_path]);
+
+  const [imgSrc, setImgSrc] = useState(initialImageSrc);
+  const [imgError, setImgError] = useState(false);
+
+  useEffect(() => {
+    setImgSrc(initialImageSrc);
+    setImgError(false);
+  }, [initialImageSrc]);
+
+  const handleImageError = () => {
+    // If backdrop failed, try local or TMDB poster
+    const localPoster = tmdbId ? posterUrl(mediaType, tmdbId, item.poster_path) : null;
+    const tmdbPoster = item.poster_path ? tmdbImgUrl(item.poster_path, 'w500') : null;
+    const fallback = (localPoster && imgSrc !== localPoster)
+      ? localPoster
+      : ((tmdbPoster && imgSrc !== tmdbPoster) ? tmdbPoster : null);
+
+    if (fallback) {
+      setImgSrc(fallback);
+    } else {
+      setImgError(true);
+    }
+  };
 
   const handleClick = () => {
     if (isEpisode && item.show_id) {
@@ -57,15 +94,21 @@ export function ThisWeekCard({ item, type }) {
     >
       {/* Poster */}
       <div className="relative h-28 sm:h-36 md:h-40 bg-slate-900 overflow-hidden rounded-t-xl sm:rounded-t-2xl">
-        {(item.backdrop_path || item.poster_path) ? (
+        {imgSrc && !imgError ? (
           <img
-            src={tmdbImgUrl(item.backdrop_path || item.poster_path, 'w780')}
+            src={imgSrc}
             alt={title}
+            loading="lazy"
+            decoding="async"
+            onError={handleImageError}
             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 ease-out"
           />
         ) : (
-          <div className="w-full h-full flex items-center justify-center text-slate-600">
-            {isEpisode ? <Tv className="w-8 h-8 sm:w-10 sm:h-10" /> : <Film className="w-8 h-8 sm:w-10 sm:h-10" />}
+          <div className="w-full h-full flex flex-col items-center justify-center text-slate-500 bg-slate-950 p-2 text-center select-none">
+            {isEpisode ? <Tv className="w-8 h-8 sm:w-10 sm:h-10 text-slate-600 mb-1" /> : <Film className="w-8 h-8 sm:w-10 sm:h-10 text-slate-600 mb-1" />}
+            <span className="text-[11px] text-slate-400 font-medium line-clamp-1 px-2">
+              {title}
+            </span>
           </div>
         )}
 

@@ -41,6 +41,17 @@ const posterPath = (type, tmdbId) => {
 };
 
 /**
+ * Absolute path for a cached backdrop.
+ * @param {'movies'|'shows'} type
+ * @param {number|string} tmdbId
+ */
+const backdropPath = (type, tmdbId) => {
+  const safeType = type === 'shows' ? 'shows' : 'movies';
+  const safeId = String(tmdbId).replace(/[^0-9]/g, '');
+  return path.join(IMAGE_DIR, safeType, safeId || '0', 'backdrop.jpg');
+};
+
+/**
  * Download an image from TMDB and save it to destPath.
  * Creates parent directories as needed.
  * @param {string} tmdbImagePath  e.g. "/abc123.jpg"
@@ -48,7 +59,9 @@ const posterPath = (type, tmdbId) => {
  * @param {string} [size]         TMDB size slug, default 'w500'
  */
 const downloadImage = async (tmdbImagePath, destPath, size = 'w500') => {
-  const base = size === 'original' ? TMDB_ORIGINAL_BASE : TMDB_POSTER_BASE;
+  const base = size === 'original'
+    ? TMDB_ORIGINAL_BASE
+    : (size && size.startsWith('w') ? `https://image.tmdb.org/t/p/${size}` : TMDB_POSTER_BASE);
   const url  = `${base}${tmdbImagePath}`;
 
   const dir = path.dirname(destPath);
@@ -120,6 +133,41 @@ const ensurePoster = async (type, tmdbId, tmdbImagePath) => {
 };
 
 /**
+ * Ensure a backdrop is cached locally, downloading from TMDB if needed.
+ * Returns the absolute local path.
+ *
+ * @param {'movies'|'shows'} type
+ * @param {number|string} tmdbId
+ * @param {string|null}   tmdbImagePath  The backdrop_path from TMDB, e.g. "/abc123.jpg"
+ */
+const ensureBackdrop = async (type, tmdbId, tmdbImagePath) => {
+  if (!tmdbImagePath) return null;
+
+  const dest = backdropPath(type, tmdbId);
+  if (fs.existsSync(dest)) return dest;
+
+  const key = `backdrop:${type}:${tmdbId}`;
+  if (_inFlight.has(key)) {
+    return _inFlight.get(key);
+  }
+
+  const promise = (async () => {
+    try {
+      await downloadImage(tmdbImagePath, dest, 'w780');
+      return dest;
+    } catch (err) {
+      console.error(`[ImageService] Failed to download backdrop for ${type}/${tmdbId}:`, err.message);
+      return null;
+    } finally {
+      _inFlight.delete(key);
+    }
+  })();
+
+  _inFlight.set(key, promise);
+  return promise;
+};
+
+/**
  * Delete the cached poster for a given item (e.g. when it's removed from library).
  * @param {'movies'|'shows'} type
  * @param {number|string} tmdbId
@@ -130,6 +178,23 @@ const deletePoster = (type, tmdbId) => {
     try { fs.unlinkSync(dest); } catch { /* ignore */ }
   }
   // Remove the now-empty directory
+  const dir = path.dirname(dest);
+  try {
+    const remaining = fs.readdirSync(dir);
+    if (remaining.length === 0) fs.rmdirSync(dir);
+  } catch { /* ignore */ }
+};
+
+/**
+ * Delete the cached backdrop for a given item.
+ * @param {'movies'|'shows'} type
+ * @param {number|string} tmdbId
+ */
+const deleteBackdrop = (type, tmdbId) => {
+  const dest = backdropPath(type, tmdbId);
+  if (fs.existsSync(dest)) {
+    try { fs.unlinkSync(dest); } catch { /* ignore */ }
+  }
   const dir = path.dirname(dest);
   try {
     const remaining = fs.readdirSync(dir);
@@ -506,6 +571,7 @@ const deleteAlbumCover = (mbid) => {
 
 module.exports = {
   ensurePoster, deletePoster, posterPath, IMAGE_DIR,
+  ensureBackdrop, deleteBackdrop, backdropPath,
   albumCoverPath, artistImagePath, ensureAlbumCover, ensureArtistImage, deleteAlbumCover,
   findAlbumFolderCover, extractEmbeddedCover, saveCoverToAlbumFolder, copyImageToCache,
   downloadExternalImage, validateSafeExternalUrl,

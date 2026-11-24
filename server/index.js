@@ -686,6 +686,97 @@ app.get('/api/images/:type/:tmdbId/poster', async (req, res) => {
   }
 });
 
+// GET /api/images/:type/:tmdbId/backdrop
+// type = 'movies' | 'shows'
+app.get('/api/images/:type/:tmdbId/backdrop', async (req, res) => {
+  const { type, tmdbId } = req.params;
+  if (!['movies', 'shows'].includes(type)) return res.status(400).json({ error: 'Invalid type' });
+  if (!/^\d+$/.test(tmdbId)) return res.status(400).json({ error: 'Invalid tmdbId' });
+
+  const dest = imageService.backdropPath(type, tmdbId);
+
+  // Serve from cache if it exists
+  if (fs.existsSync(dest)) {
+    return res.sendFile(dest, { headers: { 'Cache-Control': 'public, max-age=604800, immutable' } });
+  }
+
+  // This route bypasses authMiddleware, so verify a Bearer JWT manually when present.
+  let isAuthenticated = false;
+  const authHeader = req.headers.authorization;
+  const token = (authHeader && authHeader.startsWith('Bearer '))
+    ? authHeader.split(' ')[1]
+    : (req.query.token || null);
+
+  if (token) {
+    try {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      if (decoded?.id) {
+        const user = verifyUserSession(decoded.id, decoded.jwt_version);
+        if (user) {
+          isAuthenticated = true;
+        }
+      }
+    } catch { /* invalid token — treat as anonymous */ }
+  }
+
+  if (!isAuthenticated) {
+    try {
+      const authEnabled = isAuthEnabled();
+      if (!authEnabled) {
+        isAuthenticated = true;
+      }
+    } catch { /* ignore */ }
+  }
+
+  try {
+    let tmdbPath = req.query.path || null;
+
+    if (!tmdbPath) {
+      // Fallback: look up from TMDB
+      try {
+        if (type === 'movies') {
+          const tmdbData = await tmdbService.getMovieById(tmdbId);
+          tmdbPath = tmdbData?.backdrop_path || null;
+        } else {
+          const tmdbData = await tmdbService.getShowById(tmdbId);
+          tmdbPath = tmdbData?.backdrop_path || null;
+        }
+      } catch { /* ignore */ }
+    }
+
+    if (!isAuthenticated && !tmdbPath) {
+      return res.status(404).json({ error: 'No backdrop available' });
+    }
+
+    if (!tmdbPath) {
+      // If no backdrop found, fall back to cached or local poster
+      const posterDest = imageService.posterPath(type, tmdbId);
+      if (fs.existsSync(posterDest)) {
+        return res.sendFile(posterDest, { headers: { 'Cache-Control': 'public, max-age=604800, immutable' } });
+      }
+      return res.status(404).json({ error: 'No backdrop available' });
+    }
+
+    const cachedPath = await imageService.ensureBackdrop(type, tmdbId, tmdbPath);
+
+    if (!cachedPath || !fs.existsSync(cachedPath)) {
+      if (tmdbPath) {
+        return res.redirect(302, `https://image.tmdb.org/t/p/w780${tmdbPath}`);
+      }
+      const posterDest = imageService.posterPath(type, tmdbId);
+      if (fs.existsSync(posterDest)) {
+        return res.sendFile(posterDest, { headers: { 'Cache-Control': 'public, max-age=604800, immutable' } });
+      }
+      return res.status(404).json({ error: 'No backdrop available' });
+    }
+
+    return res.sendFile(cachedPath, { headers: { 'Cache-Control': 'public, max-age=604800, immutable' } });
+  } catch (err) {
+    console.error('[ImageRoute] Failed to serve backdrop:', err.message);
+    return res.status(500).json({ error: 'Failed to fetch backdrop' });
+  }
+});
+
 // Unknown API paths must not fall through to the SPA catch-all below
 app.use('/api', (_req, res) => res.status(404).json({ status: 'error', message: 'Not found' }));
 
