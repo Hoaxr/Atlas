@@ -12,7 +12,8 @@ const {
   applyOffsetRepair,
   applyDriftRepair,
   restoreBackup,
-  reclassifyForcedSubtitles
+  reclassifyForcedSubtitles,
+  autoRepairSubtitles
 } = require('../server/services/subtitles/subtitleSyncService');
 
 test('Subtitle Metadata & Tokenizer Suite', async (t) => {
@@ -321,6 +322,29 @@ test('Forced Subtitle Classification & False-Positive Elimination Suite', async 
       assert.strictEqual(updated.is_forced, 1, 'Track should be marked as forced');
       assert.strictEqual(updated.sync_status, 'in_sync', 'Status should be updated to in_sync');
       assert.strictEqual(updated.sync_method, 'density_check', 'Method should be density_check');
+    } finally {
+      db.prepare('DELETE FROM subtitle_tracks WHERE filename = ?').run(testFilename);
+    }
+  });
+
+  await t.test('autoRepairSubtitles reclassifies forced and identifies repairable candidates in dryRun mode', async () => {
+    const testFilename = `test_offset_${Date.now()}.srt`;
+    db.prepare(`
+      INSERT INTO subtitle_tracks (
+        media_type, media_id, filename, file_path, lang_code, lang_name,
+        sync_status, sync_offset, sync_drift, sync_confidence, sync_method, quality_score,
+        is_forced, is_sdh, is_hearing_impaired, sync_details, file_size, cue_count, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+    `).run(
+      'movie', 888888, testFilename, '/non/existent.srt', 'nl', 'Dutch',
+      'offset_detected', 2.5, 0, 0.90, 'alignment', 60,
+      0, 0, 0, 'Constant timing offset detected: +2.50s', 8000, 400
+    );
+
+    try {
+      const res = await autoRepairSubtitles({ dryRun: true });
+      assert(res.offsetRepaired >= 1, `Expected at least 1 offset repair candidate, got ${res.offsetRepaired}`);
+      assert(res.totalRepaired >= 1, `Expected totalRepaired >= 1, got ${res.totalRepaired}`);
     } finally {
       db.prepare('DELETE FROM subtitle_tracks WHERE filename = ?').run(testFilename);
     }

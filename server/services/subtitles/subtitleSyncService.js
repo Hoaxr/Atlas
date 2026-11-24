@@ -1451,6 +1451,111 @@ const reclassifyForcedSubtitles = async () => {
 };
 
 /**
+ * Automatically repairs high-confidence subtitle issues across the library:
+ * 1. Reclassifies low-cue forced subtitles (<65 cues) -> in_sync.
+ * 2. High-confidence constant offset issues (sync_confidence >= minConfidence, |sync_offset| >= 0.2s) -> applyOffsetRepair.
+ * 3. High-confidence framerate drift issues (sync_confidence >= minConfidence, |sync_drift| >= 0.0002) -> applyDriftRepair.
+ *
+ * @param {object} [options]
+ * @param {number} [options.minConfidence=0.70]
+ * @param {boolean} [options.dryRun=false]
+ * @returns {Promise<{ reclassified: number, offsetRepaired: number, driftRepaired: number, totalRepaired: number, errors: string[] }>}
+ */
+const autoRepairSubtitles = async ({ minConfidence = 0.70, dryRun = false } = {}) => {
+  console.log(`[SubtitleSyncService] Starting Subtitle Auto-Repair (minConfidence: ${minConfidence}, dryRun: ${dryRun})...`);
+
+  // Step 1: Reclassify forced tracks
+  let reclassified = 0;
+  try {
+    const reclassRes = await reclassifyForcedSubtitles();
+    reclassified = reclassRes.reclassified || 0;
+  } catch (err) {
+    console.warn('[SubtitleSyncService] Auto-repair pre-reclassify error:', err.message);
+  }
+
+  // Step 2: Fetch repairable offset candidates
+  const offsetCandidates = db.prepare(`
+    SELECT id, media_type, media_id, filename, file_path, sync_offset, sync_confidence
+    FROM subtitle_tracks
+    WHERE sync_status = 'offset_detected'
+      AND (is_forced IS NULL OR is_forced = 0)
+      AND sync_offset IS NOT NULL
+      AND abs(sync_offset) >= 0.2
+      AND abs(sync_offset) <= 300
+      AND sync_confidence >= ?
+  `).all(minConfidence);
+
+  // Step 3: Fetch repairable drift candidates
+  const driftCandidates = db.prepare(`
+    SELECT id, media_type, media_id, filename, file_path, sync_drift, sync_confidence
+    FROM subtitle_tracks
+    WHERE sync_status = 'drift_detected'
+      AND (is_forced IS NULL OR is_forced = 0)
+      AND sync_drift IS NOT NULL
+      AND abs(sync_drift) >= 0.0002
+      AND abs(sync_drift) <= 0.15
+      AND sync_confidence >= ?
+  `).all(minConfidence);
+
+  let offsetRepaired = 0;
+  let driftRepaired = 0;
+  const errors = [];
+
+  // Repair offsets
+  for (const track of offsetCandidates) {
+    if (dryRun) {
+      offsetRepaired++;
+      continue;
+    }
+    try {
+      await applyOffsetRepair({
+        mediaType: track.media_type,
+        mediaId: track.media_id,
+        filename: track.filename,
+        offsetSeconds: track.sync_offset
+      });
+      offsetRepaired++;
+    } catch (err) {
+      errors.push(`${track.filename}: ${err.message}`);
+    }
+  }
+
+  // Repair drifts
+  for (const track of driftCandidates) {
+    if (dryRun) {
+      driftRepaired++;
+      continue;
+    }
+    try {
+      await applyDriftRepair({
+        mediaType: track.media_type,
+        mediaId: track.media_id,
+        filename: track.filename,
+        slope: track.sync_drift
+      });
+      driftRepaired++;
+    } catch (err) {
+      errors.push(`${track.filename}: ${err.message}`);
+    }
+  }
+
+  const totalRepaired = reclassified + offsetRepaired + driftRepaired;
+  console.log(`[SubtitleSyncService] Auto-repair complete: ${totalRepaired} tracks repaired/reclassified (${reclassified} forced, ${offsetRepaired} offsets, ${driftRepaired} drifts).`);
+
+  if (totalRepaired > 0) {
+    eventBus.success(`Subtitle Auto-Repair: Repaired/reclassified ${totalRepaired} subtitle tracks.`);
+  }
+
+  return {
+    reclassified,
+    offsetRepaired,
+    driftRepaired,
+    totalRepaired,
+    errors
+  };
+};
+
+/**
  * Initializes task registry and scheduled cron job
  */
 const init = () => {
@@ -1467,6 +1572,19 @@ const init = () => {
   registerJob(job);
   console.log('[SubtitleSyncService] Registered and scheduled subtitle_sync_checker task.');
 
+  const repairCronExp = '0 5 * * 0'; // Sundays at 5:00 AM
+  taskRegistry.registerTask(
+    'subtitle_auto_repair',
+    'Subtitle Auto-Repair & Sync Alignment',
+    'Automatically repairs timing offsets, framerate drifts, and reclassifies forced subtitles across the entire library.',
+    repairCronExp,
+    () => autoRepairSubtitles({ minConfidence: 0.70 })
+  );
+
+  const autoRepairJob = cron.schedule(repairCronExp, () => taskRegistry.executeTask('subtitle_auto_repair'));
+  registerJob(autoRepairJob);
+  console.log('[SubtitleSyncService] Registered and scheduled subtitle_auto_repair task.');
+
   // Automatically reclassify existing low-cue forced subtitles on boot
   reclassifyForcedSubtitles().catch(err => {
     console.warn('[SubtitleSyncService] Auto-reclassification failed on boot:', err.message);
@@ -1478,6 +1596,7 @@ module.exports = {
   verifySingleSubtitleSync,
   verifyAllSubtitlesForMedia,
   runLibrarySubtitleSyncCheck,
+  autoRepairSubtitles,
   reclassifyForcedSubtitles,
   probeMediaDuration,
   probeAudioVolumeAt,

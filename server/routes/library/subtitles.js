@@ -432,6 +432,24 @@ router.get('/sync-issues', (req, res, next) => {
 });
 
 /**
+ * POST /api/library/subtitles/auto-repair
+ * Automatically repairs high-confidence subtitle timing offsets and framerate drifts
+ */
+router.post('/auto-repair', async (req, res, next) => {
+  try {
+    const minConfidence = req.body?.minConfidence !== undefined ? parseFloat(req.body.minConfidence) : 0.70;
+    const result = await subtitleSyncService.autoRepairSubtitles({ minConfidence });
+    res.json({
+      status: 'success',
+      data: result,
+      message: `Auto-repaired ${result.totalRepaired} subtitle track(s) (${result.offsetRepaired} offsets, ${result.driftRepaired} drifts, ${result.reclassified} forced).`
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
  * POST /api/library/subtitles/reclassify-forced
  * Retroactively scans duration_mismatch tracks and reclassifies low cue count tracks as forced
  */

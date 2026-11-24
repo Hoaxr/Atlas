@@ -5,7 +5,7 @@ import { formatSize } from '../lib/format';
 import {
   BarChart3, Film, Tv, HardDrive, Star,
   CheckCircle2, Hash, Zap, PlayCircle, Activity, Languages, Trash2, FolderOpen,
-  Music2, Disc, Mic2, FileAudio, ChevronRight, Loader2, Eye
+  Music2, Disc, Mic2, FileAudio, ChevronRight, Loader2, Eye, Wrench
 } from 'lucide-react';
 import LoadingState from '../components/shared/LoadingState';
 import EmptyState from '../components/shared/EmptyState';
@@ -59,9 +59,30 @@ export default function Statistics() {
   const [syncIssuesData, setSyncIssuesData] = useState(null);
   const [syncIssuesTotal, setSyncIssuesTotal] = useState(0);
   const [syncIssuesLoading, setSyncIssuesLoading] = useState(false);
+  const [autoRepairLoading, setAutoRepairLoading] = useState(false);
   const [actionLoadingFile, setActionLoadingFile] = useState(null);
   const [, setDeletableData] = useState(null);
   const [, setDeletableLoading] = useState(false);
+
+  const handleAutoRepair = async () => {
+    if (!await customConfirm('Automatically repair all high-confidence subtitle offsets and framerate drifts across your library? Safe .bak backups will be created.', 'Auto-Repair Subtitles')) {
+      return;
+    }
+    setAutoRepairLoading(true);
+    try {
+      const res = await api.post('/library/subtitles/auto-repair');
+      if (res.data?.status === 'success') {
+        const { totalRepaired, offsetRepaired, driftRepaired, reclassified } = res.data.data || {};
+        customAlert(`Auto-repair complete! Fixed ${totalRepaired || 0} subtitle track(s) (${offsetRepaired || 0} offsets, ${driftRepaired || 0} drifts, ${reclassified || 0} forced).`, 'success');
+        openSyncIssues();
+        fetchStats();
+      }
+    } catch (e) {
+      customAlert(e.response?.data?.message || 'Auto-repair encountered an error', 'error');
+    } finally {
+      setAutoRepairLoading(false);
+    }
+  };
 
   const openMissingSubs = async () => {
     setMissingSubsModal(true);
@@ -678,17 +699,28 @@ export default function Statistics() {
           </div>
         ) : (
           <div className="space-y-4 text-sm">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
               <p className="text-xs text-slate-400">
                 Found <span className="font-semibold text-amber-400">{syncIssuesTotal || syncIssuesData.length}</span> subtitle track{(syncIssuesTotal || syncIssuesData.length) > 1 ? 's' : ''} with anomalies
                 {syncIssuesTotal > syncIssuesData.length ? ` (showing top ${syncIssuesData.length})` : ''}:
               </p>
-              <button
-                onClick={() => { setSyncIssuesModal(false); navigate('/health'); }}
-                className="text-xs text-cyan-400 hover:underline cursor-pointer"
-              >
-                Media Health &rarr;
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleAutoRepair}
+                  disabled={autoRepairLoading}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/30 text-xs font-semibold transition-all cursor-pointer disabled:opacity-50 shadow-sm"
+                  title="Automatically repair all fixable offsets and framerate drifts across the library"
+                >
+                  {autoRepairLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Wrench className="w-3.5 h-3.5" />}
+                  Auto-Repair Fixable
+                </button>
+                <button
+                  onClick={() => { setSyncIssuesModal(false); navigate('/stats/health'); }}
+                  className="text-xs text-cyan-400 hover:underline cursor-pointer"
+                >
+                  Media Health &rarr;
+                </button>
+              </div>
             </div>
             <div className="bg-slate-900/50 rounded-xl border border-white/5 overflow-hidden divide-y divide-slate-800/50 max-h-96 overflow-y-auto">
               {syncIssuesData.map((sub) => (
