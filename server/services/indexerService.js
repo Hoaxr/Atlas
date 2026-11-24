@@ -1,7 +1,7 @@
 const axios = require('axios');
 const db = require('../config/database');
 const { getSetting } = require('../utils/settings');
-const { parseResolution: parseQuality } = require('../utils/mediaParsing');
+const { parseResolution: parseQuality, getResolutionRank } = require('../utils/mediaParsing');
 
 // ─── Circuit breaker for Prowlarr ─────────────────────────────────────
 
@@ -408,22 +408,36 @@ const filterAndSortResults = (results, profile, type, currentQuality = null, isM
     try { qualities = JSON.parse(profile.qualities); } catch { /* ignore */ }
 
     if (currentQuality) {
+      const currentRank = getResolutionRank(currentQuality);
       const currentIdx = qualities.indexOf(currentQuality);
-      if (currentIdx !== -1) {
-        filtered = filtered.filter(r => {
-          const idx = qualities.indexOf(parseQuality(r.title));
-          return idx !== -1 && idx < currentIdx;
-        });
-      }
+      filtered = filtered.filter(r => {
+        const relQ = parseQuality(r.title);
+        const relRank = getResolutionRank(relQ);
+        const relIdx = qualities.indexOf(relQ);
+
+        // If resolution rank is known for both, release must be strictly higher rank
+        if (relRank !== -1 && currentRank !== -1) {
+          return relRank > currentRank;
+        }
+        // Fallback to profile array ordering: if profile is ordered low-to-high vs high-to-low
+        if (relIdx !== -1 && currentIdx !== -1) {
+          const isLowToHigh = qualities.length > 1 && getResolutionRank(qualities[0]) < getResolutionRank(qualities[qualities.length - 1]);
+          return isLowToHigh ? relIdx > currentIdx : relIdx < currentIdx;
+        }
+        return false;
+      });
     }
 
     filtered.sort((a, b) => {
-      const idxA = qualities.indexOf(parseQuality(a.title));
-      const idxB = qualities.indexOf(parseQuality(b.title));
-      if (idxA === -1 && idxB === -1) return b.seeders - a.seeders;
-      if (idxA === -1) return 1;
-      if (idxB === -1) return -1;
-      if (idxA !== idxB) return idxB - idxA;
+      const qA = parseQuality(a.title);
+      const qB = parseQuality(b.title);
+      const rankA = getResolutionRank(qA);
+      const rankB = getResolutionRank(qB);
+
+      // Higher resolution first
+      if (rankA !== rankB) {
+        return rankB - rankA;
+      }
       return b.seeders - a.seeders;
     });
   }
@@ -536,47 +550,19 @@ const searchShowPack = async (showTitle, profile = null, currentQuality = null, 
   return filtered.filter(r => !isEpisodeRelease(r.title));
 };
 
-const searchSeasonPack = async (showTitle, seasonNumber, _profile = null, _currentQuality = null, _isManualSearch = false, _tmdb_id = null, customQuery = null) => {
+const searchSeasonPack = async (showTitle, seasonNumber, profile = null, currentQuality = null, isManualSearch = false, _tmdb_id = null, customQuery = null) => {
   if (customQuery && customQuery.trim()) {
-    const results = await searchProwlarr(cleanTitle(customQuery), 'tvsearch');
-    const packs = (results || [])
-      .filter(r => !isEpisodeRelease(r.title) && !isMaliciousOrFakeRelease(r.title, r.categories, { link: r.link }))
-      .sort((a, b) => b.seeders - a.seeders);
-
-    const seen = new Set();
-    const deduplicated = [];
-    for (const r of packs) {
-      const key = r.title.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
-      if (!seen.has(key)) {
-        seen.add(key);
-        deduplicated.push(r);
-      }
-    }
-    return deduplicated;
+    const rawResults = await searchProwlarr(cleanTitle(customQuery), 'tvsearch');
+    const validPacks = (rawResults || []).filter(r => !isEpisodeRelease(r.title));
+    return filterAndSortResults(validPacks, profile, 'shows', currentQuality, isManualSearch, showTitle);
   }
 
   const s = seasonNumber.toString().padStart(2, '0');
   const searchTerm = `${cleanTitle(showTitle)} S${s}`;
-  const results = await searchProwlarr(searchTerm, 'tvsearch');
+  const rawResults = await searchProwlarr(searchTerm, 'tvsearch');
 
-  // Season pack search is a manual browse: show every available full-season
-  // pack option and skip release-profile / quality / CAM filters. Individual
-  // episode releases (SxxExx / xxXxx) are excluded.
-  const packs = (results || [])
-    .filter(r => !isEpisodeRelease(r.title) && !isMaliciousOrFakeRelease(r.title, r.categories, { link: r.link }))
-    .sort((a, b) => b.seeders - a.seeders);
-
-  // Deduplicate on normalized title stem
-  const seen = new Set();
-  const deduplicated = [];
-  for (const r of packs) {
-    const key = r.title.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
-    if (!seen.has(key)) {
-      seen.add(key);
-      deduplicated.push(r);
-    }
-  }
-  return deduplicated;
+  const validPacks = (rawResults || []).filter(r => !isEpisodeRelease(r.title));
+  return filterAndSortResults(validPacks, profile, 'shows', currentQuality, isManualSearch, showTitle);
 };
 
 const searchGeneric = async (query) => {
@@ -701,5 +687,6 @@ module.exports = {
   isMaliciousOrFakeRelease,
   parseQuality,
   getCircuitStatus,
+  filterAndSortResults,
 };
 

@@ -46,4 +46,30 @@ test('Manual Search Enhancements & Prowlarr Custom Query Handling', async (t) =>
     assert.strictEqual(isVideo('Coldplay - Parachutes (2000) [ALAC]'), false);
     assert.strictEqual(isVideo('Adele - 21 (2011) [AAC 256kbps]'), false);
   });
+
+  await t.test('filterAndSortResults correctly retains higher quality releases for upgrades and sorts properly', () => {
+    // Test filterAndSortResults exported internally or testable via indexerService
+    const profile = {
+      qualities: JSON.stringify(['720p', '1080p', '2160p']),
+      cutoff: '2160p'
+    };
+
+    const mockReleases = [
+      { title: 'The.Matrix.1999.720p.BluRay.x264', link: 'magnet:720', seeders: 100, size: 2 * 1024 * 1024 * 1024 },
+      { title: 'The.Matrix.1999.1080p.BluRay.x264', link: 'magnet:1080', seeders: 50, size: 4 * 1024 * 1024 * 1024 },
+      { title: 'The.Matrix.1999.2160p.UHD.BluRay.x265', link: 'magnet:2160', seeders: 25, size: 10 * 1024 * 1024 * 1024 }
+    ];
+
+    // When upgrading from 720p, 1080p and 2160p should remain, 720p should be filtered out
+    // and 2160p should sort ahead of 1080p
+    const filtered = indexerService.filterAndSortResults(mockReleases, profile, 'movies', '720p', true, 'The Matrix', 1999);
+    assert.strictEqual(filtered.length, 2);
+    assert.strictEqual(filtered[0].title.includes('2160p'), true);
+    assert.strictEqual(filtered[1].title.includes('1080p'), true);
+
+    // When upgrading from 1080p, only 2160p should remain
+    const filtered1080 = indexerService.filterAndSortResults(mockReleases, profile, 'movies', '1080p', true, 'The Matrix', 1999);
+    assert.strictEqual(filtered1080.length, 1);
+    assert.strictEqual(filtered1080[0].title.includes('2160p'), true);
+  });
 });

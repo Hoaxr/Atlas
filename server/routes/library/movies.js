@@ -443,7 +443,7 @@ router.post('/:id/auto-search', async (req, res, next) => {
 
 router.post('/', async (req, res, next) => {
   try {
-    const { tmdbId, qualityProfileId, rootFolderPath } = req.body;
+    const { tmdbId, qualityProfileId, rootFolderPath, autoSearch = true } = req.body;
     if (!tmdbId) {
       return res.status(400).json({ status: 'error', message: 'tmdbId is required' });
     }
@@ -456,6 +456,31 @@ router.post('/', async (req, res, next) => {
       data: result,
       message: `Movie added: ${result.title}`
     });
+
+    if (autoSearch && result && result.id) {
+      // Dispatch immediate background search for the newly added movie
+      setImmediate(async () => {
+        try {
+          const movie = db.prepare('SELECT m.*, qp.name as quality_profile_name FROM movies m LEFT JOIN quality_profiles qp ON m.quality_profile_id = qp.id WHERE m.id = ?').get(result.id);
+          if (!movie || movie.status === 'downloaded') return;
+
+          let profile = null;
+          if (movie.quality_profile_id) {
+            profile = db.prepare('SELECT * FROM quality_profiles WHERE id = ?').get(movie.quality_profile_id);
+          }
+          const results = await indexerService.searchMovie(movie.title, movie.year, profile, null, false, movie.tmdb_id);
+          if (results && results.length > 0) {
+            const bestRelease = results[0];
+            await downloadClientService.addTorrent(bestRelease.link, 'movie');
+            db.prepare("UPDATE movies SET status = 'downloading', scene_name = COALESCE(NULLIF(scene_name, ''), ?), search_state = 'COMPLETED', retry_count = 0, last_success_at = datetime('now'), next_search_at = NULL WHERE id = ?").run(bestRelease.title, movie.id);
+            eventBus.info('Download started', { title: movie.title, type: 'movie', release: bestRelease.title });
+          }
+        } catch (searchErr) {
+          console.warn(`[MoviesRoute] Auto-search on add failed for "${result.title}":`, searchErr.message);
+        }
+      });
+    }
+
     res.json({ status: 'success', data: result });
   } catch (error) {
     if (error.message === 'Movie already in library') {

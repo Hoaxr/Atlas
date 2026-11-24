@@ -83,7 +83,7 @@ const runSearchCycle = async () => {
       WHERE (m.status IN ('monitored', 'missing') OR (m.status = 'downloaded' AND qp.upgrade_allowed = 1))
         AND m.monitored = 1
         AND (m.next_search_at IS NULL OR m.next_search_at <= datetime('now'))
-        AND (m.release_date IS NOT NULL AND date(m.release_date) <= date('now', 'localtime'))
+        AND (m.release_date IS NULL OR date(m.release_date) <= date('now', 'localtime') OR (m.year IS NOT NULL AND m.year <= CAST(strftime('%Y', 'now') AS INTEGER)))
     `).all();
     
     // Sort by priority, highest first
@@ -334,10 +334,29 @@ const runSearchCycle = async () => {
           db.prepare("UPDATE episodes SET status = 'downloading', scene_name = COALESCE(NULLIF(scene_name, ''), ?), search_state = 'COMPLETED', retry_count = 0, last_success_at = datetime('now'), next_search_at = NULL WHERE id = ?").run(bestRelease.title, ep.id);
           eventBus.info('Download started', { title: epLabel, type: 'episode', release: bestRelease.title });
         } else {
-          ep.retry_count = (ep.retry_count || 0) + 1;
-          const next = calculateNextSearchAt(ep, 'episode', { isDownloaded: (ep.status === 'downloaded' || hasFile), isCutoffMet: false });
-          db.prepare("UPDATE episodes SET last_searched_at = datetime('now'), search_state = ?, next_search_at = ?, retry_count = ?, last_failure_at = datetime('now') WHERE id = ?")
-            .run(next.state, next.nextSearch ? next.nextSearch.toISOString() : null, ep.retry_count, ep.id);
+          // Fallback: If no individual episode release was found, check if a season pack is available
+          let seasonPackDownloaded = false;
+          try {
+            const seasonPacks = await indexerService.searchSeasonPack(ep.show_title, ep.season_number, profile, currentQuality, false, ep.show_tmdb_id);
+            if (seasonPacks && seasonPacks.length > 0) {
+              const bestPack = seasonPacks[0];
+              await downloadClientService.addTorrent(bestPack.link, 'tv');
+              // Mark all monitored missing episodes in this season as downloading
+              db.prepare("UPDATE episodes SET status = 'downloading', scene_name = COALESCE(NULLIF(scene_name, ''), ?), search_state = 'COMPLETED', retry_count = 0, last_success_at = datetime('now'), next_search_at = NULL WHERE show_id = ? AND season_number = ? AND status IN ('monitored', 'missing')")
+                .run(bestPack.title, ep.show_id, ep.season_number);
+              eventBus.info('Season pack download started', { title: `${ep.show_title} S${String(ep.season_number).padStart(2, '0')}`, type: 'episode', release: bestPack.title });
+              seasonPackDownloaded = true;
+            }
+          } catch (spErr) {
+            console.warn(`[Automation] Season pack fallback search failed for ${epLabel}:`, spErr.message);
+          }
+
+          if (!seasonPackDownloaded) {
+            ep.retry_count = (ep.retry_count || 0) + 1;
+            const next = calculateNextSearchAt(ep, 'episode', { isDownloaded: (ep.status === 'downloaded' || hasFile), isCutoffMet: false });
+            db.prepare("UPDATE episodes SET last_searched_at = datetime('now'), search_state = ?, next_search_at = ?, retry_count = ?, last_failure_at = datetime('now') WHERE id = ?")
+              .run(next.state, next.nextSearch ? next.nextSearch.toISOString() : null, ep.retry_count, ep.id);
+          }
         }
       } catch (err) {
         // Same as movies: transient errors leave retry_count untouched for next-cycle retry.

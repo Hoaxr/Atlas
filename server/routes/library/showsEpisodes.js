@@ -760,7 +760,7 @@ router.post('/shows/:id/seasons/:season/download', async (req, res, next) => {
 
 router.post('/shows', async (req, res, next) => {
   try {
-    const { tmdbId, qualityProfileId, autoSearch, rootFolderPath, monitorLevel, monitoredSeasons } = req.body;
+    const { tmdbId, qualityProfileId, autoSearch = true, rootFolderPath, monitorLevel, monitoredSeasons } = req.body;
     if (!tmdbId) {
       return res.status(400).json({ status: 'error', message: 'tmdbId is required' });
     }
@@ -799,6 +799,16 @@ router.post('/shows', async (req, res, next) => {
                   await downloadClientService.addTorrent(bestResult.link, 'tv');
                   db.prepare("UPDATE episodes SET status = 'downloading', scene_name = COALESCE(NULLIF(scene_name, ''), ?) WHERE id = ?").run(bestResult.title || null, ep.id);
                   sentCount++;
+                } else {
+                  // Fallback: Season pack if single episode search yielded no results
+                  const seasonPacks = await indexerService.searchSeasonPack(show.title, ep.season_number, null, null, false, show.tmdb_id);
+                  if (seasonPacks && seasonPacks.length > 0) {
+                    const bestPack = seasonPacks[0];
+                    await downloadClientService.addTorrent(bestPack.link, 'tv');
+                    db.prepare("UPDATE episodes SET status = 'downloading', scene_name = COALESCE(NULLIF(scene_name, ''), ?) WHERE show_id = ? AND season_number = ? AND status IN ('monitored', 'missing')")
+                      .run(bestPack.title || null, show.id, ep.season_number);
+                    sentCount++;
+                  }
                 }
               } catch (e) {
                 console.error(`[AutoSearch] Failed for ${show.title} S${ep.season_number}E${ep.episode_number}:`, e.message);
