@@ -3,11 +3,9 @@ import { motion } from 'framer-motion';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../lib/api';
 import { 
-  Search as SearchIcon, Plus, Tv, Film, Star, CheckCircle2, Bookmark, AlertCircle, 
-  ArrowRight, Zap, Eye, EyeOff, Activity, Check, ListFilter, LayoutGrid, Grid3x3, Calendar, DownloadCloud 
+  Search as SearchIcon, Plus, Tv, Film, Star, CheckCircle2, ArrowRight, Eye, Check, ListFilter, LayoutGrid, Grid3x3, Calendar, DownloadCloud 
 } from 'lucide-react';
 import MediaDetailsModal from '../components/MediaDetailsModal';
-import ManualSearchModal from '../components/ManualSearchModal';
 import MediaRow from '../components/MediaRow';
 import InlineError from '../components/shared/InlineError';
 import { useOutsideClick } from '../lib/useOutsideClick';
@@ -15,7 +13,6 @@ import useWebSocket from '../lib/useWebSocket';
 import { setCachedMovies, setCachedShows } from '../lib/libraryCache';
 import { invalidateLibraryIndex } from '../lib/libraryIndex';
 import { posterUrl } from '../lib/posterUrl';
-import { customAlert } from '../utils/alerts';
 
 
 
@@ -100,12 +97,6 @@ export default function Discover() {
   const [downloadedSet, setDownloadedSet] = useState(new Set());
   const [libraryDetailsMap, setLibraryDetailsMap] = useState(new Map()); // tmdb_id -> full details
 
-  // Manual Search Modal
-  const [searchModalOpen, setSearchModalOpen] = useState(false);
-  const [searchMediaId, setSearchMediaId] = useState(null);
-  const [searchMediaType, setSearchMediaType] = useState('movie');
-  const [searchMediaTitle, setSearchMediaTitle] = useState('');
-  
   // Modal state
   const [selectedMediaId, setSelectedMediaId] = useState(null);
   const [selectedMediaType, setSelectedMediaType] = useState('movie');
@@ -493,213 +484,48 @@ export default function Discover() {
             style={{
               top: `${cardScale.cornerOffset}px`,
               left: `${cardScale.cornerOffset}px`,
+              width: `${cardScale.badgeSize}px`,
+              height: `${cardScale.badgeSize}px`,
             }}
-            className="absolute z-20"
+            className="absolute z-20 bg-slate-900/80 rounded-full shadow-lg flex items-center justify-center group-hover:opacity-0 transition-opacity duration-200" 
+            title="In Library"
           >
-            <button 
-              onClick={async (e) => {
-                e.stopPropagation(); e.preventDefault();
-                const dbId = libItem?.id || libraryItems.get(tmdbId) || libraryItems.get(Number(tmdbId)) || libraryItems.get(String(tmdbId));
-                if (!dbId) return;
-                try {
-                  const endpoint = displayType === 'movie' ? `/library/movies/${dbId}/toggle-monitor` : `/library/shows/${dbId}/toggle-monitor`;
-                  const res = await api.post(endpoint);
-                  if (res.data.status === 'success') {
-                    fetchLibrary();
-                    customAlert(res.data.data?.monitored ? 'Now monitored' : 'Now unmonitored');
-                  }
-                } catch {
-                  customAlert('Failed to toggle monitor status', 'error');
-                }
-              }}
+            <CheckCircle2 
               style={{
-                width: `${cardScale.badgeSize}px`,
-                height: `${cardScale.badgeSize}px`,
+                width: `${cardScale.badgeIconSize}px`,
+                height: `${cardScale.badgeIconSize}px`,
               }}
-              className="rounded-full bg-slate-900/80 hover:bg-slate-800 transition-colors shadow-lg flex items-center justify-center group/btn"
-              title={libItem?.monitored === false ? 'Monitor' : 'Unmonitor'}
-            >
-              {libItem?.monitored === false ? (
-                <Bookmark 
-                  style={{
-                    width: `${cardScale.badgeIconSize}px`,
-                    height: `${cardScale.badgeIconSize}px`,
-                  }}
-                  className="text-rose-400 group-hover/btn:text-emerald-400" 
-                />
-              ) : (
-                <Bookmark 
-                  style={{
-                    width: `${cardScale.badgeIconSize}px`,
-                    height: `${cardScale.badgeIconSize}px`,
-                  }}
-                  className="text-emerald-500 fill-emerald-500 group-hover/btn:text-rose-400 group-hover/btn:fill-transparent" 
-                />
-              )}
-            </button>
+              className="text-emerald-400 fill-emerald-400/20" 
+            />
           </div>
         )}
 
-        <div 
-          style={{
-            top: `${cardScale.cornerOffset}px`,
-            right: `${cardScale.cornerOffset}px`,
-            gap: `${cardScale.badgeGap}px`,
-          }}
-          className="absolute z-20 flex items-center"
-        >
-          {isTrending && watchers && (
-            <div 
-              className={`bg-slate-950/80 backdrop-blur font-bold rounded-md text-orange-400 border border-orange-500/30 shadow-lg ${
-                isCompact ? 'text-[9px] px-1 py-0.5' : 'text-xs px-2 py-1'
-              }`}
-            >
-              🔥 {watchers} {isCompact ? '' : 'watching'}
-            </div>
-          )}
-
-          {isInLibrary && (
-            <>
-              {(libItem?.status === 'downloading' || (displayType === 'show' && libItem?.downloading_episodes > 0)) && (
-                <div 
-                  style={{
-                    width: `${cardScale.badgeSize}px`,
-                    height: `${cardScale.badgeSize}px`,
-                  }}
-                  className="rounded-full bg-slate-900/80 flex items-center justify-center shadow-lg" 
-                  title="Downloading"
-                >
-                  <Activity 
-                    style={{
-                      width: `${cardScale.badgeIconSize}px`,
-                      height: `${cardScale.badgeIconSize}px`,
-                    }}
-                    className="text-blue-400 animate-pulse" 
-                  />
-                </div>
-              )}
-
-              {displayType === 'show' && libItem?.status !== 'downloading' && !libItem?.downloading_episodes && (
-                libItem?.missing_episodes > 0 ? (
-                  <div 
-                    style={{
-                      width: `${cardScale.badgeSize}px`,
-                      height: `${cardScale.badgeSize}px`,
-                    }}
-                    className="rounded-full bg-slate-900/80 flex items-center justify-center shadow-lg" 
-                    title={`${libItem.missing_episodes} Missing Episode${libItem.missing_episodes > 1 ? 's' : ''}`}
-                  >
-                    <AlertCircle 
-                      style={{
-                        width: `${cardScale.badgeIconSize}px`,
-                        height: `${cardScale.badgeIconSize}px`,
-                      }}
-                      className="text-amber-500" 
-                    />
-                  </div>
-                ) : (libItem?.downloaded_episodes > 0 || isDownloaded) ? (
-                  <div 
-                    style={{
-                      width: `${cardScale.badgeSize}px`,
-                      height: `${cardScale.badgeSize}px`,
-                    }}
-                    className="rounded-full bg-slate-900/80 flex items-center justify-center shadow-lg" 
-                    title="Available"
-                  >
-                    <CheckCircle2 
-                      style={{
-                        width: `${cardScale.badgeIconSize}px`,
-                        height: `${cardScale.badgeIconSize}px`,
-                      }}
-                      className="text-emerald-400 fill-emerald-400/20" 
-                    />
-                  </div>
-                ) : null
-              )}
-
-              {displayType === 'movie' && libItem?.status !== 'downloading' && (
-                <>
-                  {isDownloaded && (
-                    <div 
-                      style={{
-                        width: `${cardScale.badgeSize}px`,
-                        height: `${cardScale.badgeSize}px`,
-                      }}
-                      className="rounded-full bg-slate-900/80 flex items-center justify-center shadow-lg" 
-                      title="Available"
-                    >
-                      <CheckCircle2 
-                        style={{
-                          width: `${cardScale.badgeIconSize}px`,
-                          height: `${cardScale.badgeIconSize}px`,
-                        }}
-                        className="text-emerald-400 fill-emerald-400/20" 
-                      />
-                    </div>
-                  )}
-                  {!isDownloaded && (
-                    <div 
-                      style={{
-                        width: `${cardScale.badgeSize}px`,
-                        height: `${cardScale.badgeSize}px`,
-                      }}
-                      className="rounded-full bg-slate-900/80 flex items-center justify-center shadow-lg" 
-                      title={
-                        (media.release_date || libItem?.release_date) && new Date(media.release_date || libItem?.release_date) > new Date()
-                          ? 'Missing / Not Released Yet'
-                          : 'Missing'
-                      }
-                    >
-                      <AlertCircle 
-                        style={{
-                          width: `${cardScale.badgeIconSize}px`,
-                          height: `${cardScale.badgeIconSize}px`,
-                        }}
-                        className={
-                          (media.release_date || libItem?.release_date) && new Date(media.release_date || libItem?.release_date) > new Date()
-                            ? 'text-amber-400'
-                            : 'text-amber-500'
-                        } 
-                      />
-                    </div>
-                  )}
-                </>
-              )}
-            </>
-          )}
-        </div>
+        {isTrending && watchers && (
+          <div 
+            style={{
+              top: `${cardScale.cornerOffset}px`,
+              right: `${cardScale.cornerOffset}px`,
+            }}
+            className={`absolute z-20 bg-slate-950/80 backdrop-blur font-bold rounded-md text-orange-400 border border-orange-500/30 shadow-lg group-hover:opacity-0 transition-opacity duration-200 ${
+              isCompact ? 'text-[9px] px-1 py-0.5' : 'text-xs px-2 py-1'
+            }`}
+          >
+            🔥 {watchers} {isCompact ? '' : 'watching'}
+          </div>
+        )}
 
         <div className="w-full aspect-[2/3] relative bg-slate-800 flex-shrink-0 overflow-hidden">
-          {/* Placeholder backdrop icon */}
-          <div className="absolute inset-0 flex items-center justify-center text-slate-700/60 pointer-events-none">
-            {displayType === 'show' ? (
-              <Tv 
-                style={{
-                  width: `${cardScale.backdropIconSize}px`,
-                  height: `${cardScale.backdropIconSize}px`,
-                }} 
-                className="stroke-[1.5]" 
-              />
-            ) : (
-              <Film 
-                style={{
-                  width: `${cardScale.backdropIconSize}px`,
-                  height: `${cardScale.backdropIconSize}px`,
-                }} 
-                className="stroke-[1.5]" 
-              />
-            )}
-          </div>
-
           {isWatched ? (
             <div 
               style={{
+                top: !(isTrending && watchers) ? `${cardScale.cornerOffset}px` : undefined,
+                bottom: (isTrending && watchers) ? `${cardScale.cornerOffset}px` : undefined,
+                right: !(isTrending && watchers) ? `${cardScale.cornerOffset}px` : undefined,
+                left: (isTrending && watchers) ? `${cardScale.cornerOffset}px` : undefined,
                 width: `${cardScale.badgeSize}px`,
                 height: `${cardScale.badgeSize}px`,
-                bottom: `${cardScale.cornerOffset}px`,
-                left: `${cardScale.cornerOffset}px`,
               }}
-              className="absolute z-20 flex items-center justify-center rounded-full bg-slate-900/80 backdrop-blur border border-emerald-500/30 shadow-lg md:group-hover:opacity-0 transition-opacity duration-200"
+              className="absolute z-20 flex items-center justify-center rounded-full bg-slate-900/80 backdrop-blur border border-emerald-500/30 shadow-lg group-hover:opacity-0 transition-opacity duration-200" 
               title="Watched"
             >
               <Eye 
@@ -712,41 +538,11 @@ export default function Discover() {
             </div>
           ) : null}
 
-          {displayType === 'show' && libItem?.season_count > 0 && (
-            <div 
-              style={{
-                height: `${cardScale.seasonHeight}px`,
-                bottom: `${cardScale.cornerOffset}px`,
-                right: `${cardScale.cornerOffset}px`,
-                paddingLeft: `${cardScale.seasonPaddingX}px`,
-                paddingRight: `${cardScale.seasonPaddingX}px`,
-                gap: `${Math.max(2, Math.round(cardScale.seasonIconSize * 0.25))}px`,
-              }}
-              className="absolute z-20 flex items-center bg-slate-900/80 backdrop-blur rounded-md border border-purple-500/30 shadow-lg md:group-hover:opacity-0 transition-opacity duration-200"
-            >
-              <Tv 
-                style={{
-                  width: `${cardScale.seasonIconSize}px`,
-                  height: `${cardScale.seasonIconSize}px`,
-                }}
-                className="text-purple-400" 
-              />
-              <span 
-                style={{
-                  fontSize: `${cardScale.seasonFontSize}px`,
-                }}
-                className="font-bold text-purple-400 leading-none"
-              >
-                {libItem.season_count}
-              </span>
-            </div>
-          )}
-
           {downloadInfo && !isDownloaded && (
             <div 
               style={{
                 bottom: `${cardScale.cornerOffset}px`,
-                left: isWatched ? `${cardScale.cornerOffset * 2 + cardScale.badgeSize}px` : `${cardScale.cornerOffset}px`,
+                left: `${cardScale.cornerOffset}px`,
                 right: `${cardScale.cornerOffset}px`,
               }}
               className="absolute z-20 pointer-events-none group-hover:opacity-0 transition-opacity duration-200"
@@ -768,6 +564,11 @@ export default function Discover() {
               </div>
             </div>
           )}
+
+          <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-500 text-center p-2 text-xs">
+            {displayType === 'movie' ? <Film className="w-8 h-8 text-slate-600 mb-1" /> : <Tv className="w-8 h-8 text-slate-600 mb-1" />}
+            <span className="text-[11px] text-slate-400 font-medium line-clamp-1 px-1">{title}</span>
+          </div>
 
           {poster && (
             <img 
@@ -796,134 +597,42 @@ export default function Discover() {
             />
           )}
           
-          <div className="absolute inset-0 bg-slate-950/80 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center p-2 sm:p-3 z-10 pointer-events-none">
+          <div className={`absolute inset-0 bg-slate-950/80 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col items-center justify-center z-10 pointer-events-none ${
+            isCompact ? 'p-2 gap-1.5' : 'p-4 gap-3'
+          }`}>
             {!isInLibrary ? (
               <button 
                 onClick={(e) => {
                   e.stopPropagation();
                   handleAddMedia(tmdbId, displayType);
                 }}
-                className={`bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold flex items-center justify-center shadow-lg transition-transform hover:scale-105 pointer-events-auto ${
-                  isCompact ? 'py-1 px-2.5 text-xs rounded-lg gap-1' : 'py-2 px-4 text-sm rounded-xl gap-2'
+                className={`bg-cyan-500 hover:bg-cyan-400 text-slate-950 w-full rounded-lg font-bold flex items-center justify-center shadow-lg pointer-events-auto ${
+                  isCompact ? 'py-1 px-1 text-xs gap-1' : 'py-1.5 px-2 text-sm gap-1.5'
                 }`}
               >
-                <Plus className={`${isCompact ? 'w-3.5 h-3.5' : 'w-4 h-4'} flex-shrink-0`} />
-                <span>Add {isCompact ? '' : (mode === 'movies' ? 'Movie' : 'Show')}</span>
+                <Plus className={`${isCompact ? 'w-3.5 h-3.5' : 'w-4 h-4'} flex-shrink-0`} /> Add {isCompact ? '' : (mode === 'movies' ? 'Movie' : 'Show')}
               </button>
             ) : (
-              <div 
-                style={{
-                  gap: `${cardScale.dockGap}px`,
-                  padding: `${cardScale.dockPadding}px`,
+              <button 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const libraryId = libraryItems.get(tmdbId);
+                  if (libraryId) {
+                    navigate(displayType === 'movie' ? `/movies/${libraryId}` : `/shows/${libraryId}`);
+                  }
                 }}
-                className="flex items-center rounded-full bg-slate-900/90 backdrop-blur-md border border-white/10 shadow-2xl pointer-events-auto"
+                className={`bg-emerald-500/20 hover:bg-emerald-500/30 transition-colors text-emerald-400 border border-emerald-500/30 font-bold flex items-center justify-center shadow-lg cursor-pointer pointer-events-auto ${
+                  isCompact ? 'rounded-full hover:scale-110 transition-transform p-0' : 'w-full rounded-lg py-1.5 px-2 text-sm gap-1.5'
+                }`}
+                style={isCompact ? { width: `${cardScale.dockBtnSize}px`, height: `${cardScale.dockBtnSize}px` } : undefined}
+                title="In Library"
               >
-                <button 
-                  onClick={async (e) => { 
-                    e.stopPropagation(); e.preventDefault(); 
-                    const dbId = libItem?.id || libraryItems.get(tmdbId) || libraryItems.get(Number(tmdbId)) || libraryItems.get(String(tmdbId));
-                    if (!dbId) return;
-                    customAlert(`Starting auto-search for ${title}...`);
-                    try {
-                      const endpoint = displayType === 'movie' 
-                        ? `/library/movies/${dbId}/auto-search` 
-                        : `/library/shows/${dbId}/auto-search`;
-                      const res = await api.post(endpoint);
-                      if (res.data.status === 'success') {
-                        customAlert(res.data.message || `Found & downloading: ${res.data.data?.title || 'torrents'}`);
-                        fetchLibrary();
-                      }
-                    } catch (err) {
-                      console.error(err);
-                      customAlert('Auto-search failed to find any results', 'error');
-                    }
-                  }}
-                  style={{
-                    width: `${cardScale.dockBtnSize}px`,
-                    height: `${cardScale.dockBtnSize}px`,
-                  }}
-                  className="bg-amber-400 hover:bg-amber-300 text-slate-950 rounded-full font-bold flex items-center justify-center transition-transform hover:scale-110 shadow-lg"
-                  title="Auto Search"
-                >
-                  <Zap 
-                    style={{
-                      width: `${cardScale.dockIconSize}px`,
-                      height: `${cardScale.dockIconSize}px`,
-                    }}
-                    className="fill-current" 
-                  />
-                </button>
-                <button 
-                  onClick={(e) => { 
-                    e.stopPropagation(); e.preventDefault(); 
-                    const dbId = libItem?.id || libraryItems.get(tmdbId) || libraryItems.get(Number(tmdbId)) || libraryItems.get(String(tmdbId));
-                    if (!dbId) return;
-                    setSearchMediaId(dbId);
-                    setSearchMediaType(displayType === 'movie' ? 'movie' : 'show');
-                    setSearchMediaTitle(title);
-                    setSearchModalOpen(true);
-                  }}
-                  style={{
-                    width: `${cardScale.dockBtnSize}px`,
-                    height: `${cardScale.dockBtnSize}px`,
-                  }}
-                  className="bg-cyan-500 hover:bg-cyan-400 text-slate-950 rounded-full font-bold flex items-center justify-center transition-transform hover:scale-110 shadow-lg"
-                  title="Manual Search"
-                >
-                  <SearchIcon 
-                    style={{
-                      width: `${cardScale.dockIconSize}px`,
-                      height: `${cardScale.dockIconSize}px`,
-                    }}
-                  />
-                </button>
-                <button 
-                  onClick={async (e) => {
-                    e.stopPropagation(); e.preventDefault();
-                    const dbId = libItem?.id || libraryItems.get(tmdbId) || libraryItems.get(Number(tmdbId)) || libraryItems.get(String(tmdbId));
-                    if (!dbId) return;
-                    try {
-                      const newWatched = !isWatched;
-                      const endpoint = displayType === 'movie' 
-                        ? `/library/movies/${dbId}/watched` 
-                        : `/library/shows/${dbId}/watched`;
-                      const res = await api.patch(endpoint, { watched: newWatched });
-                      if (res.data.status === 'success') {
-                        fetchLibrary();
-                        customAlert(newWatched ? 'Marked as watched' : 'Marked as unwatched');
-                      }
-                    } catch {
-                      customAlert('Failed to update watch status', 'error');
-                    }
-                  }}
-                  style={{
-                    width: `${cardScale.dockBtnSize}px`,
-                    height: `${cardScale.dockBtnSize}px`,
-                  }}
-                  className={`rounded-full font-bold flex items-center justify-center transition-transform hover:scale-110 shadow-lg ${
-                    isWatched 
-                      ? 'bg-emerald-500 hover:bg-emerald-400 text-slate-950' 
-                      : 'bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-white/10'
-                  }`}
-                  title={isWatched ? 'Mark as Unwatched' : 'Mark as Watched'}
-                >
-                  {isWatched ? (
-                    <Eye 
-                      style={{
-                        width: `${cardScale.dockIconSize}px`,
-                        height: `${cardScale.dockIconSize}px`,
-                      }}
-                    />
-                  ) : (
-                    <EyeOff 
-                      style={{
-                        width: `${cardScale.dockIconSize}px`,
-                        height: `${cardScale.dockIconSize}px`,
-                      }}
-                    />
-                  )}
-                </button>
-              </div>
+                <CheckCircle2 
+                  style={isCompact ? { width: `${cardScale.dockIconSize}px`, height: `${cardScale.dockIconSize}px` } : undefined}
+                  className={`${isCompact ? '' : 'w-4 h-4'} flex-shrink-0`} 
+                />
+                {!isCompact && <span>In Library</span>}
+              </button>
             )}
           </div>
         </div>
@@ -1346,16 +1055,6 @@ export default function Discover() {
           fetchLibrary();
         }}
       />
-
-      {searchModalOpen && searchMediaId && (
-        <ManualSearchModal
-          mediaId={searchMediaId}
-          mediaType={searchMediaType}
-          title={searchMediaTitle}
-          onClose={() => { setSearchModalOpen(false); setSearchMediaId(null); }}
-          onGrabbed={fetchLibrary}
-        />
-      )}
     </div>
   );
 }
