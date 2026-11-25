@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import api from '../lib/api';
 import clsx from 'clsx';
 import {
-  X, Star, Calendar, Clock, Plus, PlayCircle, CheckCircle2,
+  X, Star, Calendar, Clock, Plus, Play, CheckCircle2,
   CheckSquare, Square, XCircle, Trash2, Loader2, ChevronDown,
   Clapperboard, ShieldCheck, Bookmark, BookmarkMinus, Film, Tv
 } from 'lucide-react';
@@ -221,7 +221,10 @@ export default function MediaDetailsModal({
   if (!isOpen) return null;
 
   // Extract trailer
-  const trailer = details?.videos?.results?.find(v => v.site === 'YouTube' && (v.type === 'Trailer' || v.type === 'Teaser'));
+  const trailer = details?.videos?.results?.find(v => v.site === 'YouTube' && v.type === 'Trailer')
+    || details?.videos?.results?.find(v => v.site === 'YouTube' && v.type === 'Teaser')
+    || details?.videos?.results?.find(v => v.site === 'YouTube' && (v.type === 'Clip' || v.type === 'Featurette' || v.type === 'Behind the Scenes'))
+    || details?.videos?.results?.find(v => v.site === 'YouTube');
 
   // Extract director / creator
   const director = details?.credits?.crew?.find(c => c.job === 'Director')?.name;
@@ -373,18 +376,30 @@ export default function MediaDetailsModal({
                       <div className="w-full h-full flex items-center justify-center text-slate-600 text-xs">No Poster</div>
                     )}
 
-                    {trailer && (
-                      <button
-                        onClick={() => {
+                    {/* Centered Play Button Overlay */}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (trailer?.key) {
                           setTrailerKey(trailer.key);
                           setIsTrailerOpen(true);
-                        }}
-                        className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center cursor-pointer"
-                        title="Play Trailer"
-                      >
-                        <PlayCircle className="w-9 h-9 sm:w-10 sm:h-10 text-white drop-shadow-2xl transform scale-90 group-hover:scale-110 transition-transform" />
-                      </button>
-                    )}
+                        } else {
+                          window.open(
+                            `https://www.youtube.com/results?search_query=${encodeURIComponent(`${title} ${releaseYear || ''} trailer`)}`,
+                            '_blank',
+                            'noopener,noreferrer'
+                          );
+                        }
+                      }}
+                      className="absolute inset-0 z-20 flex items-center justify-center bg-black/20 hover:bg-black/40 transition-all duration-300 cursor-pointer group/play"
+                      title={trailer ? "Play Trailer" : "Search Trailer on YouTube"}
+                      aria-label="Play Trailer"
+                    >
+                      <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-slate-950/75 hover:bg-cyan-500 border border-white/30 hover:border-cyan-400 text-white hover:text-slate-950 flex items-center justify-center shadow-2xl backdrop-blur-md transform transition-all duration-200 group-hover/play:scale-110">
+                        <Play className="w-4 h-4 sm:w-5 sm:h-5 fill-current ml-0.5" />
+                      </div>
+                    </button>
                   </div>
 
                   {/* Title & Key Meta on the right */}
