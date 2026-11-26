@@ -28,6 +28,12 @@ export function useTMDBDetails(mediaType, tmdbId) {
         if (res.data?.data?.videos?.results) {
           const trailer = res.data.data.videos.results.find(
             v => v.site === 'YouTube' && v.type === 'Trailer'
+          ) || res.data.data.videos.results.find(
+            v => v.site === 'YouTube' && v.type === 'Teaser'
+          ) || res.data.data.videos.results.find(
+            v => v.site === 'YouTube' && (v.type === 'Clip' || v.type === 'Featurette' || v.type === 'Behind the Scenes')
+          ) || res.data.data.videos.results.find(
+            v => v.site === 'YouTube'
           );
           if (trailer) setTrailerKey(trailer.key);
         }

@@ -266,8 +266,8 @@ export default function UserPortal() {
     const keyId = tmdbId || title || Math.random().toString();
 
     const cardClass = isGrid 
-      ? "glass-panel rounded-xl overflow-hidden group hover:scale-[1.05] transition-transform duration-300 relative cursor-pointer shadow-lg hover:shadow-cyan-500/20"
-      : "flex-none w-40 sm:w-48 md:w-56 glass-panel rounded-xl overflow-hidden group hover:scale-[1.05] transition-transform duration-300 relative snap-start cursor-pointer shadow-lg hover:shadow-cyan-500/20";
+      ? "glass-panel rounded-xl overflow-hidden group hover:scale-[1.05] hover:z-10 transition-transform duration-300 relative cursor-pointer shadow-lg hover:shadow-cyan-500/20"
+      : "flex-none w-40 sm:w-48 md:w-56 glass-panel rounded-xl overflow-hidden group hover:scale-[1.05] hover:z-10 transition-transform duration-300 relative snap-start cursor-pointer shadow-lg hover:shadow-cyan-500/20";
 
     return (
       <motion.div 

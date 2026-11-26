@@ -271,9 +271,9 @@ const Tracker = () => {
         ...(upNextRes.data.episodes || []).map(ep => ({ ...ep, _type: 'episode' }))
       ]);
       setThisWeekEpisodes([
-        ...(thisWeekRes.data.movies || []).map(m => ({ ...m, _type: 'movie' })),
-        ...(thisWeekRes.data.episodes || []).map(ep => ({ ...ep, _type: 'episode' }))
-      ]);
+        ...(thisWeekRes.data.movies || []).map(m => ({ ...m, _type: 'movie', _date: m.release_date })),
+        ...(thisWeekRes.data.episodes || []).map(ep => ({ ...ep, _type: 'episode', _date: ep.air_date }))
+      ].sort((a, b) => (a._date || '').localeCompare(b._date || '')));
       setError(null);
     } catch (err) {
       console.error('Failed to fetch tracker data', err);
@@ -663,7 +663,7 @@ const Tracker = () => {
               <h2 className="text-base sm:text-lg font-bold text-slate-100 flex items-center gap-2">
                 <Zap className="w-4 h-4 text-cyan-400" /> Next Up
               </h2>
-              <p className="text-xs text-slate-400 hidden sm:block">Episodes dropping in the coming week</p>
+              <p className="text-xs text-slate-400 hidden sm:block">Releases dropping in the coming week</p>
             </div>
             <div className="flex items-center gap-1.5 shrink-0">
               <button onClick={() => scrollContainerWeek('left')} className="p-1.5 rounded-lg bg-slate-900/80 hover:bg-slate-800 text-slate-300 border border-slate-800 transition-all">

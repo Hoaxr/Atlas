@@ -22,6 +22,7 @@ services:
       - '/path/to/atlas/config:/app/server/data'
       - '/path/to/movies:/data/movies'
       - '/path/to/tvshows:/data/tvshows'
+      - '/path/to/music:/data/music'
       - '/path/to/downloads:/data/downloads'
     ports:
       # Defaults to localhost (127.0.0.1) for secure reverse proxy deployment. Change to '9898:9898' if direct LAN access is required.

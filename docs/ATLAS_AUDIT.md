@@ -12,7 +12,7 @@ A comprehensive architectural and functional audit of the entire Atlas codebase 
 
 Atlas features a complete, non-mocked media management engine built in Node.js 22 with Express 5, native SQLite (`DatabaseSync` in WAL mode), and a React 19 / Tailwind v4 client.
 
-All 20 test suites containing **133 automated tests** (including end-to-end media post-processing and multi-episode import verification) pass with **100% pass rate** in ~19.5s.
+All 20 test suites containing **139 automated tests** (including end-to-end media post-processing and multi-episode import verification) pass with **100% pass rate** in ~19.8s.
 
 ---
 

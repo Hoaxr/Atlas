@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import api from '../lib/api';
 import clsx from 'clsx';
 import {
-  X, Star, Calendar, Clock, Plus, Play, CheckCircle2,
+  X, Star, Calendar, Clock, Plus, PlayCircle, CheckCircle2,
   CheckSquare, Square, XCircle, Trash2, Loader2, ChevronDown,
   Clapperboard, ShieldCheck, Bookmark, BookmarkMinus, Film, Tv
 } from 'lucide-react';
@@ -291,7 +291,7 @@ export default function MediaDetailsModal({
         onClick={onClose}
       >
         <div
-          className="bg-slate-900 border border-slate-800/80 rounded-2xl w-full max-w-xl max-h-[90vh] flex flex-col relative shadow-2xl overflow-hidden"
+          className="bg-slate-900 border border-slate-800/80 rounded-2xl w-full max-w-xl sm:max-w-2xl max-h-[90vh] flex flex-col relative shadow-2xl overflow-hidden"
           onClick={(e) => e.stopPropagation()}
         >
           {/* Floating Close Button */}
@@ -320,7 +320,7 @@ export default function MediaDetailsModal({
             <div className="overflow-y-auto flex-1 flex flex-col">
 
               {/* ─── Hero Backdrop Banner ─── */}
-              <div className="relative h-32 sm:h-40 w-full shrink-0 overflow-hidden bg-slate-950">
+              <div className="relative h-24 sm:h-32 w-full shrink-0 overflow-hidden bg-slate-950">
                 {details.backdrop_path ? (
                   <img
                     src={backdropUrl(mediaType === 'movie' ? 'movies' : 'shows', details.id, details.backdrop_path, 'original')}
@@ -348,10 +348,10 @@ export default function MediaDetailsModal({
               <div className="p-4 sm:p-5 pt-0 flex-1 flex flex-col">
 
                 {/* Header Info Area overlapping the banner: side-by-side on mobile & desktop */}
-                <div className="flex flex-row gap-3 sm:gap-4 items-start -mt-10 sm:-mt-16 relative z-20 mb-3.5">
+                <div className="flex flex-row gap-3.5 sm:gap-5 items-start -mt-10 sm:-mt-16 relative z-20 mb-4">
 
                   {/* Poster on the left */}
-                  <div className="w-24 sm:w-28 shrink-0 aspect-[2/3] rounded-lg overflow-hidden shadow-xl border border-slate-700/70 bg-slate-950 relative group">
+                  <div className="w-28 sm:w-36 md:w-40 shrink-0 aspect-[2/3] rounded-xl overflow-hidden shadow-2xl border border-slate-700/80 bg-slate-950 relative group">
                     <div className="absolute inset-0 flex items-center justify-center text-slate-600">
                       {mediaType === 'movie' ? <Film className="w-6 h-6" /> : <Tv className="w-6 h-6" />}
                     </div>
@@ -392,21 +392,19 @@ export default function MediaDetailsModal({
                           );
                         }
                       }}
-                      className="absolute inset-0 z-20 flex items-center justify-center bg-black/20 hover:bg-black/40 transition-all duration-300 cursor-pointer group/play"
-                      title={trailer ? "Play Trailer" : "Search Trailer on YouTube"}
-                      aria-label="Play Trailer"
+                      className="absolute inset-0 z-20 flex items-center justify-center bg-black/0 group-hover:bg-black/50 transition-all duration-300 cursor-pointer"
+                      title={trailer ? "Play trailer" : "Search trailer on YouTube"}
+                      aria-label="Play trailer"
                     >
-                      <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-slate-950/75 hover:bg-cyan-500 border border-white/30 hover:border-cyan-400 text-white hover:text-slate-950 flex items-center justify-center shadow-2xl backdrop-blur-md transform transition-all duration-200 group-hover/play:scale-110">
-                        <Play className="w-4 h-4 sm:w-5 sm:h-5 fill-current ml-0.5" />
-                      </div>
+                      <PlayCircle className="w-14 h-14 text-white/0 group-hover:text-white drop-shadow-2xl group-hover:scale-110 transition-all duration-300" />
                     </button>
                   </div>
 
                   {/* Title & Key Meta on the right */}
-                  <div className="flex-1 text-left min-w-0 pt-0.5 sm:pt-4">
+                  <div className="flex-1 text-left min-w-0 pt-0.5 sm:pt-2">
 
                     {/* Title & Year */}
-                    <h1 className="text-base sm:text-xl font-bold text-white tracking-tight leading-snug">
+                    <h1 className="text-base sm:text-xl font-bold text-white tracking-tight leading-snug pr-8 sm:pr-10">
                       {title} {releaseYear && <span className="text-slate-400 font-semibold font-mono text-sm sm:text-lg">({releaseYear})</span>}
                     </h1>
 
@@ -481,6 +479,16 @@ export default function MediaDetailsModal({
                       </div>
                     )}
 
+                    {/* Overview placed beside the poster */}
+                    {details.overview && (
+                      <div className="mt-2.5">
+                        <h3 className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-0.5">Overview</h3>
+                        <p className="text-slate-300 leading-relaxed text-xs sm:text-[13px] font-normal line-clamp-4 sm:line-clamp-6">
+                          {details.overview}
+                        </p>
+                      </div>
+                    )}
+
                     {/* Quick Action Button for In-Library / Request mode */}
                     <div className="mt-2.5 flex flex-wrap items-center justify-start gap-2">
                       {isInLibrary && libraryId && (
@@ -531,14 +539,6 @@ export default function MediaDetailsModal({
                       )}
                     </div>
                   </div>
-                </div>
-
-                {/* ─── Overview ─── */}
-                <div className="mb-3.5">
-                  <h3 className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1">Overview</h3>
-                  <p className="text-slate-300 leading-relaxed text-xs sm:text-sm font-normal">
-                    {details.overview || 'No overview available for this title.'}
-                  </p>
                 </div>
 
                 {/* ─── TV Seasons (Interactive Monitor Toggle) ─── */}

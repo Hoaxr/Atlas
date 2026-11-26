@@ -1396,12 +1396,16 @@ export default function Dashboard() {
                           // Transient network/socket abort: retry the local cached poster endpoint once with slight delay
                           target.dataset.retryCount = String(attempts + 1);
                           setTimeout(() => {
-                            target.src = `${posterUrl(viewMode, item.tmdb_id, item.poster_path)}?r=${Date.now()}`;
+                            const base = posterUrl(viewMode, item.tmdb_id, item.poster_path);
+                            target.src = base.includes('?') ? `${base}&r=${Date.now()}` : `${base}?r=${Date.now()}`;
                           }, 500);
                         } else if (item.poster_path && !target.dataset.fallback) {
                           // Fallback directly to TMDB CDN if local server fails repeatedly
                           target.dataset.fallback = 'true';
                           target.src = `https://image.tmdb.org/t/p/w500${item.poster_path}`;
+                        } else if (item.poster_path && !target.dataset.fallbackSmall) {
+                          target.dataset.fallbackSmall = 'true';
+                          target.src = `https://image.tmdb.org/t/p/w342${item.poster_path}`;
                         } else {
                           target.style.display = 'none';
                         }

@@ -431,23 +431,33 @@ export default function MovieDetails() {
                   }}
                   className="relative z-10 w-full h-full object-cover"
                 />
-                <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-slate-900 to-transparent pointer-events-none" />
-                {trailerKey && (
-                  <button
-                    onClick={() => setIsTrailerOpen(true)}
-                    className="absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/50 transition-all duration-400"
-                    aria-label="Play trailer"
-                  >
-                    <PlayCircle className="w-14 h-14 text-white/0 group-hover:text-white drop-shadow-2xl group-hover:scale-110 transition-all duration-300" />
-                  </button>
-                )}
+                <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-slate-900 to-transparent pointer-events-none z-10" />
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (trailerKey) {
+                      setIsTrailerOpen(true);
+                    } else {
+                      window.open(
+                        `https://www.youtube.com/results?search_query=${encodeURIComponent(`${movie.title} ${movie.year || ''} trailer`)}`,
+                        '_blank',
+                        'noopener,noreferrer'
+                      );
+                    }
+                  }}
+                  className="absolute inset-0 z-20 flex items-center justify-center bg-black/0 group-hover:bg-black/50 transition-all duration-300 cursor-pointer"
+                  title={trailerKey ? "Play trailer" : "Search trailer on YouTube"}
+                  aria-label="Play trailer"
+                >
+                  <PlayCircle className="w-14 h-14 text-white/0 group-hover:text-white drop-shadow-2xl group-hover:scale-110 transition-all duration-300" />
+                </button>
                 {/* TMDB link badge */}
                 {movie.tmdb_id && (
                   <a
                     href={`https://www.themoviedb.org/movie/${movie.tmdb_id}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="absolute bottom-3 right-3 flex items-center gap-1.5 bg-[#0d253f]/80 hover:bg-[#0d253f] backdrop-blur-sm border border-[#01b4e4]/30 hover:border-[#01b4e4]/60 px-2 py-1 rounded-lg transition-all duration-200 group/tmdb"
+                    className="absolute bottom-3 right-3 z-30 flex items-center gap-1.5 bg-[#0d253f]/80 hover:bg-[#0d253f] backdrop-blur-sm border border-[#01b4e4]/30 hover:border-[#01b4e4]/60 px-2 py-1 rounded-lg transition-all duration-200 group/tmdb"
                     title="View on TMDB"
                     onClick={e => e.stopPropagation()}
                   >

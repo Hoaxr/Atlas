@@ -34,7 +34,8 @@ Instead of juggling Radarr, Sonarr, Lidarr, Bazarr, Tautulli, and Overseerr acro
 - **Unified Media Tracking** — Monitor existing and upcoming Movies, TV Shows, seasons, and episodes with real-time status indicators (*monitored, downloaded, downloading, missing, partial*).
 - **Smart Discovery (TMDB)** — Discover trending releases, explore upcoming theatrical and digital releases, and add them with one click.
 - **Interactive Calendar** — Track theatrical debuts, physical/digital release dates, and TV airings with an intuitive calendar view.
-- **Detailed Media Views** — Full cast & crew with person filmographies, season/episode overviews, community ratings, and embedded trailer playback.
+- **Interactive Trailer Playback** — Play official trailers directly from high-contrast poster buttons and media details modals, with automatic YouTube fallbacks.
+- **Detailed Media Views** — Full cast & crew with person filmographies, season/episode overviews, and community ratings.
 - **Custom Renaming & Artwork** — Automated file renaming using customizable token templates (`{Title} ({Year}) [{Quality}]`) and automatic high-resolution poster/backdrop retrieval.
 - **Smart Cleanup Candidates** — Automated scoring algorithm identifies safe-to-delete movies based on franchise detection, TMDB rating, watch status, age, and file size. Includes one-click library removal or disk file deletion.
 - **Season 0 Specials Management** — Clutter-free season tracking with automated filtering and purging of unwanted season 0 extra files.
@@ -56,7 +57,8 @@ Instead of juggling Radarr, Sonarr, Lidarr, Bazarr, Tautulli, and Overseerr acro
 
 ### 🔤 Subtitle Management & Speech-Sync (Bazarr)
 - **Multi-Provider Search** — Automatically search and download subtitles across **OpenSubtitles**, **SubDL**, and **SubSource**.
-- **Automated Speech-to-Subtitle Sync** — Built-in Voice Activity Detection (VAD) audio extraction and FFmpeg alignment to automatically repair out-of-sync subtitle offsets.
+- **Automated Speech-to-Subtitle Sync & Auto-Repair** — Built-in Voice Activity Detection (VAD) audio extraction and FFmpeg alignment to automatically repair out-of-sync subtitle offsets, framerate drift, and timing discrepancies.
+- **Intelligent Forced Subtitle Reclassification** — Automatic classification detects low-cue foreign dialogue and commentary tracks, eliminating duration mismatch false-positives.
 - **AI-Powered Translation** — Auto-translate subtitle tracks into your preferred languages using **Claude (Anthropic)**, **DeepSeek**, or **Google Cloud Translate**.
 - **Embedded & External Language Badges** — Visual indicators showing existing embedded audio/subtitle languages and newly fetched external `.srt` tracks on every media card.
 

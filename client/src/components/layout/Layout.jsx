@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
-import { Search, SlidersHorizontal, Film, ListTodo, Tv as TvIcon, DownloadCloud, Inbox, Calendar as CalendarIcon, BarChart3, Eye, X, TrendingUp, Music } from 'lucide-react';
+import { Search, SlidersHorizontal, Film, ListTodo, Tv as TvIcon, DownloadCloud, Inbox, Calendar as CalendarIcon, BarChart3, Eye, TrendingUp, Music, ChevronLeft, X } from 'lucide-react';
 import bdekkerLogo from '../../assets/bdekker-logo.png';
 import AtlasLogo from '../common/AtlasLogo';
 import TopBar from './TopBar';
@@ -106,6 +106,27 @@ export default function Layout() {
     });
   }, []);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [desktopCollapsed, setDesktopCollapsed] = useState(() => {
+    try {
+      return localStorage.getItem('atlas_sidebar_collapsed') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  const toggleSidebar = useCallback(() => {
+    if (window.innerWidth < 1024) {
+      setSidebarOpen((prev) => !prev);
+    } else {
+      setDesktopCollapsed((prev) => {
+        const next = !prev;
+        try {
+          localStorage.setItem('atlas_sidebar_collapsed', String(next));
+        } catch { /* ignore */ }
+        return next;
+      });
+    }
+  }, []);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [user] = useState(() => {
@@ -375,12 +396,12 @@ export default function Layout() {
     return () => window.removeEventListener('keydown', handler);
   }, []);
 
-  // Listen for sidebar toggle from child components (e.g., sticky search bar)
+  // Listen for sidebar toggle from child components (e.g., sticky search bar, TopBar)
   useEffect(() => {
-    const handler = () => setSidebarOpen(true);
+    const handler = () => toggleSidebar();
     window.addEventListener('atlas-toggle-sidebar', handler);
     return () => window.removeEventListener('atlas-toggle-sidebar', handler);
-  }, []);
+  }, [toggleSidebar]);
 
   const navRef = useRef(null);
   const scrollTimerRef = useRef(null);
@@ -431,29 +452,54 @@ export default function Layout() {
         />
       )}
 
+      {/* Desktop Round Sidebar Toggle positioned on the intersection of the border lines (only when open) */}
+      {!desktopCollapsed && (
+        <button
+          onClick={toggleSidebar}
+          className={clsx(
+            "hidden lg:flex items-center justify-center absolute top-16 left-64 -translate-x-1/2 -translate-y-1/2 z-50 rounded-full transition-all duration-200 cursor-pointer",
+            "w-6 h-6 shadow-md group hover:scale-110",
+            "bg-white dark:bg-[#0c192c] hover:bg-slate-100 dark:hover:bg-[#152744]",
+            "border border-slate-300 dark:border-slate-700/90 hover:border-cyan-500/70 dark:hover:border-cyan-400/70",
+            "text-slate-500 dark:text-slate-400 hover:text-cyan-500 dark:hover:text-cyan-400",
+            "hover:shadow-[0_0_10px_rgba(6,182,212,0.4)]"
+          )}
+          title="Close menu to the side"
+          aria-label="Close menu to the side"
+        >
+          <ChevronLeft className="w-3.5 h-3.5 group-hover:scale-110 transition-transform" />
+        </button>
+      )}
+
       {/* Sidebar */}
       <aside
         className={clsx(
-          'w-64 flex flex-col fixed lg:relative z-50 h-full transition-transform duration-200',
+          'flex flex-col fixed lg:relative z-40 h-full transition-transform duration-300 ease-in-out lg:transition-none',
           'border-r border-slate-200 dark:border-slate-800/80',
           'bg-slate-50 dark:bg-[#090f1d]',
-          sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
+          // Mobile state
+          sidebarOpen ? 'translate-x-0 w-64' : '-translate-x-full w-64',
+          // Desktop state
+          desktopCollapsed
+            ? 'lg:translate-x-0 lg:w-0 lg:min-w-0 lg:max-w-0 lg:border-r-0 lg:overflow-hidden lg:pointer-events-none lg:opacity-0'
+            : 'lg:translate-x-0 lg:w-64 lg:min-w-[16rem] lg:max-w-[16rem] lg:opacity-100 lg:pointer-events-auto'
         )}
       >
-        {/* Sidebar Header */}
-        <div className="h-16 px-5 flex items-center justify-between shrink-0">
-          <AtlasLogo variant="lockup" className="h-[34px] w-auto" />
-          <button
-            onClick={() => setSidebarOpen(false)}
-            className="lg:hidden p-1.5 rounded-lg text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors"
-            title="Close menu"
-            aria-label="Close menu"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
+        <div className="w-64 min-w-[16rem] h-full flex flex-col shrink-0 select-none">
+          {/* Sidebar Header */}
+          <div className="h-16 px-5 flex items-center justify-between shrink-0 w-64">
+            <AtlasLogo variant="lockup" className="h-[34px] w-auto" />
+            <button
+              onClick={() => setSidebarOpen(false)}
+              className="lg:hidden p-1.5 rounded-lg text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+              title="Close navigation menu"
+              aria-label="Close navigation menu"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
 
-        <div className="relative flex-1 overflow-hidden flex flex-col min-h-0">
+          <div className="relative flex-1 overflow-hidden flex flex-col min-h-0">
           <nav 
             ref={navRef}
             onScroll={updateScrollState}
@@ -507,7 +553,7 @@ export default function Layout() {
                           <div className="relative z-10 flex items-center">
                             {item.path === '/movies' && libStats?.movies > 0 && (
                               <span className={clsx(
-                                "inline-flex items-center justify-center px-2 py-0.5 min-w-[26px] rounded-md text-xs font-display font-semibold leading-tight border transition-all",
+                                "inline-flex items-center justify-center px-2 py-0.5 min-w-[26px] rounded-md text-xs font-display font-semibold tabular-nums leading-tight border transition-all",
                                 isActive
                                   ? "bg-sky-500/20 border-sky-400/40 text-sky-200 font-bold"
                                   : "bg-sky-500/10 border-sky-500/25 text-sky-400 group-hover:bg-sky-500/20 group-hover:border-sky-500/40 group-hover:text-sky-300"
@@ -517,7 +563,7 @@ export default function Layout() {
                             )}
                             {item.path === '/shows' && libStats?.shows > 0 && (
                               <span className={clsx(
-                                "inline-flex items-center justify-center px-2 py-0.5 min-w-[26px] rounded-md text-xs font-display font-semibold leading-tight border transition-all",
+                                "inline-flex items-center justify-center px-2 py-0.5 min-w-[26px] rounded-md text-xs font-display font-semibold tabular-nums leading-tight border transition-all",
                                 isActive
                                   ? "bg-sky-500/20 border-sky-400/40 text-sky-200 font-bold"
                                   : "bg-sky-500/10 border-sky-500/25 text-sky-400 group-hover:bg-sky-500/20 group-hover:border-sky-500/40 group-hover:text-sky-300"
@@ -527,7 +573,7 @@ export default function Layout() {
                             )}
                             {item.path === '/music' && libStats?.artists > 0 && (
                               <span className={clsx(
-                                "inline-flex items-center justify-center px-2 py-0.5 min-w-[26px] rounded-md text-xs font-display font-semibold leading-tight border transition-all",
+                                "inline-flex items-center justify-center px-2 py-0.5 min-w-[26px] rounded-md text-xs font-display font-semibold tabular-nums leading-tight border transition-all",
                                 isActive
                                   ? "bg-sky-500/20 border-sky-400/40 text-sky-200 font-bold"
                                   : "bg-sky-500/10 border-sky-500/25 text-sky-400 group-hover:bg-sky-500/20 group-hover:border-sky-500/40 group-hover:text-sky-300"
@@ -537,30 +583,30 @@ export default function Layout() {
                             )}
                             {item.name === 'Requests' && pendingRequests > 0 && (
                               <span className={clsx(
-                                "inline-flex items-center justify-center px-2 py-0.5 min-w-[26px] rounded-md text-xs font-display font-bold leading-tight border transition-all",
+                                "inline-flex items-center justify-center px-2 py-0.5 min-w-[26px] rounded-md text-xs font-display font-semibold tabular-nums leading-tight border transition-all",
                                 isActive
-                                  ? "bg-amber-500/25 border-amber-400/50 text-amber-200 font-bold"
-                                  : "bg-amber-500/15 border-amber-500/30 text-amber-300 group-hover:bg-amber-500/25 group-hover:text-amber-200"
+                                  ? "bg-amber-500/20 border-amber-400/40 text-amber-200 font-bold"
+                                  : "bg-amber-500/10 border-amber-500/25 text-amber-400 group-hover:bg-amber-500/20 group-hover:border-amber-500/40 group-hover:text-amber-300"
                               )}>
                                 {pendingRequests}
                               </span>
                             )}
                             {item.name === 'Downloads' && downloadCount > 0 && (
                               <span className={clsx(
-                                "inline-flex items-center justify-center px-2 py-0.5 min-w-[26px] rounded-md text-xs font-display font-bold leading-tight border transition-all",
+                                "inline-flex items-center justify-center px-2 py-0.5 min-w-[26px] rounded-md text-xs font-display font-semibold tabular-nums leading-tight border transition-all",
                                 isActive
-                                  ? "bg-emerald-500/25 border-emerald-400/50 text-emerald-200 font-bold"
-                                  : "bg-emerald-500/15 border-emerald-500/30 text-emerald-300 group-hover:bg-emerald-500/25 group-hover:text-emerald-200"
+                                  ? "bg-emerald-500/20 border-emerald-400/40 text-emerald-200 font-bold"
+                                  : "bg-emerald-500/10 border-emerald-500/25 text-emerald-400 group-hover:bg-emerald-500/20 group-hover:border-emerald-500/40 group-hover:text-emerald-300"
                               )}>
                                 {downloadCount}
                               </span>
                             )}
                             {item.name === 'Watchers' && watcherCount > 0 && (
                               <span className={clsx(
-                                "inline-flex items-center justify-center px-2 py-0.5 min-w-[26px] rounded-md text-xs font-display font-bold leading-tight border transition-all",
+                                "inline-flex items-center justify-center px-2 py-0.5 min-w-[26px] rounded-md text-xs font-display font-semibold tabular-nums leading-tight border transition-all",
                                 isActive
-                                  ? "bg-cyan-500/25 border-cyan-400/50 text-cyan-200 font-bold"
-                                  : "bg-cyan-500/15 border-cyan-500/30 text-cyan-300 group-hover:bg-cyan-500/25 group-hover:text-cyan-200"
+                                  ? "bg-cyan-500/20 border-cyan-400/40 text-cyan-200 font-bold"
+                                  : "bg-cyan-500/10 border-cyan-500/25 text-cyan-400 group-hover:bg-cyan-500/20 group-hover:border-cyan-500/40 group-hover:text-cyan-300"
                               )}>
                                 {watcherCount}
                               </span>
@@ -641,8 +687,8 @@ export default function Layout() {
               <path d="M1.5 13.5h20.2c-.3 3.8-3.2 6.5-7.4 6.5H9c-4.2 0-7.1-2.3-7.5-6.5Zm5.1-4.1h2.7v2.7H6.6V9.4Zm3.2 0h2.7v2.7H9.8V9.4Zm3.2 0h2.7v2.7H13V9.4Zm-3.2-3.2h2.7v2.7H9.8V6.2Zm3.2 0h2.7v2.7H13V6.2Zm3.2 3.2h2.7v2.7h-2.7V9.4Zm5.6 1.3c.1-.9-.3-1.7-1-2.2.7-.2 1.5-.1 2.2.3-.2.9-.6 1.5-1.2 1.9Z" />
             </svg>
           </a>
+          </div>
         </div>
-
       </aside>
 
       {/* Main Content */}
@@ -662,6 +708,7 @@ export default function Layout() {
           onOpenSearch={() => setPaletteOpen(true)}
           onOpenShortcuts={() => setShortcutsOpen(true)}
           onLogout={handleLogout}
+          sidebarCollapsed={desktopCollapsed}
         />
 
         <main className={clsx("flex-1 min-h-0 min-w-0 w-full overflow-y-auto overflow-x-hidden relative z-10", currentTrack && "pb-24")}>

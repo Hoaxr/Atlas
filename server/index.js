@@ -14,7 +14,6 @@ if (!process.env.JWT_SECRET) {
 const express = require('express');
 const path = require('path');
 const http = require('http');
-const jwt = require('jsonwebtoken');
 const { WebSocketServer } = require('ws');
 const compression = require('compression');
 const cors = require('cors');
@@ -46,7 +45,6 @@ const presenceTracker = require('./services/presenceTracker');
 const { isAuthEnabled } = require('./utils/settings');
 const fs = require('fs');
 const authMiddleware = require('./middleware/authMiddleware');
-const { verifyUserSession } = authMiddleware;
 const requireAdmin = require('./middleware/requireAdmin');
 const { stopScan } = require('./services/scanner');
 
@@ -132,7 +130,7 @@ wss.on('connection', (ws, req) => {
       ws._role = 'anonymous';
     }
     console.log(`[WS] User ${ws._username || ws._userId} authenticated`);
-    
+
     onEvent = (data) => {
       try {
         if (ws.readyState === 1) {
@@ -263,7 +261,7 @@ let _lastLayoutMsg = null;
 
 const getFreshLayoutData = () => {
   const moviesCount = db.prepare('SELECT COUNT(*) as c FROM movies').get().c;
-  const showsCount  = db.prepare('SELECT COUNT(*) as c FROM shows').get().c;
+  const showsCount = db.prepare('SELECT COUNT(*) as c FROM shows').get().c;
   let musicCount = 0;
   try {
     musicCount = db.prepare('SELECT COUNT(*) as c FROM music_artists').get()?.c || 0;
@@ -352,7 +350,7 @@ const broadcastTorrentsUpdate = async (targetWs = null) => {
       downloadClientService.getTorrents().catch(() => []),
       downloadClientService.getTransferInfo().catch(() => null)
     ]);
-    
+
     const rawTorrents = torrents.status === 'fulfilled' ? torrents.value : [];
     try {
       const hideCompleted = db.prepare('SELECT value FROM settings WHERE key = ?').get('hideCompletedDownloads');
@@ -601,49 +599,20 @@ app.get('/api/images/:type/:tmdbId/poster', async (req, res) => {
     return res.sendFile(dest, { headers: { 'Cache-Control': 'public, max-age=604800, immutable' } });
   }
 
-  // This route bypasses authMiddleware, so verify a Bearer JWT manually when present.
-  // Check Authorization header or query parameter 'token' (used by <img> tags)
-  let isAuthenticated = false;
-  const authHeader = req.headers.authorization;
-  const token = (authHeader && authHeader.startsWith('Bearer '))
-    ? authHeader.split(' ')[1]
-    : (req.query.token || null);
-
-  if (token) {
-    try {
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
-      if (decoded?.id) {
-        const user = verifyUserSession(decoded.id, decoded.jwt_version);
-        if (user) {
-          isAuthenticated = true;
-        }
-      }
-    } catch { /* invalid token — treat as anonymous */ }
-  }
-
-  if (!isAuthenticated) {
-    try {
-      const authEnabled = isAuthEnabled();
-      if (!authEnabled) {
-        isAuthenticated = true;
-      }
-    } catch { /* ignore */ }
-  }
-
-  // Cache miss — look up poster_path from DB and download
+  // Cache miss — check DB or query param
   try {
     const table = type === 'movies' ? 'movies' : 'shows';
-    const row   = db.prepare(`SELECT poster_path FROM ${table} WHERE tmdb_id = ?`).get(tmdbId);
-    let tmdbPath = row?.poster_path;
+    const row = db.prepare(`SELECT poster_path FROM ${table} WHERE tmdb_id = ?`).get(tmdbId);
+    let tmdbPath = row?.poster_path || null;
+
+    if (!tmdbPath && typeof req.query.path === 'string' && /^\/[a-zA-Z0-9_.-]+$/.test(req.query.path)) {
+      tmdbPath = req.query.path;
+    }
 
     if (!tmdbPath) {
       // Check requests table
       const reqRow = db.prepare('SELECT poster_path FROM requests WHERE tmdb_id = ? AND type = ?').get(tmdbId, type === 'movies' ? 'movie' : 'show');
       tmdbPath = reqRow?.poster_path;
-    }
-
-    if (!isAuthenticated && !tmdbPath) {
-      return res.status(404).json({ error: 'No poster available' });
     }
 
     if (!tmdbPath) {
@@ -669,6 +638,10 @@ app.get('/api/images/:type/:tmdbId/poster', async (req, res) => {
       } catch { /* ignore */ }
     }
 
+    if (!tmdbPath) {
+      return res.status(404).json({ error: 'No poster available' });
+    }
+
     const cachedPath = await imageService.ensurePoster(type, tmdbId, tmdbPath);
 
     if (!cachedPath || !fs.existsSync(cachedPath)) {
@@ -682,6 +655,9 @@ app.get('/api/images/:type/:tmdbId/poster', async (req, res) => {
     return res.sendFile(cachedPath, { headers: { 'Cache-Control': 'public, max-age=604800, immutable' } });
   } catch (err) {
     console.error('[ImageRoute] Failed to serve poster:', err.message);
+    if (typeof req.query.path === 'string' && /^\/[a-zA-Z0-9_.-]+$/.test(req.query.path)) {
+      return res.redirect(302, `https://image.tmdb.org/t/p/w500${req.query.path}`);
+    }
     return res.status(500).json({ error: 'Failed to fetch poster' });
   }
 });
@@ -700,36 +676,8 @@ app.get('/api/images/:type/:tmdbId/backdrop', async (req, res) => {
     return res.sendFile(dest, { headers: { 'Cache-Control': 'public, max-age=604800, immutable' } });
   }
 
-  // This route bypasses authMiddleware, so verify a Bearer JWT manually when present.
-  let isAuthenticated = false;
-  const authHeader = req.headers.authorization;
-  const token = (authHeader && authHeader.startsWith('Bearer '))
-    ? authHeader.split(' ')[1]
-    : (req.query.token || null);
-
-  if (token) {
-    try {
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
-      if (decoded?.id) {
-        const user = verifyUserSession(decoded.id, decoded.jwt_version);
-        if (user) {
-          isAuthenticated = true;
-        }
-      }
-    } catch { /* invalid token — treat as anonymous */ }
-  }
-
-  if (!isAuthenticated) {
-    try {
-      const authEnabled = isAuthEnabled();
-      if (!authEnabled) {
-        isAuthenticated = true;
-      }
-    } catch { /* ignore */ }
-  }
-
   try {
-    let tmdbPath = req.query.path || null;
+    let tmdbPath = (typeof req.query.path === 'string' && /^\/[a-zA-Z0-9_.-]+$/.test(req.query.path)) ? req.query.path : null;
 
     if (!tmdbPath) {
       // Fallback: look up from TMDB
@@ -742,10 +690,6 @@ app.get('/api/images/:type/:tmdbId/backdrop', async (req, res) => {
           tmdbPath = tmdbData?.backdrop_path || null;
         }
       } catch { /* ignore */ }
-    }
-
-    if (!isAuthenticated && !tmdbPath) {
-      return res.status(404).json({ error: 'No backdrop available' });
     }
 
     if (!tmdbPath) {
@@ -773,6 +717,9 @@ app.get('/api/images/:type/:tmdbId/backdrop', async (req, res) => {
     return res.sendFile(cachedPath, { headers: { 'Cache-Control': 'public, max-age=604800, immutable' } });
   } catch (err) {
     console.error('[ImageRoute] Failed to serve backdrop:', err.message);
+    if (typeof req.query.path === 'string' && /^\/[a-zA-Z0-9_.-]+$/.test(req.query.path)) {
+      return res.redirect(302, `https://image.tmdb.org/t/p/w780${req.query.path}`);
+    }
     return res.status(500).json({ error: 'Failed to fetch backdrop' });
   }
 });
@@ -793,20 +740,20 @@ app.use(errorHandler);
 // Graceful shutdown
 const shutdown = (signal) => {
   console.log(`[Backend] ${signal} received — shutting down...`);
-  
+
   // Cancel any running library scan
   try {
     stopScan();
     console.log('[Backend] Library scan cancelled.');
   } catch { /* ignore */ }
-  
+
   // Stop all cron jobs to prevent new task executions
   stopAllCronJobs();
-  
+
   // Stop the watcher polling
   watcherService.stopPolling();
   cleanupWorker.stop();
-  
+
   // Close active WebSockets and HTTP connections immediately so server.close doesn't hang
   try {
     for (const client of wss.clients) {
@@ -821,7 +768,7 @@ const shutdown = (signal) => {
   // Close HTTP server (stops accepting new connections)
   server.close(() => {
     console.log('[Backend] HTTP server closed.');
-    
+
     // Close database connection cleanly
     try {
       const db = require('./config/database');
@@ -833,10 +780,10 @@ const shutdown = (signal) => {
       db.close();
       console.log('[Backend] Database checkpointed and closed.');
     } catch { /* ignore */ }
-    
+
     process.exit(0);
   });
-  
+
   // Force exit after 3s if graceful shutdown hangs
   setTimeout(() => {
     console.error('[Backend] Forced shutdown after timeout.');

@@ -21,6 +21,11 @@ import {
   Settings as SettingsIcon,
   Sparkles,
   Plus,
+  Activity,
+  Eye,
+  HeartPulse,
+  Trash2,
+  Server,
 } from 'lucide-react';
 import api from '../../lib/api';
 import { setCachedMovies, setCachedShows } from '../../lib/libraryCache';
@@ -35,16 +40,21 @@ import MediaDetailsModal from '../MediaDetailsModal';
 
 const QUICK_LINKS = [
   { label: 'Dashboard', hint: 'Overview', route: '/', icon: LayoutDashboard },
+  { label: 'Tracker', hint: 'Airings & schedule', route: '/tracker', icon: Activity },
   { label: 'Discover', hint: 'Browse TMDB', route: '/discover', icon: Compass },
   { label: 'Movies', hint: 'Your collection', route: '/movies', icon: Film },
   { label: 'TV Shows', hint: 'Your collection', route: '/shows', icon: Tv },
   { label: 'Music', hint: 'Artists & albums', route: '/music', icon: Music },
+  { label: 'Watcher', hint: 'Active sessions', route: '/watcher', icon: Eye },
   { label: 'Calendar', hint: 'Upcoming releases', route: '/calendar', icon: CalendarDays },
   { label: 'Downloads', hint: 'Active transfers', route: '/downloads', icon: DownloadCloud },
   { label: 'Requests', hint: 'User requests', route: '/requests', icon: Inbox },
   { label: 'User Portal', hint: 'Browse & request media', route: '/portal', icon: Sparkles },
   { label: 'Tasks', hint: 'Scheduled jobs', route: '/tasks', icon: ListTodo },
   { label: 'Statistics', hint: 'Library insights', route: '/stats', icon: BarChart3 },
+  { label: 'Media Health', hint: 'Issues & sync diagnostics', route: '/stats/health', icon: HeartPulse },
+  { label: 'Disk Cleanup', hint: 'Cleanup candidates', route: '/stats/cleanup', icon: Trash2 },
+  { label: 'System Status', hint: 'Services & system health', route: '/status', icon: Server },
   { label: 'Settings', hint: 'Configuration', route: '/settings', icon: SettingsIcon },
 ];
 

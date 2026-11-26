@@ -445,8 +445,8 @@ export default function Discover() {
     const isCompact = cardScale.isCompact;
 
     const cardClass = isGrid 
-      ? "w-full h-full min-w-0 cursor-pointer glass-panel interactive-glow-card rounded-xl overflow-hidden group hover:scale-[1.02] transition-all duration-300 relative flex flex-col focus:outline-none focus:ring-2 focus:ring-cyan-500/50 hover:shadow-[0_0_30px_-5px_rgba(6,182,212,0.25)] hover:border-cyan-500/40"
-      : "flex-none snap-start h-full min-w-0 cursor-pointer glass-panel interactive-glow-card rounded-xl overflow-hidden group hover:scale-[1.02] transition-all duration-300 relative flex flex-col focus:outline-none focus:ring-2 focus:ring-cyan-500/50 hover:shadow-[0_0_30px_-5px_rgba(6,182,212,0.25)] hover:border-cyan-500/40";
+      ? "w-full h-full min-w-0 cursor-pointer glass-panel interactive-glow-card rounded-xl overflow-hidden group hover:scale-[1.02] hover:z-10 transition-all duration-300 relative flex flex-col focus:outline-none focus:ring-2 focus:ring-cyan-500/50 hover:shadow-[0_0_30px_-5px_rgba(6,182,212,0.25)] hover:border-cyan-500/40"
+      : "flex-none snap-start h-full min-w-0 cursor-pointer glass-panel interactive-glow-card rounded-xl overflow-hidden group hover:scale-[1.02] hover:z-10 transition-all duration-300 relative flex flex-col focus:outline-none focus:ring-2 focus:ring-cyan-500/50 hover:shadow-[0_0_30px_-5px_rgba(6,182,212,0.25)] hover:border-cyan-500/40";
 
     const handleCardClick = () => {
       if (isInLibrary) {
@@ -461,7 +461,9 @@ export default function Discover() {
       setModalAction('details');
     };
 
-    const poster = posterUrl(displayType === 'movie' ? 'movies' : 'shows', tmdbId, media.poster_path) || (media.poster_path ? (media.poster_path.startsWith('http') ? media.poster_path : `https://image.tmdb.org/t/p/w500${media.poster_path}`) : null);
+    const poster = isInLibrary
+      ? (posterUrl(displayType === 'movie' ? 'movies' : 'shows', tmdbId, media.poster_path) || (media.poster_path ? (media.poster_path.startsWith('http') ? media.poster_path : `https://image.tmdb.org/t/p/w500${media.poster_path}`) : null))
+      : (media.poster_path ? (media.poster_path.startsWith('http') ? media.poster_path : `https://image.tmdb.org/t/p/w500${media.poster_path}`) : (tmdbId ? posterUrl(displayType === 'movie' ? 'movies' : 'shows', tmdbId) : null));
 
     return (
       <div
@@ -584,11 +586,15 @@ export default function Discover() {
                 if (attempts < 2 && isInLibrary) {
                   target.dataset.retryCount = String(attempts + 1);
                   setTimeout(() => {
-                    target.src = `${posterUrl(displayType === 'movie' ? 'movies' : 'shows', tmdbId, media.poster_path)}?r=${Date.now()}`;
+                    const base = posterUrl(displayType === 'movie' ? 'movies' : 'shows', tmdbId, media.poster_path);
+                    target.src = base.includes('?') ? `${base}&r=${Date.now()}` : `${base}?r=${Date.now()}`;
                   }, 500);
                 } else if (media.poster_path && !target.dataset.fallback) {
                   target.dataset.fallback = 'true';
                   target.src = media.poster_path.startsWith('http') ? media.poster_path : `https://image.tmdb.org/t/p/w500${media.poster_path}`;
+                } else if (media.poster_path && !target.dataset.fallbackSmall) {
+                  target.dataset.fallbackSmall = 'true';
+                  target.src = media.poster_path.startsWith('http') ? media.poster_path : `https://image.tmdb.org/t/p/w342${media.poster_path}`;
                 } else {
                   target.style.display = 'none';
                 }

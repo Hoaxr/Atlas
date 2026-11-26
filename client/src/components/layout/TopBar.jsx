@@ -36,7 +36,7 @@ import { MOD_KEY } from '../../lib/platform';
  * @param {{ issues?: number, requests?: number, downloads?: number, watchers?: number }} [props.activity]
  *   Live counters surfaced by the notifications bell (owned by Layout).
  */
-export default function TopBar({ user, activity, updateUrl, alerts = [], onClearAlerts, onDismissAlert, onOpenSearch, onOpenShortcuts, onLogout }) {
+export default function TopBar({ user, activity, updateUrl, alerts = [], onClearAlerts, onDismissAlert, onOpenSearch, onOpenShortcuts, onLogout, sidebarCollapsed }) {
   const navigate = useNavigate();
   const [activityOpen, setActivityOpen] = useState(false);
   const [hasUnread, setHasUnread] = useState(true);
@@ -375,8 +375,12 @@ export default function TopBar({ user, activity, updateUrl, alerts = [], onClear
       <header className="h-16 shrink-0 flex items-center justify-between gap-2.5 sm:gap-4 px-3 sm:px-6 lg:px-8 bg-slate-100/90 dark:bg-[#101b2b] border-b border-slate-200 dark:border-slate-800/80 backdrop-blur-md relative z-40 max-w-full">
         <button
           onClick={() => window.dispatchEvent(new CustomEvent('atlas-toggle-sidebar'))}
-          className="lg:hidden p-2 -ml-1 rounded-lg text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-100 hover:bg-slate-200/70 dark:hover:bg-slate-800/70 transition-colors shrink-0"
-          aria-label="Open navigation menu"
+          className={clsx(
+            "p-2 -ml-1 rounded-lg text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-100 hover:bg-slate-200/70 dark:hover:bg-slate-800/70 transition-colors shrink-0 cursor-pointer",
+            sidebarCollapsed ? "flex" : "lg:hidden flex"
+          )}
+          title={sidebarCollapsed ? "Open navigation menu" : "Toggle navigation menu"}
+          aria-label={sidebarCollapsed ? "Open navigation menu" : "Toggle navigation menu"}
         >
           <Menu className="w-5 h-5" />
         </button>

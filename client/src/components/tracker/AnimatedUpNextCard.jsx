@@ -38,15 +38,17 @@ export function AnimatedUpNextCard({ item, type, onMarkWatched, onDismiss }) {
   }, [initialImageSrc]);
 
   const handleImageError = () => {
-    // If backdrop failed, try local or TMDB poster
+    // If backdrop failed, try TMDB CDN backdrop first, then local or TMDB poster
+    const tmdbBackdrop = item.backdrop_path ? tmdbImgUrl(item.backdrop_path, 'w780') : null;
     const localPoster = tmdbId ? posterUrl(mediaType, tmdbId, item.poster_path) : null;
     const tmdbPoster = item.poster_path ? tmdbImgUrl(item.poster_path, 'w500') : null;
-    const fallback = (localPoster && imgSrc !== localPoster)
-      ? localPoster
-      : ((tmdbPoster && imgSrc !== tmdbPoster) ? tmdbPoster : null);
 
-    if (fallback) {
-      setImgSrc(fallback);
+    if (tmdbBackdrop && imgSrc !== tmdbBackdrop) {
+      setImgSrc(tmdbBackdrop);
+    } else if (localPoster && imgSrc !== localPoster) {
+      setImgSrc(localPoster);
+    } else if (tmdbPoster && imgSrc !== tmdbPoster) {
+      setImgSrc(tmdbPoster);
     } else {
       setImgError(true);
     }

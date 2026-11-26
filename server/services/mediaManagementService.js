@@ -514,47 +514,60 @@ const resetDownloadsNotInClient = async (torrentList) => {
     WHERE e.status = 'downloading'
   `).all();
 
-  for (const movie of downloadingMovies) {
-    const isStillInQueue = list.some(t => matchMovieToTorrent(t, movie));
-    if (!isStillInQueue) {
-      if (movie.file_path && fs.existsSync(movie.file_path)) {
-        console.log(`[MediaManagement] Movie ${movie.title} removed from client but its file exists. Restoring to downloaded.`);
-        db.prepare("UPDATE movies SET status = 'downloaded' WHERE id = ?").run(movie.id);
-      } else {
-        const resetStatus = movie.monitored === 1 ? 'monitored' : 'unmonitored';
-        console.log(`[MediaManagement] Movie ${movie.title} no longer in download client. Resetting to ${resetStatus}.`);
-        db.prepare("UPDATE movies SET status = ?, file_path = NULL, file_size = 0, scene_name = NULL WHERE id = ?").run(resetStatus, movie.id);
+  const updateMovieDownloaded = db.prepare("UPDATE movies SET status = 'downloaded' WHERE id = ?");
+  const updateMovieReset = db.prepare("UPDATE movies SET status = ?, file_path = NULL, file_size = 0, scene_name = NULL WHERE id = ?");
+  const updateEpDownloaded = db.prepare("UPDATE episodes SET status = 'downloaded' WHERE id = ?");
+  const updateEpReset = db.prepare("UPDATE episodes SET status = ?, file_path = NULL, file_size = NULL, scene_name = NULL WHERE id = ?");
+
+  db.transaction(() => {
+    for (const movie of downloadingMovies) {
+      const isStillInQueue = list.some(t => matchMovieToTorrent(t, movie));
+      if (!isStillInQueue) {
+        if (movie.file_path && fs.existsSync(movie.file_path)) {
+          console.log(`[MediaManagement] Movie ${movie.title} removed from client but its file exists. Restoring to downloaded.`);
+          updateMovieDownloaded.run(movie.id);
+        } else {
+          const resetStatus = movie.monitored === 1 ? 'monitored' : 'unmonitored';
+          console.log(`[MediaManagement] Movie ${movie.title} no longer in download client. Resetting to ${resetStatus}.`);
+          updateMovieReset.run(resetStatus, movie.id);
+        }
       }
     }
-  }
 
-  for (const ep of downloadingEpisodes) {
-    const isStillInQueue = list.some(t => {
-      return matchEpisodeToTorrent(t, ep) || matchSeasonPackToTorrent(t, ep.show_title, ep.season_number);
-    });
+    for (const ep of downloadingEpisodes) {
+      const isStillInQueue = list.some(t => {
+        return matchEpisodeToTorrent(t, ep) || matchSeasonPackToTorrent(t, ep.show_title, ep.season_number);
+      });
 
-    if (!isStillInQueue) {
-      if (ep.file_path && fs.existsSync(ep.file_path)) {
-        console.log(`[MediaManagement] Episode ${ep.show_title} S${String(ep.season_number).padStart(2,'0')}E${String(ep.episode_number).padStart(2,'0')} removed from client but its file exists. Restoring to downloaded.`);
-        db.prepare("UPDATE episodes SET status = 'downloaded' WHERE id = ?").run(ep.id);
-      } else {
-        const resetStatus = (ep.monitored === 1 && ep.show_monitored === 1) ? 'monitored' : 'unmonitored';
-        console.log(`[MediaManagement] Episode ${ep.show_title} S${String(ep.season_number).padStart(2,'0')}E${String(ep.episode_number).padStart(2,'0')} no longer in download client. Resetting to ${resetStatus}.`);
-        db.prepare("UPDATE episodes SET status = ?, file_path = NULL, file_size = NULL, scene_name = NULL WHERE id = ?").run(resetStatus, ep.id);
+      if (!isStillInQueue) {
+        if (ep.file_path && fs.existsSync(ep.file_path)) {
+          console.log(`[MediaManagement] Episode ${ep.show_title} S${String(ep.season_number).padStart(2,'0')}E${String(ep.episode_number).padStart(2,'0')} removed from client but its file exists. Restoring to downloaded.`);
+          updateEpDownloaded.run(ep.id);
+        } else {
+          const resetStatus = (ep.monitored === 1 && ep.show_monitored === 1) ? 'monitored' : 'unmonitored';
+          console.log(`[MediaManagement] Episode ${ep.show_title} S${String(ep.season_number).padStart(2,'0')}E${String(ep.episode_number).padStart(2,'0')} no longer in download client. Resetting to ${resetStatus}.`);
+          updateEpReset.run(resetStatus, ep.id);
+        }
       }
     }
-  }
+  })();
 
   // Recalculate status for shows that were marked as downloading or monitored
   const candidateShows = db.prepare("SELECT id, monitored FROM shows WHERE status IN ('downloading', 'monitored')").all();
-  for (const show of candidateShows) {
-    const activeEps = db.prepare("SELECT COUNT(*) as count FROM episodes WHERE show_id = ? AND status = 'downloading'").get(show.id).count;
-    if (activeEps === 0) {
-      const missingMonitored = db.prepare("SELECT COUNT(*) as count FROM episodes WHERE show_id = ? AND monitored = 1 AND (file_path IS NULL OR file_path = '')").get(show.id).count;
-      const newStatus = missingMonitored > 0 ? (show.monitored === 1 ? 'monitored' : 'unmonitored') : 'downloaded';
-      db.prepare("UPDATE shows SET status = ? WHERE id = ? AND status != ?").run(newStatus, show.id, newStatus);
+  const getActiveEps = db.prepare("SELECT COUNT(*) as count FROM episodes WHERE show_id = ? AND status = 'downloading'");
+  const getMissingMonitored = db.prepare("SELECT COUNT(*) as count FROM episodes WHERE show_id = ? AND monitored = 1 AND (file_path IS NULL OR file_path = '')");
+  const updateShowStatus = db.prepare("UPDATE shows SET status = ? WHERE id = ? AND status != ?");
+
+  db.transaction(() => {
+    for (const show of candidateShows) {
+      const activeEps = getActiveEps.get(show.id).count;
+      if (activeEps === 0) {
+        const missingCount = getMissingMonitored.get(show.id).count;
+        const newStatus = missingCount > 0 ? (show.monitored === 1 ? 'monitored' : 'unmonitored') : 'downloaded';
+        updateShowStatus.run(newStatus, show.id, newStatus);
+      }
     }
-  }
+  })();
 
   // Recalculate status for music albums that were marked as downloading
   const downloadingAlbums = db.prepare(`
@@ -563,31 +576,42 @@ const resetDownloadsNotInClient = async (torrentList) => {
     JOIN music_artists a ON a.id = al.artist_id 
     WHERE al.status = 'downloading'
   `).all();
-  for (const album of downloadingAlbums) {
-    const isStillInQueue = list.some(t => {
-      const name = (t.name || '').toLowerCase();
-      return name.includes(album.title.toLowerCase()) && name.includes(album.artist_name.toLowerCase());
-    });
-    if (!isStillInQueue) {
-      if (album.folder_path && fs.existsSync(album.folder_path)) {
-        db.prepare("UPDATE music_albums SET status = 'downloaded' WHERE id = ?").run(album.id);
-      } else {
-        const resetStatus = (album.monitored === 1 && album.artist_monitored === 1) ? 'monitored' : 'unmonitored';
-        db.prepare("UPDATE music_albums SET status = ? WHERE id = ?").run(resetStatus, album.id);
+  const updateAlbumDownloaded = db.prepare("UPDATE music_albums SET status = 'downloaded' WHERE id = ?");
+  const updateAlbumReset = db.prepare("UPDATE music_albums SET status = ? WHERE id = ?");
+
+  db.transaction(() => {
+    for (const album of downloadingAlbums) {
+      const isStillInQueue = list.some(t => {
+        const name = (t.name || '').toLowerCase();
+        return name.includes(album.title.toLowerCase()) && name.includes(album.artist_name.toLowerCase());
+      });
+      if (!isStillInQueue) {
+        if (album.folder_path && fs.existsSync(album.folder_path)) {
+          updateAlbumDownloaded.run(album.id);
+        } else {
+          const resetStatus = (album.monitored === 1 && album.artist_monitored === 1) ? 'monitored' : 'unmonitored';
+          updateAlbumReset.run(resetStatus, album.id);
+        }
       }
     }
-  }
+  })();
 
   // Recalculate status for music artists that were marked as downloading or monitored
   const candidateArtists = db.prepare("SELECT id, monitored FROM music_artists WHERE status IN ('downloading', 'monitored')").all();
-  for (const artist of candidateArtists) {
-    const activeAlbums = db.prepare("SELECT COUNT(*) as count FROM music_albums WHERE artist_id = ? AND status = 'downloading'").get(artist.id).count;
-    if (activeAlbums === 0) {
-      const missingMonitored = db.prepare("SELECT COUNT(*) as count FROM music_albums WHERE artist_id = ? AND monitored = 1 AND (folder_path IS NULL OR folder_path = '')").get(artist.id).count;
-      const newStatus = missingMonitored > 0 ? (artist.monitored === 1 ? 'monitored' : 'unmonitored') : 'downloaded';
-      db.prepare("UPDATE music_artists SET status = ? WHERE id = ? AND status != ?").run(newStatus, artist.id, newStatus);
+  const getActiveAlbums = db.prepare("SELECT COUNT(*) as count FROM music_albums WHERE artist_id = ? AND status = 'downloading'");
+  const getMissingMonitoredAlbums = db.prepare("SELECT COUNT(*) as count FROM music_albums WHERE artist_id = ? AND monitored = 1 AND (folder_path IS NULL OR folder_path = '')");
+  const updateArtistStatus = db.prepare("UPDATE music_artists SET status = ? WHERE id = ? AND status != ?");
+
+  db.transaction(() => {
+    for (const artist of candidateArtists) {
+      const activeAlbums = getActiveAlbums.get(artist.id).count;
+      if (activeAlbums === 0) {
+        const missingCount = getMissingMonitoredAlbums.get(artist.id).count;
+        const newStatus = missingCount > 0 ? (artist.monitored === 1 ? 'monitored' : 'unmonitored') : 'downloaded';
+        updateArtistStatus.run(newStatus, artist.id, newStatus);
+      }
     }
-  }
+  })();
 };
 
 const runMediaManagement = async () => {

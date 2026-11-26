@@ -5,6 +5,7 @@ npm-debug.log
 .env
 .env.*
 *.md
+docs
 assets
 server/data/*
 server/tests

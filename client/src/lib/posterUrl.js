@@ -19,11 +19,14 @@ const MUSIC_IMAGE_VERSION = '2';
  */
 export const posterUrl = (type, tmdbId, tmdbPath = null, size = 'w500') => {
   if (tmdbId) {
-    return `/api/images/${type}/${tmdbId}/poster`;
+    const query = (tmdbPath && typeof tmdbPath === 'string' && tmdbPath.startsWith('/'))
+      ? `?path=${encodeURIComponent(tmdbPath)}`
+      : '';
+    return `/api/images/${type}/${tmdbId}/poster${query}`;
   }
   // Fallback for items not yet in the library (search results, discover)
   if (tmdbPath) {
-    return `https://image.tmdb.org/t/p/${size}${tmdbPath}`;
+    return tmdbPath.startsWith('http') ? tmdbPath : `https://image.tmdb.org/t/p/${size}${tmdbPath}`;
   }
   return null;
 };

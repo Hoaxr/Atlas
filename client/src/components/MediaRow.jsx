@@ -53,7 +53,7 @@ export default function MediaRow({ title, items, badgeText, isTrending = false, 
         </div>
       </div>
       
-      <div ref={scrollContainerRef} className="flex overflow-x-auto gap-6 snap-x snap-mandatory pt-2 pb-4 -mt-2 px-1 -mx-1 hide-scrollbar">
+      <div ref={scrollContainerRef} className="flex overflow-x-auto gap-6 snap-x snap-mandatory pt-3 pb-5 -mt-3 px-3 sm:px-4 -mx-3 sm:-mx-4 scroll-pl-3 sm:scroll-pl-4 hide-scrollbar">
         {items.map(item => renderMediaCard(item, isTrending, false))}
       </div>
     </div>
